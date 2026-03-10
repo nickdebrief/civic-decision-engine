@@ -7,6 +7,15 @@ A decision analysis system built around the Civic Recall framework.
 
 > A structured tool for mapping institutional disputes, evidence, procedures, and escalation strategies into clear decision records.
 
+## Quick Start
+
+Clone the repository and run the engine:
+
+```
+git clone https://github.com/nickdebrief/civic-decision-engine
+cd civic-decision-engine
+python3 civic_decision_engine_v8.py
+```
 The Civic Decision Engine helps citizens transform complicated institutional interactions into structured, auditable decision records.
 
 Instead of relying on memory, fragmented notes, or informal interpretation, the engine creates a clear analytical framework for understanding:
