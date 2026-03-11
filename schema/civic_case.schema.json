@@ -1,0 +1,316 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Civic Decision Engine Case Record",
+  "description": "Structured case record for the Civic Decision Engine",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "strike_reference",
+    "case_title",
+    "civic_domain",
+    "decision_trigger",
+    "recall_question",
+    "user_priority",
+    "desired_outcome",
+    "urgency",
+    "institutions",
+    "rules_or_procedures",
+    "constraints",
+    "actors",
+    "evidence_bundle",
+    "deadlines",
+    "timeline",
+    "escalation_paths",
+    "linked_cases",
+    "structural_insight",
+    "personal_positioning",
+    "decision_note",
+    "learning_capture"
+  ],
+  "properties": {
+    "strike_reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "civic_domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision_trigger": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recall_question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_priority": {
+      "type": "string",
+      "minLength": 1
+    },
+    "desired_outcome": {
+      "type": "string",
+      "minLength": 1
+    },
+    "urgency": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "institutions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "rules_or_procedures": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "actor_type",
+          "role_in_case",
+          "incentive_or_pressure",
+          "likely_behaviour"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role_in_case": {
+            "type": "string",
+            "minLength": 1
+          },
+          "incentive_or_pressure": {
+            "type": "string",
+            "minLength": 1
+          },
+          "likely_behaviour": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "evidence_bundle": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "evidence_type",
+          "relevance",
+          "strength",
+          "linked_timeline_label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relevance": {
+            "type": "string",
+            "minLength": 1
+          },
+          "strength": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "linked_timeline_label": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "deadlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "due_date",
+          "consequence"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "due_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "consequence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_date",
+          "label",
+          "event_type",
+          "description"
+        ],
+        "properties": {
+          "event_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "event_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "escalation_paths": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "route_type",
+          "trigger",
+          "likely_response",
+          "time_horizon",
+          "risk_level",
+          "jurisdiction_fit",
+          "evidence_readiness",
+          "deadline_pressure",
+          "outcome_status",
+          "outcome_note"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "route_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "likely_response": {
+            "type": "string",
+            "minLength": 1
+          },
+          "time_horizon": {
+            "type": "string",
+            "enum": ["short", "medium", "long"]
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "jurisdiction_fit": {
+            "type": "string",
+            "enum": ["yes", "partial", "no"]
+          },
+          "evidence_readiness": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "deadline_pressure": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "outcome_status": {
+            "type": "string",
+            "enum": ["successful", "partial", "failed", "unknown", ""]
+          },
+          "outcome_note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "linked_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "strike_reference",
+          "relationship_type",
+          "note"
+        ],
+        "properties": {
+          "strike_reference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relationship_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "structural_insight": {
+      "type": "string"
+    },
+    "personal_positioning": {
+      "type": "string"
+    },
+    "decision_note": {
+      "type": "string"
+    },
+    "learning_capture": {
+      "type": "string"
+    }
+  }
+}
