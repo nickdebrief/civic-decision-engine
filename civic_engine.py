@@ -164,8 +164,52 @@ def print_pattern_analysis(case: dict[str, Any]) -> None:
     print(f"Deadline pressure   : {deadline_status}")
     print(f"Pattern signal      : {pattern_level}")
 
+
+def score_escalation_paths(case: dict[str, Any]) -> None:
+    print("\nEscalation Ranking")
+    print("------------------")
+
+    escalation_paths = case.get("escalation_paths", [])
+
+    if not escalation_paths:
+        print("No escalation paths recorded.")
+        return
+
+    jurisdiction_scores = {"yes": 3, "partial": 2, "no": 0}
+    evidence_scores = {"high": 3, "medium": 2, "low": 1}
+    deadline_scores = {"high": 3, "medium": 2, "low": 1}
+    risk_scores = {"low": 3, "medium": 2, "high": 1}
+
+    ranked_paths = []
+
+    for path in escalation_paths:
+        score = 0
+        score += jurisdiction_scores.get(path.get("jurisdiction_fit"), 0)
+        score += evidence_scores.get(path.get("evidence_readiness"), 0)
+        score += deadline_scores.get(path.get("deadline_pressure"), 0)
+        score += risk_scores.get(path.get("risk_level"), 0)
+
+        ranked_paths.append((path.get("name", "Unnamed path"), score))
+
+    ranked_paths.sort(key=lambda x: x[1], reverse=True)
+
+    for i, (name, score) in enumerate(ranked_paths, start=1):
+        print(f"{i}. {name}   score: {score}")
+
+
+def print_overall_view(case: dict[str, Any]) -> None:
     print("\nOverall View")
     print("------------")
+
+    linked_cases = case.get("linked_cases", [])
+    escalation_paths = case.get("escalation_paths", [])
+
+    strong_paths = [
+        p for p in escalation_paths
+        if p.get("evidence_readiness") == "high"
+        and p.get("jurisdiction_fit") in {"yes", "partial"}
+    ]
+
     if linked_cases and strong_paths:
         print("This case shows pattern potential and has at least one reasonably prepared escalation route.")
     elif linked_cases:
@@ -195,10 +239,14 @@ def validate_case(case_path: Path, schema_path: Path) -> bool:
     print(f"Case file '{case_path}' matches schema '{schema_path}'.\n")
 
     print_case_summary(case_data)
+
     print("\n══════════════════════════════")
     print("Civic Case Analysis")
     print("══════════════════════════════")
+
     print_pattern_analysis(case_data)
+    score_escalation_paths(case_data)
+    print_overall_view(case_data)
 
     return True
 
