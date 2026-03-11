@@ -14,7 +14,7 @@ Clone the repository and run the engine:
 ```
 git clone https://github.com/nickdebrief/civic-decision-engine
 cd civic-decision-engine
-python3 civic_decision_engine_v7.py
+python3 civic_decision_engine_v8.py
 ```
 The Civic Decision Engine helps citizens transform complicated institutional interactions into structured, auditable decision records.
 
