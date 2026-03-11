@@ -43,19 +43,15 @@ def print_case_summary(case: dict[str, Any]) -> None:
     print("\nActors")
     print("------")
     for actor in case.get("actors", []):
-        print(f"- {actor.get('role_in_case')} : {actor.get('name')}")
+        name = actor.get("name", "Unknown")
+        role = actor.get("role_in_case", "unspecified role")
+        print(f"- {name} — {role}")
 
     print("\nEvidence Bundle")
     print("---------------")
-    print(f"{len(case.get('evidence_bundle', []))} item(s)")
-
-    print("\nDeadlines")
-    print("---------")
-    print(f"{len(case.get('deadlines', []))} deadline(s)")
-
-    print("\nTimeline")
-    print("--------")
-    print(f"{len(case.get('timeline', []))} event(s)")
+    print(f"Evidence items     : {len(case.get('evidence_bundle', []))}")
+    print(f"Deadlines          : {len(case.get('deadlines', []))}")
+    print(f"Timeline events    : {len(case.get('timeline', []))}")
 
     print("\nEscalation Paths")
     print("----------------")
@@ -87,6 +83,99 @@ def print_case_summary(case: dict[str, Any]) -> None:
     print(case.get("learning_capture"))
 
 
+def print_pattern_analysis(case: dict[str, Any]) -> None:
+    print("\nPattern Analysis")
+    print("----------------")
+
+    linked_cases = case.get("linked_cases", [])
+    institutions = case.get("institutions", [])
+    escalation_paths = case.get("escalation_paths", [])
+
+    if len(linked_cases) >= 2:
+        print("Pattern signal      : Strong")
+        print("Interpretation      : Multiple linked cases suggest a repeating institutional pattern.")
+    elif len(linked_cases) == 1:
+        print("Pattern signal      : Moderate")
+        print("Interpretation      : One linked case suggests this may be more than an isolated event.")
+    else:
+        print("Pattern signal      : Low")
+        print("Interpretation      : No linked cases recorded yet; may still be an isolated issue.")
+
+    print(f"Institutions mapped : {len(institutions)}")
+    print(f"Escalation paths    : {len(escalation_paths)}")
+
+    strong_paths = []
+    pressure_paths = []
+
+    for path in escalation_paths:
+        evidence = path.get("evidence_readiness")
+        jurisdiction = path.get("jurisdiction_fit")
+        deadline = path.get("deadline_pressure")
+
+        if evidence == "high" and jurisdiction in {"yes", "partial"}:
+            strong_paths.append(path.get("name"))
+
+        if deadline == "high":
+            pressure_paths.append(path.get("name"))
+
+    print("\nEscalation Readiness")
+    print("--------------------")
+    if strong_paths:
+        print("Most prepared paths :")
+        for name in strong_paths:
+            print(f"- {name}")
+    else:
+        print("Most prepared paths : None clearly ready yet")
+
+    if pressure_paths:
+        print("\nDeadline-sensitive paths :")
+        for name in pressure_paths:
+            print(f"- {name}")
+    else:
+        print("\nDeadline-sensitive paths : None flagged")
+
+    print("\nCase Health")
+    print("-----------")
+
+    evidence_levels = [p.get("evidence_readiness") for p in escalation_paths]
+    deadline_levels = [p.get("deadline_pressure") for p in escalation_paths]
+
+    if "high" in evidence_levels:
+        evidence_status = "HIGH"
+    elif "medium" in evidence_levels:
+        evidence_status = "MEDIUM"
+    else:
+        evidence_status = "LOW"
+
+    if "high" in deadline_levels:
+        deadline_status = "HIGH"
+    elif "medium" in deadline_levels:
+        deadline_status = "MEDIUM"
+    else:
+        deadline_status = "LOW"
+
+    pattern_level = (
+        "HIGH" if len(linked_cases) >= 2
+        else "MODERATE" if len(linked_cases) == 1
+        else "LOW"
+    )
+
+    print(f"Evidence strength   : {evidence_status}")
+    print(f"Deadline pressure   : {deadline_status}")
+    print(f"Pattern signal      : {pattern_level}")
+
+    print("\nOverall View")
+    print("------------")
+    if linked_cases and strong_paths:
+        print("This case shows pattern potential and has at least one reasonably prepared escalation route.")
+    elif linked_cases:
+        print("This case shows pattern potential, but escalation readiness may need strengthening.")
+    elif strong_paths:
+        print("This case does not yet show a strong repeat-pattern signal, but escalation routes are available.")
+    else:
+        print("This case needs more pattern evidence and stronger escalation preparation before major next steps.")
+
+
 def validate_case(case_path: Path, schema_path: Path) -> bool:
     schema = load_json(schema_path)
     case_data = load_json(case_path)
@@ -106,6 +195,10 @@ def validate_case(case_path: Path, schema_path: Path) -> bool:
     print(f"Case file '{case_path}' matches schema '{schema_path}'.\n")
 
     print_case_summary(case_data)
+    print("\n══════════════════════════════")
+    print("Civic Case Analysis")
+    print("══════════════════════════════")
+    print_pattern_analysis(case_data)
 
     return True
 
