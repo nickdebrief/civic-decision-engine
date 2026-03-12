@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-
+from datetime import date
 from jsonschema import Draft7Validator
 
 
@@ -50,7 +50,6 @@ def print_case_summary(case: dict[str, Any]) -> None:
     print(f"Next decision    : {lifecycle.get('next_decision_point')}")
     print(f"Next deadline    : {lifecycle.get('next_deadline')}")
     print(f"Recommended mode : {lifecycle.get('recommended_mode')}")
-
     print("\nActors")
     print("------")
     for actor in case.get("actors", []):
@@ -174,7 +173,7 @@ def print_pattern_analysis(case: dict[str, Any]) -> None:
     print(f"Evidence strength   : {evidence_status}")
     print(f"Deadline pressure   : {deadline_status}")
     print(f"Pattern signal      : {pattern_level}")
-
+    
 def print_lifecycle_diagnostics(case: dict[str, Any]) -> None:
     print("\nLifecycle Diagnostics")
     print("---------------------")
@@ -188,6 +187,12 @@ def print_lifecycle_diagnostics(case: dict[str, Any]) -> None:
     next_deadline = lifecycle.get("next_deadline")
     recommended_mode = lifecycle.get("recommended_mode")
 
+    days_remaining = None
+    if next_deadline:
+        deadline_date = date.fromisoformat(next_deadline)
+        today = date.today()
+        days_remaining = (deadline_date - today).days
+
     if stalled:
         stage_stability = "Unstable"
     elif status == "active":
@@ -195,12 +200,15 @@ def print_lifecycle_diagnostics(case: dict[str, Any]) -> None:
     else:
         stage_stability = "Monitor"
 
-    if days_open >= 30:
-        deadline_proximity = "High"
-    elif days_open >= 20:
-        deadline_proximity = "Near"
+    if days_remaining is not None:
+        if days_remaining <= 3:
+            deadline_proximity = "High"
+        elif days_remaining <= 10:
+            deadline_proximity = "Near"
+        else:
+            deadline_proximity = "Low"
     else:
-        deadline_proximity = "Low"
+        deadline_proximity = "Unknown"
 
     if stage == "awaiting_response":
         case_momentum = "Waiting on institution"
@@ -222,7 +230,10 @@ def print_lifecycle_diagnostics(case: dict[str, Any]) -> None:
     }
 
     print(f"Stage stability     : {stage_stability}")
-    print(f"Deadline proximity  : {deadline_proximity}")
+    if days_remaining is not None:
+        print(f"Deadline proximity  : {deadline_proximity} ({days_remaining} days remaining)")
+    else:
+        print(f"Deadline proximity  : {deadline_proximity}")
     print(f"Case momentum       : {case_momentum}")
     print(f"Recommended stance  : {stance_labels.get(recommended_mode, recommended_mode)}")
     print(f"Next deadline       : {next_deadline}")
