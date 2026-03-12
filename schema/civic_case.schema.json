@@ -5,28 +5,29 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "strike_reference",
-    "case_title",
-    "civic_domain",
-    "decision_trigger",
-    "recall_question",
-    "user_priority",
-    "desired_outcome",
-    "urgency",
-    "institutions",
-    "rules_or_procedures",
-    "constraints",
-    "actors",
-    "evidence_bundle",
-    "deadlines",
-    "timeline",
-    "escalation_paths",
-    "linked_cases",
-    "structural_insight",
-    "personal_positioning",
-    "decision_note",
-    "learning_capture"
-  ],
+  "strike_reference",
+  "case_title",
+  "civic_domain",
+  "decision_trigger",
+  "recall_question",
+  "user_priority",
+  "desired_outcome",
+  "urgency",
+  "institutions",
+  "case_lifecycle",
+  "rules_or_procedures",
+  "constraints",
+  "actors",
+  "evidence_bundle",
+  "deadlines",
+  "timeline",
+  "escalation_paths",
+  "linked_cases",
+  "structural_insight",
+  "personal_positioning",
+  "decision_note",
+  "learning_capture"
+],
   "properties": {
     "strike_reference": {
       "type": "string",
@@ -38,8 +39,69 @@
     },
     "civic_domain": {
       "type": "string",
+      "minLength": 1 
+    },
+    "case_lifecycle": {
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "current_stage",
+    "status",
+    "stalled",
+    "days_open",
+    "next_decision_point",
+    "next_deadline",
+    "recommended_mode"
+  ],
+  "properties": {
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "intake",
+        "internal_process",
+        "awaiting_response",
+        "escalation_ready",
+        "external_review",
+        "resolved",
+        "archived"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "resolved",
+        "stalled"
+      ]
+    },
+    "stalled": {
+      "type": "boolean"
+    },
+    "days_open": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_decision_point": {
+      "type": "string",
       "minLength": 1
     },
+    "next_deadline": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommended_mode": {
+      "type": "string",
+      "enum": [
+        "observe",
+        "hold_and_prepare",
+        "escalate",
+        "stabilise",
+        "close_out"
+      ]
+    }
+  }
+},
     "decision_trigger": {
       "type": "string",
       "minLength": 1
@@ -65,7 +127,68 @@
       "items": {
         "type": "string",
         "minLength": 1
-      }
+      },
+    "case_lifecycle": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+    "current_stage",
+    "status",
+    "stalled",
+    "days_open",
+    "next_decision_point",
+    "next_deadline",
+    "recommended_mode"
+  ],
+  "properties": {
+    "current_stage": {
+      "type": "string",
+      "enum": [
+        "intake",
+        "internal_process",
+        "awaiting_response",
+        "escalation_ready",
+        "external_review",
+        "resolved",
+        "archived"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active", 
+        "paused",
+        "resolved",
+        "stalled"
+      ]
+    },
+    "stalled": {
+      "type": "boolean"
+    },
+    "days_open": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "next_decision_point": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next_deadline": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommended_mode": {
+      "type": "string",
+      "enum": [
+        "observe",
+        "hold_and_prepare",
+        "escalate",
+        "stabilise",
+        "close_out"
+      ]
+    }
+  }
+}
     },
     "rules_or_procedures": {
       "type": "array",
