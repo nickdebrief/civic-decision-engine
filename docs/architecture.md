@@ -3,6 +3,11 @@
 The Civic Decision Engine is a prototype framework designed to analyse
 decision environments involving institutions, procedures, and evidence.
 
+The Civic Decision Engine builds on the Civic Recall Pipeline model.
+
+Reference implementation:
+https://github.com/nickdebrief/civic_recall_pipeline
+
 Core components include:
 
 1. Decision Trigger
