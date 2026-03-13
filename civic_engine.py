@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
+
 """
 Civic Decision Engine — Version 9
-Schema validation + structured case loading
+Behaviour Scoring & Lifecycle Intelligence
+
+Version 9 introduces a behavioural analysis layer that evaluates
+institutional response patterns within civic cases.
+
+New capabilities:
+- Institutional behaviour detection
+- Behaviour scoring (posture, engagement, escalation)
+- Behaviour index for escalation signalling
+- Integrated lifecycle diagnostics
+
+Copyright (c) 2026 Nick Moloney
+Licensed under the MIT License
 """
 
 from __future__ import annotations
@@ -230,13 +243,150 @@ def print_lifecycle_diagnostics(case: dict[str, Any]) -> None:
     }
 
     print(f"Stage stability     : {stage_stability}")
+
     if days_remaining is not None:
         print(f"Deadline proximity  : {deadline_proximity} ({days_remaining} days remaining)")
     else:
         print(f"Deadline proximity  : {deadline_proximity}")
+
     print(f"Case momentum       : {case_momentum}")
     print(f"Recommended stance  : {stance_labels.get(recommended_mode, recommended_mode)}")
     print(f"Next deadline       : {next_deadline}")
+
+def print_institution_behaviour(case: dict[str, Any]) -> None:
+    print("\nInstitution Behaviour")
+    print("---------------------")
+
+    lifecycle = case.get("case_lifecycle", {})
+
+    status = lifecycle.get("status")
+    stalled = lifecycle.get("stalled")
+    days_open = lifecycle.get("days_open", 0)
+    stage = lifecycle.get("current_stage")
+    recommended_mode = lifecycle.get("recommended_mode")
+
+    behaviour = "Responsive"
+    posture = "Neutral"
+    engagement = "Normal"
+    escalation_signal = "Low"
+
+    if stalled or (stage == "awaiting_response" and days_open >= 30):
+        behaviour = "Non-responsive"
+        posture = "Withdrawn"
+        engagement = "Very low"
+        escalation_signal = "High"
+
+    elif (
+        status == "active"
+        and stage == "awaiting_response"
+        and recommended_mode == "hold_and_prepare"
+        and days_open >= 10
+    ):
+        behaviour = "Procedural containment"
+        posture = "Defensive"
+        engagement = "Low"
+        escalation_signal = "Increasing"
+
+    elif (
+        status == "active"
+        and stage in {"internal_process", "awaiting_response"}
+        and days_open >= 7
+    ):
+        behaviour = "Delayed response"
+        posture = "Cautious"
+        engagement = "Moderate"
+        escalation_signal = "Watch"
+
+    print(f"Behaviour pattern : {behaviour}")
+    print(f"Institution posture: {posture}")
+    print(f"Engagement level  : {engagement}")
+    print(f"Escalation signal : {escalation_signal}")   
+
+def print_behaviour_score(case: dict[str, Any]) -> None:
+    print("\nInstitution Behaviour Score")
+    print("---------------------------")
+
+    lifecycle = case.get("case_lifecycle", {})
+
+    status = lifecycle.get("status")
+    stalled = lifecycle.get("stalled")
+    days_open = lifecycle.get("days_open", 0)
+    stage = lifecycle.get("current_stage")
+    recommended_mode = lifecycle.get("recommended_mode")
+
+    behaviour = "Responsive"
+    posture = "Neutral"
+    engagement = "Normal"
+    escalation_signal = "Low"
+
+    if stalled or (stage == "awaiting_response" and days_open >= 30):
+        behaviour = "Non-responsive"
+        posture = "Withdrawn"
+        engagement = "Very low"
+        escalation_signal = "High"
+
+    elif (
+        status == "active"
+        and stage == "awaiting_response"
+        and recommended_mode == "hold_and_prepare"
+        and days_open >= 10
+    ):
+        behaviour = "Procedural containment"
+        posture = "Defensive"
+        engagement = "Low"
+        escalation_signal = "Increasing"
+
+    elif (
+        status == "active"
+        and stage in {"internal_process", "awaiting_response"}
+        and days_open >= 7
+    ):
+        behaviour = "Delayed response"
+        posture = "Cautious"
+        engagement = "Moderate"
+        escalation_signal = "Watch"
+
+    posture_scores = {
+        "Neutral": 1,
+        "Cautious": 2,
+        "Defensive": 3,
+        "Withdrawn": 3,
+    }
+
+    engagement_scores = {
+        "Normal": 1,
+        "Moderate": 2,
+        "Low": 3,
+        "Very low": 3,
+    }
+
+    escalation_scores = {
+        "Low": 1,
+        "Watch": 2,
+        "Increasing": 3,
+        "High": 3,
+    }
+
+    posture_score = posture_scores.get(posture, 1)
+    engagement_score = engagement_scores.get(engagement, 1)
+    escalation_score = escalation_scores.get(escalation_signal, 1)
+
+    behaviour_index = posture_score + engagement_score + escalation_score
+
+    if behaviour_index >= 8:
+        interpretation = "Strong institutional resistance or containment detected"
+    elif behaviour_index >= 6:
+        interpretation = "Elevated institutional friction detected"
+    elif behaviour_index >= 4:
+        interpretation = "Moderate behavioural caution detected"
+    else:
+        interpretation = "Low behavioural concern"
+
+    print(f"Posture score     : {posture_score} / 3")
+    print(f"Engagement score  : {engagement_score} / 3")
+    print(f"Escalation score  : {escalation_score} / 3")
+    print(f"Behaviour index   : {behaviour_index} / 9")
+    print(f"Interpretation    : {interpretation}")       
 
 def score_escalation_paths(case: dict[str, Any]) -> None:
     print("\nEscalation Ranking")
@@ -319,6 +469,8 @@ def validate_case(case_path: Path, schema_path: Path) -> bool:
 
     print_pattern_analysis(case_data)
     print_lifecycle_diagnostics(case_data)
+    print_institution_behaviour(case_data)
+    print_behaviour_score(case_data)
     score_escalation_paths(case_data)
     print_overall_view(case_data)
 
