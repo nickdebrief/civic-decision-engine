@@ -7,6 +7,24 @@ A decision analysis system built around the Civic Recall framework.
 
 > A structured tool for mapping institutional disputes, evidence, procedures, and escalation strategies into clear decision records.
 
+## Version 9 – Behaviour Scoring
+
+Version 9 introduces a behavioural analysis layer to the Civic Decision Engine.
+
+The engine now evaluates institutional response signals such as:
+
+- procedural containment
+- engagement level
+- escalation signal
+
+These signals are translated into a transparent **behaviour index**, helping
+identify when institutional response patterns may indicate delay or
+containment dynamics.
+
+Pipeline:
+
+Pattern → Lifecycle → Behaviour → Escalation → Overall interpretation
+
 ## Quick Start
 
 Clone the repository and run the engine:
@@ -14,7 +32,7 @@ Clone the repository and run the engine:
 ```
 git clone https://github.com/nickdebrief/civic-decision-engine
 cd civic-decision-engine
-python3 civic_decision_engine_v8.py
+python3 civic_engine_v8.py
 ```
 The Civic Decision Engine helps citizens transform complicated institutional interactions into structured, auditable decision records.
 
@@ -88,7 +106,7 @@ Clone the repository:
 
 Run the engine: 
 
-	python3 civic_decision_engine_v8.py
+	python3 civic_engine.py
 
 No external dependencies are required beyond the Python standard library.
 
