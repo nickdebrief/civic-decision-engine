@@ -1,6 +1,6 @@
 # Civic Decision Engine
 
-![Version](https://img.shields.io/badge/version-v0.8-blue)
+![Version](https://img.shields.io/badge/version-v0.9-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A decision analysis system built around the Civic Recall framework.
@@ -32,7 +32,7 @@ Clone the repository and run the engine:
 ```
 git clone https://github.com/nickdebrief/civic-decision-engine
 cd civic-decision-engine
-python3 civic_engine_v8.py
+python3 civic_engine.py
 ```
 The Civic Decision Engine helps citizens transform complicated institutional interactions into structured, auditable decision records.
 
