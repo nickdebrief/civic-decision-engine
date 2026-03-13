@@ -25,6 +25,20 @@ Pipeline:
 
 Pattern → Lifecycle → Behaviour → Escalation → Overall interpretation
 
+### Behaviour Index
+
+The Behaviour Index translates observable institutional response signals into
+a simple scoring model.
+
+Three dimensions are evaluated:
+
+- **Posture score** – reflects whether the institution's response posture appears cooperative, neutral, or defensive.
+- **Engagement score** – measures the level of meaningful engagement with the case.
+- **Escalation score** – evaluates signals indicating procedural delay, containment, or escalation pressure.
+
+These components combine to produce a transparent **Behaviour Index**, helping
+identify patterns of institutional response across cases.
+
 ## Quick Start
 
 Clone the repository and run the engine:
