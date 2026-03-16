@@ -1,37 +1,59 @@
 # Civic Decision Engine Architecture
 
-The Civic Decision Engine is a prototype framework designed to analyse
-decision environments involving institutions, procedures, and evidence.
+The Civic Decision Engine is a prototype analytical framework designed to
+analyse civic decision environments involving institutions, procedures,
+actors, and evidence.
 
-The Civic Decision Engine builds on the Civic Recall Pipeline model.
+The system builds upon the Civic Recall Pipeline model and provides a
+structured method for analysing institutional interactions and case
+progression over time.
 
 Reference implementation:
 https://github.com/nickdebrief/civic_recall_pipeline
 
-Core components include:
 
-1. Decision Trigger
-2. Institutional Field
-3. Actor Incentives
-4. Evidence Bundle
-5. Timeline / Chronology
-6. Escalation Pathways
-7. Decision Structure Mapping
-8. Learning Capture
+## Core Concept
+
+The engine models civic cases as structured records containing:
+
+• institutional actors  
+• evidence bundles  
+• procedural timelines  
+• escalation pathways  
+
+These elements are processed through a layered analytical pipeline to
+produce interpretable signals about case posture, escalation readiness,
+and decision environment structure.
 
 
-The Civic Decision Engine processes structured civic case records and produces
-interpretable analysis signals.
+## Core Components
 
-The Civic Decision Engine evaluates cases through a layered processing pipeline:
+The Civic Decision Engine evaluates civic cases through several conceptual
+components:
 
-1. Case Input
-2. Schema Validation
-3. Case Summary
-4. Pattern Analysis
-5. Lifecycle Diagnostics
-6. Escalation Ranking
-7. Overall View
+1. Decision Trigger  
+2. Institutional Field  
+3. Actor Incentives  
+4. Evidence Bundle  
+5. Timeline / Chronology  
+6. Escalation Pathways  
+7. Decision Structure Mapping  
+8. Learning Capture  
+
+
+## Processing Pipeline
+
+The Civic Decision Engine processes structured case records through the
+following pipeline:
+
+1. Case Input  
+2. Schema Validation  
+3. Case Summary  
+4. Pattern Analysis  
+5. Lifecycle Diagnostics  
+6. Escalation Ranking  
+7. Overall View  
+
 
                     Civic Decision Engine
                            (V9)
@@ -104,69 +126,62 @@ The Civic Decision Engine evaluates cases through a layered processing pipeline:
                 │  case posture & options  │
                 └──────────────────────────┘
 
-The system is based on the Civic Recall Pipeline concept developed by
-Nick Moloney.
 
-                    Civic Case Lifecycle
+## Civic Case Lifecycle
 
-            ┌───────────────────────────┐
-            │           intake          │
-            │  Case is created and     │
-            │  evidence bundle begins  │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │      internal_process     │
-            │  Institution handling    │
-            │  complaint internally    │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │     awaiting_response     │
-            │  Waiting for response     │
-            │  within procedural window │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │     escalation_ready      │
-            │  Internal deadline        │
-            │  expired or inadequate    │
-            │  response received        │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │      external_review      │
-            │  Oversight or regulator   │
-            │  reviews the complaint    │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │         resolved          │
-            │  Case outcome determined  │
-            │  or process completed     │
-            └─────────────┬────────────┘
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │          archived         │
-            │  Case preserved for       │
-            │  learning and pattern     │
-            │  analysis                 │
-            └───────────────────────────┘
+The engine models the procedural progression of a civic case using a
+lifecycle framework.
 
-The lifecycle model describes the procedural progression of a civic case.
-Lifecycle diagnostics within the engine evaluate the stability of the
-current stage, proximity to procedural deadlines, and the appropriate
-strategic posture (observe, hold and prepare, escalate, stabilise, close out).
+            intake
+               │
+               ▼
+        internal_process
+               │
+               ▼
+       awaiting_response
+               │
+               ▼
+       escalation_ready
+               │
+               ▼
+        external_review
+               │
+               ▼
+            resolved
+               │
+               ▼
+            archived
 
-Future development will include:
 
-- institutional network mapping
-- escalation success heuristics
-- portfolio analytics
-- decision environment simulation
+### Lifecycle Interpretation
+
+Lifecycle diagnostics evaluate:
+
+• stage stability  
+• proximity to procedural deadlines  
+• case momentum  
+• recommended strategic posture  
+
+The system may recommend:
+
+- observe
+- hold and prepare
+- escalate
+- stabilise
+- close out
+
+
+## Future Development
+
+Planned extensions include:
+
+• institutional network mapping  
+• escalation success heuristics  
+• portfolio-level analytics  
+• decision environment simulation  
+
+
+## Author
+
+The Civic Decision Engine and Civic Recall Pipeline concepts were
+developed by **Nick Moloney**.
