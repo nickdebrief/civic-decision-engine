@@ -105,6 +105,7 @@ following pipeline:
 6. Escalation Ranking  
 7. Overall View  
 
+          
 ```text
                     Civic Decision Engine
                            (V9)
@@ -176,7 +177,7 @@ following pipeline:
                 │  Final interpretation of │
                 │  case posture & options  │
                 └──────────────────────────┘
-
+```
 
 ## Civic Case Lifecycle
 
