@@ -1,0 +1,154 @@
+{
+  "strike_reference": "CIVIC-CASE-001",
+  "case_title": "Financial services complaint progressing through oversight stages",
+  "civic_domain": "financial_regulation",
+  "decision_trigger": "Complaint escalation through financial oversight structures.",
+  "recall_question": "What escalation signals and institutional behaviour patterns appear across the case lifecycle?",
+  "user_priority": "documentation, procedural clarity, escalation readiness",
+  "desired_outcome": "Maintain accurate record of oversight stages and institutional responses.",
+  "urgency": "medium",
+
+  "institutions": [
+    "Financial Services and Pensions Ombudsman",
+    "Legal Services Review",
+    "European Parliament PETI Secretariat"
+  ],
+
+  "rules_or_procedures": [
+    "Financial Services and Pensions Ombudsman complaint procedures",
+    "Legal Services Review internal review procedures",
+    "European Parliament PETI petition admissibility procedures"
+  ],
+
+  "constraints": [
+    "institutional jurisdiction limits",
+    "procedural timelines",
+    "oversight body admissibility rules"
+  ],
+
+  "case_lifecycle": {
+    "current_stage": "external_review",
+    "status": "active",
+    "stalled": false,
+    "days_open": 90,
+    "next_decision_point": "monitor_external_response",
+    "next_deadline": "2026-03-30",
+    "recommended_mode": "observe"
+  },
+
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and documenting complaint",
+      "incentive_or_pressure": "seek accountability and procedural clarity",
+      "likely_behaviour": "maintain evidence record and escalate where appropriate"
+    },
+    {
+      "name": "Financial Services and Pensions Ombudsman",
+      "actor_type": "oversight_body",
+      "role_in_case": "initial complaint handling and escalation assessment",
+      "incentive_or_pressure": "apply regulatory process and jurisdictional rules",
+      "likely_behaviour": "progress complaint through defined oversight stages"
+    },
+    {
+      "name": "European Parliament PETI Secretariat",
+      "actor_type": "oversight_body",
+      "role_in_case": "petition review at EU institutional level",
+      "incentive_or_pressure": "apply petition admissibility and closure procedures",
+      "likely_behaviour": "review documentation and determine petition status"
+    }
+  ],
+
+  "evidence_bundle": [
+    {
+      "label": "Complaint escalation record",
+      "evidence_type": "documentation",
+      "relevance": "Shows complaint progression to legal services review stage",
+      "strength": "high",
+      "linked_timeline_label": "Complaint progressed to Legal Services Review"
+    },
+    {
+      "label": "Reference model shared",
+      "evidence_type": "documentation",
+      "relevance": "Demonstrates analytical framework shared during correspondence period",
+      "strength": "medium",
+      "linked_timeline_label": "Reference model for auditable decision pipelines shared"
+    },
+    {
+      "label": "Correspondence acknowledgement",
+      "evidence_type": "email",
+      "relevance": "Confirms complaint acknowledged and awaiting investigation",
+      "strength": "high",
+      "linked_timeline_label": "Correspondence acknowledged"
+    }
+  ],
+
+  "deadlines": [],
+
+  "timeline": [
+    {
+      "event_date": "2026-01-07",
+      "label": "Complaint progressed to Legal Services Review",
+      "event_type": "escalation",
+      "description": "Complaint progressed to Legal Services Review by the Financial Services and Pensions Ombudsman."
+    },
+    {
+      "event_date": "2026-01-25",
+      "label": "Reference model for auditable decision pipelines shared",
+      "event_type": "documentation",
+      "description": "Reference model shared while awaiting institutional correspondence."
+    },
+    {
+      "event_date": "2026-01-26",
+      "label": "Correspondence acknowledged",
+      "event_type": "acknowledgement",
+      "description": "Complaint acknowledged and confirmed as awaiting investigation."
+    },
+    {
+      "event_date": "2026-02-10",
+      "label": "Petition closure communicated",
+      "event_type": "decision",
+      "description": "European Parliament PETI Secretariat communicated petition closure."
+    }
+  ],
+
+  "escalation_paths": [
+    {
+      "name": "Ombudsman legal services review",
+      "route_type": "oversight_review",
+      "trigger": "Complaint progressed to legal services review stage",
+      "likely_response": "Internal legal assessment of complaint merits",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "low",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    },
+    {
+      "name": "EU petition review",
+      "route_type": "petition_review",
+      "trigger": "Petition submitted to EU oversight body",
+      "likely_response": "Admissibility review and institutional closure decision",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "medium",
+      "deadline_pressure": "low",
+      "outcome_status": "unknown",
+      "outcome_note": "Petition closure communicated"
+    }
+  ],
+
+  "linked_cases": [],
+
+  "structural_insight": "Institutional responses follow formal procedural pathways with acknowledgement and staged review processes.",
+
+  "personal_positioning": "The complainant maintains a documented record of escalation stages across institutions.",
+
+  "decision_note": "Continue documenting institutional responses and maintain structured case chronology.",
+
+  "learning_capture": "Escalation across multiple oversight bodies introduces procedural stages that shape institutional response timelines."
+}

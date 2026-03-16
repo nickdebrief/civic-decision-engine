@@ -66,6 +66,18 @@
         "archived"
       ]
     },
+
+"rules_or_procedures": [
+  "Financial Services and Pensions Ombudsman complaint procedures",
+  "Legal Services Review internal review procedures",
+  "European Parliament PETI petition admissibility procedures"
+],
+"constraints": [
+  "institutional jurisdiction limits",
+  "procedural timelines",
+  "oversight body admissibility rules"
+],
+    },
     "status": {
       "type": "string",
       "enum": [
