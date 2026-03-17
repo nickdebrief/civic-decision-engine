@@ -1,0 +1,183 @@
+{
+  "strike_reference": "CIVIC-CASE-003",
+  "case_title": "Complaint showing partial engagement with intermittent delays",
+  "civic_domain": "public_administration",
+  "decision_trigger": "Institution responded at key points but with gaps, delays, and partial clarity.",
+  "recall_question": "Does partial engagement indicate progress or controlled procedural pacing?",
+  "user_priority": "clarity, timing, and escalation judgment",
+  "desired_outcome": "Determine whether continued engagement is productive or whether escalation should be prepared.",
+  "urgency": "medium",
+
+  "institutions": [
+    "Public Body Complaints Unit",
+    "Internal Review Office"
+  ],
+
+  "rules_or_procedures": [
+    "Complaint intake and acknowledgement procedure",
+    "Internal review procedure",
+    "Follow-up and clarification process"
+  ],
+
+  "constraints": [
+    "inconsistent response timing",
+    "partial information disclosure",
+    "unclear next steps"
+  ],
+
+  "case_lifecycle": {
+    "current_stage": "internal_process",
+    "status": "active",
+    "stalled": false,
+    "days_open": 48,
+    "next_decision_point": "assess_response_quality",
+    "next_deadline": "2026-03-28",
+    "recommended_mode": "observe"
+  },
+
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and monitoring complaint",
+      "incentive_or_pressure": "seek clarity while avoiding premature escalation",
+      "likely_behaviour": "continue engagement while tracking response quality"
+    },
+    {
+      "name": "Public Body Complaints Unit",
+      "actor_type": "institutional_actor",
+      "role_in_case": "initial complaint response and coordination",
+      "incentive_or_pressure": "maintain procedural flow while managing exposure",
+      "likely_behaviour": "respond intermittently with partial information"
+    },
+    {
+      "name": "Internal Review Office",
+      "actor_type": "institutional_actor",
+      "role_in_case": "review complaint aspects when escalated internally",
+      "incentive_or_pressure": "apply internal standards without overcommitting",
+      "likely_behaviour": "engage selectively and delay full resolution"
+    }
+  ],
+
+  "evidence_bundle": [
+    {
+      "label": "Initial complaint submission",
+      "evidence_type": "email",
+      "relevance": "Establishes complaint scope",
+      "strength": "high",
+      "linked_timeline_label": "Complaint submitted"
+    },
+    {
+      "label": "Acknowledgement response",
+      "evidence_type": "email",
+      "relevance": "Confirms complaint received",
+      "strength": "high",
+      "linked_timeline_label": "Complaint acknowledged"
+    },
+    {
+      "label": "Partial response",
+      "evidence_type": "email",
+      "relevance": "Addresses some elements but leaves key questions open",
+      "strength": "medium",
+      "linked_timeline_label": "Partial response issued"
+    },
+    {
+      "label": "Follow-up clarification",
+      "evidence_type": "email",
+      "relevance": "Requests clarification on incomplete response",
+      "strength": "high",
+      "linked_timeline_label": "Follow-up submitted"
+    }
+  ],
+
+  "deadlines": [
+    {
+      "label": "Expected clarification response",
+      "due_date": "2026-03-28",
+      "consequence": "If response remains partial or delayed, escalation becomes more viable"
+    }
+  ],
+
+  "timeline": [
+    {
+      "event_date": "2026-02-05",
+      "label": "Complaint submitted",
+      "event_type": "submission",
+      "description": "Complaint submitted to institution."
+    },
+    {
+      "event_date": "2026-02-06",
+      "label": "Complaint acknowledged",
+      "event_type": "acknowledgement",
+      "description": "Institution acknowledged receipt."
+    },
+    {
+      "event_date": "2026-02-18",
+      "label": "Partial response issued",
+      "event_type": "response",
+      "description": "Institution responded but did not address all points."
+    },
+    {
+      "event_date": "2026-02-25",
+      "label": "Follow-up submitted",
+      "event_type": "follow_up",
+      "description": "Clarification requested on incomplete response."
+    },
+    {
+      "event_date": "2026-03-05",
+      "label": "Additional response issued",
+      "event_type": "response",
+      "description": "Further response provided but still incomplete."
+    }
+  ],
+
+  "escalation_paths": [
+    {
+      "name": "Continue internal engagement",
+      "route_type": "internal_process",
+      "trigger": "Institution continues to respond, albeit partially",
+      "likely_response": "Gradual clarification with intermittent delays",
+      "time_horizon": "medium",
+      "risk_level": "low",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    },
+    {
+      "name": "Prepare external escalation",
+      "route_type": "oversight_review",
+      "trigger": "Repeated partial responses without full resolution",
+      "likely_response": "Review based on documented gaps and response quality",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+
+  "linked_cases": [
+    {
+      "strike_reference": "CIVIC-CASE-001",
+      "relationship_type": "lower_intensity_comparison",
+      "note": "More engagement than case 002 but less clarity than case 001."
+    },
+    {
+      "strike_reference": "CIVIC-CASE-002",
+      "relationship_type": "partial_pattern_overlap",
+      "note": "Shares delay characteristics but retains some engagement."
+    }
+  ],
+
+  "structural_insight": "The institution engages intermittently, providing partial responses that maintain process continuity without fully resolving issues.",
+
+  "personal_positioning": "The complainant remains engaged while carefully monitoring response quality and completeness.",
+
+  "decision_note": "Continue engagement but monitor for repeated partial responses that may justify escalation.",
+
+  "learning_capture": "Partial engagement can create the appearance of progress while delaying full resolution, requiring careful monitoring of response quality."
+}
