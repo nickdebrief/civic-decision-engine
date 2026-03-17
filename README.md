@@ -66,6 +66,44 @@ Full architecture documentation:
 
 ---
 
+## Adaptation Layer (v10)
+
+Building on the core architecture, the Adaptation Layer introduces
+a structured way to observe how institutional behaviour shifts over time.
+
+While individual cases can appear complex or ambiguous, comparing multiple structured cases allows patterns to emerge across timelines, responses, and escalation pathways.
+
+This layer focuses on behavioural movement rather than isolated events.
+
+### What it captures
+
+- Changes in institutional behaviour across cases  
+- Movement between response, partial engagement, and resistance  
+- The relationship between escalation, timing, and engagement patterns  
+
+### Behavioural progression
+
+Example cases illustrate a common progression:
+
+response → partial engagement → resistance
+
+This progression does not assume intent.  
+It reflects observable changes in engagement and response patterns over time.
+
+### Interpretation
+
+By comparing structured cases, the engine enables:
+
+- Identification of emerging patterns  
+- Recognition of stabilisation or deterioration  
+- Understanding of when escalation may become necessary  
+
+This is not designed to judge outcomes or assign blame.
+
+It is designed to make behavioural change visible.
+
+---
+
 ## Example Civic Case
 
 ```json
