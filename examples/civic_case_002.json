@@ -1,0 +1,186 @@
+{
+  "strike_reference": "CIVIC-CASE-002",
+  "case_title": "Complaint experiencing delay and procedural narrowing during oversight process",
+  "civic_domain": "public_administration",
+  "decision_trigger": "A complaint remained active across multiple stages but responses became narrower and more procedural over time.",
+  "recall_question": "Do the case signals indicate delay, procedural containment, or escalation readiness?",
+  "user_priority": "clarity, accountability, and escalation timing",
+  "desired_outcome": "Establish whether the complaint remains meaningfully active or has shifted into procedural containment.",
+  "urgency": "medium",
+
+  "institutions": [
+    "Public Body Complaints Unit",
+    "Internal Review Office",
+    "External Oversight Body"
+  ],
+
+  "rules_or_procedures": [
+    "Internal complaint handling procedure",
+    "Internal review procedure",
+    "External oversight escalation after delayed or inadequate response"
+  ],
+
+  "constraints": [
+    "fragmented correspondence",
+    "limited institutional transparency",
+    "unclear internal timelines"
+  ],
+
+  "case_lifecycle": {
+    "current_stage": "awaiting_response",
+    "status": "active",
+    "stalled": false,
+    "days_open": 34,
+    "next_decision_point": "assess_escalation_readiness",
+    "next_deadline": "2026-03-22",
+    "recommended_mode": "hold_and_prepare"
+  },
+
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "raising, documenting, and following up the complaint",
+      "incentive_or_pressure": "seek procedural clarity and substantive engagement",
+      "likely_behaviour": "preserve chronology, monitor deadlines, and prepare escalation"
+    },
+    {
+      "name": "Public Body Complaints Unit",
+      "actor_type": "institutional_actor",
+      "role_in_case": "initial complaint intake and first-stage responses",
+      "incentive_or_pressure": "manage complaint volume and reduce procedural exposure",
+      "likely_behaviour": "acknowledge complaint, narrow scope, and rely on procedure"
+    },
+    {
+      "name": "Internal Review Office",
+      "actor_type": "institutional_actor",
+      "role_in_case": "secondary internal review of the complaint",
+      "incentive_or_pressure": "preserve internal procedural consistency",
+      "likely_behaviour": "frame issues narrowly and defer substantive resolution"
+    },
+    {
+      "name": "External Oversight Body",
+      "actor_type": "oversight_body",
+      "role_in_case": "potential escalation route after internal delay",
+      "incentive_or_pressure": "review whether complaint falls within remit and is sufficiently evidenced",
+      "likely_behaviour": "seek chronology, records, and proof of internal exhaustion"
+    }
+  ],
+
+  "evidence_bundle": [
+    {
+      "label": "Initial complaint submission",
+      "evidence_type": "email",
+      "relevance": "Establishes the complaint start point and issues raised",
+      "strength": "high",
+      "linked_timeline_label": "Initial complaint submitted"
+    },
+    {
+      "label": "Acknowledgement email",
+      "evidence_type": "email",
+      "relevance": "Confirms receipt of complaint by the institution",
+      "strength": "high",
+      "linked_timeline_label": "Complaint acknowledged"
+    },
+    {
+      "label": "Procedural clarification response",
+      "evidence_type": "email",
+      "relevance": "Shows a narrow procedural response without substantive engagement",
+      "strength": "medium",
+      "linked_timeline_label": "Procedural response issued"
+    },
+    {
+      "label": "Follow-up request",
+      "evidence_type": "email",
+      "relevance": "Demonstrates continued effort to obtain substantive response",
+      "strength": "high",
+      "linked_timeline_label": "Follow-up request submitted"
+    }
+  ],
+
+  "deadlines": [
+    {
+      "label": "Internal review follow-up deadline",
+      "due_date": "2026-03-22",
+      "consequence": "Failure to respond strengthens the case for external escalation"
+    }
+  ],
+
+  "timeline": [
+    {
+      "event_date": "2026-02-01",
+      "label": "Initial complaint submitted",
+      "event_type": "submission",
+      "description": "The complainant submitted the original complaint to the Public Body Complaints Unit."
+    },
+    {
+      "event_date": "2026-02-03",
+      "label": "Complaint acknowledged",
+      "event_type": "acknowledgement",
+      "description": "The institution acknowledged receipt of the complaint."
+    },
+    {
+      "event_date": "2026-02-14",
+      "label": "Procedural response issued",
+      "event_type": "response",
+      "description": "The institution issued a procedural response that did not address the substance of the complaint."
+    },
+    {
+      "event_date": "2026-02-20",
+      "label": "Follow-up request submitted",
+      "event_type": "follow_up",
+      "description": "The complainant requested substantive clarification and next procedural steps."
+    },
+    {
+      "event_date": "2026-03-01",
+      "label": "Internal review referenced",
+      "event_type": "procedure",
+      "description": "The institution referenced internal review pathways without resolving the issues raised."
+    }
+  ],
+
+  "escalation_paths": [
+    {
+      "name": "Internal review follow-up",
+      "route_type": "internal_review",
+      "trigger": "Substantive response remains absent after procedural correspondence",
+      "likely_response": "Further procedural narrowing or delayed clarification",
+      "time_horizon": "short",
+      "risk_level": "medium",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    },
+    {
+      "name": "External oversight escalation",
+      "route_type": "oversight_review",
+      "trigger": "Internal route appears delayed or procedurally exhausted",
+      "likely_response": "Request for complaint chronology, correspondence, and evidence bundle",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "high",
+      "deadline_pressure": "high",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+
+  "linked_cases": [
+    {
+      "strike_reference": "CIVIC-CASE-001",
+      "relationship_type": "similar_pattern",
+      "note": "Both cases involve procedural acknowledgement followed by delayed substantive movement."
+    }
+  ],
+
+  "structural_insight": "The complaint appears to remain active procedurally while substantive engagement narrows over time.",
+
+  "personal_positioning": "The complainant is maintaining a measured and evidence-based record while preparing for possible escalation.",
+
+  "decision_note": "Continue documenting delays, preserve chronology, and prepare escalation if the next procedural window expires without meaningful engagement.",
+
+  "learning_capture": "Repeated procedural responses without substantive movement can indicate emerging containment dynamics rather than active resolution."
+}
