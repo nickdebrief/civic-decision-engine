@@ -102,6 +102,14 @@ Deadline pressure:       medium
 Case momentum:           active
 Escalation readiness:    moderate
 ```
+### Example Cases
+
+- `civic_case_001.json` — baseline procedural case
+- `civic_case_002.json` — delayed response with escalation signal
+
+These examples demonstrate how the engine distinguishes between  
+standard institutional processing and emerging containment dynamics  
+through behavioural scoring and structured case comparison.
 
 ## Documentation
 
