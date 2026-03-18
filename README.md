@@ -12,7 +12,7 @@ The Civic Decision Engine models civic cases using structured representations of
 - timelines  
 - institutional interactions  
 
-It produces interpretable analytical signals to support understanding of institutional behaviour and decision processes.
+Produces interpretable analytical signals for understanding institutional behaviour and decision processes.
 
 ---
 
@@ -30,18 +30,15 @@ Framework → System → Application
 
 ## Architecture Overview
 
-Conceptual flow:
+Conceptual flow of the Civic Decision Engine:
 
 ```
-Real-world civic interaction
-            ↓
-     Structured civic case
-            ↓
-    Civic Decision Engine
-            ↓
-     Analytical signals
-            ↓
-   Interpretable insights
+- Case structure modelling  
+- Pattern signal identification  
+- Lifecycle state diagnostics  
+- Institutional behaviour analysis  
+- Escalation pathway evaluation
+
 ```
 
 ---
@@ -78,9 +75,9 @@ Development Status
 Version: v10
 
 Current focus:
-	•	framework architecture
-	•	structured case modelling
-	•	analytical signal development
+• framework architecture
+• structured case modelling
+• analytical signal development
 
 Approach
 
