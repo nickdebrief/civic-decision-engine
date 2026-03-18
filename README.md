@@ -1,52 +1,36 @@
-# Civic Decision Engine
+# Civic Decision Engine — v10
 
-Observation sometimes becomes clearer when structure is applied.
+Structured framework for analysing civic decision environments.
 
-## Why this project exists
+---
 
-Civic processes often involve complex interactions between citizens,
-institutions, procedures, and timelines.
+## Overview
 
-Individual cases can appear fragmented or ambiguous when viewed only
-through documents, correspondence, or isolated events.
+The Civic Decision Engine models civic cases using structured representations of:
 
-The Civic Decision Engine explores whether applying structured models
-to civic cases can help reveal patterns in institutional decision
-environments.
+- evidence  
+- timelines  
+- institutional interactions  
 
-By representing cases as structured records containing actors,
-evidence, timelines, and procedural stages, the framework attempts to
-produce interpretable analytical signals about case posture,
-escalation readiness, and decision structure.
+It produces interpretable analytical signals to support understanding of institutional behaviour and decision processes.
 
-The goal is not to automate decisions, but to make civic processes
-more observable and understandable.
+---
 
-## Project Status
+## Position Within Civic Decision Systems
 
-Civic Decision Engine — **v10**
+The Civic Decision Engine forms the **framework layer** within a broader structure:
 
-Prototype analytical framework for modelling civic decision environments.
+Framework → System → Application
 
-Current focus:
+- Framework: Civic Decision Engine  
+- System: Civic Recall Pipeline  
+- Application: Civic Case Timeline  
 
-• framework architecture  
-• civic case structure  
-• analytical signal modelling  
-
-Future development may explore:
-
-• institutional pattern analysis  
-• multi-case comparison  
-• visual analysis interfaces
-
+---
 
 ## Architecture Overview
 
-Conceptual flow of the Civic Decision Engine.
-
-The engine applies structured analysis to civic cases involving
-institutions, actors, timelines, and evidence.
+Conceptual flow:
 
 ```
 Real-world civic interaction
@@ -60,47 +44,15 @@ Real-world civic interaction
    Interpretable insights
 ```
 
-Full architecture documentation:
-
-[Architecture Documentation](docs/ARCHITECTURE.md)
-
 ---
 
-## Adaptation Layer (v10)
+## Core Capabilities
 
-Building on the core architecture, the Adaptation Layer introduces
-a structured way to observe how institutional behaviour shifts over time.
-
-While individual cases can appear complex or ambiguous, comparing multiple structured cases allows patterns to emerge across timelines, responses, and escalation pathways.
-
-This layer focuses on behavioural movement rather than isolated events.
-
-### What it captures
-
-- Changes in institutional behaviour across cases  
-- Movement between response, partial engagement, and resistance  
-- The relationship between escalation, timing, and engagement patterns  
-
-### Behavioural progression
-
-Example cases illustrate a common progression:
-
-response → partial engagement → resistance
-
-This progression does not assume intent.  
-It reflects observable changes in engagement and response patterns over time.
-
-### Interpretation
-
-By comparing structured cases, the engine enables:
-
-- Identification of emerging patterns  
-- Recognition of stabilisation or deterioration  
-- Understanding of when escalation may become necessary  
-
-This is not designed to judge outcomes or assign blame.
-
-It is designed to make behavioural change visible.
+- Case structure modelling  
+- Pattern signal identification  
+- Lifecycle diagnostics  
+- Institutional behaviour analysis  
+- Escalation path evaluation  
 
 ---
 
@@ -111,48 +63,37 @@ It is designed to make behavioural change visible.
   "case_id": "strike_742",
   "institution": "Example Authority",
   "lifecycle_state": "awaiting_response",
-  "actors": [
-    "citizen",
-    "institution"
-  ],
-  "timeline": [
+  "events": [
     {
-      "date": "2026-02-01",
-      "event": "complaint_submitted"
-    },
-    {
-      "date": "2026-02-10",
-      "event": "institution_acknowledged"
+      "date": "2026-01-07",
+      "action": "escalation",
+      "target": "oversight_body"
     }
-  ],
-  "evidence_bundle": [
-    "email_correspondence",
-    "document_record"
   ]
 }
 ```
 
-## Example Analysis Signals
+Development Status
 
-```
-Evidence strength:       high
-Deadline pressure:       medium
-Case momentum:           active
-Escalation readiness:    moderate
-```
-### Example Cases
+Version: v10
 
-- `civic_case_001.json` — baseline procedural case
-- `civic_case_002.json` — delayed response with escalation signal
+Current focus:
+	•	framework architecture
+	•	structured case modelling
+	•	analytical signal development
 
-These examples demonstrate how the engine distinguishes between  
-standard institutional processing and emerging containment dynamics  
-through behavioural scoring and structured case comparison.
+Approach
 
-## Documentation
+Observation sometimes becomes clearer when structure is applied.
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Civic Case Specification](docs/CIVIC_CASE_SPEC.md)
-- [Decision Model](docs/DECISION_MODEL.md)
-- [Philosophy](docs/PHILOSOPHY.md)
+Not designed for attention.
+Designed for understanding.
+
+Repository
+
+https://github.com/nickdebrief/civic-decision-engine
+
+Full architecture documentation:
+
+[Architecture Documentation](docs/ARCHITECTURE.md)
 
