@@ -86,9 +86,19 @@ Observation sometimes becomes clearer when structure is applied.
 Not designed for attention.
 Designed for understanding.
 
-Repository
+## Related Components
+
+- Civic Recall Pipeline — v0.1 (system): https://github.com/nickdebrief/civic-recall-pipeline
+
+---
+
+## Repository
 
 https://github.com/nickdebrief/civic-decision-engine
+
+Part of the Civic Decision Systems structure:
+
+- Civic Recall Pipeline — v0.1: https://github.com/nickdebrief/civic-recall-pipeline
 
 Full architecture documentation:
 
