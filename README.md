@@ -86,7 +86,7 @@ Observation sometimes becomes clearer when structure is applied.
 Not designed for attention.
 Designed for understanding.
 
-See Conditions Layer → docs/conditions_layer.md
+Conditions Layer → [docs/conditions_layer.md](docs/conditions_layer.md)
 
 ## Related Components
 
