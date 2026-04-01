@@ -12,8 +12,7 @@ The Civic Decision Engine models civic cases using structured representations of
 - timelines  
 - institutional interactions  
 
-Produces interpretable analytical signals for understanding institutional behaviour and decision processes.
-
+Produces interpretable analytical signals and classified conditions of institutional behaviour state.
 ---
 
 ## Position Within Civic Decision Systems
@@ -78,7 +77,7 @@ Current focus:
 • framework architecture
 • structured case modelling
 • analytical signal development
-
+f
 Approach
 
 Observation sometimes becomes clearer when structure is applied.
