@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "System Case",
+  "type": "object",
+  "required": [
+    "system_reference",
+    "title",
+    "system_type",
+    "domain",
+    "declared_purpose",
+    "observed_components",
+    "declared_capabilities",
+    "implemented_capabilities",
+    "missing_capabilities",
+    "signals",
+    "assessment"
+  ],
+  "properties": {
+    "system_reference": {
+      "type": "string",
+      "description": "Unique reference for the analysed system."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title of the system."
+    },
+    "system_type": {
+      "type": "string",
+      "enum": [
+        "software_repository",
+        "workflow",
+        "service_process",
+        "institutional_procedure",
+        "hybrid_system",
+        "other"
+      ]
+    },
+    "domain": {
+      "type": "string",
+      "description": "Context or subject area the system belongs to."
+    },
+    "declared_purpose": {
+      "type": "string",
+      "description": "What the system says it is for."
+    },
+    "observed_components": {
+      "type": "object",
+      "required": [
+        "entrypoints",
+        "commands",
+        "tools",
+        "subsystems",
+        "hooks",
+        "services",
+        "documents",
+        "tests"
+      ],
+      "properties": {
+        "entrypoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "subsystems": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "hooks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "services": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "documents": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tests": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "declared_capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Capabilities the system claims or presents."
+    },
+    "implemented_capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Capabilities evidenced in the observed structure."
+    },
+    "missing_capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Claimed or expected capabilities not evidenced in operation."
+    },
+    "intervention_points": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Places where behaviour can be changed, checked, or controlled."
+    },
+    "observability_points": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Places where the system can be inspected, traced, or audited."
+    },
+    "dependency_surface": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "External dependencies or hidden support conditions."
+    },
+    "signals": {
+      "type": "object",
+      "required": [
+        "capability_alignment",
+        "execution_depth",
+        "hook_coverage",
+        "observability_strength",
+        "pathway_completion",
+        "dependency_fragility",
+        "surface_to_function_ratio",
+        "intervention_density",
+        "structural_drift",
+        "parity_integrity"
+      ],
+      "properties": {
+        "capability_alignment": {
+          "type": "string",
+          "enum": ["HIGH", "PARTIAL", "LOW"]
+        },
+        "execution_depth": {
+          "type": "string",
+          "enum": ["DEEP", "MODERATE", "SHALLOW"]
+        },
+        "hook_coverage": {
+          "type": "string",
+          "enum": ["HIGH", "PARTIAL", "LOW"]
+        },
+        "observability_strength": {
+          "type": "string",
+          "enum": ["STRONG", "LIMITED", "WEAK"]
+        },
+        "pathway_completion": {
+          "type": "string",
+          "enum": ["COMPLETE", "PARTIAL", "INCOMPLETE"]
+        },
+        "dependency_fragility": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH"]
+        },
+        "surface_to_function_ratio": {
+          "type": "string",
+          "enum": ["LOW", "BALANCED", "HIGH"]
+        },
+        "intervention_density": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "structural_drift": {
+          "type": "string",
+          "enum": ["LOW", "MODERATE", "ELEVATED"]
+        },
+        "parity_integrity": {
+          "type": "string",
+          "enum": ["STRONG", "PARTIAL", "SURFACE_LEVEL", "WEAK"]
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "required": [
+        "system_posture",
+        "structural_finding",
+        "interpretation"
+      ],
+      "properties": {
+        "system_posture": {
+          "type": "string",
+          "description": "High-level structural posture label."
+        },
+        "structural_finding": {
+          "type": "string",
+          "description": "Primary structural conclusion."
+        },
+        "interpretation": {
+          "type": "string",
+          "description": "Human-readable meaning of the observed structure."
+        }
+      }
+    },
+    "learning_capture": {
+      "type": "string",
+      "description": "What this system teaches about structure, function, or failure."
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "source_evidence": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Files, modules, or records supporting the analysis."
+    }
+  }
+}

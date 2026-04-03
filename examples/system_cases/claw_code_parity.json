@@ -1,0 +1,74 @@
+{
+  "system_reference": "claw_code_parity_v1",
+  "title": "Claw Code Parity",
+  "system_type": "software_repository",
+  "domain": "agent_harness_analysis",
+  "declared_purpose": "Parity-oriented reconstruction of an agent runtime",
+
+  "observed_components": {
+    "entrypoints": ["main.py"],
+    "commands": ["summary", "manifest", "commands", "tools", "parity-audit"],
+    "tools": ["tool registry (partial)"],
+    "subsystems": ["models", "commands", "tools", "query_engine"],
+    "hooks": [],
+    "services": ["CLI interface"],
+    "documents": ["README.md", "PARITY.md"],
+    "tests": ["unit tests (partial)"]
+  },
+
+  "declared_capabilities": [
+    "Agent runtime parity",
+    "Command and tool equivalence",
+    "System reconstruction"
+  ],
+
+  "implemented_capabilities": [
+    "Command inventory",
+    "Tool inventory",
+    "Manifest generation",
+    "Parity audit structure"
+  ],
+
+  "missing_capabilities": [
+    "Full runtime equivalence",
+    "Comprehensive tool execution",
+    "Hook execution system",
+    "Deep orchestration layer"
+  ],
+
+  "intervention_points": [
+    "CLI command layer"
+  ],
+
+  "observability_points": [
+    "CLI summaries",
+    "Manifest output",
+    "Parity audit output"
+  ],
+
+  "dependency_surface": [
+    "Local environment",
+    "Archived reference system (external)"
+  ],
+
+  "signals": {
+    "capability_alignment": "PARTIAL",
+    "execution_depth": "SHALLOW",
+    "hook_coverage": "LOW",
+    "observability_strength": "LIMITED",
+    "pathway_completion": "PARTIAL",
+    "dependency_fragility": "MEDIUM",
+    "surface_to_function_ratio": "HIGH",
+    "intervention_density": "LOW",
+    "structural_drift": "MODERATE",
+    "parity_integrity": "SURFACE_LEVEL"
+  },
+
+  "assessment": {
+    "system_posture": "SURFACE_COMPLETE_RUNTIME_INCOMPLETE",
+    "structural_finding": "Surface parity exceeds runtime capability",
+    "interpretation": "The system presents a structured representation of parity, but functional depth remains limited. Similarity is present at the manifest level, but full operational equivalence is not yet established."
+  },
+
+  "learning_capture": "Systems can appear equivalent through structure while lacking the execution depth required for true parity."
+}
