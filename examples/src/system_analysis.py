@@ -60,10 +60,18 @@ def build_output(
         "signals": signals,
         "assessment": assessment,
     }
+def generate_run_id():
+    now = datetime.now(timezone.utc)
+    return f"system-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}"
 
+def generate_run_id():
+    now = datetime.now(timezone.utc)
+    return f"system-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}"
 
 def build_run_metadata(args, input_path, schema_path, case_count):
     return {
+        "run_id": generate_run_id(),
+        "run_id": generate_run_id(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "system_analysis",
         "input_path": str(input_path),
@@ -204,6 +212,7 @@ def export_markdown(results, export_path, metadata=None):
             [
                 "## Run Metadata",
                 "",
+                f"- **Run ID:** {metadata.get('run_id')}",
                 f"- **Generated At:** {metadata.get('generated_at')}",
                 f"- **Mode:** {metadata.get('mode')}",
                 f"- **Input Path:** {metadata.get('input_path')}",
