@@ -1,5 +1,5 @@
+import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -25,10 +25,11 @@ def compare_values(label: str, old: Any, new: Any) -> tuple[bool, str]:
 def compare_dict(
     old: dict[str, Any],
     new: dict[str, Any],
-) -> tuple[int, int, list[str]]:
+) -> tuple[int, int, list[str], dict[str, dict[str, Any]]]:
     changed = 0
     unchanged = 0
     lines: list[str] = []
+    structured: dict[str, dict[str, Any]] = {}
 
     all_keys = sorted(set(old.keys()) | set(new.keys()))
     for key in all_keys:
@@ -36,19 +37,30 @@ def compare_dict(
         new_val = new.get(key)
 
         if isinstance(old_val, dict) and isinstance(new_val, dict):
-            sub_changed, sub_unchanged, sub_lines = compare_dict(old_val, new_val)
+            sub_changed, sub_unchanged, sub_lines, sub_structured = compare_dict(
+                old_val, new_val
+            )
             changed += sub_changed
             unchanged += sub_unchanged
             lines.extend(sub_lines)
+            structured[key] = {
+                "type": "nested",
+                "changes": sub_structured,
+            }
         else:
             did_change, line = compare_values(key, old_val, new_val)
             lines.append(line)
+            structured[key] = {
+                "changed": did_change,
+                "old": old_val,
+                "new": new_val,
+            }
             if did_change:
                 changed += 1
             else:
                 unchanged += 1
 
-    return changed, unchanged, lines
+    return changed, unchanged, lines, structured
 
 
 def print_section(title: str) -> None:
@@ -56,22 +68,7 @@ def print_section(title: str) -> None:
     print("-" * len(title))
 
 
-def main() -> None:
-    if len(sys.argv) != 3:
-        print("Usage: python compare_runs.py <old_run.json> <new_run.json>")
-        raise SystemExit(1)
-
-    old_path = Path(sys.argv[1])
-    new_path = Path(sys.argv[2])
-
-    if not old_path.exists():
-        print(f"Error: file not found -> {old_path}")
-        raise SystemExit(1)
-
-    if not new_path.exists():
-        print(f"Error: file not found -> {new_path}")
-        raise SystemExit(1)
-
+def build_comparison(old_path: Path, new_path: Path) -> dict[str, Any]:
     old_payload = load_json(str(old_path))
     new_payload = load_json(str(new_path))
 
@@ -83,15 +80,9 @@ def main() -> None:
 
     metadata_changed = 0
     metadata_unchanged = 0
-    result_changed = 0
-    result_unchanged = 0
+    metadata_lines: list[str] = []
+    metadata_structured: dict[str, dict[str, Any]] = {}
 
-    print("\nRun Comparison")
-    print("==============")
-    print(f"Old File: {old_path}")
-    print(f"New File: {new_path}")
-
-    print_section("Metadata")
     metadata_fields = [
         ("run_id", old_meta.get("run_id"), new_meta.get("run_id")),
         ("generated_at", old_meta.get("generated_at"), new_meta.get("generated_at")),
@@ -103,13 +94,22 @@ def main() -> None:
 
     for label, old_val, new_val in metadata_fields:
         did_change, line = compare_values(label, old_val, new_val)
-        print(line)
+        metadata_lines.append(line)
+        metadata_structured[label] = {
+            "changed": did_change,
+            "old": old_val,
+            "new": new_val,
+        }
         if did_change:
             metadata_changed += 1
         else:
             metadata_unchanged += 1
 
-    print_section("Top Level")
+    top_level_changed = 0
+    top_level_unchanged = 0
+    top_level_lines: list[str] = []
+    top_level_structured: dict[str, dict[str, Any]] = {}
+
     top_fields = [
         ("system_reference", old_result.get("system_reference"), new_result.get("system_reference")),
         ("title", old_result.get("title"), new_result.get("title")),
@@ -119,55 +119,160 @@ def main() -> None:
 
     for label, old_val, new_val in top_fields:
         did_change, line = compare_values(label, old_val, new_val)
-        print(line)
+        top_level_lines.append(line)
+        top_level_structured[label] = {
+            "changed": did_change,
+            "old": old_val,
+            "new": new_val,
+        }
         if did_change:
-            result_changed += 1
+            top_level_changed += 1
         else:
-            result_unchanged += 1
+            top_level_unchanged += 1
 
-    print_section("Signals")
-    changed, unchanged, lines = compare_dict(
+    signals_changed, signals_unchanged, signals_lines, signals_structured = compare_dict(
         old_result.get("signals", {}),
         new_result.get("signals", {}),
     )
-    for line in lines:
-        print(line)
-    result_changed += changed
-    result_unchanged += unchanged
 
-    print_section("Assessment")
-    changed, unchanged, lines = compare_dict(
+    assessment_changed, assessment_unchanged, assessment_lines, assessment_structured = compare_dict(
         old_result.get("assessment", {}),
         new_result.get("assessment", {}),
     )
-    for line in lines:
-        print(line)
-    result_changed += changed
-    result_unchanged += unchanged
+
+    result_changed = top_level_changed + signals_changed + assessment_changed
+    result_unchanged = top_level_unchanged + signals_unchanged + assessment_unchanged
 
     total_changed = metadata_changed + result_changed
     total_unchanged = metadata_unchanged + result_unchanged
 
-    print_section("Summary")
-    print(f"Metadata changes: {metadata_changed}")
-    print(f"Metadata unchanged: {metadata_unchanged}")
-    print(f"Result changes: {result_changed}")
-    print(f"Result unchanged: {result_unchanged}")
-    print(f"Total changed fields: {total_changed}")
-    print(f"Total unchanged fields: {total_unchanged}")
-
     if result_changed == 0:
-        print("Behavioural change detected: no")
+        interpretation = "new run recorded, but no result-level change detected."
+        behavioural_change_detected = False
     else:
-        print("Behavioural change detected: yes")
+        interpretation = "result-level changes detected between runs."
+        behavioural_change_detected = True
 
-    if metadata_changed > 0 and result_changed == 0:
-        print("Interpretation: new run recorded, but no result-level change detected.")
-    elif result_changed > 0:
-        print("Interpretation: result-level changes detected between runs.")
+    return {
+        "comparison_metadata": {
+            "old_file": str(old_path),
+            "new_file": str(new_path),
+        },
+        "metadata": {
+            "changed": metadata_changed,
+            "unchanged": metadata_unchanged,
+            "fields": metadata_structured,
+            "lines": metadata_lines,
+        },
+        "top_level": {
+            "changed": top_level_changed,
+            "unchanged": top_level_unchanged,
+            "fields": top_level_structured,
+            "lines": top_level_lines,
+        },
+        "signals": {
+            "changed": signals_changed,
+            "unchanged": signals_unchanged,
+            "fields": signals_structured,
+            "lines": signals_lines,
+        },
+        "assessment": {
+            "changed": assessment_changed,
+            "unchanged": assessment_unchanged,
+            "fields": assessment_structured,
+            "lines": assessment_lines,
+        },
+        "summary": {
+            "metadata_changes": metadata_changed,
+            "metadata_unchanged": metadata_unchanged,
+            "result_changes": result_changed,
+            "result_unchanged": result_unchanged,
+            "total_changed_fields": total_changed,
+            "total_unchanged_fields": total_unchanged,
+            "behavioural_change_detected": behavioural_change_detected,
+            "interpretation": interpretation,
+        },
+    }
+
+
+def print_human_readable(comparison: dict[str, Any]) -> None:
+    print("\nRun Comparison")
+    print("==============")
+    print(f"Old File: {comparison['comparison_metadata']['old_file']}")
+    print(f"New File: {comparison['comparison_metadata']['new_file']}")
+
+    print_section("Metadata")
+    for line in comparison["metadata"]["lines"]:
+        print(line)
+
+    print_section("Top Level")
+    for line in comparison["top_level"]["lines"]:
+        print(line)
+
+    print_section("Signals")
+    for line in comparison["signals"]["lines"]:
+        print(line)
+
+    print_section("Assessment")
+    for line in comparison["assessment"]["lines"]:
+        print(line)
+
+    summary = comparison["summary"]
+
+    print_section("Summary")
+    print(f"Metadata changes: {summary['metadata_changes']}")
+    print(f"Metadata unchanged: {summary['metadata_unchanged']}")
+    print(f"Result changes: {summary['result_changes']}")
+    print(f"Result unchanged: {summary['result_unchanged']}")
+    print(f"Total changed fields: {summary['total_changed_fields']}")
+    print(f"Total unchanged fields: {summary['total_unchanged_fields']}")
+    print(
+        f"Behavioural change detected: {'yes' if summary['behavioural_change_detected'] else 'no'}"
+    )
+    print(f"Interpretation: {summary['interpretation']}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Compare two CDE run outputs")
+    parser.add_argument("old_run", help="Path to the older run JSON file")
+    parser.add_argument("new_run", help="Path to the newer run JSON file")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print comparison as machine-readable JSON",
+    )
+    parser.add_argument(
+        "--export",
+        help="Path to save comparison JSON output",
+    )
+
+    args = parser.parse_args()
+
+    old_path = Path(args.old_run)
+    new_path = Path(args.new_run)
+
+    if not old_path.exists():
+        print(f"Error: file not found -> {old_path}")
+        raise SystemExit(1)
+
+    if not new_path.exists():
+        print(f"Error: file not found -> {new_path}")
+        raise SystemExit(1)
+
+    comparison = build_comparison(old_path, new_path)
+
+    if args.export:
+        export_path = Path(args.export)
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(comparison, f, indent=2)
+        print(f"Exported comparison -> {export_path}")
+
+    if args.json:
+        print(json.dumps(comparison, indent=2))
     else:
-        print("Interpretation: no changes detected.")
-        
+        print_human_readable(comparison)
+
 
 if __name__ == "__main__":
     main()
