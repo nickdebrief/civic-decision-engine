@@ -9,8 +9,22 @@ License: MIT
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
+from datetime import date
 from pathlib import Path
+from typing import Any, List
+
+from jsonschema import Draft7Validator
+
+SYSTEM_SRC_DIR = Path(__file__).resolve().parent / "examples" / "src"
+if str(SYSTEM_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SYSTEM_SRC_DIR))
+
+from system_analysis import main as system_analysis_main
+
+import json
 from typing import Any, List
 from datetime import date
 from jsonschema import Draft7Validator
@@ -196,6 +210,101 @@ def validate_case(case_path: Path, schema_path: Path) -> dict[str, Any] | None:
 # ============================================================
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Civic Decision Engine v10")
+
+    parser.add_argument(
+        "--mode",
+        choices=["civic", "system"],
+        default="civic",
+        help="Run Civic Case Mode or System Analysis Mode",
+    )
+    parser.add_argument(
+        "--input",
+        help="Path to input file or directory",
+    )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Process all JSON files in a directory",
+    )
+    parser.add_argument(
+        "--schema",
+        default="schema/system_case.schema.json",
+        help="Path to schema file",
+    )
+    parser.add_argument(
+        "--raw-signals",
+        action="store_true",
+        help="Use raw signals from case JSON",
+    )
+    parser.add_argument(
+        "--raw-assessment",
+        action="store_true",
+        help="Use raw assessment from case JSON",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print JSON output",
+    )
+    parser.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip schema validation",
+    )
+    parser.add_argument(
+        "--export",
+        help="Path to save JSON output",
+    )
+    parser.add_argument(
+        "--export-md",
+        help="Path to save Markdown output",
+    )
+
+    args = parser.parse_args()
+
+    # ============================================================
+    # SYSTEM MODE
+    # ============================================================
+
+    if args.mode == "system":
+        system_argv = ["system_analysis.py"]
+
+        if args.input:
+            system_argv.append(args.input)
+        else:
+            raise SystemExit("System mode requires --input")
+
+        if args.batch:
+            system_argv.append("--batch")
+        if args.schema:
+            system_argv.extend(["--schema", args.schema])
+        if args.raw_signals:
+            system_argv.append("--raw-signals")
+        if args.raw_assessment:
+            system_argv.append("--raw-assessment")
+        if args.json:
+            system_argv.append("--json")
+        if args.no_validate:
+            system_argv.append("--no-validate")
+        if args.export:
+            system_argv.extend(["--export", args.export])
+        if args.export_md:
+            system_argv.extend(["--export-md", args.export_md])
+
+        original_argv = sys.argv[:]
+        try:
+            sys.argv = system_argv
+            system_analysis_main()
+        finally:
+            sys.argv = original_argv
+
+        return
+
+    # ============================================================
+    # CIVIC MODE (existing menu)
+    # ============================================================
+
     print("Civic Decision Engine — Version 10")
     print("1) Validate sample case")
     print("2) Validate case by path")
