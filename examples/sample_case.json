@@ -16,7 +16,7 @@
   "current_stage": "awaiting_response",
   "status": "active",
   "stalled": false,
-  "days_open": 24,
+  "days_open": 45,
   "next_decision_point": "assess_internal_deadline_expiry",
   "next_deadline": "2026-03-25",
   "recommended_mode": "hold_and_prepare"
