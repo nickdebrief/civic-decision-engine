@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, List
 
@@ -23,11 +23,6 @@ if str(SYSTEM_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SYSTEM_SRC_DIR))
 
 from system_analysis import main as system_analysis_main
-
-import json
-from typing import Any, List
-from datetime import date
-from jsonschema import Draft7Validator
 
 # ============================================================
 # Configuration
@@ -46,6 +41,7 @@ EXAMPLE_CASES = [
 # JSON Utilities
 # ============================================================
 
+
 def load_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
@@ -53,6 +49,7 @@ def load_json(path: Path) -> Any:
 # ============================================================
 # Behaviour Extraction (Core V10 Layer)
 # ============================================================
+
 
 def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
     lifecycle = case.get("case_lifecycle", {})
@@ -88,7 +85,11 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
         escalation = "Low"
         label = "Response"
 
-    posture_scores = {"Neutral": 1, "Cautious": 2, "Defensive": 3, "Withdrawn": 3}
+    posture_scores = {
+        "Neutral": 1,
+        "Cautious": 2,
+        "Defensive": 3,
+        "Withdrawn": 3}
     engagement_scores = {"Normal": 1, "Moderate": 2, "Low": 3, "Very low": 3}
     escalation_scores = {"Low": 1, "Watch": 2, "Increasing": 3, "High": 3}
 
@@ -107,9 +108,63 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
         "escalation": escalation,
     }
 
+
+def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
+    summary = extract_behaviour_summary(case)
+
+    return {
+        "system_reference": case.get("strike_reference"),
+        "title": case.get("case_title"),
+        "domain": "civic_case_analysis",
+        "declared_purpose": (
+            case.get("case_description")
+            or case.get("decision_trigger")
+            or case.get("recall_question")
+        ),
+        "signals": {
+            "posture": summary["posture"],
+            "engagement": summary["engagement"],
+            "escalation": summary["escalation"],
+            "behaviour_index": summary["index"],
+        },
+        "assessment": {
+            "label": summary["label"],
+            "interpretation": (
+                f"Institutional behaviour classified as {summary['label']} "
+                f"with posture {summary['posture']}."
+            ),
+        },
+    }
+
+
+def build_civic_run_metadata(
+        input_path: Path | None, case_count: int) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+
+    return {
+        "run_id": f"civic-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}",
+        "generated_at": now.isoformat(),
+        "mode": "civic_analysis",
+        "input_path": str(input_path) if input_path else None,
+        "schema_path": str(SCHEMA_PATH),
+        "batch": False,
+        "validation_enabled": True,
+        "computed_signals": True,
+        "computed_assessment": True,
+        "case_count": case_count,
+    }
+
+
+def export_json_output(output: dict[str, Any], path: str) -> None:
+    export_path = Path(path)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text(json.dumps(output, indent=2))
+    print(f"\nExported results -> {export_path}")
+
 # ============================================================
 # Adaptation Layer (NEW IN V10)
 # ============================================================
+
 
 def print_adaptation_analysis(cases: List[dict[str, Any]]) -> None:
     print("\n══════════════════════════════")
@@ -138,7 +193,8 @@ def print_adaptation_analysis(cases: List[dict[str, Any]]) -> None:
     print("--------------")
 
     if trajectory == "Deteriorating":
-        print("Behaviour shows increasing institutional resistance or containment over time.")
+        print(
+            "Behaviour shows increasing institutional resistance or containment over time.")
     elif trajectory == "Improving":
         print("Behaviour shows improving engagement and resolution trajectory.")
     else:
@@ -147,6 +203,7 @@ def print_adaptation_analysis(cases: List[dict[str, Any]]) -> None:
 # ============================================================
 # Audit Logs (Clean Separation)
 # ============================================================
+
 
 def write_case_snapshot(case: dict[str, Any]) -> None:
     path = Path("audit_logs/case_analysis_log.json")
@@ -189,12 +246,16 @@ def append_engine_history(case: dict[str, Any]) -> None:
 # Validation Engine
 # ============================================================
 
+
 def validate_case(case_path: Path, schema_path: Path) -> dict[str, Any] | None:
     schema = load_json(schema_path)
     case_data = load_json(case_path)
 
     validator = Draft7Validator(schema)
-    errors = sorted(validator.iter_errors(case_data), key=lambda e: list(e.path))
+    errors = sorted(
+        validator.iter_errors(case_data),
+        key=lambda e: list(
+            e.path))
 
     if errors:
         print("\nValidation failed.\n")
@@ -208,6 +269,7 @@ def validate_case(case_path: Path, schema_path: Path) -> dict[str, Any] | None:
 # ============================================================
 # CLI
 # ============================================================
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Civic Decision Engine v10")
@@ -315,6 +377,19 @@ def main() -> None:
     if choice == "1":
         case = validate_case(SAMPLE_CASE_PATH, SCHEMA_PATH)
         if case:
+            result = format_civic_result(case)
+            metadata = build_civic_run_metadata(SAMPLE_CASE_PATH, 1)
+
+            output = {
+                "run_metadata": metadata,
+                "results": [result],
+            }
+
+            print(json.dumps(output, indent=2))
+
+            if args.export:
+                export_json_output(output, args.export)
+
             write_case_snapshot(case)
             append_engine_history(case)
 
@@ -322,6 +397,19 @@ def main() -> None:
         path = Path(input("Enter case path: ").strip())
         case = validate_case(path, SCHEMA_PATH)
         if case:
+            result = format_civic_result(case)
+            metadata = build_civic_run_metadata(path, 1)
+
+            output = {
+                "run_metadata": metadata,
+                "results": [result],
+            }
+
+            print(json.dumps(output, indent=2))
+
+            if args.export:
+                export_json_output(output, args.export)
+
             write_case_snapshot(case)
             append_engine_history(case)
 
