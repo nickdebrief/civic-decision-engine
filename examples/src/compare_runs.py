@@ -231,6 +231,67 @@ def print_human_readable(comparison: dict[str, Any]) -> None:
     )
     print(f"Interpretation: {summary['interpretation']}")
 
+def export_markdown(comparison: dict[str, Any], export_path: str) -> None:
+    export_path = Path(export_path)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+
+    meta = comparison["comparison_metadata"]
+    summary = comparison["summary"]
+
+    lines = [
+        "# Run Comparison Report",
+        "",
+        "## Files",
+        "",
+        f"- **Old File:** {meta['old_file']}",
+        f"- **New File:** {meta['new_file']}",
+        "",
+        "## Metadata",
+        "",
+    ]
+
+    lines.extend(comparison["metadata"]["lines"])
+    lines.append("")
+
+    lines.extend([
+        "## Top Level",
+        "",
+    ])
+    lines.extend(comparison["top_level"]["lines"])
+    lines.append("")
+
+    lines.extend([
+        "## Signals",
+        "",
+    ])
+    lines.extend(comparison["signals"]["lines"])
+    lines.append("")
+
+    lines.extend([
+        "## Assessment",
+        "",
+    ])
+    lines.extend(comparison["assessment"]["lines"])
+    lines.append("")
+
+    lines.extend([
+        "## Summary",
+        "",
+        f"- **Metadata Changes:** {summary['metadata_changes']}",
+        f"- **Metadata Unchanged:** {summary['metadata_unchanged']}",
+        f"- **Result Changes:** {summary['result_changes']}",
+        f"- **Result Unchanged:** {summary['result_unchanged']}",
+        f"- **Total Changed Fields:** {summary['total_changed_fields']}",
+        f"- **Total Unchanged Fields:** {summary['total_unchanged_fields']}",
+        f"- **Behavioural Change Detected:** {'Yes' if summary['behavioural_change_detected'] else 'No'}",
+        f"- **Interpretation:** {summary['interpretation']}",
+        "",
+    ])
+
+    with open(export_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines).rstrip() + "\n")
+
+    print(f"Exported Markdown report -> {export_path}")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare two CDE run outputs")
@@ -244,6 +305,10 @@ def main() -> None:
     parser.add_argument(
         "--export",
         help="Path to save comparison JSON output",
+    )
+    parser.add_argument(
+        "--export-md",
+        help="Path to save Markdown comparison report",
     )
 
     args = parser.parse_args()
@@ -268,11 +333,13 @@ def main() -> None:
             json.dump(comparison, f, indent=2)
         print(f"Exported comparison -> {export_path}")
 
+    if args.export_md:
+        export_markdown(comparison, args.export_md)
+
     if args.json:
         print(json.dumps(comparison, indent=2))
     else:
         print_human_readable(comparison)
-
-
+        
 if __name__ == "__main__":
     main()
