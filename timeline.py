@@ -3,6 +3,7 @@
 CDE Timeline Generator
 Reads the audit log and produces a structured timeline of events
 and transitions per case reference.
+Detects the moment of change — the first point of behavioural deterioration.
 """
 
 from __future__ import annotations
@@ -29,6 +30,15 @@ def load_audit_log(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     return json.loads(path.read_text())
+
+
+def detect_moment_of_change(
+        transitions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for i, t in enumerate(transitions):
+        if t["direction"] == "deteriorating":
+            if i == 0 or transitions[i - 1]["direction"] != "deteriorating":
+                return t
+    return None
 
 
 def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -77,12 +87,15 @@ def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
                 "direction": direction,
             })
 
+        moment_of_change = detect_moment_of_change(transitions)
+
         timeline[ref] = {
             "case_reference": ref,
             "event_count": len(events_sorted),
             "events": events_sorted,
             "transitions": transitions,
             "overall_trajectory": _overall_trajectory(events_sorted),
+            "moment_of_change": moment_of_change,
         }
 
     return timeline
@@ -113,6 +126,15 @@ def print_timeline(timeline: dict[str, Any]) -> None:
         print(f"\nCase: {ref}")
         print(f"  Events     : {data['event_count']}")
         print(f"  Trajectory : {data['overall_trajectory']}")
+
+        if data.get("moment_of_change"):
+            m = data["moment_of_change"]
+            print(
+                f"\n  Moment of Change"
+                f"\n    {m['from_event']} → {m['to_event']}  |  "
+                f"{m['from_label']} → {m['to_label']}  |  "
+                f"index {m['from_index']} → {m['to_index']}"
+            )
 
         print("\n  Events")
         for e in data["events"]:
@@ -191,16 +213,29 @@ def main() -> None:
                 "",
                 f"- **Events:** {data['event_count']}",
                 f"- **Trajectory:** {data['overall_trajectory']}",
-                "",
-                "### Events",
-                "",
             ]
+
+            if data.get("moment_of_change"):
+                m = data["moment_of_change"]
+                lines += [
+                    "",
+                    "### Moment of Change",
+                    "",
+                    (
+                        f"- `{m['from_event']}` → `{m['to_event']}` — "
+                        f"{m['from_label']} → {m['to_label']} — "
+                        f"index {m['from_index']} → {m['to_index']}"
+                    ),
+                ]
+
+            lines += ["", "### Events", ""]
             for e in data["events"]:
                 lines.append(
                     f"- `{e.get('timestamp')}` — "
                     f"{e.get('label')} — "
                     f"index: {e.get('behaviour_index')}"
                 )
+
             if data["transitions"]:
                 lines += ["", "### Transitions", ""]
                 for t in data["transitions"]:
@@ -210,6 +245,7 @@ def main() -> None:
                         f"index {t['from_index']} → {t['to_index']} — "
                         f"{t['direction']}"
                     )
+
             lines.append("")
 
         export_path.write_text("\n".join(lines))
