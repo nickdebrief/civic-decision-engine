@@ -1,107 +1,140 @@
-# Civic Decision Engine — v10
+# Civic Decision Engine (CDE)
 
-Structured framework for analysing civic decision environments.
-
----
-
-## Overview
-
-The Civic Decision Engine models civic cases using structured representations of:
-
-- evidence  
-- timelines  
-- institutional interactions  
-
-Produces interpretable analytical signals and classified conditions of institutional behaviour state.
----
-
-## Position Within Civic Decision Systems
-
-The Civic Decision Engine forms the **framework layer** within a broader structure:
-
-Framework → System → Application
-
-- Framework: Civic Decision Engine  
-- System: Civic Recall Pipeline  
-- Application: Civic Case Timeline  
+A framework for tracking how institutional behaviour changes over time — clearly, consistently, and without guesswork.
 
 ---
 
-## Architecture Overview
+## What this is (in simple terms)
 
-Conceptual flow of the Civic Decision Engine:
+The Civic Decision Engine is a way of keeping track of how situations change over time.
 
+Imagine you have a problem with an organisation.
+
+At the start, they might respond normally.  
+Then they slow down.  
+Then they only partly engage.  
+And eventually, they might stop responding altogether.
+
+The engine looks at that and answers a simple question:
+
+**“What stage is this at right now?”**
+
+But more importantly, it keeps a record of each check.
+
+So instead of just seeing one moment, it shows:
+
+- what it looked like before  
+- what it looks like now  
+- whether anything actually changed  
+
+And this is the key part:
+
+It can tell the difference between:
+
+- **something new happened**
+- **nothing changed, but we checked again**
+
+That matters, because sometimes things feel like they’re moving, but they’re actually just staying the same.
+
+It also identifies the moment things shift — for example, the exact point where something moves from *Partial engagement* to *Resistance*.
+
+---
+
+## What it does
+
+The engine:
+
+- Classifies behaviour at a given moment  
+  *(e.g. Response, Delayed response, Partial engagement, Resistance)*  
+- Records each run as part of a sequence  
+- Tracks whether anything actually changed between runs  
+- Detects the first moment behaviour shifts  
+
+---
+
+## Key Concepts
+
+**Run**  
+A single observation of a case at a point in time.
+
+**Lineage**  
+Each run is linked to the previous one, forming a chain.
+
+**Depth**  
+Indicates how far along the sequence the record has progressed.
+
+**Behaviour vs Metadata**  
+The engine distinguishes between:
+- a new observation being recorded  
+- an actual behavioural change  
+
+**Moment of Change**  
+The first point where behaviour shifts (e.g. Partial engagement → Resistance).
+
+---
+
+## How the Engine Works
+
+```mermaid
+flowchart TD
+    A["Situation with an organisation"] --> B["Engine checks current behaviour"]
+    B --> C["Classifies the situation"]
+
+    C --> D["Creates a run record"]
+    D --> E["Links it to earlier runs"]
+    E --> F["Builds a timeline"]
+
+    F --> G["Compares before and now"]
+    G --> H["Check for change"]
+
+    H --> I["No change"]
+    H --> J["Behavioural shift detected"]
+
+    J --> K["Identify moment of change"]
 ```
-- Case structure modelling  
-- Pattern signal identification  
-- Lifecycle state diagnostics  
-- Institutional behaviour analysis  
-- Escalation pathway evaluation
 
+## Example Output
+
+```text
+Lineage
+-------
+Depth Change       : 1 -> 2
+Lineage Continuity : yes
+
+Summary
+-------
+Behavioural change : no
+Interpretation     : new run recorded, but no result-level change detected.
 ```
 
----
+## Usage
 
-## Core Capabilities
+### Run a civic analysis
 
-- Case structure modelling  
-- Pattern signal identification  
-- Lifecycle diagnostics  
-- Institutional behaviour analysis  
-- Escalation path evaluation  
-
----
-
-## Example Civic Case
-
-```json
-{
-  "case_id": "strike_742",
-  "institution": "Example Authority",
-  "lifecycle_state": "awaiting_response",
-  "events": [
-    {
-      "date": "2026-01-07",
-      "action": "escalation",
-      "target": "oversight_body"
-    }
-  ]
-}
+```bash
+python civic_decision_engine_v10.py --mode civic --export outputs/run.json
 ```
+### Run a comparison
+```bash
+python civic_decision_engine_v10.py \
+  --mode compare \
+  --input outputs/run_2.json \
+  --compare-with outputs/run_1.json \
+  --timeline audit_logs/civic_engine_audit_log.json
+```
+## Philosophy
 
-Development Status
+The engine does not attempt to solve problems.
 
-Version: v10
+It creates a clear, structured record of what is happening.
 
-Current focus:
-• framework architecture
-• structured case modelling
-• analytical signal development
-f
-Approach
+Once the record is clear, repetition is no longer required.
 
-Observation sometimes becomes clearer when structure is applied.
+## Next Step
 
-Not designed for attention.
-Designed for understanding.
+The Civic Decision Engine will be developed into a web application so that anyone can use it to track and understand institutional behaviour over time.
 
-Conditions Layer → [docs/conditions_layer.md](docs/conditions_layer.md)
+## This version is:
 
-## Related Components
-
-- Civic Recall Pipeline — v0.1 (system): https://github.com/nickdebrief/civic-recall-pipeline
-
----
-
-## Repository
-
-https://github.com/nickdebrief/civic-decision-engine
-
-Part of the Civic Decision Systems structure:
-
-- Civic Recall Pipeline — v0.1: https://github.com/nickdebrief/civic-recall-pipeline
-
-Full architecture documentation:
-
-[Architecture Documentation](docs/ARCHITECTURE.md)
-
+- Clear for non-technical readers  
+- Structured for developers
