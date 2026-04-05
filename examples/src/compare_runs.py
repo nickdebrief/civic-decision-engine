@@ -74,7 +74,7 @@ def build_comparison(old_path: Path, new_path: Path) -> dict[str, Any]:
 
     old_meta = old_payload.get("run_metadata", {})
     new_meta = new_payload.get("run_metadata", {})
-
+    lineage_continuity = new_meta.get("parent_run_id") == old_meta.get("run_id")
     old_result = get_first_result(old_payload)
     new_result = get_first_result(new_payload)
 
@@ -158,6 +158,14 @@ def build_comparison(old_path: Path, new_path: Path) -> dict[str, Any]:
             "old_file": str(old_path),
             "new_file": str(new_path),
         },
+        "lineage": {
+            "old_run_id": old_meta.get("run_id"),
+            "new_run_id": new_meta.get("run_id"),
+            "new_parent_run_id": new_meta.get("parent_run_id"),
+            "old_lineage_depth": old_meta.get("lineage_depth"),
+            "new_lineage_depth": new_meta.get("lineage_depth"),
+            "lineage_continuity": lineage_continuity,
+        },
         "metadata": {
             "changed": metadata_changed,
             "unchanged": metadata_unchanged,
@@ -200,7 +208,18 @@ def print_human_readable(comparison: dict[str, Any]) -> None:
     print("==============")
     print(f"Old File: {comparison['comparison_metadata']['old_file']}")
     print(f"New File: {comparison['comparison_metadata']['new_file']}")
+    lineage = comparison["lineage"]
 
+    print_section("Lineage")
+    print(f"Old Run ID: {lineage['old_run_id']}")
+    print(f"New Run ID: {lineage['new_run_id']}")
+    print(f"New Parent Run ID: {lineage['new_parent_run_id']}")
+    print(
+        f"Depth Change: {lineage['old_lineage_depth']} -> {lineage['new_lineage_depth']}"
+    )
+    print(
+        f"Lineage Continuity: {'yes' if lineage['lineage_continuity'] else 'no'}"
+    )
     print_section("Metadata")
     for line in comparison["metadata"]["lines"]:
         print(line)
@@ -249,7 +268,18 @@ def export_markdown(comparison: dict[str, Any], export_path: str) -> None:
         "## Metadata",
         "",
     ]
+    lineage = comparison["lineage"]
 
+    lines.extend([
+        "## Lineage",
+        "",
+        f"- **Old Run ID:** {lineage['old_run_id']}",
+        f"- **New Run ID:** {lineage['new_run_id']}",
+        f"- **New Parent Run ID:** {lineage['new_parent_run_id']}",
+        f"- **Depth Change:** {lineage['old_lineage_depth']} -> {lineage['new_lineage_depth']}",
+        f"- **Lineage Continuity:** {'Yes' if lineage['lineage_continuity'] else 'No'}",
+        "",
+    ])
     lines.extend(comparison["metadata"]["lines"])
     lines.append("")
 
