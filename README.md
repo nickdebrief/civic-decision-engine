@@ -72,7 +72,7 @@ The system now produces a consistent record of behavioural progression over time
 - Lineage tracking with continuity validation  
 - Transition state detection between behavioural classifications  
 - Moment-of-change identification (first detected shift)  
-- Timeline generation across runs  
+- Timeline generation across runs   
 
 ---
 
