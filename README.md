@@ -96,10 +96,11 @@ The engine distinguishes between:
 - a new observation being recorded  
 - an actual behavioural change  
 
-**Moment of Change**  
-The first point where behaviour shifts (e.g. Partial engagement → Resistance).
----
+**Moment of Change**
 
+The first point where behaviour shifts (e.g. Partial engagement → Resistance).
+
+---
 ## How the Engine Works
 
 ```mermaid
