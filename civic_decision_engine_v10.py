@@ -137,22 +137,25 @@ def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_civic_run_metadata(
-        input_path: Path | None, case_count: int) -> dict[str, Any]:
-    now = datetime.now(timezone.utc)
-
+    metadata = build_civic_run_metadata(
+    input_path,
+    case_count,
+    parent_run_id=args.parent_run
+)
     return {
-        "run_id": f"civic-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}",
-        "generated_at": now.isoformat(),
-        "mode": "civic_analysis",
-        "input_path": str(input_path) if input_path else None,
-        "schema_path": str(SCHEMA_PATH),
-        "batch": False,
-        "validation_enabled": True,
-        "computed_signals": True,
-        "computed_assessment": True,
-        "case_count": case_count,
-    }
+    "run_id": f"civic-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}",
+    "generated_at": now.isoformat(),
+    "mode": "civic_analysis",
+    "input_path": str(input_path) if input_path else None,
+    "schema_path": str(SCHEMA_PATH),
+    "batch": False,
+    "validation_enabled": True,
+    "computed_signals": True,
+    "computed_assessment": True,
+    "case_count": case_count,
+    "parent_run_id": parent_run_id,
+    "lineage_depth": 1 if not parent_run_id else 2,
+}
 
 
 def export_json_output(output: dict[str, Any], path: str) -> None:
@@ -266,6 +269,36 @@ def validate_case(case_path: Path, schema_path: Path) -> dict[str, Any] | None:
     print("\nValidation successful.")
     return case_data
 
+    from datetime import datetime, UTC
+
+    now = datetime.now(UTC)
+
+    from typing import Any
+
+
+def build_civic_run_metadata(
+    input_path,
+    case_count: int,
+    parent_run_id: str | None = None
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+
+    return {
+        "run_id": f"civic-analysis-{now.strftime('%Y-%m-%d-%H%M%S')}",
+        "generated_at": now.isoformat(),
+        "mode": "civic_analysis",
+        "input_path": str(input_path) if input_path else None,
+        "schema_path": str(SCHEMA_PATH),
+        "batch": False,
+        "validation_enabled": True,
+        "computed_signals": True,
+        "computed_assessment": True,
+        "case_count": case_count,
+
+        # lineage
+        "parent_run_id": parent_run_id,
+        "lineage_depth": 1 if not parent_run_id else 2,
+    }
 # ============================================================
 # CLI
 # ============================================================
@@ -322,7 +355,10 @@ def main() -> None:
         "--export-md",
         help="Path to save Markdown output",
     )
-
+    parser.add_argument(
+    "--parent-run",
+    help="Parent run_id to establish lineage",
+    )
     args = parser.parse_args()
 
     # ============================================================
@@ -378,8 +414,11 @@ def main() -> None:
         case = validate_case(SAMPLE_CASE_PATH, SCHEMA_PATH)
         if case:
             result = format_civic_result(case)
-            metadata = build_civic_run_metadata(SAMPLE_CASE_PATH, 1)
-
+            metadata = build_civic_run_metadata(
+            SAMPLE_CASE_PATH,
+            1,
+            parent_run_id=args.parent_run,
+)
             output = {
                 "run_metadata": metadata,
                 "results": [result],
@@ -398,7 +437,11 @@ def main() -> None:
         case = validate_case(path, SCHEMA_PATH)
         if case:
             result = format_civic_result(case)
-            metadata = build_civic_run_metadata(path, 1)
+            metadata = build_civic_run_metadata(
+            path,
+            1,
+            parent_run_id=args.parent_run,
+)
 
             output = {
                 "run_metadata": metadata,
