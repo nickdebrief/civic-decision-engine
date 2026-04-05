@@ -52,6 +52,30 @@ The engine:
 
 ---
 
+## Development Status
+
+v10 establishes:
+
+- Run comparison logic  
+- Lineage continuity tracking  
+- Transition state detection  
+- Moment-of-change identification  
+- Timeline generation across runs  
+
+The system now produces a consistent record of behavioural progression over time.
+
+---
+
+## Extended Capabilities
+
+- Run comparison to distinguish change vs repeated observation  
+- Lineage tracking with continuity validation  
+- Transition state detection between behavioural classifications  
+- Moment-of-change identification (first detected shift)  
+- Timeline generation across runs  
+
+---
+
 ## Key Concepts
 
 **Run**  
@@ -70,7 +94,6 @@ The engine distinguishes between:
 
 **Moment of Change**  
 The first point where behaviour shifts (e.g. Partial engagement → Resistance).
-
 ---
 
 ## How the Engine Works
