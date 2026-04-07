@@ -127,7 +127,11 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
 def classify_condition(summary: dict[str, Any]) -> str:
     posture = summary.get("posture")
     engagement = summary.get("engagement")
+    escalation = summary.get("escalation")
     label = summary.get("label")
+
+    if escalation == "High" and engagement in ["Low", "Very low"]:
+        return "ESCALATION_WITHOUT_RESPONSE"
 
     if posture == "Withdrawn" or engagement == "Very low":
         return "RESISTANCE"
@@ -137,6 +141,12 @@ def classify_condition(summary: dict[str, Any]) -> str:
 
     if posture == "Defensive" and engagement == "Low":
         return "ADMINISTRATIVE_CONTAINMENT"
+
+    if label == "Response" and engagement == "Normal" and escalation == "Low":
+        return "ACKNOWLEDGEMENT_WITHOUT_ACTION"
+
+    if label == "Delayed response" and posture == "Cautious":
+        return "TRANSFER_OF_BURDEN"
 
     if posture in ["Neutral", "Cautious"]:
         return "STABILITY_WITHOUT_CONFIRMATION"
