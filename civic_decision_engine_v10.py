@@ -123,10 +123,30 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
         "engagement": engagement,
         "escalation": escalation,
     }
+    
+def classify_condition(summary: dict[str, Any]) -> str:
+    posture = summary.get("posture")
+    engagement = summary.get("engagement")
+    label = summary.get("label")
+
+    if posture == "Withdrawn" or engagement == "Very low":
+        return "RESISTANCE"
+
+    if label == "Partial engagement":
+        return "PARTIAL_ENGAGEMENT"
+
+    if posture == "Defensive" and engagement == "Low":
+        return "ADMINISTRATIVE_CONTAINMENT"
+
+    if posture in ["Neutral", "Cautious"]:
+        return "STABILITY_WITHOUT_CONFIRMATION"
+
+    return "UNCLASSIFIED"
 
 
 def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
     summary = extract_behaviour_summary(case)
+    condition = classify_condition(summary)
 
     return {
         "system_reference": case.get("strike_reference"),
@@ -143,6 +163,7 @@ def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
             "escalation": summary["escalation"],
             "behaviour_index": summary["index"],
         },
+        "condition": condition,
         "assessment": {
             "label": summary["label"],
             "interpretation": (
