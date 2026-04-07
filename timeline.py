@@ -18,10 +18,25 @@ AUDIT_LOG_PATH = Path("audit_logs/civic_engine_audit_log.json")
 
 LABEL_ORDER = ["Response", "Delayed response", "Partial engagement", "Resistance"]
 
+CONDITION_ORDER = [
+    "STABILITY_WITHOUT_CONFIRMATION",
+    "PARTIAL_ENGAGEMENT",
+    "ADMINISTRATIVE_CONTAINMENT",
+    "CLOSURE_WITHOUT_RESOLUTION",
+    "RESISTANCE",
+]
+
 
 def label_rank(label: str) -> int:
     try:
         return LABEL_ORDER.index(label)
+    except ValueError:
+        return -1
+
+
+def condition_rank(condition: str) -> int:
+    try:
+        return CONDITION_ORDER.index(condition)
     except ValueError:
         return -1
 
@@ -33,13 +48,15 @@ def load_audit_log(path: Path) -> list[dict[str, Any]]:
 
 
 def detect_moment_of_change(
-        transitions: list[dict[str, Any]]) -> dict[str, Any] | None:
-    for i, t in enumerate(transitions):
+    transitions: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    meaningful = [t for t in transitions if t["direction"] != "structural_update"]
+
+    for i, t in enumerate(meaningful):
         if t["direction"] == "deteriorating":
-            if i == 0 or transitions[i - 1]["direction"] != "deteriorating":
+            if i == 0 or meaningful[i - 1]["direction"] != "deteriorating":
                 return t
     return None
-
 
 def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
     cases: dict[str, list[dict[str, Any]]] = {}
@@ -60,6 +77,9 @@ def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
             prev = events_sorted[i - 1]
             curr = events_sorted[i]
 
+            prev_condition = prev.get("condition")
+            curr_condition = curr.get("condition")
+
             index_change = (
                 curr.get("behaviour_index", 0) - prev.get("behaviour_index", 0)
             )
@@ -69,18 +89,32 @@ def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 prev_rank = label_rank(prev.get("label", ""))
                 curr_rank = label_rank(curr.get("label", ""))
+
                 if curr_rank > prev_rank:
                     direction = "deteriorating"
                 elif curr_rank < prev_rank:
                     direction = "improving"
                 else:
-                    direction = "stable"
+                    if prev_condition is None or curr_condition is None:
+                        direction = "structural_update"
+                    else:
+                        prev_condition_rank = condition_rank(prev_condition)
+                        curr_condition_rank = condition_rank(curr_condition)
+
+                        if curr_condition_rank > prev_condition_rank:
+                            direction = "deteriorating"
+                        elif curr_condition_rank < prev_condition_rank:
+                            direction = "improving"
+                        else:
+                            direction = "stable"
 
             transitions.append({
                 "from_event": prev.get("timestamp"),
                 "to_event": curr.get("timestamp"),
                 "from_label": prev.get("label"),
                 "to_label": curr.get("label"),
+                "from_condition": prev_condition,
+                "to_condition": curr_condition,
                 "from_index": prev.get("behaviour_index"),
                 "to_index": curr.get("behaviour_index"),
                 "index_change": index_change,
@@ -94,28 +128,35 @@ def build_timeline(entries: list[dict[str, Any]]) -> dict[str, Any]:
             "event_count": len(events_sorted),
             "events": events_sorted,
             "transitions": transitions,
-            "overall_trajectory": _overall_trajectory(events_sorted),
+            "overall_trajectory": _overall_trajectory(events_sorted, transitions),
             "moment_of_change": moment_of_change,
         }
 
     return timeline
 
 
-def _overall_trajectory(events: list[dict[str, Any]]) -> str:
+def _overall_trajectory(
+    events: list[dict[str, Any]],
+    transitions: list[dict[str, Any]],
+) -> str:
     if len(events) < 2:
         return "single_event"
 
-    indices = [e.get("behaviour_index", 0) for e in events]
-    labels = [e.get("label", "") for e in events]
+    meaningful = [t for t in transitions if t["direction"] != "structural_update"]
 
-    if indices == sorted(indices):
-        if len(set(labels)) > 1:
-            return "deteriorating"
+    if not meaningful:
         return "stable"
-    elif indices == sorted(indices, reverse=True):
+
+    directions = [t["direction"] for t in meaningful]
+
+    if "deteriorating" in directions and "improving" not in directions:
+        return "deteriorating"
+    if "improving" in directions and "deteriorating" not in directions:
         return "improving"
-    else:
-        return "mixed"
+    if all(d == "stable" for d in directions):
+        return "stable"
+
+    return "mixed"
 
 
 def print_timeline(timeline: dict[str, Any]) -> None:
@@ -133,6 +174,7 @@ def print_timeline(timeline: dict[str, Any]) -> None:
                 f"\n  Moment of Change"
                 f"\n    {m['from_event']} → {m['to_event']}  |  "
                 f"{m['from_label']} → {m['to_label']}  |  "
+                f"{m['from_condition']} → {m['to_condition']}  |  "
                 f"index {m['from_index']} → {m['to_index']}"
             )
 
@@ -141,6 +183,7 @@ def print_timeline(timeline: dict[str, Any]) -> None:
             print(
                 f"    {e.get('timestamp')}  |  "
                 f"{e.get('label')}  |  "
+                f"{e.get('condition')}  |  "
                 f"index: {e.get('behaviour_index')}"
             )
 
@@ -150,6 +193,7 @@ def print_timeline(timeline: dict[str, Any]) -> None:
                 print(
                     f"    {t['from_event']} → {t['to_event']}  |  "
                     f"{t['from_label']} → {t['to_label']}  |  "
+                    f"{t['from_condition']} → {t['to_condition']}  |  "
                     f"index {t['from_index']} → {t['to_index']}  |  "
                     f"{t['direction']}"
                 )
@@ -224,6 +268,7 @@ def main() -> None:
                     (
                         f"- `{m['from_event']}` → `{m['to_event']}` — "
                         f"{m['from_label']} → {m['to_label']} — "
+                        f"{m['from_condition']} → {m['to_condition']} — "
                         f"index {m['from_index']} → {m['to_index']}"
                     ),
                 ]
@@ -233,6 +278,7 @@ def main() -> None:
                 lines.append(
                     f"- `{e.get('timestamp')}` — "
                     f"{e.get('label')} — "
+                    f"{e.get('condition')} — "
                     f"index: {e.get('behaviour_index')}"
                 )
 
@@ -242,6 +288,7 @@ def main() -> None:
                     lines.append(
                         f"- `{t['from_event']}` → `{t['to_event']}` — "
                         f"{t['from_label']} → {t['to_label']} — "
+                        f"{t['from_condition']} → {t['to_condition']} — "
                         f"index {t['from_index']} → {t['to_index']} — "
                         f"{t['direction']}"
                     )

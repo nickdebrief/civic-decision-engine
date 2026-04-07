@@ -123,7 +123,7 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
         "engagement": engagement,
         "escalation": escalation,
     }
-    
+
 def classify_condition(summary: dict[str, Any]) -> str:
     posture = summary.get("posture")
     engagement = summary.get("engagement")
@@ -277,22 +277,21 @@ def append_engine_history(case: dict[str, Any]) -> None:
     path.parent.mkdir(exist_ok=True)
 
     summary = extract_behaviour_summary(case)
+    condition = classify_condition(summary)
 
     data = []
     if path.exists():
         data = json.loads(path.read_text())
 
-    data.append(
-        {
-            "timestamp": date.today().isoformat(),
-            "case": summary["case"],
-            "behaviour_index": summary["index"],
-            "label": summary["label"],
-        }
-    )
+    data.append({
+        "timestamp": date.today().isoformat(),
+        "case": summary["case"],
+        "behaviour_index": summary["index"],
+        "label": summary["label"],
+        "condition": condition,
+    })
 
     path.write_text(json.dumps(data, indent=2))
-
 
 # ============================================================
 # Validation Engine
