@@ -146,7 +146,8 @@ def detect_transition_state(
         new_label = new_result.get("assessment", {}).get("label", "")
         old_index = old_result.get("signals", {}).get("behaviour_index", 0)
         new_index = new_result.get("signals", {}).get("behaviour_index", 0)
-
+        old_condition = old_result.get("condition")
+        new_condition = new_result.get("condition")
         index_change = new_index - old_index
         old_rank = label_rank(old_label)
         new_rank = label_rank(new_label)
@@ -191,6 +192,9 @@ def detect_transition_state(
             "new_label": new_label,
             "old_index": old_index,
             "new_index": new_index,
+            "old_condition": old_condition,
+            "new_condition": new_condition,
+            "condition_changed": old_condition != new_condition,
             "direction": direction,
             "transition_status": transition_status,
             "transition_label": transition_label,
@@ -282,6 +286,9 @@ def build_comparison(
         old_result = old_results.get(ref, {})
         new_result = new_results.get(ref, {})
 
+        old_condition = old_result.get("condition")
+        new_condition = new_result.get("condition")
+
         if not old_result:
             result_comparisons[ref] = {"status": "added", "result": new_result}
             any_behavioural_change = True
@@ -340,8 +347,25 @@ def build_comparison(
             new_result.get("assessment", {}),
         )
 
-        result_changed = top_changed + signals_changed + assessment_changed
-        result_unchanged = top_unchanged + signals_unchanged + assessment_unchanged
+        condition_changed = 0
+        condition_unchanged = 0
+        condition_lines: list[str] = []
+        condition_structured: dict[str, dict[str, Any]] = {}
+
+        did_change, line = compare_values("condition", old_condition, new_condition)
+        condition_lines.append(line)
+        condition_structured["condition"] = {
+            "changed": did_change,
+            "old": old_condition,
+            "new": new_condition,
+        }
+        if did_change:
+            condition_changed += 1
+        else:
+            condition_unchanged += 1
+
+        result_changed = top_changed + signals_changed + assessment_changed + condition_changed
+        result_unchanged = top_unchanged + signals_unchanged + assessment_unchanged + condition_unchanged
 
         total_result_changed += result_changed
         total_result_unchanged += result_unchanged
@@ -362,6 +386,12 @@ def build_comparison(
                 "unchanged": signals_unchanged,
                 "fields": signals_structured,
                 "lines": signals_lines,
+            },
+            "condition": {
+                "changed": condition_changed,
+                "unchanged": condition_unchanged,
+                "fields": condition_structured,
+                "lines": condition_lines,
             },
             "assessment": {
                 "changed": assessment_changed,
@@ -444,6 +474,10 @@ def print_human_readable(comparison: dict[str, Any]) -> None:
 
         print("\n  Signals")
         for line in result["signals"]["lines"]:
+            print(f"  {line}")
+
+        print("\n  Condition")
+        for line in result["condition"]["lines"]:
             print(f"  {line}")
 
         print("\n  Assessment")
