@@ -136,17 +136,26 @@ def classify_condition(summary: dict[str, Any]) -> str:
     if posture == "Withdrawn" or engagement == "Very low":
         return "RESISTANCE"
 
+    if (
+        posture in ["Neutral", "Cautious", "Defensive"]
+        and engagement == "Low"
+        and escalation in ["Increasing", "High"]
+    ):
+        return "ACKNOWLEDGEMENT_WITHOUT_ACTION"
+
+    if (
+        label == "Delayed response"
+        and posture == "Cautious"
+        and engagement == "Moderate"
+        and escalation == "Watch"
+    ):
+        return "TRANSFER_OF_BURDEN"
+
     if label == "Partial engagement":
         return "PARTIAL_ENGAGEMENT"
 
     if posture == "Defensive" and engagement == "Low":
         return "ADMINISTRATIVE_CONTAINMENT"
-
-    if label == "Response" and engagement == "Normal" and escalation == "Low":
-        return "ACKNOWLEDGEMENT_WITHOUT_ACTION"
-
-    if label == "Delayed response" and posture == "Cautious":
-        return "TRANSFER_OF_BURDEN"
 
     if posture in ["Neutral", "Cautious"]:
         return "STABILITY_WITHOUT_CONFIRMATION"

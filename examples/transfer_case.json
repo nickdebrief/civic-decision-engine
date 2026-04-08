@@ -1,0 +1,147 @@
+{
+  "strike_reference": "Strike-Test-TRANSFER-001",
+  "case_title": "Delayed process with burden shifted back to complainant",
+  "civic_domain": "local_government",
+  "decision_trigger": "The institution kept the matter active but left further progress dependent on the complainant.",
+  "recall_question": "What happens when the practical burden of progress is shifted back onto the individual?",
+  "user_priority": "clarity, accountability, and procedural footing",
+  "desired_outcome": "A formal response, procedural clarification, and an evidence-based escalation path",
+  "urgency": "medium",
+  "institutions": [
+  "Local Authority Complaints Office",
+  "Oversight Body"
+],
+
+"case_lifecycle": {
+  "current_stage": "awaiting_response",
+  "status": "active",
+  "stalled": false,
+  "days_open": 8,
+  "next_decision_point": "assess_internal_deadline_expiry",
+  "next_deadline": "2026-04-15",
+  "recommended_mode": "observe"
+},
+
+"rules_or_procedures": [
+  "Internal complaint procedure",
+  "Response window of 20 working days",
+  "External escalation route after internal process delay"
+],
+  "constraints": [
+    "Limited time and energy",
+    "Fragmented correspondence history",
+    "Need to maintain an accurate chronology"
+  ],
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and documenting the complaint",
+      "incentive_or_pressure": "seeking clarity, accountability, and resolution",
+      "likely_behaviour": "preserve records, seek procedural clarity, and escalate if necessary"
+    },
+    {
+      "name": "Complaints officer",
+      "actor_type": "institutional_actor",
+      "role_in_case": "handling the internal complaint process",
+      "incentive_or_pressure": "manage workload and contain procedural exposure",
+      "likely_behaviour": "respond narrowly, delay, or redirect responsibility"
+    },
+    {
+      "name": "Oversight reviewer",
+      "actor_type": "oversight_actor",
+      "role_in_case": "assessing whether the complaint fits remit for external review",
+      "incentive_or_pressure": "remain within jurisdiction and evidential thresholds",
+      "likely_behaviour": "request a clear chronology and supporting records before progressing"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Initial complaint email",
+      "evidence_type": "email",
+      "relevance": "Shows the original issue raised and the date the complaint process began",
+      "strength": "high",
+      "linked_timeline_label": "Initial complaint submitted"
+    },
+    {
+      "label": "Acknowledgement reply",
+      "evidence_type": "email",
+      "relevance": "Confirms receipt of the complaint by the institution",
+      "strength": "high",
+      "linked_timeline_label": "Acknowledgement received"
+    },
+    {
+      "label": "Follow-up note",
+      "evidence_type": "note",
+      "relevance": "Records the absence of substantive response and captures the developing pattern",
+      "strength": "medium",
+      "linked_timeline_label": "Follow-up sent after no response"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Internal response deadline",
+      "due_date": "2026-03-25",
+      "consequence": "Missed deadline strengthens the case for external escalation"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-03-01",
+      "label": "Initial complaint submitted",
+      "event_type": "submission",
+      "description": "The complainant submitted the first formal complaint to the local authority."
+    },
+    {
+      "event_date": "2026-03-03",
+      "label": "Acknowledgement received",
+      "event_type": "acknowledgement",
+      "description": "The institution acknowledged receipt but gave no substantive response."
+    },
+    {
+      "event_date": "2026-03-18",
+      "label": "Follow-up sent after no response",
+      "event_type": "follow_up",
+      "description": "The complainant sent a follow-up requesting clarification and a formal response."
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Internal procedural follow-up",
+      "route_type": "internal_complaint",
+      "trigger": "No substantive response within the stated response window",
+      "likely_response": "A narrow procedural reply or further delay",
+      "time_horizon": "short",
+      "risk_level": "low",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    },
+    {
+      "name": "External oversight escalation",
+      "route_type": "oversight_review",
+      "trigger": "Internal route appears stalled or exhausted",
+      "likely_response": "Request for chronology, complaint history, and evidence bundle",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "high",
+      "deadline_pressure": "low",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "Strike-Reference-Prev-001",
+      "relationship_type": "same_institution",
+      "note": "Earlier complaint involving delayed response by the same body"
+    }
+  ],
+  "structural_insight": "The institutional pattern appears to favour acknowledgement without timely substantive engagement.",
+  "personal_positioning": "The complainant is attempting to remain accurate, measured, and procedurally grounded.",
+  "decision_note": "Preserve the chronology, wait for the internal deadline to expire, then escalate with a tighter evidence bundle.",
+  "learning_capture": "A structured timeline and evidence bundle make it easier to distinguish an isolated delay from a repeating institutional pattern."
+}
