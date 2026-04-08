@@ -65,9 +65,13 @@ v10 establishes:
 The system now produces a consistent record of behavioural progression over time.
 
 ---
-Future direction:
-
-- A Conditions Layer to define and name recurring institutional behaviour patterns
+## Conditions Layer:
+- Defines and names recurring institutional behaviour patterns
+- Enables precise interpretation without altering underlying signals
+- Supports:
+  - Immediate classification
+  - Stability across runs
+  - Interpretive refinement
 ---
 
 ## Extended Capabilities
