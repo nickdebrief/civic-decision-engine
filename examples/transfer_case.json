@@ -17,10 +17,10 @@
   "status": "active",
   "resolution_status": "unresolved",
   "stalled": false,
-  "days_open": 8,
+  "days_open": 14,
   "next_decision_point": "assess_internal_deadline_expiry",
   "next_deadline": "2026-04-15",
-  "recommended_mode": "observe"
+  "recommended_mode": "hold_and_prepare"
 },
 
 "rules_or_procedures": [
