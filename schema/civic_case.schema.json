@@ -99,7 +99,16 @@
             "active",
             "paused",
             "resolved",
-            "stalled"
+            "stalled",
+            "closed"
+          ]
+        },
+        "resolution_status": {
+          "type": "string",
+          "enum": [
+            "resolved",
+            "unresolved",
+            "partial"
           ]
         },
         "stalled": {

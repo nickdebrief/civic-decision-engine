@@ -15,6 +15,7 @@
 "case_lifecycle": {
   "current_stage": "awaiting_response",
   "status": "active",
+  "resolution_status": "unresolved",
   "stalled": false,
   "days_open": 8,
   "next_decision_point": "assess_internal_deadline_expiry",
