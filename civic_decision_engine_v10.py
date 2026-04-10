@@ -70,8 +70,15 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
     days_open = lifecycle.get("days_open", 0)
     stage = lifecycle.get("current_stage")
     mode = lifecycle.get("recommended_mode")
+    resolution_status = lifecycle.get("resolution_status")
 
-    if stalled or (stage == "awaiting_response" and days_open >= 30):
+    if status == "closed" and resolution_status == "unresolved":
+        posture = "Withdrawn"
+        engagement = "Very low"
+        escalation = "High"
+        label = "Resistance"
+
+    elif stalled or (stage == "awaiting_response" and days_open >= 30):
         posture = "Withdrawn"
         engagement = "Very low"
         escalation = "High"
@@ -124,6 +131,7 @@ def extract_behaviour_summary(case: dict[str, Any]) -> dict[str, Any]:
         "escalation": escalation,
     }
 
+
 def classify_condition(summary: dict[str, Any]) -> str:
     posture = summary.get("posture")
     engagement = summary.get("engagement")
@@ -136,11 +144,11 @@ def classify_condition(summary: dict[str, Any]) -> str:
     if posture == "Withdrawn" or engagement == "Very low":
         return "RESISTANCE"
     if (
-     posture in ["Neutral", "Cautious", "Defensive"]
-     and engagement == "Low"
-     and escalation in ["Increasing", "High"]
+        posture in ["Neutral", "Cautious", "Defensive"]
+        and engagement == "Low"
+        and escalation in ["Increasing", "High"]
     ):
-     return "ACKNOWLEDGEMENT_WITHOUT_ACTION"
+        return "ACKNOWLEDGEMENT_WITHOUT_ACTION"
     if (
         label == "Delayed response"
         and posture == "Cautious"
@@ -300,15 +308,18 @@ def append_engine_history(case: dict[str, Any]) -> None:
     if path.exists():
         data = json.loads(path.read_text())
 
-    data.append({
-        "timestamp": date.today().isoformat(),
-        "case": summary["case"],
-        "behaviour_index": summary["index"],
-        "label": summary["label"],
-        "condition": condition,
-    })
+    data.append(
+        {
+            "timestamp": date.today().isoformat(),
+            "case": summary["case"],
+            "behaviour_index": summary["index"],
+            "label": summary["label"],
+            "condition": condition,
+        }
+    )
 
     path.write_text(json.dumps(data, indent=2))
+
 
 # ============================================================
 # Validation Engine

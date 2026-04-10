@@ -1,0 +1,119 @@
+{
+  "strike_reference": "Strike-Test-CLOSURE-001",
+  "case_title": "Process formally closed without substantive resolution",
+  "civic_domain": "local_government",
+  "decision_trigger": "The institution treated the process as complete, but the underlying issue remained unresolved.",
+  "recall_question": "What happens when a process is formally completed without resolving the issue it was meant to address?",
+  "user_priority": "clarity, accountability, and procedural footing",
+  "desired_outcome": "Substantive resolution, procedural clarity, and an accurate record of closure without remedy",
+  "urgency": "medium",
+  "institutions": [
+    "Public Body",
+    "Oversight Body"
+  ],
+  "case_lifecycle": {
+    "current_stage": "archived",
+    "status": "closed",
+    "resolution_status": "unresolved",
+    "stalled": false,
+    "days_open": 60,
+    "next_decision_point": "assess_post-closure_options",
+    "next_deadline": "2026-05-01",
+    "recommended_mode": "close_out"
+  },
+  "rules_or_procedures": [
+    "Internal complaint procedure",
+    "Closure notice or final response process",
+    "External review route after internal closure"
+  ],
+  "constraints": [
+    "Process has been treated as complete",
+    "Underlying issue remains unresolved",
+    "Need to distinguish closure from resolution"
+  ],
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and documenting the complaint",
+      "incentive_or_pressure": "seeking substantive resolution and an accurate record",
+      "likely_behaviour": "preserve the record, distinguish procedural completion from substantive outcome, and assess escalation"
+    },
+    {
+      "name": "Institutional decision-maker",
+      "actor_type": "institutional_actor",
+      "role_in_case": "issuing the final procedural position",
+      "incentive_or_pressure": "bring the matter to formal closure and limit continued exposure",
+      "likely_behaviour": "frame the process as completed even where substantive resolution is absent"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Closure or final response notice",
+      "evidence_type": "letter",
+      "relevance": "Shows that the institution considers the process complete",
+      "strength": "high",
+      "linked_timeline_label": "Closure communicated"
+    },
+    {
+      "label": "Outstanding unresolved issue record",
+      "evidence_type": "note",
+      "relevance": "Shows that the underlying issue remains unresolved despite closure",
+      "strength": "high",
+      "linked_timeline_label": "Issue remains unresolved"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Post-closure review deadline",
+      "due_date": "2026-05-01",
+      "consequence": "Missing this deadline may narrow external review options"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-03-01",
+      "label": "Complaint submitted",
+      "event_type": "submission",
+      "description": "The original complaint was submitted to the institution"
+    },
+    {
+      "event_date": "2026-04-20",
+      "label": "Closure communicated",
+      "event_type": "closure",
+      "description": "The institution communicated that the process was complete or closed"
+    },
+    {
+      "event_date": "2026-04-21",
+      "label": "Issue remains unresolved",
+      "event_type": "post_closure_status",
+      "description": "The underlying issue remained unresolved despite formal closure"
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Post-closure external review",
+      "route_type": "oversight_review",
+      "trigger": "Process is closed but substantive resolution has not been achieved",
+      "likely_response": "Review of whether procedure was followed and whether closure was substantively sufficient",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "Strike-Reference-Prev-001",
+      "relationship_type": "same_institution",
+      "note": "Earlier matter where process closure and substantive outcome diverged"
+    }
+  ],
+  "structural_insight": "The process may be formally completed while the underlying issue remains unresolved.",
+  "personal_positioning": "Distinguishing procedural closure from substantive resolution.",
+  "decision_note": "Record the closure accurately, preserve the unresolved outcome, and assess whether external review is appropriate.",
+  "learning_capture": "Formal closure does not necessarily indicate substantive resolution."
+}

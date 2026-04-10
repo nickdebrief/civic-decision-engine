@@ -1,0 +1,91 @@
+{
+  "strike_reference": "Strike-Reference-001",
+  "case_title": "Case title",
+  "civic_domain": "local_government",
+  "decision_trigger": "Describe what triggered the case",
+  "recall_question": "What is the key question this case is asking?",
+  "user_priority": "clarity, accountability, and procedural footing",
+  "desired_outcome": "Describe the desired outcome",
+  "urgency": "medium",
+  "institutions": [
+    "Institution 1",
+    "Institution 2"
+  ],
+  "case_lifecycle": {
+    "current_stage": "awaiting_response",
+    "status": "active",
+    "resolution_status": "unresolved",
+    "stalled": false,
+    "days_open": 14,
+    "next_decision_point": "assess_internal_deadline_expiry",
+    "next_deadline": "2026-04-15",
+    "recommended_mode": "hold_and_prepare"
+  },
+  "rules_or_procedures": [
+    "Rule or procedure 1",
+    "Rule or procedure 2"
+  ],
+  "constraints": [
+    "Constraint 1",
+    "Constraint 2"
+  ],
+  "actors": [
+    {
+      "name": "Actor Name",
+      "actor_type": "individual",
+      "role_in_case": "Describe role in case",
+      "incentive_or_pressure": "Describe incentive or pressure",
+      "likely_behaviour": "Describe likely behaviour"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Evidence Label",
+      "evidence_type": "email",
+      "relevance": "Describe relevance",
+      "strength": "high",
+      "linked_timeline_label": "Related timeline event label"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Deadline Label",
+      "due_date": "2026-04-15",
+      "consequence": "Describe consequence if missed"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-04-01",
+      "label": "Initial event",
+      "event_type": "submission",
+      "description": "Describe the event"
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Escalation Path Name",
+      "route_type": "internal_complaint",
+      "trigger": "Describe trigger",
+      "likely_response": "Describe likely response",
+      "time_horizon": "short",
+      "risk_level": "low",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "Related-Strike-001",
+      "relationship_type": "same_institution",
+      "note": "Describe relationship"
+    }
+  ],
+  "structural_insight": "Describe the structural insight",
+  "personal_positioning": "Describe personal positioning",
+  "decision_note": "Describe the decision note",
+  "learning_capture": "Describe the learning capture"
+}

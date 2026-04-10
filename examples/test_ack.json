@@ -1,0 +1,104 @@
+{
+  "strike_reference": "Strike-Test-ACK-001",
+  "case_title": "Acknowledged complaint without follow-through",
+  "civic_domain": "local_government",
+  "decision_trigger": "Complaint acknowledged but no substantive action followed.",
+  "recall_question": "What happens when acknowledgement is provided without action?",
+  "user_priority": "resolution",
+  "desired_outcome": "A substantive response and evidence-based next step",
+  "urgency": "medium",
+  "institutions": [
+    "Public Body",
+    "Oversight Body"
+  ],
+  "case_lifecycle": {
+    "current_stage": "awaiting_response",
+    "status": "active",
+    "resolution_status": "unresolved",
+    "stalled": false,
+    "days_open": 14,
+    "next_decision_point": "assess_internal_deadline_expiry",
+    "next_deadline": "2026-04-15",
+    "recommended_mode": "hold_and_prepare"
+  },
+  "rules_or_procedures": [
+    "Complaint handling procedure",
+    "Response window of 20 working days"
+  ],
+  "constraints": [
+    "Delay",
+    "No substantive follow-up"
+  ],
+  "actors": [
+    {
+      "name": "Complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and documenting the complaint",
+      "incentive_or_pressure": "seeking substantive response and clarity",
+      "likely_behaviour": "preserve records, follow up, and escalate if necessary"
+    },
+    {
+      "name": "Administrative Office",
+      "actor_type": "institutional_actor",
+      "role_in_case": "receiving and processing the complaint",
+      "incentive_or_pressure": "manage workload and reduce procedural exposure",
+      "likely_behaviour": "acknowledge receipt but delay substantive engagement"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Acknowledgement email",
+      "evidence_type": "email",
+      "relevance": "Shows that receipt was acknowledged without substantive action",
+      "strength": "high",
+      "linked_timeline_label": "Acknowledgement received"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Follow-up threshold",
+      "due_date": "2026-04-15",
+      "consequence": "Continued silence strengthens the case for escalation"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-04-01",
+      "label": "Complaint submitted",
+      "event_type": "submission",
+      "description": "Formal complaint submitted to the institution"
+    },
+    {
+      "event_date": "2026-04-02",
+      "label": "Acknowledgement received",
+      "event_type": "acknowledgement",
+      "description": "Institution acknowledged receipt of the complaint"
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Written follow-up",
+      "route_type": "internal_complaint",
+      "trigger": "No substantive response after acknowledgement",
+      "likely_response": "A narrow reply or continued delay",
+      "time_horizon": "short",
+      "risk_level": "low",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "Strike-Reference-Prev-001",
+      "relationship_type": "same_institution",
+      "note": "Earlier matter involving delayed substantive response"
+    }
+  ],
+  "structural_insight": "Acknowledgement can create the appearance of progress without advancing resolution.",
+  "personal_positioning": "Awaiting substantive response after acknowledgement.",
+  "decision_note": "Case remains open because acknowledgement did not produce action.",
+  "learning_capture": "Acknowledgement is not the same as resolution."
+}

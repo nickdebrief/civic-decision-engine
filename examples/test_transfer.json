@@ -1,0 +1,104 @@
+{
+  "strike_reference": "Strike-Test-TRANSFER-001",
+  "case_title": "Delayed process with burden shifted back to complainant",
+  "civic_domain": "local_government",
+  "decision_trigger": "The institution kept the matter active but left further progress dependent on the complainant.",
+  "recall_question": "What happens when the practical burden of progress is shifted back onto the individual?",
+  "user_priority": "clarity, accountability, and procedural footing",
+  "desired_outcome": "A formal response and procedurally grounded next step",
+  "urgency": "medium",
+  "institutions": [
+    "Local Authority Complaints Office",
+    "Oversight Body"
+  ],
+  "case_lifecycle": {
+    "current_stage": "awaiting_response",
+    "status": "active",
+    "resolution_status": "unresolved",
+    "stalled": false,
+    "days_open": 8,
+    "next_decision_point": "assess_internal_deadline_expiry",
+    "next_deadline": "2026-04-15",
+    "recommended_mode": "observe"
+  },
+  "rules_or_procedures": [
+    "Internal complaint procedure",
+    "Response window of 20 working days"
+  ],
+  "constraints": [
+    "Delay",
+    "Progress depends on complainant follow-up"
+  ],
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "initiating and documenting the complaint",
+      "incentive_or_pressure": "seeking clarity and procedural progress",
+      "likely_behaviour": "preserve chronology and continue follow-up"
+    },
+    {
+      "name": "Complaints officer",
+      "actor_type": "institutional_actor",
+      "role_in_case": "handling the complaint route",
+      "incentive_or_pressure": "manage workload and shift practical burden outward",
+      "likely_behaviour": "keep the process open while leaving momentum with the complainant"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Follow-up correspondence",
+      "evidence_type": "email",
+      "relevance": "Shows that continued movement depends on complainant input",
+      "strength": "high",
+      "linked_timeline_label": "Follow-up sent after no response"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Internal response deadline",
+      "due_date": "2026-04-15",
+      "consequence": "Missed deadline strengthens the case for external escalation"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-04-01",
+      "label": "Initial complaint submitted",
+      "event_type": "submission",
+      "description": "Initial complaint was submitted to the institution"
+    },
+    {
+      "event_date": "2026-04-03",
+      "label": "Follow-up requested from complainant",
+      "event_type": "follow_up",
+      "description": "Progress is effectively dependent on the complainant supplying further movement"
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Internal procedural follow-up",
+      "route_type": "internal_complaint",
+      "trigger": "Process remains active but movement is displaced onto the complainant",
+      "likely_response": "Further delay or limited procedural reply",
+      "time_horizon": "short",
+      "risk_level": "low",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "high",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "Strike-Reference-Prev-001",
+      "relationship_type": "same_institution",
+      "note": "Earlier complaint involving delayed institutional movement"
+    }
+  ],
+  "structural_insight": "The matter appears active, but practical progress is shifted back to the complainant.",
+  "personal_positioning": "Maintaining a clear chronology while procedural burden is displaced.",
+  "decision_note": "Hold position, preserve record, and prepare escalation if the deadline passes.",
+  "learning_capture": "An active case can still place the burden of movement on the individual."
+}
