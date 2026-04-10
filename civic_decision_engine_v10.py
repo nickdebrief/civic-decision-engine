@@ -24,6 +24,19 @@ if str(SYSTEM_SRC_DIR) not in sys.path:
 
 from system_analysis import main as system_analysis_main
 
+OUTPUT_DIR = Path("outputs/civic")
+
+
+def save_output(run_id: str, data: dict[str, Any]) -> Path:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = OUTPUT_DIR / f"{run_id}.json"
+
+    with output_file.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    return output_file
+
+
 # ============================================================
 # Configuration
 # ============================================================
@@ -522,8 +535,11 @@ def main() -> None:
                 "run_metadata": metadata,
                 "results": [result],
             }
-
+            print("Validation successful.")
             print(json.dumps(output, indent=2))
+
+            saved_path = save_output(output["run_metadata"]["run_id"], output)
+            print(f"\nSaved output → {saved_path}")
 
             if args.export:
                 export_json_output(output, args.export)
@@ -552,6 +568,8 @@ def main() -> None:
             }
 
             print(json.dumps(output, indent=2))
+            saved_path = save_output(output["run_metadata"]["run_id"], output)
+            print(f"\nSaved output → {saved_path}")
 
             if args.export:
                 export_json_output(output, args.export)
