@@ -24,17 +24,18 @@ if str(SYSTEM_SRC_DIR) not in sys.path:
 
 from system_analysis import main as system_analysis_main
 
-OUTPUT_DIR = Path("outputs/civic")
+OUTPUT_ROOT = Path("outputs")
 
 
-def save_output(run_id: str, data: dict[str, Any]) -> Path:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_file = OUTPUT_DIR / f"{run_id}.json"
+def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
+    run_dir = OUTPUT_ROOT / category / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    with output_file.open("w", encoding="utf-8") as f:
+    json_path = run_dir / "result.json"
+    with json_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-    return output_file
+    return json_path
 
 
 # ============================================================
@@ -568,7 +569,9 @@ def main() -> None:
             }
 
             print(json.dumps(output, indent=2))
-            saved_path = save_output(output["run_metadata"]["run_id"], output)
+            saved_path = save_run_snapshot(
+                "civic", output["run_metadata"]["run_id"], output
+            )
             print(f"\nSaved output → {saved_path}")
 
             if args.export:
