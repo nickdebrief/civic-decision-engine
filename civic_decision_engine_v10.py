@@ -35,7 +35,76 @@ def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
     with json_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+    md_path = run_dir / "summary.md"
+    if category == "civic":
+        md_content = build_civic_markdown(data)
+    elif category == "compare":
+        md_content = build_compare_markdown(data)
+    else:
+        md_content = "# Run Summary\n"
+
+    md_path.write_text(md_content, encoding="utf-8")
+
     return json_path
+
+
+def build_civic_markdown(output: dict[str, Any]) -> str:
+    metadata = output["run_metadata"]
+    result = output["results"][0]
+
+    lines = [
+        "# Civic Analysis Run",
+        "",
+        f"**Run ID:** {metadata['run_id']}",
+        f"**Generated:** {metadata['generated_at']}",
+        f"**Input:** {metadata['input_path']}",
+        f"**Version:** {metadata['lineage']['version']}",
+        "",
+        "## Condition",
+        f"**{result['condition']}**",
+        "",
+        "## Assessment",
+        f"- Label: {result['assessment']['label']}",
+        f"- Interpretation: {result['assessment']['interpretation']}",
+        "",
+        "## Signals",
+        f"- Posture: {result['signals']['posture']}",
+        f"- Engagement: {result['signals']['engagement']}",
+        f"- Escalation: {result['signals']['escalation']}",
+        f"- Behaviour Index: {result['signals']['behaviour_index']}",
+    ]
+
+    return "\n".join(lines)
+
+
+def build_compare_markdown(output: dict[str, Any]) -> str:
+    metadata = output["run_metadata"]
+
+    lines = [
+        "# Compare Run",
+        "",
+        f"**Run ID:** {metadata['run_id']}",
+        f"**Generated:** {metadata['generated_at']}",
+        f"**Version:** {metadata['lineage']['version']}",
+        "",
+        "## Results",
+        "",
+    ]
+
+    for i, result in enumerate(output.get("results", []), start=1):
+        lines.extend(
+            [
+                f"### Result {i}",
+                f"- System Reference: {result.get('system_reference', '')}",
+                f"- Title: {result.get('title', '')}",
+                f"- Condition: {result.get('condition', '')}",
+                f"- Label: {result.get('assessment', {}).get('label', '')}",
+                f"- Interpretation: {result.get('assessment', {}).get('interpretation', '')}",
+                "",
+            ]
+        )
+
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -252,7 +321,7 @@ def export_json_output(output: dict[str, Any], path: str) -> None:
 # ============================================================
 
 
-def print_adaptation_analysis(cases: list[dict[str, Any]]) -> None:
+def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
     print("\n══════════════════════════════")
     print("Adaptation Analysis (V10)")
     print("══════════════════════════════")
@@ -261,8 +330,9 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> None:
 
     labels = [s["label"] for s in summaries]
     indices = [s["index"] for s in summaries]
+    case_sequence = [s["case"] for s in summaries]
 
-    print("Case sequence       :", " → ".join([s["case"] for s in summaries]))
+    print("Case sequence       :", " → ".join(case_sequence))
     print("Behaviour indices   :", " → ".join(map(str, indices)))
     print("Progression         :", " → ".join(labels))
 
@@ -279,13 +349,36 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> None:
     print("--------------")
 
     if trajectory == "Deteriorating":
-        print(
-            "Behaviour shows increasing institutional resistance or containment over time."
-        )
+        interpretation = "Behaviour shows increasing institutional resistance or containment over time."
     elif trajectory == "Improving":
-        print("Behaviour shows improving engagement and resolution trajectory.")
+        interpretation = (
+            "Behaviour shows improving engagement and resolution trajectory."
+        )
     else:
-        print("Behaviour is mixed or transitional across cases.")
+        interpretation = "Behaviour is mixed or transitional across cases."
+
+    print(interpretation)
+
+    output = {
+        "run_metadata": {
+            "run_id": f"compare-analysis-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%S')}",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "compare_analysis",
+            "case_count": len(cases),
+            "lineage": {"version": "v10"},
+        },
+        "results": [
+            {
+                "case_sequence": case_sequence,
+                "behaviour_indices": indices,
+                "progression": labels,
+                "trajectory": trajectory,
+                "interpretation": interpretation,
+            }
+        ],
+    }
+
+    return output
 
 
 # ============================================================
@@ -539,7 +632,9 @@ def main() -> None:
             print("Validation successful.")
             print(json.dumps(output, indent=2))
 
-            saved_path = save_output(output["run_metadata"]["run_id"], output)
+            saved_path = save_run_snapshot(
+                "civic", output["run_metadata"]["run_id"], output
+            )
             print(f"\nSaved output → {saved_path}")
 
             if args.export:
@@ -582,7 +677,14 @@ def main() -> None:
 
     elif choice == "3":
         cases = [load_json(p) for p in EXAMPLE_CASES]
-        print_adaptation_analysis(cases)
+        compare_output = print_adaptation_analysis(cases)
+
+        saved_path = save_run_snapshot(
+            "compare",
+            compare_output["run_metadata"]["run_id"],
+            compare_output,
+        )
+        print(f"\nSaved output → {saved_path}")
 
     else:
         print("Invalid choice.")
