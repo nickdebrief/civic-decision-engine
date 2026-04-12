@@ -27,51 +27,30 @@ from system_analysis import main as system_analysis_main
 OUTPUT_ROOT = Path("outputs")
 
 
-def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
-    run_dir = OUTPUT_ROOT / category / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = run_dir / "result.json"
-    with json_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-    md_path = run_dir / "summary.md"
-    if category == "civic":
-        md_content = build_civic_markdown(data)
-    elif category == "compare":
-        md_content = build_compare_markdown(data)
-    else:
-        md_content = "# Run Summary\n"
-
-    md_path.write_text(md_content, encoding="utf-8")
-
-    return json_path
-
-
 def build_civic_markdown(output: dict[str, Any]) -> str:
     metadata = output["run_metadata"]
     result = output["results"][0]
 
     lines = [
-        "# Civic Analysis Run",
+        "# Civic Run",
         "",
         f"**Run ID:** {metadata['run_id']}",
         f"**Generated:** {metadata['generated_at']}",
-        f"**Input:** {metadata['input_path']}",
         f"**Version:** {metadata['lineage']['version']}",
         "",
-        "## Condition",
-        f"**{result['condition']}**",
+        "## Result",
         "",
-        "## Assessment",
-        f"- Label: {result['assessment']['label']}",
-        f"- Interpretation: {result['assessment']['interpretation']}",
+        f"- System Reference: {result.get('system_reference', '')}",
+        f"- Title: {result.get('title', '')}",
+        f"- Condition: {result.get('condition', '')}",
+        f"- Label: {result.get('assessment', {}).get('label', '')}",
+        f"- Interpretation: {result.get('assessment', {}).get('interpretation', '')}",
         "",
         "## Signals",
-        f"- Posture: {result['signals']['posture']}",
-        f"- Engagement: {result['signals']['engagement']}",
-        f"- Escalation: {result['signals']['escalation']}",
-        f"- Behaviour Index: {result['signals']['behaviour_index']}",
+        f"- Posture: {result.get('signals', {}).get('posture', '')}",
+        f"- Engagement: {result.get('signals', {}).get('engagement', '')}",
+        f"- Escalation: {result.get('signals', {}).get('escalation', '')}",
+        f"- Behaviour Index: {result.get('signals', {}).get('behaviour_index', '')}",
     ]
 
     return "\n".join(lines)
@@ -95,16 +74,101 @@ def build_compare_markdown(output: dict[str, Any]) -> str:
         lines.extend(
             [
                 f"### Result {i}",
-                f"- System Reference: {result.get('system_reference', '')}",
-                f"- Title: {result.get('title', '')}",
-                f"- Condition: {result.get('condition', '')}",
-                f"- Label: {result.get('assessment', {}).get('label', '')}",
-                f"- Interpretation: {result.get('assessment', {}).get('interpretation', '')}",
+                f"- Case Sequence: {' → '.join(result.get('case_sequence', []))}",
+                f"- Behaviour Indices: {' → '.join(map(str, result.get('behaviour_indices', [])))}",
+                f"- Progression: {' → '.join(result.get('progression', []))}",
+                f"- Trajectory: {result.get('trajectory', '')}",
+                f"- Interpretation: {result.get('interpretation', '')}",
                 "",
             ]
         )
 
     return "\n".join(lines)
+
+
+def build_timeline_markdown(output: dict[str, Any]) -> str:
+    metadata = output["run_metadata"]
+
+    lines = [
+        "# Timeline Run",
+        "",
+        f"**Run ID:** {metadata['run_id']}",
+        f"**Generated:** {metadata['generated_at']}",
+        f"**Version:** {metadata['lineage']['version']}",
+        "",
+        "## Timeline Summary",
+        "",
+    ]
+
+    for i, result in enumerate(output.get("results", []), start=1):
+        lines.extend(
+            [
+                f"### Result {i}",
+                f"- System Reference: {result.get('system_reference', '')}",
+                f"- Title: {result.get('title', '')}",
+                "",
+            ]
+        )
+
+        # Timeline entries
+        for event in result.get("timeline", []):
+            lines.extend(
+                [
+                    f"- **{event.get('event_date', '')}** — {event.get('label', '')}",
+                    f"  - Type: {event.get('event_type', '')}",
+                    f"  - Description: {event.get('description', '')}",
+                ]
+            )
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def build_timeline_output(case: dict[str, Any]) -> dict[str, Any]:
+    run_id = (
+        f"timeline-analysis-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%S')}"
+    )
+
+    return {
+        "run_metadata": {
+            "run_id": run_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "timeline_analysis",
+            "case_count": 1,
+            "lineage": {"version": "v10"},
+        },
+        "results": [
+            {
+                "system_reference": case.get("strike_reference", ""),
+                "title": case.get("case_title", ""),
+                "timeline": case.get("timeline", []),
+            }
+        ],
+    }
+
+
+def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
+    run_dir = OUTPUT_ROOT / category / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = run_dir / "result.json"
+    with json_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    md_path = run_dir / "summary.md"
+    if category == "civic":
+        md_content = build_civic_markdown(data)
+    elif category == "compare":
+        md_content = build_compare_markdown(data)
+    elif category == "timeline":
+        md_content = build_timeline_markdown(data)
+    else:
+        md_content = "# Run Summary\n"
+
+    md_path.write_text(md_content, encoding="utf-8")
+
+    return json_path
 
 
 # ============================================================
@@ -686,8 +750,23 @@ def main() -> None:
         )
         print(f"\nSaved output → {saved_path}")
 
-    else:
-        print("Invalid choice.")
+    elif choice == "4":
+        path = Path(input("Enter case path: ").strip())
+        case = validate_case(path, SCHEMA_PATH)
+        if case:
+            timeline_output = build_timeline_output(case)
+
+            print(json.dumps(timeline_output, indent=2))
+
+            saved_path = save_run_snapshot(
+                "timeline",
+                timeline_output["run_metadata"]["run_id"],
+                timeline_output,
+            )
+            print(f"\nSaved output → {saved_path}")
+
+        else:
+            print("Invalid choice.")
 
 
 # ============================================================
