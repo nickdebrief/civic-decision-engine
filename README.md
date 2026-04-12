@@ -138,15 +138,50 @@ Summary
 Behavioural change : no
 Interpretation     : new run recorded, but no result-level change detected.
 ```
+## Output Structure
+
+Outputs are generated per run and stored by run_id:
+
+outputs/
+  civic/
+    <run_id>/
+      result.json
+      summary.md
+  compare/
+    <run_id>/
+      result.json
+      summary.md
+
+Each run produces:
+
+- Structured JSON output  
+- A corresponding Markdown summary  
+- A stable, traceable run_id  
+
+Each run is preserved as a structured artefact that can be returned to
 
 ## Usage
 
 ### Run a civic analysis
+```bash
+python civic_decision_engine_v10.py
+```
 
+### Then choose:
+2) Validate case by path
+   
+### Run a comparison
+```bash
+python civic_decision_engine_v10.py
+```
+Then choose:
+```bash
+3) Run adaptation analysis (example cases)
+```
+### CLI mode
 ```bash
 python civic_decision_engine_v10.py --mode civic --export outputs/run.json
 ```
-### Run a comparison
 ```bash
 python civic_decision_engine_v10.py \
   --mode compare \
