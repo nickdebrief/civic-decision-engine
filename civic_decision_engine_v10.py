@@ -182,6 +182,45 @@ def load_stored_civic_runs() -> list[dict[str, Any]]:
     return runs
 
 
+def interpret_timeline_result(
+    behaviour_indices: list[int],
+    conditions: list[str],
+    progression: list[str],
+    trajectory: str,
+    moment_of_change: dict[str, Any] | None,
+) -> str:
+    if not behaviour_indices:
+        return "No stored runs were available for timeline interpretation."
+
+    if trajectory == "Stable" and moment_of_change is None:
+        return "Behaviour remained stable across stored runs with no detected moment of change."
+
+    if trajectory == "Deteriorating" and moment_of_change is not None:
+        return (
+            f"Behaviour deteriorated across stored runs, with a change from "
+            f"{moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+
+    if trajectory == "Improving" and moment_of_change is not None:
+        return (
+            f"Behaviour improved across stored runs, with a change from "
+            f"{moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+
+    if trajectory == "Mixed" and moment_of_change is not None:
+        return (
+            f"Behaviour changed across stored runs, with the first detected shift from "
+            f"{moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+
+    if trajectory == "Mixed":
+        return "Behaviour varied across stored runs without a single clear directional pattern."
+
+    return (
+        "Timeline interpretation was generated, but no stronger pattern was detected."
+    )
+
+
 def build_timeline_output_from_runs(
     stored_runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -228,6 +267,13 @@ def build_timeline_output_from_runs(
             }
             break
 
+    interpretation = interpret_timeline_result(
+        behaviour_indices,
+        conditions,
+        progression,
+        trajectory,
+        moment_of_change,
+    )
     return {
         "run_metadata": {
             "run_id": run_id,
@@ -248,6 +294,7 @@ def build_timeline_output_from_runs(
                 "progression": progression,
                 "trajectory": trajectory,
                 "moment_of_change": moment_of_change,
+                "interpretation": interpretation,
             }
         ],
     }
