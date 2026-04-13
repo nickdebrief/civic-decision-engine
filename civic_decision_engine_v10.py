@@ -171,6 +171,88 @@ def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
     return json_path
 
 
+def load_stored_civic_runs() -> list[dict[str, Any]]:
+    run_files = sorted(Path("outputs/civic").glob("*/result.json"))
+
+    runs: list[dict[str, Any]] = []
+    for run_file in run_files:
+        with run_file.open("r", encoding="utf-8") as f:
+            runs.append(json.load(f))
+
+    return runs
+
+
+def build_timeline_output_from_runs(
+    stored_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    run_id = (
+        f"timeline-analysis-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%S')}"
+    )
+
+    run_sequence: list[str] = []
+    case_sequence: list[str] = []
+    behaviour_indices: list[int] = []
+    conditions: list[str] = []
+    progression: list[str] = []
+
+    for run in stored_runs:
+        metadata = run.get("run_metadata", {})
+        results = run.get("results", [])
+        if not results:
+            continue
+
+        result = results[0]
+
+        run_sequence.append(metadata.get("run_id", ""))
+        case_sequence.append(result.get("system_reference", ""))
+        behaviour_indices.append(result.get("signals", {}).get("behaviour_index", 0))
+        conditions.append(result.get("condition", ""))
+        progression.append(result.get("assessment", {}).get("label", ""))
+
+    if len(set(behaviour_indices)) == 1:
+        trajectory = "Stable"
+    elif behaviour_indices == sorted(behaviour_indices):
+        trajectory = "Deteriorating"
+    elif behaviour_indices == sorted(behaviour_indices, reverse=True):
+        trajectory = "Improving"
+    else:
+        trajectory = "Mixed"
+
+    moment_of_change = None
+    for i in range(1, len(conditions)):
+        if conditions[i] != conditions[i - 1]:
+            moment_of_change = {
+                "from": conditions[i - 1],
+                "to": conditions[i],
+                "at_index": i + 1,
+            }
+            break
+
+    return {
+        "run_metadata": {
+            "run_id": run_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "timeline_analysis",
+            "source": "outputs/civic/",
+            "case_count": len(case_sequence),
+            "lineage": {
+                "version": "v10",
+            },
+        },
+        "results": [
+            {
+                "run_sequence": run_sequence,
+                "case_sequence": case_sequence,
+                "behaviour_indices": behaviour_indices,
+                "conditions": conditions,
+                "progression": progression,
+                "trajectory": trajectory,
+                "moment_of_change": moment_of_change,
+            }
+        ],
+    }
+
+
 # ============================================================
 # Configuration
 # ============================================================
@@ -672,6 +754,7 @@ def main() -> None:
     print("1) Validate sample case")
     print("2) Validate case by path")
     print("3) Run adaptation analysis (example cases)")
+    print("4) Run timeline analysis (stored runs)")
 
     choice = input("\nChoose option: ").strip()
 
@@ -751,22 +834,20 @@ def main() -> None:
         print(f"\nSaved output → {saved_path}")
 
     elif choice == "4":
-        path = Path(input("Enter case path: ").strip())
-        case = validate_case(path, SCHEMA_PATH)
-        if case:
-            timeline_output = build_timeline_output(case)
+        stored_runs = load_stored_civic_runs()
 
-            print(json.dumps(timeline_output, indent=2))
+    if not stored_runs:
+        print("No stored civic runs found in outputs/civic/.")
+    else:
+        timeline_output = build_timeline_output_from_runs(stored_runs)
+        print(json.dumps(timeline_output, indent=2))
 
-            saved_path = save_run_snapshot(
-                "timeline",
-                timeline_output["run_metadata"]["run_id"],
-                timeline_output,
-            )
-            print(f"\nSaved output → {saved_path}")
-
-        else:
-            print("Invalid choice.")
+        saved_path = save_run_snapshot(
+            "timeline",
+            timeline_output["run_metadata"]["run_id"],
+            timeline_output,
+        )
+    print(f"\nSaved output → {saved_path}")
 
 
 # ============================================================
