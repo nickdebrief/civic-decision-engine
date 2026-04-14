@@ -133,7 +133,6 @@ def build_timeline_markdown(output: dict[str, Any]) -> str:
             ]
         )
 
-        # ✅ Only include if it exists
         if moment_of_change:
             lines.append(
                 f"- Moment of Change: {moment_of_change['from']} → {moment_of_change['to']} "
@@ -143,6 +142,56 @@ def build_timeline_markdown(output: dict[str, Any]) -> str:
         lines.extend(
             [
                 f"- Interpretation: {interpretation}",
+                "",
+            ]
+        )
+
+    return "\n".join(lines)
+
+
+def build_pattern_markdown(output: dict[str, Any]) -> str:
+    metadata = output["run_metadata"]
+
+    lines = [
+        "# Pattern Run",
+        "",
+        f"**Run ID:** {metadata['run_id']}",
+        "",
+        f"**Generated:** {metadata['generated_at']}",
+        "",
+        f"**Version:** {metadata['lineage']['version']}",
+        "",
+        "## Pattern Summary",
+        "",
+    ]
+
+    for i, result in enumerate(output.get("results", []), start=1):
+        lines.append(f"### Result {i}")
+
+        dominant_conditions = result.get("dominant_conditions", [])
+        dominant_labels = result.get("dominant_labels", [])
+        recurring_transitions = result.get("recurring_transitions", [])
+        pattern_summary = result.get("pattern_summary", "")
+
+        if dominant_conditions:
+            for item in dominant_conditions:
+                lines.append(
+                    f"- Dominant Condition: {item['condition']} ({item['count']})"
+                )
+
+        if dominant_labels:
+            for item in dominant_labels:
+                lines.append(f"- Dominant Label: {item['label']} ({item['count']})")
+
+        if recurring_transitions:
+            for item in recurring_transitions:
+                lines.append(
+                    f"- Recurring Transition: {item['from']} → {item['to']} ({item['count']})"
+                )
+
+        lines.extend(
+            [
+                f"- Pattern Summary: {pattern_summary}",
                 "",
             ]
         )
@@ -189,6 +238,8 @@ def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
         md_content = build_compare_markdown(data)
     elif category == "timeline":
         md_content = build_timeline_markdown(data)
+    elif category == "pattern":
+        md_content = build_pattern_markdown(data)
     else:
         md_content = "# Run Summary\n"
 
@@ -204,6 +255,22 @@ def load_stored_civic_runs() -> list[dict[str, Any]]:
     for run_file in run_files:
         with run_file.open("r", encoding="utf-8") as f:
             runs.append(json.load(f))
+
+    return runs
+
+
+def load_stored_timeline_runs() -> list[dict[str, Any]]:
+    runs = []
+    base_path = OUTPUT_ROOT / "timeline"
+
+    if not base_path.exists():
+        return runs
+
+    for run_dir in sorted(base_path.iterdir()):
+        result_file = run_dir / "result.json"
+        if result_file.exists():
+            with result_file.open("r", encoding="utf-8") as f:
+                runs.append(json.load(f))
 
     return runs
 
@@ -321,6 +388,153 @@ def build_timeline_output_from_runs(
                 "trajectory": trajectory,
                 "moment_of_change": moment_of_change,
                 "interpretation": interpretation,
+            }
+        ],
+    }
+
+
+def build_pattern_output_from_timelines(
+    timeline_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    run_id = (
+        f"pattern-analysis-{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H%M%S')}"
+    )
+
+    # 1. Extract data
+    # 2. Count conditions
+    # 3. Count labels
+    # 4. Count transitions
+
+    condition_counts: dict[str, int] = {}
+
+    for timeline_run in timeline_runs:
+        results = timeline_run.get("results", [])
+        if not results:
+            continue
+
+        result = results[0]
+        conditions = result.get("conditions", [])
+
+        for condition in conditions:
+            if not condition:
+                continue
+            condition_counts[condition] = condition_counts.get(condition, 0) + 1
+
+    dominant_conditions = [
+        {"condition": condition, "count": count}
+        for condition, count in sorted(
+            condition_counts.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
+
+    label_counts: dict[str, int] = {}
+
+    for timeline_run in timeline_runs:
+        results = timeline_run.get("results", [])
+        if not results:
+            continue
+
+        result = results[0]
+        progression = result.get("progression", [])
+
+        for label in progression:
+            if not label:
+                continue
+            label_counts[label] = label_counts.get(label, 0) + 1
+
+    dominant_labels = [
+        {"label": label, "count": count}
+        for label, count in sorted(
+            label_counts.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
+
+    transition_counts: dict[tuple[str, str], int] = {}
+
+    for timeline_run in timeline_runs:
+        results = timeline_run.get("results", [])
+        if not results:
+            continue
+
+        result = results[0]
+        moment_of_change = result.get("moment_of_change")
+
+        if not moment_of_change:
+            continue
+
+        from_label = moment_of_change.get("from")
+        to_label = moment_of_change.get("to")
+
+        if not from_label or not to_label:
+            continue
+
+        key = (from_label, to_label)
+        transition_counts[key] = transition_counts.get(key, 0) + 1
+
+    recurring_transitions = [
+        {"from": from_label, "to": to_label, "count": count}
+        for (from_label, to_label), count in sorted(
+            transition_counts.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+    ]
+
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+        pattern_summary = (
+            f"Repeated transition from {top_transition['from']} to {top_transition['to']} "
+            f"detected across stored timeline sequences."
+        )
+
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+        pattern_summary = (
+            f"Repeated transition from {top_transition['from']} to {top_transition['to']} "
+            f"detected across stored timeline sequences."
+        )
+
+    elif dominant_conditions and dominant_labels:
+        pattern_summary = (
+            f"Stored timeline sequences are dominated by "
+            f"{dominant_conditions[0]['condition']} and {dominant_labels[0]['label']}, "
+            f"with no recurring transition detected."
+        )
+
+    elif dominant_conditions:
+        pattern_summary = (
+            f"{dominant_conditions[0]['condition']} is the dominant condition "
+            f"across stored timeline sequences."
+        )
+
+    elif dominant_labels:
+        pattern_summary = (
+            f"{dominant_labels[0]['label']} is the dominant label "
+            f"across stored timeline sequences."
+        )
+
+    else:
+        pattern_summary = "Pattern analysis generated."
+
+    return {
+        "run_metadata": {
+            "run_id": run_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "pattern_analysis",
+            "source": "outputs/timeline/",
+            "case_count": len(timeline_runs),
+            "lineage": {"version": "v10"},
+        },
+        "results": [
+            {
+                "dominant_conditions": dominant_conditions,
+                "dominant_labels": dominant_labels,
+                "recurring_transitions": recurring_transitions,
+                "pattern_summary": pattern_summary,
             }
         ],
     }
@@ -666,6 +880,49 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
     return output
 
 
+def print_pattern_analysis(output: dict[str, Any]) -> None:
+    print("\n══════════════════════════════")
+    print("Pattern Analysis (V10)")
+    print("══════════════════════════════")
+
+    results = output.get("results", [])
+    if not results:
+        print("No pattern results available.")
+        return
+
+    r = results[0]
+
+    dominant_conditions = r.get("dominant_conditions", [])
+    dominant_labels = r.get("dominant_labels", [])
+    recurring_transitions = r.get("recurring_transitions", [])
+    pattern_summary = r.get("pattern_summary", "")
+
+    if dominant_conditions:
+        top_condition = dominant_conditions[0]
+        print(
+            "Dominant condition :",
+            f"{top_condition['condition']} ({top_condition['count']})",
+        )
+
+    if dominant_labels:
+        top_label = dominant_labels[0]
+        print(
+            "Dominant label     :",
+            f"{top_label['label']} ({top_label['count']})",
+        )
+
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+        print(
+            "Recurring transition:",
+            f"{top_transition['from']} → {top_transition['to']} ({top_transition['count']})",
+        )
+
+    print("\nSummary")
+    print("-------")
+    print(pattern_summary)
+
+
 # ============================================================
 # Audit Logs (Clean Separation)
 # ============================================================
@@ -894,6 +1151,7 @@ def main() -> None:
     print("2) Validate case by path")
     print("3) Run adaptation analysis (example cases)")
     print("4) Run timeline analysis (stored runs)")
+    print("5) Run pattern analysis (stored timelines)")
 
     choice = input("\nChoose option: ").strip()
 
@@ -990,8 +1248,22 @@ def main() -> None:
                 timeline_output,
             )
             print(f"\nSaved output → {saved_path}")
+
+    elif choice == "5":
+        timeline_runs = load_stored_timeline_runs()
+
+    if not timeline_runs:
+        print("No stored timeline runs found in outputs/timeline/.")
     else:
-        print("Invalid choice.")
+        pattern_output = build_pattern_output_from_timelines(timeline_runs)
+        print_pattern_analysis(pattern_output)
+
+        saved_path = save_run_snapshot(
+            "pattern",
+            pattern_output["run_metadata"]["run_id"],
+            pattern_output,
+        )
+        print(f"\nSaved output → {saved_path}")
 
 
 # ============================================================
