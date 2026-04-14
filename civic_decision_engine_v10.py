@@ -63,7 +63,9 @@ def build_compare_markdown(output: dict[str, Any]) -> str:
         "# Compare Run",
         "",
         f"**Run ID:** {metadata['run_id']}",
+        "",
         f"**Generated:** {metadata['generated_at']}",
+        "",
         f"**Version:** {metadata['lineage']['version']}",
         "",
         "## Results",
@@ -71,6 +73,8 @@ def build_compare_markdown(output: dict[str, Any]) -> str:
     ]
 
     for i, result in enumerate(output.get("results", []), start=1):
+        moment_of_change = result.get("moment_of_change")
+
         lines.extend(
             [
                 f"### Result {i}",
@@ -78,6 +82,17 @@ def build_compare_markdown(output: dict[str, Any]) -> str:
                 f"- Behaviour Indices: {' → '.join(map(str, result.get('behaviour_indices', [])))}",
                 f"- Progression: {' → '.join(result.get('progression', []))}",
                 f"- Trajectory: {result.get('trajectory', '')}",
+            ]
+        )
+
+        if moment_of_change:
+            lines.append(
+                f"- Moment of Change: {moment_of_change['from']} → {moment_of_change['to']} "
+                f"(Run {moment_of_change['at_index']})"
+            )
+
+        lines.extend(
+            [
                 f"- Interpretation: {result.get('interpretation', '')}",
                 "",
             ]
@@ -93,7 +108,9 @@ def build_timeline_markdown(output: dict[str, Any]) -> str:
         "# Timeline Run",
         "",
         f"**Run ID:** {metadata['run_id']}",
+        "",
         f"**Generated:** {metadata['generated_at']}",
+        "",
         f"**Version:** {metadata['lineage']['version']}",
         "",
         "## Timeline Summary",
@@ -101,26 +118,34 @@ def build_timeline_markdown(output: dict[str, Any]) -> str:
     ]
 
     for i, result in enumerate(output.get("results", []), start=1):
+        run_sequence = result.get("run_sequence", [])
+        progression = result.get("progression", [])
+        trajectory = result.get("trajectory", "")
+        interpretation = result.get("interpretation", "")
+        moment_of_change = result.get("moment_of_change")
+
         lines.extend(
             [
-                f"### Result {i}",
-                f"- System Reference: {result.get('system_reference', '')}",
-                f"- Title: {result.get('title', '')}",
-                "",
+                f"### Sequence {i}",
+                f"- Run Sequence: {' → '.join(run_sequence)}",
+                f"- Progression: {' → '.join(progression)}",
+                f"- Trajectory: {trajectory}",
             ]
         )
 
-        # Timeline entries
-        for event in result.get("timeline", []):
-            lines.extend(
-                [
-                    f"- **{event.get('event_date', '')}** — {event.get('label', '')}",
-                    f"  - Type: {event.get('event_type', '')}",
-                    f"  - Description: {event.get('description', '')}",
-                ]
+        # ✅ Only include if it exists
+        if moment_of_change:
+            lines.append(
+                f"- Moment of Change: {moment_of_change['from']} → {moment_of_change['to']} "
+                f"(Run {moment_of_change['at_index']})"
             )
 
-        lines.append("")
+        lines.extend(
+            [
+                f"- Interpretation: {interpretation}",
+                "",
+            ]
+        )
 
     return "\n".join(lines)
 
@@ -155,6 +180,7 @@ def save_run_snapshot(category: str, run_id: str, data: dict[str, Any]) -> Path:
     json_path = run_dir / "result.json"
     with json_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+        f.write("\n")
 
     md_path = run_dir / "summary.md"
     if category == "civic":
@@ -514,6 +540,41 @@ def export_json_output(output: dict[str, Any], path: str) -> None:
 # ============================================================
 
 
+def print_timeline_analysis(output: dict[str, Any]) -> None:
+    print("\n══════════════════════════════")
+    print("Timeline Analysis (V10)")
+    print("══════════════════════════════")
+
+    results = output.get("results", [])
+    if not results:
+        print("No timeline results available.")
+        return
+
+    r = results[0]
+
+    run_sequence = r.get("run_sequence", [])
+    progression = r.get("progression", [])
+    trajectory = r.get("trajectory", "")
+    interpretation = r.get("interpretation", "")
+
+    print("Run sequence      :", " → ".join(run_sequence))
+    print("Progression       :", " → ".join(progression))
+    print("Trajectory        :", trajectory)
+
+    moment_of_change = r.get("moment_of_change")
+    if moment_of_change:
+        print("\nMoment of Change")
+        print("----------------")
+        print(
+            f"{moment_of_change['from']} → {moment_of_change['to']} "
+            f"(Run {moment_of_change['at_index']})"
+        )
+
+    print("\nInterpretation")
+    print("--------------")
+    print(interpretation)
+
+
 def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
     print("\n══════════════════════════════")
     print("Adaptation Analysis (V10)")
@@ -525,31 +586,59 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
     indices = [s["index"] for s in summaries]
     case_sequence = [s["case"] for s in summaries]
 
-    print("Case sequence       :", " → ".join(case_sequence))
-    print("Behaviour indices   :", " → ".join(map(str, indices)))
-    print("Progression         :", " → ".join(labels))
-
-    if indices == sorted(indices):
+    if len(set(indices)) == 1:
+        trajectory = "Stable"
+    elif indices == sorted(indices):
         trajectory = "Deteriorating"
     elif indices == sorted(indices, reverse=True):
         trajectory = "Improving"
     else:
         trajectory = "Mixed"
 
-    print("Trajectory          :", trajectory)
+    moment_of_change = None
+    for i in range(1, len(labels)):
+        if labels[i] != labels[i - 1]:
+            moment_of_change = {
+                "from": labels[i - 1],
+                "to": labels[i],
+                "at_index": i + 1,
+            }
+            break
+
+    print("Case sequence      :", " → ".join(case_sequence))
+    print("Progression        :", " → ".join(labels))
+    print("Trajectory         :", trajectory)
+
+    if moment_of_change:
+        print("\nMoment of Change")
+        print("----------------")
+        print(
+            f"{moment_of_change['from']} → {moment_of_change['to']} "
+            f"(Run {moment_of_change['at_index']})"
+        )
+
+    if trajectory == "Stable" and moment_of_change is None:
+        interpretation = "Behaviour remained stable across compared cases with no detected moment of change."
+    elif trajectory == "Deteriorating" and moment_of_change is not None:
+        interpretation = (
+            f"Behaviour shows increasing institutional resistance or containment over time, "
+            f"with a shift from {moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+    elif trajectory == "Improving" and moment_of_change is not None:
+        interpretation = (
+            f"Behaviour shows improving engagement over time, with a shift from "
+            f"{moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+    elif trajectory == "Mixed" and moment_of_change is not None:
+        interpretation = (
+            f"Behaviour changes across compared cases, with the first detected shift from "
+            f"{moment_of_change['from']} to {moment_of_change['to']} at run {moment_of_change['at_index']}."
+        )
+    else:
+        interpretation = "Behaviour varies across compared cases without a single clear directional pattern."
 
     print("\nInterpretation")
     print("--------------")
-
-    if trajectory == "Deteriorating":
-        interpretation = "Behaviour shows increasing institutional resistance or containment over time."
-    elif trajectory == "Improving":
-        interpretation = (
-            "Behaviour shows improving engagement and resolution trajectory."
-        )
-    else:
-        interpretation = "Behaviour is mixed or transitional across cases."
-
     print(interpretation)
 
     output = {
@@ -558,7 +647,9 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "compare_analysis",
             "case_count": len(cases),
-            "lineage": {"version": "v10"},
+            "lineage": {
+                "version": "v10",
+            },
         },
         "results": [
             {
@@ -566,6 +657,7 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
                 "behaviour_indices": indices,
                 "progression": labels,
                 "trajectory": trajectory,
+                "moment_of_change": moment_of_change,
                 "interpretation": interpretation,
             }
         ],
@@ -883,18 +975,23 @@ def main() -> None:
     elif choice == "4":
         stored_runs = load_stored_civic_runs()
 
-    if not stored_runs:
-        print("No stored civic runs found in outputs/civic/.")
-    else:
-        timeline_output = build_timeline_output_from_runs(stored_runs)
-        print(json.dumps(timeline_output, indent=2))
+        if not stored_runs:
+            print("No stored civic runs found in outputs/civic/.")
+        else:
+            timeline_output = build_timeline_output_from_runs(stored_runs)
+            print_timeline_analysis(timeline_output)
 
-        saved_path = save_run_snapshot(
-            "timeline",
-            timeline_output["run_metadata"]["run_id"],
-            timeline_output,
-        )
-    print(f"\nSaved output → {saved_path}")
+            # Optional debug view
+            # print(json.dumps(timeline_output, indent=2))
+
+            saved_path = save_run_snapshot(
+                "timeline",
+                timeline_output["run_metadata"]["run_id"],
+                timeline_output,
+            )
+            print(f"\nSaved output → {saved_path}")
+    else:
+        print("Invalid choice.")
 
 
 # ============================================================
