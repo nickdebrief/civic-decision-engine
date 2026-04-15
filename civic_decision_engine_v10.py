@@ -172,6 +172,10 @@ def build_pattern_markdown(output: dict[str, Any]) -> str:
         dominant_labels = result.get("dominant_labels", [])
         recurring_transitions = result.get("recurring_transitions", [])
         pattern_summary = result.get("pattern_summary", "")
+        pattern_interpretation = result.get("pattern_interpretation", "")
+        system_state = result.get("system_state", "")
+        f"- System State: {system_state}",
+        signals = result.get("signals", [])
 
         if dominant_conditions:
             for item in dominant_conditions:
@@ -182,6 +186,11 @@ def build_pattern_markdown(output: dict[str, Any]) -> str:
         if dominant_labels:
             for item in dominant_labels:
                 lines.append(f"- Dominant Label: {item['label']} ({item['count']})")
+        if system_state:
+            lines.append(f"- System State: {system_state}")
+
+        if signals:
+            lines.append(f"- Signals: {' | '.join(signals)}")
 
         if recurring_transitions:
             for item in recurring_transitions:
@@ -192,6 +201,7 @@ def build_pattern_markdown(output: dict[str, Any]) -> str:
         lines.extend(
             [
                 f"- Pattern Summary: {pattern_summary}",
+                f"- Interpretation: {pattern_interpretation}",
                 "",
             ]
         )
@@ -393,6 +403,100 @@ def build_timeline_output_from_runs(
     }
 
 
+def interpret_pattern_result(
+    dominant_conditions: list[dict[str, Any]],
+    dominant_labels: list[dict[str, Any]],
+    recurring_transitions: list[dict[str, Any]],
+) -> str:
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+        return (
+            f"Stored sequences show repeated movement from {top_transition['from']} "
+            f"to {top_transition['to']}, indicating a recurring behavioural shift "
+            f"across timelines."
+        )
+
+    if dominant_conditions and dominant_labels:
+        top_condition = dominant_conditions[0]["condition"]
+        top_label = dominant_labels[0]["label"]
+        return (
+            f"Stored sequences indicate a stable {top_label.lower()} posture, where "
+            f"{top_condition.lower().replace('_', ' ')} persists without evidence of transition toward resolution."
+        )
+
+    if dominant_conditions:
+        top_condition = dominant_conditions[0]["condition"]
+        return (
+            f"Stored sequences are primarily characterised by {top_condition.lower().replace('_', ' ')}, "
+            f"suggesting a recurring structural condition across timelines."
+        )
+
+    if dominant_labels:
+        top_label = dominant_labels[0]["label"]
+        return (
+            f"Stored sequences are primarily characterised by {top_condition.lower().replace('_', ' ')}, "
+            f"suggesting a recurring behavioural posture across timelines."
+        )
+
+    return "Pattern interpretation could not be established from the stored timeline archive."
+
+
+def classify_pattern_system_state(
+    dominant_conditions: list[dict[str, Any]],
+    dominant_labels: list[dict[str, Any]],
+    recurring_transitions: list[dict[str, Any]],
+) -> str:
+    top_condition = dominant_conditions[0]["condition"] if dominant_conditions else None
+    top_label = dominant_labels[0]["label"] if dominant_labels else None
+
+    if (
+        top_condition == "ESCALATION_WITHOUT_RESPONSE"
+        and top_label == "Resistance"
+        and not recurring_transitions
+    ):
+        return "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION"
+
+    if top_condition == "ESCALATION_WITHOUT_RESPONSE" and recurring_transitions:
+        return "REPEATED_ESCALATION_WITH_TRANSITION"
+
+    if top_label == "Resistance" and recurring_transitions:
+        return "TRANSITIONAL_RESISTANCE_PATTERN"
+
+    if top_label == "Resistance":
+        return "DOMINANT_RESISTANCE_PATTERN"
+
+    if top_condition:
+        return "DOMINANT_CONDITION_PATTERN"
+
+    return "PATTERN_STATE_UNRESOLVED"
+
+
+def derive_pattern_signals(
+    dominant_conditions: list[dict[str, Any]],
+    dominant_labels: list[dict[str, Any]],
+    recurring_transitions: list[dict[str, Any]],
+    system_state: str,
+) -> list[str]:
+    signals: list[str] = []
+
+    top_condition = dominant_conditions[0]["condition"] if dominant_conditions else None
+    top_label = dominant_labels[0]["label"] if dominant_labels else None
+
+    if not recurring_transitions:
+        signals.append("NO_RECURRING_TRANSITION")
+
+    if top_label == "Resistance":
+        signals.append("DOMINANT_RESISTANCE")
+
+    if top_condition == "ESCALATION_WITHOUT_RESPONSE":
+        signals.append("DOMINANT_ESCALATION_WITHOUT_RESPONSE")
+
+    if system_state == "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION":
+        signals.append("PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION")
+
+    return signals
+
+
 def build_pattern_output_from_timelines(
     timeline_runs: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -501,13 +605,13 @@ def build_pattern_output_from_timelines(
     elif dominant_conditions and dominant_labels:
         pattern_summary = (
             f"Stored timeline sequences are dominated by "
-            f"{dominant_conditions[0]['condition']} and {dominant_labels[0]['label']}, "
+            f"{dominant_conditions[0]['condition'].lower().replace('_', ' ')} and {dominant_labels[0]['label']}, "
             f"with no recurring transition detected."
         )
 
     elif dominant_conditions:
         pattern_summary = (
-            f"{dominant_conditions[0]['condition']} is the dominant condition "
+            f"{dominant_conditions[0]['condition'].lower().replace('_', ' ')} is the dominant condition "
             f"across stored timeline sequences."
         )
 
@@ -519,6 +623,25 @@ def build_pattern_output_from_timelines(
 
     else:
         pattern_summary = "Pattern analysis generated."
+
+    pattern_interpretation = interpret_pattern_result(
+        dominant_conditions,
+        dominant_labels,
+        recurring_transitions,
+    )
+
+    system_state = classify_pattern_system_state(
+        dominant_conditions,
+        dominant_labels,
+        recurring_transitions,
+    )
+
+    signals = derive_pattern_signals(
+        dominant_conditions,
+        dominant_labels,
+        recurring_transitions,
+        system_state,
+    )
 
     return {
         "run_metadata": {
@@ -535,6 +658,9 @@ def build_pattern_output_from_timelines(
                 "dominant_labels": dominant_labels,
                 "recurring_transitions": recurring_transitions,
                 "pattern_summary": pattern_summary,
+                "pattern_interpretation": pattern_interpretation,
+                "system_state": system_state,
+                "signals": signals,
             }
         ],
     }
@@ -896,6 +1022,9 @@ def print_pattern_analysis(output: dict[str, Any]) -> None:
     dominant_labels = r.get("dominant_labels", [])
     recurring_transitions = r.get("recurring_transitions", [])
     pattern_summary = r.get("pattern_summary", "")
+    pattern_interpretation = r.get("pattern_interpretation", "")
+    system_state = r.get("system_state", "")
+    signals = r.get("signals", [])
 
     if dominant_conditions:
         top_condition = dominant_conditions[0]
@@ -910,6 +1039,11 @@ def print_pattern_analysis(output: dict[str, Any]) -> None:
             "Dominant label     :",
             f"{top_label['label']} ({top_label['count']})",
         )
+    if system_state:
+        print("System state       :", system_state)
+
+    if signals:
+        print("Signals           :", " | ".join(signals))
 
     if recurring_transitions:
         top_transition = recurring_transitions[0]
@@ -921,6 +1055,10 @@ def print_pattern_analysis(output: dict[str, Any]) -> None:
     print("\nSummary")
     print("-------")
     print(pattern_summary)
+
+    print("\nInterpretation")
+    print("--------------")
+    print(pattern_interpretation)
 
 
 # ============================================================
