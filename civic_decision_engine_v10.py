@@ -434,7 +434,7 @@ def interpret_pattern_result(
     if dominant_labels:
         top_label = dominant_labels[0]["label"]
         return (
-            f"Stored sequences are primarily characterised by {top_condition.lower().replace('_', ' ')}, "
+            f"Stored sequences are primarily characterised by {top_label.lower()}, "
             f"suggesting a recurring behavioural posture across timelines."
         )
 
@@ -587,13 +587,6 @@ def build_pattern_output_from_timelines(
             reverse=True,
         )
     ]
-
-    if recurring_transitions:
-        top_transition = recurring_transitions[0]
-        pattern_summary = (
-            f"Repeated transition from {top_transition['from']} to {top_transition['to']} "
-            f"detected across stored timeline sequences."
-        )
 
     if recurring_transitions:
         top_transition = recurring_transitions[0]
