@@ -189,6 +189,39 @@ python civic_decision_engine_v10.py \
   --compare-with outputs/run_1.json \
   --timeline audit_logs/civic_engine_audit_log.json
 ```
+
+## API Direction
+
+The Civic Decision Engine is evolving from a CLI-based diagnostic tool into an API-first system.
+
+The next stage introduces a FastAPI layer to expose core analysis modes as structured endpoints:
+
+- Civic case validation
+- Adaptation analysis
+- Timeline analysis
+- Pattern analysis
+
+This transition reflects the system’s design:
+
+Input → Structured processing → Classified output
+
+This is not an interface decision.
+It is a structural extension of the system.
+
+FastAPI has been selected due to its strong alignment with:
+- typed data models
+- structured JSON outputs
+- automatic documentation
+- minimal overhead for exposing existing logic
+
+At this stage, the engine remains CLI-first.  
+The API layer will act as a direct interface over the existing system, without altering core logic.
+
+Future expansion (if required) may introduce persistence, authentication, and platform-level features.
+
+The system is designed to be called, not just observed.
+
+
 ## Philosophy
 
 The engine does not attempt to solve problems.
@@ -199,7 +232,9 @@ Once the record is clear, repetition is no longer required.
 
 ## Next Step
 
-The Civic Decision Engine will be developed into a web application so that anyone can use it to track and understand institutional behaviour over time.
+The Civic Decision Engine will first be extended into an API-first system, exposing its diagnostic capabilities through structured endpoints.
+
+From this foundation, it may then be developed into a web application so that anyone can use it to track and understand institutional behaviour over time.
 
 ## This version is:
 
