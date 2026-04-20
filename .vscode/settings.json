@@ -1,0 +1,25 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "/examples/sample_case.json",
+        "/examples/ack_case.json",
+        "/examples/transfer_case.json",
+        "/examples/civic_case_001.json",
+        "/examples/civic_case_002.json",
+        "/examples/civic_case_003.json"
+      ],
+      "url": "./schema/civic_case.schema.json"
+    }
+  ],
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "editor.formatOnSave": true,
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": false,
+    "strings": true
+  },
+  "editor.suggestOnTriggerCharacters": true
+}
