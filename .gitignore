@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 # Ignore audit and log files
+.vscode/
 audit_logs/
 outputs/*
 !outputs/.gitkeep
