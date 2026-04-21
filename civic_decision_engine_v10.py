@@ -15,8 +15,36 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
-
 from jsonschema import Draft7Validator
+
+SCHEMA_PATH = Path("schema/civic_case.schema.json")
+
+
+def load_civic_schema() -> dict[str, Any]:
+
+    with SCHEMA_PATH.open("r", encoding="utf-8") as f:
+
+        return json.load(f)
+
+
+def validate_civic_case_data(case_data: dict[str, Any]) -> list[str]:
+
+    schema = load_civic_schema()
+
+    validator = Draft7Validator(schema)
+
+    errors = sorted(validator.iter_errors(case_data), key=lambda e: e.path)
+
+    messages: list[str] = []
+
+    for error in errors:
+
+        path = ".".join(str(p) for p in error.path) if error.path else "root"
+
+        messages.append(f"{path}: {error.message}")
+
+    return messages
+
 
 SYSTEM_SRC_DIR = Path(__file__).resolve().parent / "examples" / "src"
 if str(SYSTEM_SRC_DIR) not in sys.path:
@@ -410,10 +438,22 @@ def interpret_pattern_result(
 ) -> str:
     if recurring_transitions:
         top_transition = recurring_transitions[0]
+        from_condition = top_transition["from"]
+        to_condition = top_transition["to"]
+
+        if (
+            top_transition["count"] == 1
+            and from_condition == "TRANSFER_OF_BURDEN"
+            and to_condition == "ESCALATION_WITHOUT_RESPONSE"
+        ):
+            return (
+                "The submitted sequence shows deterioration from delayed procedural burden "
+                "to escalation without response."
+            )
+
         return (
-            f"Stored sequences show repeated movement from {top_transition['from']} "
-            f"to {top_transition['to']}, indicating a recurring behavioural shift "
-            f"across timelines."
+            f"Stored sequences show repeated movement from {from_condition} to {to_condition}, "
+            f"indicating a recurring behavioural shift across timelines."
         )
 
     if dominant_conditions and dominant_labels:
@@ -428,7 +468,7 @@ def interpret_pattern_result(
         top_condition = dominant_conditions[0]["condition"]
         return (
             f"Stored sequences are primarily characterised by {top_condition.lower().replace('_', ' ')}, "
-            f"suggesting a recurring structural condition across timelines."
+            f"suggesting a recurring behavioural posture across timelines."
         )
 
     if dominant_labels:
@@ -438,7 +478,9 @@ def interpret_pattern_result(
             f"suggesting a recurring behavioural posture across timelines."
         )
 
-    return "Pattern interpretation could not be established from the stored timeline archive."
+    return (
+        "No clear behavioural pattern could be interpreted from the supplied sequences."
+    )
 
 
 def classify_pattern_system_state(
@@ -448,6 +490,15 @@ def classify_pattern_system_state(
 ) -> str:
     top_condition = dominant_conditions[0]["condition"] if dominant_conditions else None
     top_label = dominant_labels[0]["label"] if dominant_labels else None
+
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+        if (
+            top_transition["count"] == 1
+            and top_transition["from"] == "TRANSFER_OF_BURDEN"
+            and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
+        ):
+            return "TRANSITION_TO_ESCALATION"
 
     if (
         top_condition == "ESCALATION_WITHOUT_RESPONSE"
@@ -482,6 +533,15 @@ def derive_pattern_signals(
     top_condition = dominant_conditions[0]["condition"] if dominant_conditions else None
     top_label = dominant_labels[0]["label"] if dominant_labels else None
 
+    if recurring_transitions:
+        top_transition = recurring_transitions[0]
+    if (
+        top_transition["count"] == 1
+        and top_transition["from"] == "TRANSFER_OF_BURDEN"
+        and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
+    ):
+        signals.append("TRANSITION_DETECTED")
+        signals.append("ESCALATION_WITHOUT_RESPONSE_PRESENT")
     if not recurring_transitions:
         signals.append("NO_RECURRING_TRANSITION")
 
@@ -590,10 +650,17 @@ def build_pattern_output_from_timelines(
 
     if recurring_transitions:
         top_transition = recurring_transitions[0]
-        pattern_summary = (
-            f"Repeated transition from {top_transition['from']} to {top_transition['to']} "
-            f"detected across stored timeline sequences."
-        )
+
+        if top_transition["count"] == 1 and len(timeline_runs) == 1:
+            pattern_summary = (
+                f"Transition from {top_transition['from']} to {top_transition['to']} "
+                f"detected within submitted sequence."
+            )
+        else:
+            pattern_summary = (
+                f"Repeated transition from {top_transition['from']} to {top_transition['to']} "
+                f"detected across stored timeline sequences."
+            )
 
     elif dominant_conditions and dominant_labels:
         pattern_summary = (
@@ -644,6 +711,7 @@ def build_pattern_output_from_timelines(
             "source": "outputs/timeline/",
             "case_count": len(timeline_runs),
             "lineage": {"version": "v10"},
+            "pattern_summary": pattern_summary,
         },
         "results": [
             {
@@ -1121,6 +1189,27 @@ def validate_case(case_path: Path, schema_path: Path) -> dict[str, Any] | None:
 
     print("\nValidation successful.")
     return case_data
+
+
+def run_civic_analysis_from_data(case_data: dict[str, Any]) -> dict[str, Any]:
+
+    errors = validate_civic_case_data(case_data)
+
+    if errors:
+        raise ValueError("\n".join(errors))
+
+    result = format_civic_result(case_data)
+
+    metadata = build_civic_run_metadata(
+        None,
+        1,
+        None,
+    )
+
+    return {
+        "run_metadata": metadata,
+        "results": [result],
+    }
 
 
 # ============================================================
