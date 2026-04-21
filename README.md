@@ -1,242 +1,163 @@
 # Civic Decision Engine (CDE)
 
-A framework for tracking how institutional behaviour changes over time — clearly, consistently, and without guesswork.
+A system for diagnosing institutional behaviour.
+
+Observation sometimes becomes clearer when structure is applied.
+
+Not designed for attention. 
+Designed for understanding.
 
 ---
 
-## What this is (in simple terms)
+## What this is
 
-The Civic Decision Engine is a way of keeping track of how situations change over time.
+The Civic Decision Engine is a diagnostic system.
 
-Imagine you have a problem with an organisation.
-
-At the start, they might respond normally.  
-Then they slow down.  
-Then they only partly engage.  
-And eventually, they might stop responding altogether.
-
-The engine looks at that and answers a simple question:
-
-**“What stage is this at right now?”**
-
-But more importantly, it keeps a record of each check.
-
-So instead of just seeing one moment, it shows:
-
-- what it looked like before  
-- what it looks like now  
-- whether anything actually changed  
-
-And this is the key part:
-
-It can tell the difference between:
-
-- **something new happened**
-- **nothing changed, but we checked again**
-
-That matters, because sometimes things feel like they’re moving, but they’re actually just staying the same.
-
-It also identifies the moment things shift — for example, the exact point where something moves from *Partial engagement* to *Resistance*.
+It does not argue a case.
+It classifies and interprets institutional behaviour based on structured inputs.
 
 ---
 
 ## What it does
 
-The engine:
+Given one or more civic cases, the system:
 
-- Classifies behaviour at a given moment  
-  *(e.g. Response, Delayed response, Partial engagement, Resistance)*  
-- Records each run as part of a sequence  
-- Tracks whether anything actually changed between runs  
-- Detects the first moment behaviour shifts  
+* structures the case into a standard form
+* detects behavioural conditions (e.g. delay, escalation)
+* identifies progression across cases
+* interprets the pattern as a system state
 
----
+Outputs are:
 
-## Development Status
-
-v10 establishes:
-
-- Run comparison logic  
-- Lineage continuity tracking  
-- Transition state detection  
-- Moment-of-change identification  
-- Timeline generation across runs  
-
-The system now produces a consistent record of behavioural progression over time.
-
----
-## Conditions Layer:
-- Defines and names recurring institutional behaviour patterns
-- Enables precise interpretation without altering underlying signals
-- Supports:
-  - Immediate classification
-  - Stability across runs
-  - Interpretive refinement
----
-
-## Extended Capabilities
-
-- Run comparison to distinguish change vs repeated observation  
-- Lineage tracking with continuity validation  
-- Transition state detection between behavioural classifications  
-- Moment-of-change identification (first detected shift)  
-- Timeline generation across runs   
+* Timeline analysis → what is happening
+* Pattern analysis → what it means
 
 ---
 
-## Key Concepts
+## One working example
 
-**Run**  
-A single observation of a case at a point in time.
+This example shows a transition from delay to escalation.
 
-**Lineage**  
-Each run is linked to the previous one, forming a chain.
-
-**Depth**  
-Indicates how far along the sequence the record has progressed.
-
-**Behaviour vs Metadata**  
-The engine distinguishes between:
-- a new observation being recorded  
-- an actual behavioural change  
-
-**Moment of Change**
-
-The first point where behaviour shifts (e.g. Partial engagement → Resistance).
-
----
-## How the Engine Works
-
-```mermaid
-flowchart TD
-    A["Situation with an organisation"] --> B["Engine checks current behaviour"]
-    B --> C["Classifies the situation"]
-
-    C --> D["Creates a run record"]
-    D --> E["Links it to earlier runs"]
-    E --> F["Builds a timeline"]
-
-    F --> G["Compares before and now"]
-    G --> H["Check for change"]
-
-    H --> I["No change"]
-    H --> J["Behavioural shift detected"]
-
-    J --> K["Identify moment of change"]
-```
-
-## Example Output
+Request
 
 ```text
-Lineage
--------
-Depth Change       : 1 -> 2
-Lineage Continuity : yes
 
-Summary
--------
-Behavioural change : no
-Interpretation     : new run recorded, but no result-level change detected.
-```
-## Output Structure
-
-Outputs are generated per run and stored by run_id:
-
-outputs/
-  civic/
-    <run_id>/
-      result.json
-      summary.md
-  compare/
-    <run_id>/
-      result.json
-      summary.md
-
-Each run produces:
-
-- Structured JSON output  
-- A corresponding Markdown summary  
-- A stable, traceable run_id  
-
-Each run is preserved as a structured artefact that can be returned to
-
-## Usage
-
-### Run a civic analysis
-```bash
-python civic_decision_engine_v10.py
+curl -X POST "http://127.0.0.1:8000/analysis/timeline" \
+-H "Content-Type: application/json" \
+-d '{
+  "cases": [
+    {
+      "strike_reference": "Strike-Example-001",
+      "case_title": "Administrative complaint awaiting substantive response",
+      "civic_domain": "local_government",
+      "decision_trigger": "Acknowledged but no substantive response",
+      "urgency": "medium",
+      "institutions": ["Local Authority"],
+      "case_lifecycle": {
+        "current_stage": "awaiting_response",
+        "status": "active",
+        "stalled": false,
+        "days_open": 20
+      }
+    },
+    {
+      "strike_reference": "Strike-Example-002",
+      "case_title": "Unresolved complaint with missed deadline",
+      "civic_domain": "local_government",
+      "decision_trigger": "No response beyond deadline",
+      "urgency": "high",
+      "institutions": ["Local Authority"],
+      "case_lifecycle": {
+        "current_stage": "awaiting_response",
+        "status": "active",
+        "stalled": true,
+        "days_open": 90
+      }
+    }
+  ]
+}'
 ```
 
-### Then choose:
-2) Validate case by path
-   
-### Run a comparison
-```bash
-python civic_decision_engine_v10.py
+---
+## Expected output (simplified)
+
+The system detects a transition 
+from early delay 
+to escalation:
+
+```text
+
+{
+  "results": [
+    {
+      "conditions": [
+        "TRANSFER_OF_BURDEN",
+        "ESCALATION_WITHOUT_RESPONSE"
+      ],
+      "trajectory": "Deteriorating",
+      "moment_of_change": {
+        "from": "TRANSFER_OF_BURDEN",
+        "to": "ESCALATION_WITHOUT_RESPONSE"
+      }
+    }
+  ]
+}
 ```
-Then choose:
-```bash
-3) Run adaptation analysis (example cases)
+## This is then interpreted as:
+
+## Pattern interpretation
+
+The sequence shows deterioration:
+
+From delayed procedural burden  
+to escalation without response.
+
+```text
+
+{
+  "pattern_summary": "Transition from TRANSFER_OF_BURDEN to ESCALATION_WITHOUT_RESPONSE detected within submitted sequence.",
+  "pattern_interpretation": "The submitted sequence shows deterioration from delayed procedural burden to escalation without response.",
+  "system_state": "TRANSITION_TO_ESCALATION",
+  "signals": [
+    "TRANSITION_DETECTED",
+    "ESCALATION_WITHOUT_RESPONSE_PRESENT"
+  ]
+}
 ```
-### CLI mode
-```bash
-python civic_decision_engine_v10.py --mode civic --export outputs/run.json
+---
+
+## Key principle
+
+The system does not determine outcomes.
+
+It makes visible:
+
+* when delay becomes pattern
+* when pattern becomes structure
+* when structure no longer requires explanation
+
+---
+
+## Run locally
+```text
+uvicorn api.main:app --reload
 ```
-```bash
-python civic_decision_engine_v10.py \
-  --mode compare \
-  --input outputs/run_2.json \
-  --compare-with outputs/run_1.json \
-  --timeline audit_logs/civic_engine_audit_log.json
+
+## Then open:
+```text
+http://127.0.0.1:8000/docs
 ```
+---
 
-## API Direction
+## Status
 
-The Civic Decision Engine is evolving from a CLI-based diagnostic tool into an API-first system.
+Active development (v10)
+Conditions Layer integrated
+Timeline + Pattern analysis operational
+---
 
-The next stage introduces a FastAPI layer to expose core analysis modes as structured endpoints:
+The record does not argue.
 
-- Civic case validation
-- Adaptation analysis
-- Timeline analysis
-- Pattern analysis
+It becomes clear enough 
+to be returned to.
 
-This transition reflects the system’s design:
-
-Input → Structured processing → Classified output
-
-This is not an interface decision.
-It is a structural extension of the system.
-
-FastAPI has been selected due to its strong alignment with:
-- typed data models
-- structured JSON outputs
-- automatic documentation
-- minimal overhead for exposing existing logic
-
-At this stage, the engine remains CLI-first.  
-The API layer will act as a direct interface over the existing system, without altering core logic.
-
-Future expansion (if required) may introduce persistence, authentication, and platform-level features.
-
-The system is designed to be called, not just observed.
-
-
-## Philosophy
-
-The engine does not attempt to solve problems.
-
-It creates a clear, structured record of what is happening.
-
-Once the record is clear, repetition is no longer required.
-
-## Next Step
-
-The Civic Decision Engine will first be extended into an API-first system, exposing its diagnostic capabilities through structured endpoints.
-
-From this foundation, it may then be developed into a web application so that anyone can use it to track and understand institutional behaviour over time.
-
-## This version is:
-
-- Clear for non-technical readers  
-- Structured for developers
