@@ -1,0 +1,33 @@
+{
+  "run_metadata": {
+    "run_id": "timeline-analysis-2026-04-20-111537",
+    "generated_at": "2026-04-20T11:15:37.639514+00:00",
+    "mode": "timeline_analysis",
+    "case_count": 1,
+    "lineage": {
+      "version": "v10"
+    }
+  },
+  "results": [
+    {
+      "run_sequence": [
+        "civic-analysis-2026-04-20-111537"
+      ],
+      "case_sequence": [
+        "Strike-Example-002"
+      ],
+      "behaviour_indices": [
+        9
+      ],
+      "conditions": [
+        "ESCALATION_WITHOUT_RESPONSE"
+      ],
+      "progression": [
+        "Resistance"
+      ],
+      "trajectory": "Stable",
+      "moment_of_change": null,
+      "interpretation": "Behaviour remained stable across stored runs with no detected moment of change."
+    }
+  ]
+}

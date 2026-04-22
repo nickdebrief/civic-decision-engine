@@ -1,0 +1,102 @@
+import httpx
+import json
+response = httpx.post(
+    f"{BASE_URL}/analysis/timeline",
+    json=case_1
+)
+
+print("Status:", response.status_code)
+
+data = response.json()
+print(json.dumps(data, indent=2))
+
+with open("case_1_timeline.json", "w") as f:
+    json.dump(data, f, indent=2)import json
+
+BASE_URL = "http://127.0.0.1:8000"
+
+case_1 = {
+    "cases": [
+        {
+            "strike_reference": "Strike-Example-001",
+            "case_title": "Administrative complaint awaiting substantive response",
+            "civic_domain": "local_government",
+            "decision_trigger": "A public body acknowledged the complaint but has not yet provided a substantive response.",
+            "recall_question": "What is the appropriate next step to preserve the record while allowing reasonable time for response?",
+            "user_priority": "clarity, procedural footing, and record integrity",
+            "desired_outcome": "A timely substantive response and confirmation of procedural handling",
+            "urgency": "medium",
+            "institutions": [
+                "Local Authority Complaints Office"
+            ],
+            "case_lifecycle": {
+                "current_stage": "awaiting_response",
+                "status": "active",
+                "stalled": False,
+                "days_open": 20,
+                "next_decision_point": "assess_internal_deadline_expiry",
+                "next_deadline": "2026-03-25",
+                "recommended_mode": "monitor_and_prepare"
+            }
+        }
+    ]
+}
+
+response = httpx.post(
+    f"{BASE_URL}/analysis/timeline",
+    json=case_1
+)
+
+print("Status:", response.status_code)
+
+data = response.json()
+print(json.dumps(data, indent=2))
+
+with open("case_1_timeline.json", "w") as f:
+    json.dump(data, f, indent=2)import httpx
+import json
+
+BASE_URL = "http://127.0.0.1:8000"
+
+# -------- CASE 1 --------
+case_1 = {
+    "cases": [
+        {
+            "strike_reference": "Strike-Example-001",
+            "case_title": "Administrative complaint awaiting substantive response",
+            "civic_domain": "local_government",
+            "decision_trigger": "A public body acknowledged the complaint but has not yet provided a substantive response.",
+            "recall_question": "What is the appropriate next step to preserve the record while allowing reasonable time for response?",
+            "user_priority": "clarity, procedural footing, and record integrity",
+            "desired_outcome": "A timely substantive response and confirmation of procedural handling",
+            "urgency": "medium",
+            "institutions": [
+                "Local Authority Complaints Office"
+            ],
+            "case_lifecycle": {
+                "current_stage": "awaiting_response",
+                "status": "active",
+                "stalled": False,
+                "days_open": 20,
+                "next_decision_point": "assess_internal_deadline_expiry",
+                "next_deadline": "2026-03-25",
+                "recommended_mode": "monitor_and_prepare"
+            }
+        }
+    ]
+}
+
+# -------- REQUEST --------
+response = httpx.post(
+    f"{BASE_URL}/analysis/timeline",
+    json=case_1
+)
+
+# -------- OUTPUT --------
+print("Status:", response.status_code)
+
+data = response.json()
+print(json.dumps(data, indent=2))
+
+# -------- SAVE --------
+with open("test_cases/outputs/case_1_timeline.json", "w") as f:

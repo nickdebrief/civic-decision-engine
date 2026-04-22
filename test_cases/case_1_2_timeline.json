@@ -1,0 +1,49 @@
+{
+  "run_metadata": {
+    "run_id": "pattern-analysis-2026-04-21-105306",
+    "generated_at": "2026-04-21T10:53:06.640772+00:00",
+    "mode": "pattern_analysis",
+    "case_count": 1,
+    "lineage": {
+      "version": "v10"
+    }
+  },
+  "results": [
+    {
+      "dominant_conditions": [
+        {
+          "condition": "TRANSFER_OF_BURDEN",
+          "count": 1
+        },
+        {
+          "condition": "ESCALATION_WITHOUT_RESPONSE",
+          "count": 1
+        }
+      ],
+      "dominant_labels": [
+        {
+          "label": "Delayed response",
+          "count": 1
+        },
+        {
+          "label": "Resistance",
+          "count": 1
+        }
+      ],
+      "recurring_transitions": [
+        {
+          "from": "TRANSFER_OF_BURDEN",
+          "to": "ESCALATION_WITHOUT_RESPONSE",
+          "count": 1
+        }
+      ],
+      "pattern_summary": "Transition from TRANSFER_OF_BURDEN to ESCALATION_WITHOUT_RESPONSE detected within submitted sequence.",
+      "pattern_interpretation": "The submitted sequence shows deterioration from delayed procedural burden to escalation without response.",
+      "system_state": "TRANSITION_TO_ESCALATION",
+      "signals": [
+        "TRANSITION_DETECTED",
+        "ESCALATION_WITHOUT_RESPONSE_PRESENT"
+      ]
+    }
+  ]
+}

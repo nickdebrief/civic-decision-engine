@@ -1,6 +1,7 @@
-from __future__ import annotations
-
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
 from api.routes import health, civic, adaptation, timeline, pattern
 
 app = FastAPI(
@@ -13,8 +14,16 @@ app = FastAPI(
     version="v10",
 )
 
-app.include_router(health.router, prefix="/system")
-app.include_router(civic.router, prefix="/civic")
-app.include_router(adaptation.router, prefix="/analysis")
-app.include_router(timeline.router, prefix="/analysis")
-app.include_router(pattern.router, prefix="/analysis")
+app.mount("/static", StaticFiles(directory="api/static"), name="static")
+
+
+@app.get("/")
+def root():
+    return FileResponse("api/static/index.html")
+
+
+app.include_router(health.router)
+app.include_router(civic.router)
+app.include_router(adaptation.router)
+app.include_router(timeline.router)
+app.include_router(pattern.router)
