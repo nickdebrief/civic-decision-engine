@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Civic Decision Engine</title>
+  <style>
+    :root {
+      --bg: #05070b;
+      --panel: #0b1220;
+      --panel-2: #101827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #1f2937;
+      --accent: #d1d5db;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 32px;
+      align-items: center;
+      margin-bottom: 40px;
+    }
+
+    .hero-text h1 {
+      margin: 0 0 16px;
+      font-size: clamp(2rem, 5vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .hero-text .lead {
+      margin: 0 0 10px;
+      font-size: 1.25rem;
+      color: var(--accent);
+    }
+
+    .hero-text .sub {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .hero-text .record {
+      margin-top: 24px;
+      color: var(--text);
+      font-size: 0.98rem;
+    }
+
+    .hero-image {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      overflow: hidden;
+      background: #000;
+      min-height: 320px;
+    }
+
+    .hero-image img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: brightness(0.9);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 20px;
+      min-height: 680px;
+    }
+
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+    }
+
+    .panel p.meta {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 18px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #111827;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: #e5e7eb;
+      color: #05070b;
+      font-weight: 600;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    textarea,
+    input,
+    select {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #060b14;
+      color: var(--text);
+      outline: none;
+      font-size: 0.96rem;
+    }
+
+    textarea {
+      min-height: 420px;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      resize: vertical;
+    }
+
+    textarea:focus,
+    input:focus,
+    select:focus {
+      border-color: #374151;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 8px;
+      font-size: 0.92rem;
+      color: var(--accent);
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .plain-textarea {
+      min-height: 140px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #111827;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: #e5e7eb;
+      color: #05070b;
+      font-weight: 600;
+    }
+
+    button:hover {
+      opacity: 0.95;
+    }
+
+    .output-block {
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+      margin-top: 16px;
+    }
+
+    .output-block h3 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .card {
+      background: #060b14;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+
+    .mono {
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .status {
+      margin-top: 8px;
+      min-height: 24px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .footer-note {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .signal-card {
+      background: #060b14;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+
+    .signal-title {
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .signal-description {
+      font-size: 0.92rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .grid,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        min-height: unset;
+      }
+
+      textarea {
+        min-height: 320px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="hero-text">
+        <h1>Civic Decision Engine</h1>
+        <p class="lead">A system for diagnosing institutional behaviour.</p>
+        <p class="sub">Observation sometimes becomes clearer when structure is applied.</p>
+        <p class="sub">Not designed for attention. Designed for understanding.</p>
+        <p class="record">The record does not argue.</p>
+      </div>
+
+      <div class="hero-image">
+        <img src="/static/lens.jpeg" alt="Lens image" />
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Enter a case</h2>
+        <p class="meta">Describe the situation in plain language, or paste structured JSON.</p>
+
+        <div class="tabs">
+          <button class="tab-btn active" id="describeTabBtn" type="button">Describe a case</button>
+          <button class="tab-btn" id="jsonTabBtn" type="button">Paste JSON</button>
+        </div>
+
+        <div class="tab-panel active" id="describePanel">
+          <p class="meta">Enter the situation in plain language. The page will structure it for analysis.</p>
+
+          <div class="form-grid">
+            <div class="field full">
+              <label for="simpleWhatHappened">What happened?</label>
+              <textarea id="simpleWhatHappened" class="plain-textarea" placeholder="Describe the situation..."></textarea>
+            </div>
+
+            <div class="field">
+              <label for="simpleInstitution">Who is involved?</label>
+              <input id="simpleInstitution" type="text" placeholder="e.g. Local Authority" />
+            </div>
+
+            <div class="field">
+              <label for="simpleResponse">What response was received, if any?</label>
+              <select id="simpleResponse">
+                <option value="no_response">No response</option>
+                <option value="acknowledged_only" selected>Acknowledged only</option>
+                <option value="partial_response">Partial response</option>
+                <option value="substantive_response">Substantive response</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="simpleDaysOpen">How long has it been open? (days)</label>
+              <input id="simpleDaysOpen" type="number" min="0" placeholder="e.g. 45" />
+            </div>
+
+            <div class="field">
+              <label for="simpleStage">What stage is it at?</label>
+              <select id="simpleStage">
+                <option value="submitted">Submitted</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="awaiting_response" selected>Awaiting response</option>
+                <option value="delayed">Delayed</option>
+                <option value="escalated">Escalated</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="simpleUrgency">How urgent is it?</label>
+              <select id="simpleUrgency">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label for="simpleOutcome">What outcome is needed?</label>
+              <input id="simpleOutcome" type="text" placeholder="e.g. A clear substantive response and procedural accountability" />
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="jsonPanel">
+          <p class="meta">Paste one or more civic cases in JSON. The page will run timeline and pattern analysis.</p>
+          <textarea id="inputJson"></textarea>
+        </div>
+
+        <div class="controls">
+          <button class="primary" id="runBtn" type="button">Run analysis</button>
+          <button id="loadExampleBtn" type="button">Try an example</button>
+          <button id="clearBtn" type="button">Clear</button>
+        </div>
+
+        <div class="status" id="statusText"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Analysis</h2>
+        <p class="meta">Structured interpretation</p>
+
+        <div class="output-block">
+          <h3>What is happening</h3>
+          <div class="card mono" id="whatIsHappening">Awaiting input.</div>
+        </div>
+
+        <div class="output-block">
+          <h3>What it means</h3>
+          <div class="card mono" id="whatItMeans">Awaiting analysis.</div>
+        </div>
+
+        <div class="output-block">
+          <h3>System state</h3>
+          <div class="card mono" id="systemState">Awaiting analysis.</div>
+        </div>
+
+        <div class="output-block">
+          <h3>Signals</h3>
+          <div id="signalsBox">
+            <div class="signal-card">
+              <div class="signal-description">Awaiting analysis.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-block">
+          <h3>Raw output</h3>
+          <div class="card mono" id="rawOutput">No result yet.</div>
+        </div>
+
+        <div class="footer-note">
+          It becomes clear enough to be returned to.
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const examplePayload = {
+      cases: [
+        {
+          strike_reference: "Strike-Example-001",
+          case_title: "Administrative complaint awaiting substantive response",
+          civic_domain: "local_government",
+          decision_trigger: "A public body acknowledged the complaint but has not yet provided a substantive response.",
+          recall_question: "What is the appropriate next step to preserve the record while allowing reasonable time for response?",
+          user_priority: "clarity, procedural footing, and record integrity",
+          desired_outcome: "A timely substantive response and confirmation of procedural handling",
+          urgency: "medium",
+          institutions: ["Local Authority Complaints Office"],
+          case_lifecycle: {
+            current_stage: "awaiting_response",
+            status: "active",
+            stalled: false,
+            days_open: 20,
+            next_decision_point: "assess_internal_deadline_expiry",
+            next_deadline: "2026-03-25",
+            recommended_mode: "monitor_and_prepare"
+          }
+        },
+        {
+          strike_reference: "Strike-Example-002",
+          case_title: "Unresolved complaint with missed deadline",
+          civic_domain: "local_government",
+          decision_trigger: "A public body continued non-response beyond the stated internal deadline.",
+          recall_question: "At what point does delay become escalation?",
+          user_priority: "resolution, escalation readiness, preservation of record",
+          desired_outcome: "Escalation to the appropriate oversight route",
+          urgency: "high",
+          institutions: ["Local Authority Complaints Office"],
+          case_lifecycle: {
+            current_stage: "awaiting_response",
+            status: "active",
+            stalled: true,
+            days_open: 90,
+            next_decision_point: "trigger_external_escalation",
+            next_deadline: "2026-04-01",
+            recommended_mode: "prepare_escalation"
+          }
+        }
+      ]
+    };
+
+    const SIGNAL_MAP = {
+      TRANSITION_DETECTED: {
+        title: "Transition detected",
+        description: "Movement between behavioural conditions has been identified."
+      },
+      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
+        title: "Escalation without response present",
+        description: "Escalation is occurring without corresponding institutional action."
+      }
+    };
+
+    const describeTabBtn = document.getElementById("describeTabBtn");
+    const jsonTabBtn = document.getElementById("jsonTabBtn");
+    const describePanel = document.getElementById("describePanel");
+    const jsonPanel = document.getElementById("jsonPanel");
+
+    const inputJson = document.getElementById("inputJson");
+    const statusText = document.getElementById("statusText");
+    const runBtn = document.getElementById("runBtn");
+    const loadExampleBtn = document.getElementById("loadExampleBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    const simpleWhatHappened = document.getElementById("simpleWhatHappened");
+    const simpleInstitution = document.getElementById("simpleInstitution");
+    const simpleResponse = document.getElementById("simpleResponse");
+    const simpleDaysOpen = document.getElementById("simpleDaysOpen");
+    const simpleStage = document.getElementById("simpleStage");
+    const simpleUrgency = document.getElementById("simpleUrgency");
+    const simpleOutcome = document.getElementById("simpleOutcome");
+
+    const whatIsHappening = document.getElementById("whatIsHappening");
+    const whatItMeans = document.getElementById("whatItMeans");
+    const systemState = document.getElementById("systemState");
+    const signalsBox = document.getElementById("signalsBox");
+    const rawOutput = document.getElementById("rawOutput");
+
+    let currentMode = "describe";
+
+    inputJson.value = JSON.stringify(examplePayload, null, 2);
+
+    describeTabBtn.addEventListener("click", () => switchMode("describe"));
+    jsonTabBtn.addEventListener("click", () => switchMode("json"));
+
+    function switchMode(mode) {
+      currentMode = mode;
+
+      if (mode === "describe") {
+        describeTabBtn.classList.add("active");
+        jsonTabBtn.classList.remove("active");
+        describePanel.classList.add("active");
+        jsonPanel.classList.remove("active");
+      } else {
+        jsonTabBtn.classList.add("active");
+        describeTabBtn.classList.remove("active");
+        jsonPanel.classList.add("active");
+        describePanel.classList.remove("active");
+      }
+    }
+
+    loadExampleBtn.addEventListener("click", () => {
+      if (currentMode === "json") {
+        inputJson.value = JSON.stringify(examplePayload, null, 2);
+      } else {
+        simpleWhatHappened.value = "A complaint was submitted and acknowledged, but no substantive response was provided. The matter remained open beyond the expected response period.";
+        simpleInstitution.value = "Local Authority";
+        simpleResponse.value = "acknowledged_only";
+        simpleDaysOpen.value = "45";
+        simpleStage.value = "awaiting_response";
+        simpleUrgency.value = "medium";
+        simpleOutcome.value = "A clear substantive response and procedural accountability.";
+      }
+      statusText.textContent = "Example loaded.";
+    });
+
+    clearBtn.addEventListener("click", () => {
+      inputJson.value = "";
+      simpleWhatHappened.value = "";
+      simpleInstitution.value = "";
+      simpleResponse.value = "acknowledged_only";
+      simpleDaysOpen.value = "";
+      simpleStage.value = "awaiting_response";
+      simpleUrgency.value = "medium";
+      simpleOutcome.value = "";
+
+      statusText.textContent = "";
+      whatIsHappening.textContent = "Awaiting input.";
+      whatItMeans.textContent = "Awaiting analysis.";
+      systemState.textContent = "Awaiting analysis.";
+      signalsBox.innerHTML = `
+        <div class="signal-card">
+          <div class="signal-description">Awaiting analysis.</div>
+        </div>
+      `;
+      rawOutput.textContent = "No result yet.";
+    });
+
+    runBtn.addEventListener("click", async () => {
+      statusText.textContent = "Running analysis...";
+
+      let payload;
+      try {
+        payload = currentMode === "json"
+          ? JSON.parse(inputJson.value)
+          : buildPayloadFromForm();
+      } catch (err) {
+        statusText.textContent = "Invalid input. Please correct the form or JSON.";
+        return;
+      }
+
+      try {
+        const [timelineRes, patternRes] = await Promise.all([
+          fetch("/timeline", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }),
+          fetch("/pattern", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          })
+        ]);
+
+        const timelineData = await timelineRes.json();
+        const patternData = await patternRes.json();
+
+        if (!timelineRes.ok || !patternRes.ok) {
+          rawOutput.textContent = JSON.stringify(
+            { timeline: timelineData, pattern: patternData },
+            null,
+            2
+          );
+          statusText.textContent = "Analysis returned an error.";
+          return;
+        }
+
+        renderResults(timelineData, patternData);
+        rawOutput.textContent = JSON.stringify(
+          { timeline: timelineData, pattern: patternData },
+          null,
+          2
+        );
+        statusText.textContent = "Analysis complete.";
+      } catch (err) {
+        statusText.textContent = "Unable to reach the API.";
+        rawOutput.textContent = String(err);
+      }
+    });
+
+    function buildPayloadFromForm() {
+      const whatHappened = simpleWhatHappened.value.trim();
+      const institution = simpleInstitution.value.trim() || "Institution";
+      const response = simpleResponse.value;
+      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
+      const stage = simpleStage.value;
+      const urgency = simpleUrgency.value;
+      const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
+
+      const stalled = response === "no_response" || response === "acknowledged_only" || stage === "delayed" || stage === "escalated";
+
+      let decisionTrigger = whatHappened || "Case described by user.";
+      if (response === "no_response") {
+        decisionTrigger += " No response has been received.";
+      } else if (response === "acknowledged_only") {
+        decisionTrigger += " The matter was acknowledged but not substantively progressed.";
+      } else if (response === "partial_response") {
+        decisionTrigger += " A partial response was received.";
+      } else if (response === "substantive_response") {
+        decisionTrigger += " A substantive response was received.";
+      }
+
+      return {
+        cases: [
+          {
+            strike_reference: "Case-001",
+            case_title: "User-submitted case",
+            civic_domain: "local_government",
+            decision_trigger: decisionTrigger,
+            desired_outcome: desiredOutcome,
+            urgency: urgency,
+            institutions: [institution],
+            case_lifecycle: {
+              current_stage: stage,
+              status: "active",
+              stalled: stalled,
+              days_open: daysOpen
+            }
+          }
+        ]
+      };
+    }
+
+    function renderResults(timelineData, patternData) {
+      const t = timelineData?.results?.[0] || {};
+      const p = patternData?.results?.[0] || {};
+
+      const lines = [];
+      if (Array.isArray(t.conditions) && t.conditions.length) {
+        lines.push("Conditions:");
+        lines.push(...t.conditions.map(c => `- ${c}`));
+        lines.push("");
+      }
+
+      if (t.trajectory) {
+        lines.push("Trajectory:");
+        lines.push(`- ${t.trajectory}`);
+        lines.push("");
+      }
+
+      if (t.moment_of_change) {
+        lines.push("Transition:");
+        lines.push(`- ${t.moment_of_change.from} → ${t.moment_of_change.to}`);
+      } else {
+        lines.push("Transition:");
+        lines.push("- No detected moment of change");
+      }
+
+      const meaning = [];
+      if (p.pattern_summary) {
+        meaning.push(p.pattern_summary);
+      }
+      if (p.pattern_interpretation) {
+        meaning.push("");
+        meaning.push(p.pattern_interpretation);
+      }
+
+      whatIsHappening.textContent = "Processing...";
+      whatItMeans.textContent = "Processing...";
+      systemState.textContent = "Processing...";
+      signalsBox.innerHTML = `
+        <div class="signal-card">
+          <div class="signal-description">Processing...</div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        whatIsHappening.textContent = lines.join("\n").trim() || "No timeline result returned.";
+      }, 200);
+
+      setTimeout(() => {
+        whatItMeans.textContent = meaning.join("\n").trim() || "No interpretation returned.";
+      }, 400);
+
+      setTimeout(() => {
+        systemState.textContent = p.system_state || "No system state returned.";
+      }, 600);
+
+      setTimeout(() => {
+        renderSignals(p.signals || []);
+      }, 800);
+    }
+
+    function renderSignals(signals) {
+      if (!Array.isArray(signals) || signals.length === 0) {
+        signalsBox.innerHTML = `
+          <div class="signal-card">
+            <div class="signal-description">No signals returned.</div>
+          </div>
+        `;
+        return;
+      }
+
+      signalsBox.innerHTML = signals.map(signal => {
+        const mapped = SIGNAL_MAP[signal] || {
+          title: signal,
+          description: ""
+        };
+
+        return `
+          <div class="signal-card">
+            <div class="signal-title">${mapped.title}</div>
+            <div class="signal-description">${mapped.description}</div>
+          </div>
+        `;
+      }).join("");
+    }
+  </script>
+</body>
+</html>
