@@ -396,6 +396,7 @@
         <div class="controls">
           <button class="primary" id="runBtn" type="button">Run analysis</button>
           <button id="copyResultBtn" type="button">Copy result</button>
+          <button id="downloadJsonBtn" type="button">Download JSON report</button>
           <button id="loadExampleBtn" type="button">Try an example</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
@@ -526,6 +527,7 @@
     const rawOutput = document.getElementById("rawOutput");
 
     let currentMode = "describe";
+    let latestReportData = null;
 
     inputJson.value = JSON.stringify(examplePayload, null, 2);
 
@@ -563,31 +565,35 @@
       statusText.textContent = "Example loaded.";
     });
 
-    clearBtn.addEventListener("click", () => {
-      inputJson.value = "";
-      simpleWhatHappened.value = "";
-      simpleInstitution.value = "";
-      simpleResponse.value = "acknowledged_only";
-      simpleDaysOpen.value = "";
-      simpleStage.value = "awaiting_response";
-      simpleUrgency.value = "medium";
-      simpleOutcome.value = "";
+clearBtn.addEventListener("click", () => {
+  inputJson.value = "";
+  simpleWhatHappened.value = "";
+  simpleInstitution.value = "";
+  simpleResponse.value = "acknowledged_only";
+  simpleDaysOpen.value = "";
+  simpleStage.value = "awaiting_response";
+  simpleUrgency.value = "medium";
+  simpleOutcome.value = "";
 
-      statusText.textContent = "";
-      whatIsHappening.textContent = "Awaiting input.";
-      whatItMeans.textContent = "Awaiting analysis.";
-      systemState.textContent = "Awaiting analysis.";
-      signalsBox.innerHTML = `
-        <div class="signal-card">
-          <div class="signal-description">Awaiting analysis.</div>
-        </div>
-      `;
-      rawOutput.textContent = "No result yet.";
-    });
-    const copyResultBtn = document.getElementById("copyResultBtn");
+  latestReportData = null;
 
-  copyResultBtn.addEventListener("click", async () => {
-    const resultText = [
+  statusText.textContent = "";
+  whatIsHappening.textContent = "Awaiting input.";
+  whatItMeans.textContent = "Awaiting analysis.";
+  systemState.textContent = "Awaiting analysis.";
+  signalsBox.innerHTML = `
+    <div class="signal-card">
+      <div class="signal-description">Awaiting analysis.</div>
+    </div>
+  `;
+  rawOutput.textContent = "No result yet.";
+});
+
+const copyResultBtn = document.getElementById("copyResultBtn");
+const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+
+copyResultBtn.addEventListener("click", async () => {
+  const resultText = [
     "WHAT IS HAPPENING",
     whatIsHappening.textContent.trim(),
     "",
@@ -608,89 +614,93 @@
     statusText.textContent = "Unable to copy result.";
   }
 });
-    runBtn.addEventListener("click", async () => {
-      statusText.textContent = "Running analysis...";
 
-      let payload;
-      try {
-        payload = currentMode === "json"
-          ? JSON.parse(inputJson.value)
-          : buildPayloadFromForm();
-      } catch (err) {
-        statusText.textContent = "Invalid input. Please correct the form or JSON.";
-        return;
-      }
-
-      try {
-        const [timelineRes, patternRes] = await Promise.all([
-          fetch("/timeline", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          }),
-          fetch("/pattern", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          })
-        ]);
-
-        const timelineData = await timelineRes.json();
-        const patternData = await patternRes.json();
-
-        rawOutput.textContent = JSON.stringify(
-        { timeline: timelineData, pattern: patternData },
-        null,
-        2
-      );
-
-      function renderResults(timelineData, patternData) {
-  const t = timelineData?.results?.[0] || {};
-  const p = patternData?.results?.[0] || {};
-  let meaningText = "";
-
-const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
-
-if (mappedMeaning) {
-  meaningText = mappedMeaning.join("\n\n");
-} else if (p.pattern_summary) {
-  meaningText = p.pattern_summary.trim();
-} else {
-  meaningText = "No interpretation returned.";
-}
-  const conditions = Array.isArray(t.conditions) ? t.conditions : [];
-  const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
-
-  let transitionText = "– NONE";
-  if (t.moment_of_change?.from && t.moment_of_change?.to) {
-    transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
+downloadJsonBtn.addEventListener("click", () => {
+  if (!latestReportData) {
+    statusText.textContent = "No report available yet.";
+    return;
   }
 
-  const happeningLines = [
-    "Conditions:",
-    ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
-    "",
-    "Trajectory:",
-    `– ${trajectory}`,
-    "",
-    "Transition:",
-    transitionText
-  ];
+  const blob = new Blob(
+    [JSON.stringify(latestReportData, null, 2)],
+    { type: "application/json" }
+  );
 
-  whatIsHappening.textContent = happeningLines.join("\n");
-  whatItMeans.textContent = meaningText;
-  systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
-  renderSignals(p.signals || []);
-}
+  a.href = url;
+  a.download = `cde-report-${timestamp}.json`;
 
-        renderResults(timelineData, patternData);
-        statusText.textContent = "Analysis complete.";
-      } catch (err) {
-        console.error(err);
-        statusText.textContent = "Error during analysis. Please try again.";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  statusText.textContent = "JSON report downloaded.";
+});
+
+runBtn.addEventListener("click", async () => {
+  statusText.textContent = "Running analysis...";
+
+  let payload;
+  try {
+    payload = currentMode === "json"
+      ? JSON.parse(inputJson.value)
+      : buildPayloadFromForm();
+  } catch (err) {
+    statusText.textContent = "Invalid input. Please correct the form or JSON.";
+    return;
+  }
+
+  try {
+    const [timelineRes, patternRes] = await Promise.all([
+      fetch("/timeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }),
+      fetch("/pattern", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+    ]);
+
+    const timelineData = await timelineRes.json();
+    const patternData = await patternRes.json();
+
+    rawOutput.textContent = JSON.stringify(
+      { timeline: timelineData, pattern: patternData },
+      null,
+      2
+    );
+
+    renderResults(timelineData, patternData);
+
+    latestReportData = {
+      generated_at: new Date().toISOString(),
+      input_mode: currentMode,
+      input_payload: payload,
+      output: {
+        timeline: timelineData,
+        pattern: patternData
+      },
+      rendered: {
+        what_is_happening: whatIsHappening.textContent.trim(),
+        what_it_means: whatItMeans.textContent.trim(),
+        system_state: systemState.textContent.trim(),
+        signals: signalsBox.innerText.trim()
       }
-    });
+    };
+
+    statusText.textContent = "Analysis complete.";
+  } catch (err) {
+    console.error(err);
+    statusText.textContent = "Error during analysis. Please try again.";
+  }
+});
 
     function buildPayloadFromForm() {
   const whatHappened = simpleWhatHappened.value.trim();
@@ -762,7 +772,47 @@ if (mappedMeaning) {
   };
 }
 
-   
+function renderResults(timelineData, patternData) {
+  const t = timelineData?.results?.[0] || {};
+  const p = patternData?.results?.[0] || {};
+
+  let meaningText = "";
+  const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
+
+  if (mappedMeaning) {
+    meaningText = mappedMeaning.join("\n\n");
+  } else if (p.pattern_summary) {
+    meaningText = p.pattern_summary.trim();
+  } else {
+    meaningText = "No interpretation returned.";
+  }
+
+  const conditions = Array.isArray(t.conditions) ? t.conditions : [];
+  const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
+
+  let transitionText = "– NONE";
+  if (t.moment_of_change?.from && t.moment_of_change?.to) {
+    transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
+  }
+
+  const happeningLines = [
+    "Conditions:",
+    ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
+    "",
+    "Trajectory:",
+    `– ${trajectory}`,
+    "",
+    "Transition:",
+    transitionText
+  ];
+
+  whatIsHappening.textContent = happeningLines.join("\n");
+  whatItMeans.textContent = meaningText;
+  systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
+
+  renderSignals(p.signals || []);
+}
+  
 function renderSignals(signals) {
   if (!Array.isArray(signals) || signals.length === 0) {
     signalsBox.innerHTML = `
