@@ -108,21 +108,89 @@
       font-size: 0.95rem;
     }
 
-    textarea {
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 18px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #111827;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: #e5e7eb;
+      color: #05070b;
+      font-weight: 600;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    textarea,
+    input,
+    select {
       width: 100%;
-      min-height: 420px;
-      padding: 16px;
+      padding: 14px 16px;
       border-radius: 14px;
       border: 1px solid var(--line);
       background: #060b14;
       color: var(--text);
-      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      resize: vertical;
       outline: none;
+      font-size: 0.96rem;
     }
 
-    textarea:focus {
+    textarea {
+      min-height: 420px;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      resize: vertical;
+    }
+
+    textarea:focus,
+    input:focus,
+    select:focus {
       border-color: #374151;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 8px;
+      font-size: 0.92rem;
+      color: var(--accent);
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .plain-textarea {
+      min-height: 140px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
     }
 
     .controls {
@@ -181,11 +249,6 @@
       word-break: break-word;
     }
 
-    .list {
-      margin: 0;
-      padding-left: 18px;
-    }
-
     .muted {
       color: var(--muted);
     }
@@ -227,7 +290,8 @@
 
     @media (max-width: 980px) {
       .hero,
-      .grid {
+      .grid,
+      .form-grid {
         grid-template-columns: 1fr;
       }
 
@@ -236,7 +300,7 @@
       }
 
       textarea {
-        min-height: 340px;
+        min-height: 320px;
       }
     }
   </style>
@@ -246,7 +310,7 @@
     <section class="hero">
       <div class="hero-text">
         <h1>Civic Decision Engine</h1>
-        <p class="lead">A system for diagnosing institutional behaviour.</p>
+        <p class="lead">A system that makes institutional behaviour visible.</p>
         <p class="sub">Observation sometimes becomes clearer when structure is applied.</p>
         <p class="sub">Not designed for attention. Designed for understanding.</p>
         <p class="record">The record does not argue.</p>
@@ -260,14 +324,79 @@
     <section class="grid">
       <div class="panel">
         <h2>Enter a case</h2>
-        <p class="meta">Paste one or more civic cases in JSON. The page will run timeline and pattern analysis.</p>
+        <p class="meta">Describe the situation in plain language, or paste structured JSON.</p>
 
-        <textarea id="inputJson"></textarea>
+        <div class="tabs">
+          <button class="tab-btn active" id="describeTabBtn" type="button">Describe a case</button>
+          <button class="tab-btn" id="jsonTabBtn" type="button">Paste JSON</button>
+        </div>
+
+        <div class="tab-panel active" id="describePanel">
+          <p class="meta">Enter the situation in plain language. The page will structure it for analysis.</p>
+
+          <div class="form-grid">
+            <div class="field full">
+              <label for="simpleWhatHappened">What happened?</label>
+              <textarea id="simpleWhatHappened" class="plain-textarea" placeholder="Describe the situation..."></textarea>
+            </div>
+
+            <div class="field">
+              <label for="simpleInstitution">Who is involved?</label>
+              <input id="simpleInstitution" type="text" placeholder="e.g. Local Authority" />
+            </div>
+
+            <div class="field">
+              <label for="simpleResponse">What response was received, if any?</label>
+              <select id="simpleResponse">
+                <option value="no_response">No response</option>
+                <option value="acknowledged_only" selected>Acknowledged only</option>
+                <option value="partial_response">Partial response</option>
+                <option value="substantive_response">Substantive response</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="simpleDaysOpen">How long has it been open? (days)</label>
+              <input id="simpleDaysOpen" type="number" min="0" placeholder="e.g. 45" />
+            </div>
+
+            <div class="field">
+              <label for="simpleStage">What stage is it at?</label>
+              <select id="simpleStage">
+                <option value="submitted">Submitted</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="awaiting_response" selected>Awaiting response</option>
+                <option value="delayed">Delayed</option>
+                <option value="escalated">Escalated</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label for="simpleUrgency">How urgent is it?</label>
+              <select id="simpleUrgency">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <div class="field full">
+              <label for="simpleOutcome">What outcome is needed?</label>
+              <input id="simpleOutcome" type="text" placeholder="e.g. A clear substantive response and procedural accountability" />
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="jsonPanel">
+          <p class="meta">Paste one or more civic cases in JSON. The page will run timeline and pattern analysis.</p>
+          <textarea id="inputJson"></textarea>
+        </div>
 
         <div class="controls">
-          <button class="primary" id="runBtn">Run analysis</button>
-          <button id="loadExampleBtn">Load example</button>
-          <button id="clearBtn">Clear</button>
+          <button class="primary" id="runBtn" type="button">Run analysis</button>
+          <button id="loadExampleBtn" type="button">Try an example</button>
+          <button id="clearBtn" type="button">Clear</button>
         </div>
 
         <div class="status" id="statusText"></div>
@@ -320,28 +449,40 @@
           strike_reference: "Strike-Example-001",
           case_title: "Administrative complaint awaiting substantive response",
           civic_domain: "local_government",
-          decision_trigger: "Acknowledged but no substantive response",
+          decision_trigger: "A public body acknowledged the complaint but has not yet provided a substantive response.",
+          recall_question: "What is the appropriate next step to preserve the record while allowing reasonable time for response?",
+          user_priority: "clarity, procedural footing, and record integrity",
+          desired_outcome: "A timely substantive response and confirmation of procedural handling",
           urgency: "medium",
-          institutions: ["Local Authority"],
+          institutions: ["Local Authority Complaints Office"],
           case_lifecycle: {
             current_stage: "awaiting_response",
             status: "active",
             stalled: false,
-            days_open: 20
+            days_open: 20,
+            next_decision_point: "assess_internal_deadline_expiry",
+            next_deadline: "2026-03-25",
+            recommended_mode: "monitor_and_prepare"
           }
         },
         {
           strike_reference: "Strike-Example-002",
           case_title: "Unresolved complaint with missed deadline",
           civic_domain: "local_government",
-          decision_trigger: "No response beyond deadline",
+          decision_trigger: "A public body continued non-response beyond the stated internal deadline.",
+          recall_question: "At what point does delay become escalation?",
+          user_priority: "resolution, escalation readiness, preservation of record",
+          desired_outcome: "Escalation to the appropriate oversight route",
           urgency: "high",
-          institutions: ["Local Authority"],
+          institutions: ["Local Authority Complaints Office"],
           case_lifecycle: {
             current_stage: "awaiting_response",
             status: "active",
             stalled: true,
-            days_open: 90
+            days_open: 90,
+            next_decision_point: "trigger_external_escalation",
+            next_deadline: "2026-04-01",
+            recommended_mode: "prepare_escalation"
           }
         }
       ]
@@ -358,11 +499,24 @@
       }
     };
 
+    const describeTabBtn = document.getElementById("describeTabBtn");
+    const jsonTabBtn = document.getElementById("jsonTabBtn");
+    const describePanel = document.getElementById("describePanel");
+    const jsonPanel = document.getElementById("jsonPanel");
+
     const inputJson = document.getElementById("inputJson");
     const statusText = document.getElementById("statusText");
     const runBtn = document.getElementById("runBtn");
     const loadExampleBtn = document.getElementById("loadExampleBtn");
     const clearBtn = document.getElementById("clearBtn");
+
+    const simpleWhatHappened = document.getElementById("simpleWhatHappened");
+    const simpleInstitution = document.getElementById("simpleInstitution");
+    const simpleResponse = document.getElementById("simpleResponse");
+    const simpleDaysOpen = document.getElementById("simpleDaysOpen");
+    const simpleStage = document.getElementById("simpleStage");
+    const simpleUrgency = document.getElementById("simpleUrgency");
+    const simpleOutcome = document.getElementById("simpleOutcome");
 
     const whatIsHappening = document.getElementById("whatIsHappening");
     const whatItMeans = document.getElementById("whatItMeans");
@@ -370,15 +524,54 @@
     const signalsBox = document.getElementById("signalsBox");
     const rawOutput = document.getElementById("rawOutput");
 
+    let currentMode = "describe";
+
     inputJson.value = JSON.stringify(examplePayload, null, 2);
 
+    describeTabBtn.addEventListener("click", () => switchMode("describe"));
+    jsonTabBtn.addEventListener("click", () => switchMode("json"));
+
+    function switchMode(mode) {
+      currentMode = mode;
+
+      if (mode === "describe") {
+        describeTabBtn.classList.add("active");
+        jsonTabBtn.classList.remove("active");
+        describePanel.classList.add("active");
+        jsonPanel.classList.remove("active");
+      } else {
+        jsonTabBtn.classList.add("active");
+        describeTabBtn.classList.remove("active");
+        jsonPanel.classList.add("active");
+        describePanel.classList.remove("active");
+      }
+    }
+
     loadExampleBtn.addEventListener("click", () => {
-      inputJson.value = JSON.stringify(examplePayload, null, 2);
+      if (currentMode === "json") {
+        inputJson.value = JSON.stringify(examplePayload, null, 2);
+      } else {
+        simpleWhatHappened.value = "A complaint was submitted and acknowledged, but no substantive response was provided. The matter remained open beyond the expected response period.";
+        simpleInstitution.value = "Local Authority";
+        simpleResponse.value = "acknowledged_only";
+        simpleDaysOpen.value = "45";
+        simpleStage.value = "awaiting_response";
+        simpleUrgency.value = "medium";
+        simpleOutcome.value = "A clear substantive response and procedural accountability.";
+      }
       statusText.textContent = "Example loaded.";
     });
 
     clearBtn.addEventListener("click", () => {
       inputJson.value = "";
+      simpleWhatHappened.value = "";
+      simpleInstitution.value = "";
+      simpleResponse.value = "acknowledged_only";
+      simpleDaysOpen.value = "";
+      simpleStage.value = "awaiting_response";
+      simpleUrgency.value = "medium";
+      simpleOutcome.value = "";
+
       statusText.textContent = "";
       whatIsHappening.textContent = "Awaiting input.";
       whatItMeans.textContent = "Awaiting analysis.";
@@ -396,9 +589,11 @@
 
       let payload;
       try {
-        payload = JSON.parse(inputJson.value);
+        payload = currentMode === "json"
+          ? JSON.parse(inputJson.value)
+          : buildPayloadFromForm();
       } catch (err) {
-        statusText.textContent = "Invalid JSON. Please correct the input.";
+        statusText.textContent = "Invalid input. Please correct the form or JSON.";
         return;
       }
 
@@ -441,6 +636,49 @@
         rawOutput.textContent = String(err);
       }
     });
+
+    function buildPayloadFromForm() {
+      const whatHappened = simpleWhatHappened.value.trim();
+      const institution = simpleInstitution.value.trim() || "Institution";
+      const response = simpleResponse.value;
+      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
+      const stage = simpleStage.value;
+      const urgency = simpleUrgency.value;
+      const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
+
+      const stalled = response === "no_response" || response === "acknowledged_only" || stage === "delayed" || stage === "escalated";
+
+      let decisionTrigger = whatHappened || "Case described by user.";
+      if (response === "no_response") {
+        decisionTrigger += " No response has been received.";
+      } else if (response === "acknowledged_only") {
+        decisionTrigger += " The matter was acknowledged but not substantively progressed.";
+      } else if (response === "partial_response") {
+        decisionTrigger += " A partial response was received.";
+      } else if (response === "substantive_response") {
+        decisionTrigger += " A substantive response was received.";
+      }
+
+      return {
+        cases: [
+          {
+            strike_reference: "Case-001",
+            case_title: "User-submitted case",
+            civic_domain: "local_government",
+            decision_trigger: decisionTrigger,
+            desired_outcome: desiredOutcome,
+            urgency: urgency,
+            institutions: [institution],
+            case_lifecycle: {
+              current_stage: stage,
+              status: "active",
+              stalled: stalled,
+              days_open: daysOpen
+            }
+          }
+        ]
+      };
+    }
 
     function renderResults(timelineData, patternData) {
       const t = timelineData?.results?.[0] || {};
