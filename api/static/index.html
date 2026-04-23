@@ -2,267 +2,199 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Civic Decision Engine</title>
 
 <style>
-body {
+:root {
+  --bg:#05070b;
+  --panel:#0b1220;
+  --text:#e5e7eb;
+  --muted:#9ca3af;
+  --line:#1f2937;
+}
+
+body{
   margin:0;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  background:#05070b;
-  color:#e5e7eb;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter,system-ui;
 }
 
-.wrap {
-  max-width:1200px;
+.page{
+  max-width:1400px;
   margin:auto;
-  padding:40px 20px;
+  padding:30px;
 }
 
-.grid {
+.main{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:24px;
+  gap:20px;
 }
 
-.panel {
-  background:#0b1220;
-  border:1px solid #1f2937;
-  border-radius:16px;
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:20px;
   padding:20px;
 }
 
-textarea, input, select {
+textarea,input,select{
   width:100%;
-  padding:12px;
-  border-radius:10px;
-  border:1px solid #1f2937;
-  background:#020617;
+  padding:14px;
+  margin-bottom:14px;
+  border-radius:12px;
+  border:1px solid #243042;
+  background:#040814;
   color:white;
-  margin-top:8px;
 }
 
-button {
-  margin-top:12px;
-  padding:10px 16px;
-  border-radius:10px;
+button{
+  padding:12px 18px;
+  border-radius:12px;
   border:none;
-  background:#2563eb;
-  color:white;
   cursor:pointer;
+  font-weight:600;
 }
 
-.secondary {
-  background:#1f2937;
-}
+.primary{background:white;color:black;}
 
-pre {
-  background:#020617;
+.signal-card{
+  border:1px solid #243042;
+  border-radius:12px;
   padding:12px;
-  border-radius:10px;
-  overflow:auto;
+  margin-bottom:10px;
 }
 </style>
 </head>
 
 <body>
-<div class="wrap">
+<div class="page">
 
-<h1>Civic Decision Engine</h1>
+<div class="main">
 
-<div class="grid">
-
-<!-- LEFT PANEL -->
 <div class="panel">
-
 <h2>Enter a case</h2>
 
-<p>Describe the situation in plain language, or paste structured JSON.</p>
+<textarea id="what" placeholder="Describe the situation..."></textarea>
+<input id="who" placeholder="Who is involved?" />
 
-<button onclick="setMode('form')">Describe a case</button>
-<button class="secondary" onclick="setMode('json')">Paste JSON</button>
-
-<div id="formMode">
-
-<h4>Describe the situation</h4>
-<textarea id="whatHappened" placeholder="e.g. A complaint was submitted..."></textarea>
-
-<h4>Who is involved?</h4>
-<input id="institution" placeholder="e.g. Local Authority" />
-
-<h4>Response received</h4>
 <select id="response">
 <option value="no_response">No response</option>
 <option value="acknowledged_only">Acknowledged only</option>
-<option value="partial_response">Partial response</option>
-<option value="substantive_response">Substantive response</option>
-<option value="resolved">Resolved</option>
 </select>
 
-<h4>Days open</h4>
-<input id="days" type="number" value="30" />
+<input id="days" type="number" placeholder="Days open" />
 
-<h4>Stage</h4>
 <select id="stage">
 <option value="awaiting_response">Awaiting response</option>
 <option value="delayed">Delayed</option>
 <option value="escalated">Escalated</option>
-<option value="closed">Closed</option>
 </select>
 
-<h4>Urgency</h4>
 <select id="urgency">
 <option value="low">Low</option>
 <option value="medium" selected>Medium</option>
 <option value="high">High</option>
 </select>
 
-<h4>Desired outcome</h4>
-<input id="outcome" placeholder="A clear response..." />
+<input id="outcome" placeholder="Desired outcome" />
 
+<button class="primary" onclick="run()">Run analysis</button>
 </div>
 
-<div id="jsonMode" style="display:none;">
-<textarea id="jsonInput">{ "cases": [] }</textarea>
-</div>
-
-<button onclick="runAnalysis()">Run analysis</button>
-
-<p id="status"></p>
-
-</div>
-
-<!-- RIGHT PANEL -->
 <div class="panel">
-
 <h2>Analysis</h2>
 
-<h4>WHAT IS HAPPENING</h4>
+<h3>What is happening</h3>
 <div id="happening">Awaiting input.</div>
 
-<h4>WHAT IT MEANS</h4>
-<div id="meaning">Awaiting analysis.</div>
+<h3>What it means</h3>
+<div id="meaning"></div>
 
-<h4>SYSTEM STATE</h4>
-<div id="state">Awaiting analysis.</div>
+<h3>System state</h3>
+<div id="state"></div>
 
-<h4>SIGNALS</h4>
+<h3>Signals</h3>
 <div id="signals"></div>
 
-<h4>RAW OUTPUT</h4>
+<h3>Raw</h3>
 <pre id="raw"></pre>
-
 </div>
 
 </div>
 </div>
-
 <script>
 
-let mode = "form";
+const SIGNAL_MAP = {
+TRANSITION_DETECTED:{
+title:"Transition detected",
+description:"Movement between behavioural conditions has been identified."
+},
+ESCALATION_WITHOUT_RESPONSE_PRESENT:{
+title:"Escalation without response present",
+description:"Escalation is occurring without corresponding institutional action."
+}
+};
 
-function setMode(m) {
-  mode = m;
-  document.getElementById("formMode").style.display = m==="form" ? "block":"none";
-  document.getElementById("jsonMode").style.display = m==="json" ? "block":"none";
+function buildPayload(){
+return {
+cases:[{
+strike_reference:`Generated-${Date.now()}`,
+case_title:"User case",
+civic_domain:"local_government",
+decision_trigger:document.getElementById("what").value,
+desired_outcome:document.getElementById("outcome").value,
+urgency:document.getElementById("urgency").value,
+institutions:[document.getElementById("who").value || "Institution"],
+case_lifecycle:{
+current_stage:document.getElementById("stage").value,
+status:"active",
+stalled:true,
+days_open:parseInt(document.getElementById("days").value||"0")
+}
+}]
+};
 }
 
-function buildPayload() {
-  return {
-    cases: [{
-      strike_reference: "Generated-001",
-      case_title: "User case",
-      civic_domain: "local_government",
-      decision_trigger: document.getElementById("whatHappened").value,
-      urgency: document.getElementById("urgency").value,
-      institutions: [document.getElementById("institution").value],
-      case_lifecycle: {
-        current_stage: document.getElementById("stage").value,
-        status: "active",
-        stalled: true,
-        days_open: parseInt(document.getElementById("days").value)
-      }
-    }]
-  };
+async function run(){
+
+const payload = buildPayload();
+
+const [tRes,pRes] = await Promise.all([
+fetch("/timeline",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
+fetch("/pattern",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+]);
+
+const t = await tRes.json();
+const p = await pRes.json();
+
+document.getElementById("raw").textContent = JSON.stringify({t,p},null,2);
+
+const tr = t.results?.[0] || {};
+const pr = p.results?.[0] || {};
+
+document.getElementById("happening").textContent = JSON.stringify(tr,null,2);
+document.getElementById("meaning").textContent = pr.pattern_summary || "";
+document.getElementById("state").textContent = pr.system_state || "";
+
+renderSignals(pr.signals||[]);
 }
 
-async function runAnalysis() {
+function renderSignals(signals){
 
-  const status = document.getElementById("status");
-  const raw = document.getElementById("raw");
+const box = document.getElementById("signals");
 
-  status.textContent = "Running analysis...";
-
-  let payload;
-
-  try {
-    payload = mode==="json"
-      ? JSON.parse(document.getElementById("jsonInput").value)
-      : buildPayload();
-  } catch (e) {
-    status.textContent = "Invalid input";
-    raw.textContent = e;
-    return;
-  }
-
-  try {
-    const [t,p] = await Promise.all([
-      fetch("/timeline",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}),
-      fetch("/pattern",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
-    ]);
-
-    const timeline = await t.json();
-    const pattern = await p.json();
-
-    raw.textContent = JSON.stringify({timeline,pattern,payload},null,2);
-
-    if(!t.ok || !p.ok){
-      status.textContent="Analysis returned an error.";
-      return;
-    }
-
-    render(pattern);
-
-    status.textContent="Analysis complete.";
-
-  } catch(e) {
-    status.textContent="API error";
-    raw.textContent=e;
-  }
+if(!signals.length){
+box.innerHTML="No signals";
+return;
 }
 
-function render(data) {
-
-  const result = data.results?.[0] || {};
-
-  document.getElementById("happening").innerHTML =
-    result.conditions?.map(c=>`- ${c}`).join("<br>") || "No data";
-
-  document.getElementById("meaning").textContent =
-    result.interpretation || "No interpretation";
-
-  document.getElementById("state").textContent =
-    result.system_state || "Unknown";
-
-  document.getElementById("signals").innerHTML = "";
-
-  (result.signals || []).forEach(s => {
-    const el = document.createElement("div");
-
-    if (s === "TRANSITION_DETECTED") {
-      el.innerHTML = "<b>Transition detected</b><br>Movement between behavioural conditions has been identified.";
-    }
-
-    else if (s === "ESCALATION_WITHOUT_RESPONSE_PRESENT") {
-      el.innerHTML = "<b>Escalation without response present</b><br>Escalation is occurring without corresponding institutional action.";
-    }
-
-    else {
-      el.textContent = s;
-    }
-
-    document.getElementById("signals").appendChild(el);
-  });
+box.innerHTML = signals.map(s=>{
+const m = SIGNAL_MAP[s] || {title:s,description:""};
+return `<div class="signal-card"><strong>${m.title}</strong><br>${m.description}</div>`;
+}).join("");
 }
 
 </script>
