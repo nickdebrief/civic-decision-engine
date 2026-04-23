@@ -614,23 +614,25 @@
         const timelineData = await timelineRes.json();
         const patternData = await patternRes.json();
 
-        if (!timelineRes.ok || !patternRes.ok) {
-          rawOutput.textContent = JSON.stringify(
-            { timeline: timelineData, pattern: patternData },
-            null,
-            2
-          );
-          statusText.textContent = "Analysis returned an error.";
-          return;
-        }
-
-        renderResults(timelineData, patternData);
         rawOutput.textContent = JSON.stringify(
-          { timeline: timelineData, pattern: patternData },
-          null,
-          2
-        );
-        statusText.textContent = "Analysis complete.";
+        { timeline: timelineData, pattern: patternData },
+        null,
+        2
+      );
+
+      renderResults(timelineData, patternData);
+
+      if (!timelineRes.ok || !patternRes.ok) {
+        const failed = [];
+        if (!timelineRes.ok) failed.push("timeline");
+        if (!patternRes.ok) failed.push("pattern");
+
+        statusText.textContent =
+          `Analysis returned a partial result (${failed.join(" + ")} error). See Raw output.`;
+        return;
+      }
+
+      statusText.textContent = "Analysis complete.";
       } catch (err) {
         statusText.textContent = "Unable to reach the API.";
         rawOutput.textContent = String(err);
