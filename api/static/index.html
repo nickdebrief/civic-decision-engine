@@ -638,47 +638,74 @@
     });
 
     function buildPayloadFromForm() {
-      const whatHappened = simpleWhatHappened.value.trim();
-      const institution = simpleInstitution.value.trim() || "Institution";
-      const response = simpleResponse.value;
-      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
-      const stage = simpleStage.value;
-      const urgency = simpleUrgency.value;
-      const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
+  const whatHappened = simpleWhatHappened.value.trim();
+  const institution = simpleInstitution.value.trim() || "Institution";
+  const response = simpleResponse.value;
+  const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
+  const stage = simpleStage.value;
+  const urgency = simpleUrgency.value;
+  const desiredOutcome =
+    simpleOutcome.value.trim() || "A clear substantive response.";
 
-      const stalled = response === "no_response" || response === "acknowledged_only" || stage === "delayed" || stage === "escalated";
+  if (!whatHappened) {
+    throw new Error("Please describe the situation.");
+  }
 
-      let decisionTrigger = whatHappened || "Case described by user.";
-      if (response === "no_response") {
-        decisionTrigger += " No response has been received.";
-      } else if (response === "acknowledged_only") {
-        decisionTrigger += " The matter was acknowledged but not substantively progressed.";
-      } else if (response === "partial_response") {
-        decisionTrigger += " A partial response was received.";
-      } else if (response === "substantive_response") {
-        decisionTrigger += " A substantive response was received.";
+  if (!Number.isFinite(daysOpen) || daysOpen < 0) {
+    throw new Error("Please enter a valid number of days open.");
+  }
+
+  const earlierDays = Math.max(7, Math.min(daysOpen - 20, Math.floor(daysOpen * 0.4)));
+  const laterDays = Math.max(daysOpen, earlierDays + 20);
+
+  return {
+    cases: [
+      {
+        strike_reference: `Generated-${Date.now()}-A`,
+        case_title: "Earlier stage of submitted case",
+        civic_domain: "local_government",
+        decision_trigger: `${whatHappened} The matter was acknowledged but not substantively progressed.`,
+        desired_outcome: desiredOutcome,
+        urgency: urgency === "high" ? "medium" : urgency,
+        institutions: [institution],
+        case_lifecycle: {
+          current_stage: "awaiting_response",
+          status: "active",
+          stalled: false,
+          days_open: earlierDays
+        }
+      },
+      {
+        strike_reference: `Generated-${Date.now()}-B`,
+        case_title: "Later stage of submitted case",
+        civic_domain: "local_government",
+        decision_trigger:
+          response === "no_response"
+            ? `${whatHappened} No response has been received beyond the expected period.`
+            : response === "acknowledged_only"
+            ? `${whatHappened} The matter was acknowledged but no substantive response has been provided.`
+            : response === "partial_response"
+            ? `${whatHappened} A partial response was received without substantive progression.`
+            : response === "substantive_response"
+            ? `${whatHappened} A substantive response was received.`
+            : `${whatHappened}`,
+        desired_outcome: desiredOutcome,
+        urgency: urgency,
+        institutions: [institution],
+        case_lifecycle: {
+          current_stage: stage,
+          status: "active",
+          stalled:
+            response === "no_response" ||
+            response === "acknowledged_only" ||
+            stage === "delayed" ||
+            stage === "escalated",
+          days_open: laterDays
+        }
       }
-
-      return {
-        cases: [
-          {
-            strike_reference: "Case-001",
-            case_title: "User-submitted case",
-            civic_domain: "local_government",
-            decision_trigger: decisionTrigger,
-            desired_outcome: desiredOutcome,
-            urgency: urgency,
-            institutions: [institution],
-            case_lifecycle: {
-              current_stage: stage,
-              status: "active",
-              stalled: stalled,
-              days_open: daysOpen
-            }
-          }
-        ]
-      };
-    }
+    ]
+  };
+}
 
     function renderResults(timelineData, patternData) {
       const t = timelineData?.results?.[0] || {};
