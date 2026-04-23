@@ -395,6 +395,7 @@
 
         <div class="controls">
           <button class="primary" id="runBtn" type="button">Run analysis</button>
+          <button id="copyResultBtn" type="button">Copy result</button>
           <button id="loadExampleBtn" type="button">Try an example</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
@@ -489,15 +490,15 @@
     };
 
     const SIGNAL_MAP = {
-      TRANSITION_DETECTED: {
-        title: "Transition detected",
-        description: "Movement between behavioural conditions has been identified."
-      },
-      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-        title: "Escalation without response present",
-        description: "Escalation is occurring without corresponding institutional action."
-      }
-    };
+  TRANSITION_DETECTED: {
+    title: "Transition detected",
+    description: "Behavioural conditions changed across the submitted sequence."
+  },
+  ESCALATION_WITHOUT_RESPONSE_PRESENT: {
+    title: "Escalation without response present",
+    description: "Escalation is occurring without institutional response."
+  }
+};
 
     const describeTabBtn = document.getElementById("describeTabBtn");
     const jsonTabBtn = document.getElementById("jsonTabBtn");
@@ -583,7 +584,30 @@
       `;
       rawOutput.textContent = "No result yet.";
     });
+    const copyResultBtn = document.getElementById("copyResultBtn");
 
+  copyResultBtn.addEventListener("click", async () => {
+    const resultText = [
+    "WHAT IS HAPPENING",
+    whatIsHappening.textContent.trim(),
+    "",
+    "WHAT IT MEANS",
+    whatItMeans.textContent.trim(),
+    "",
+    "SYSTEM STATE",
+    systemState.textContent.trim(),
+    "",
+    "SIGNALS",
+    signalsBox.innerText.trim()
+  ].join("\n");
+
+  try {
+    await navigator.clipboard.writeText(resultText);
+    statusText.textContent = "Result copied.";
+  } catch (err) {
+    statusText.textContent = "Unable to copy result.";
+  }
+});
     runBtn.addEventListener("click", async () => {
       statusText.textContent = "Running analysis...";
 
@@ -620,22 +644,51 @@
         2
       );
 
-      renderResults(timelineData, patternData);
+      function renderResults(timelineData, patternData) {
+  const t = timelineData?.results?.[0] || {};
+  const p = patternData?.results?.[0] || {};
+  let meaningText = "";
 
-      if (!timelineRes.ok || !patternRes.ok) {
-        const failed = [];
-        if (!timelineRes.ok) failed.push("timeline");
-        if (!patternRes.ok) failed.push("pattern");
+const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
 
-        statusText.textContent =
-          `Analysis returned a partial result (${failed.join(" + ")} error). See Raw output.`;
-        return;
-      }
+if (mappedMeaning) {
+  meaningText = mappedMeaning.join("\n\n");
+} else if (p.pattern_summary) {
+  meaningText = p.pattern_summary.trim();
+} else {
+  meaningText = "No interpretation returned.";
+}
+  const conditions = Array.isArray(t.conditions) ? t.conditions : [];
+  const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
 
-      statusText.textContent = "Analysis complete.";
+  let transitionText = "– NONE";
+  if (t.moment_of_change?.from && t.moment_of_change?.to) {
+    transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
+  }
+
+  const happeningLines = [
+    "Conditions:",
+    ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
+    "",
+    "Trajectory:",
+    `– ${trajectory}`,
+    "",
+    "Transition:",
+    transitionText
+  ];
+
+  whatIsHappening.textContent = happeningLines.join("\n");
+  whatItMeans.textContent = meaningText;
+  systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
+
+  renderSignals(p.signals || []);
+}
+
+        renderResults(timelineData, patternData);
+        statusText.textContent = "Analysis complete.";
       } catch (err) {
-        statusText.textContent = "Unable to reach the API.";
-        rawOutput.textContent = String(err);
+        console.error(err);
+        statusText.textContent = "Error during analysis. Please try again.";
       }
     });
 
@@ -709,90 +762,63 @@
   };
 }
 
-    function renderResults(timelineData, patternData) {
-      const t = timelineData?.results?.[0] || {};
-      const p = patternData?.results?.[0] || {};
+   
+function renderSignals(signals) {
+  if (!Array.isArray(signals) || signals.length === 0) {
+    signalsBox.innerHTML = `
+      <div class="signal-card">
+        <div class="signal-description">No signals returned.</div>
+      </div>
+    `;
+    return;
+  }
 
-      const lines = [];
-      if (Array.isArray(t.conditions) && t.conditions.length) {
-        lines.push("Conditions:");
-        lines.push(...t.conditions.map(c => `- ${c}`));
-        lines.push("");
-      }
+  signalsBox.innerHTML = signals.map(signal => {
+    const mapped = SIGNAL_MAP[signal] || {
+      title: signal,
+      description: ""
+    };
 
-      if (t.trajectory) {
-        lines.push("Trajectory:");
-        lines.push(`- ${t.trajectory}`);
-        lines.push("");
-      }
+    return `
+      <div class="signal-card">
+        <div class="signal-title">${mapped.title}</div>
+        ${mapped.description ? `<div class="signal-description">${mapped.description}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+}
 
-      if (t.moment_of_change) {
-        lines.push("Transition:");
-        lines.push(`- ${t.moment_of_change.from} → ${t.moment_of_change.to}`);
-      } else {
-        lines.push("Transition:");
-        lines.push("- No detected moment of change");
-      }
+const SYSTEM_STATE_MAP = {
+  STABLE_DELAY: [
+    "Delay is present without confirmed structural escalation.",
+    "The matter remains open without transition to a more severe condition."
+  ],
 
-      const meaning = [];
-      if (p.pattern_summary) {
-        meaning.push(p.pattern_summary);
-      }
-      if (p.pattern_interpretation) {
-        meaning.push("");
-        meaning.push(p.pattern_interpretation);
-      }
+  TRANSFER_OF_BURDEN_PRESENT: [
+    "Procedural burden has shifted from the institution.",
+    "Responsibility now rests increasingly outside the responding body."
+  ],
 
-      whatIsHappening.textContent = "Processing...";
-      whatItMeans.textContent = "Processing...";
-      systemState.textContent = "Processing...";
-      signalsBox.innerHTML = `
-        <div class="signal-card">
-          <div class="signal-description">Processing...</div>
-        </div>
-      `;
+  ESCALATION_WITHOUT_RESPONSE_PRESENT: [
+    "Escalation has occurred without corresponding response.",
+    "The matter has advanced without institutional action."
+  ],
 
-      setTimeout(() => {
-        whatIsHappening.textContent = lines.join("\n").trim() || "No timeline result returned.";
-      }, 200);
+  TRANSITION_TO_ESCALATION: [
+    "The sequence has transitioned into escalation.",
+    "Earlier delay has developed into escalation without response."
+  ],
 
-      setTimeout(() => {
-        whatItMeans.textContent = meaning.join("\n").trim() || "No interpretation returned.";
-      }, 400);
+  STABLE_ESCALATION: [
+    "Escalation is present and sustained.",
+    "The case remains escalated without structural reversal."
+  ],
 
-      setTimeout(() => {
-        systemState.textContent = p.system_state || "No system state returned.";
-      }, 600);
-
-      setTimeout(() => {
-        renderSignals(p.signals || []);
-      }, 800);
-    }
-
-    function renderSignals(signals) {
-      if (!Array.isArray(signals) || signals.length === 0) {
-        signalsBox.innerHTML = `
-          <div class="signal-card">
-            <div class="signal-description">No signals returned.</div>
-          </div>
-        `;
-        return;
-      }
-
-      signalsBox.innerHTML = signals.map(signal => {
-        const mapped = SIGNAL_MAP[signal] || {
-          title: signal,
-          description: ""
-        };
-
-        return `
-          <div class="signal-card">
-            <div class="signal-title">${mapped.title}</div>
-            <div class="signal-description">${mapped.description}</div>
-          </div>
-        `;
-      }).join("");
-    }
+  INSUFFICIENT_PATTERN_EVIDENCE: [
+    "Pattern evidence is insufficient.",
+    "The sequence does not support a stable interpretation."
+  ]
+};
   </script>
 </body>
 </html>
