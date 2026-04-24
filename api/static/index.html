@@ -200,6 +200,31 @@
       flex-wrap: wrap;
     }
 
+    .controls-export {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+
+    .strike-attach {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .strike-attach input {
+      width: auto;
+      flex: 1;
+      min-width: 180px;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+    }
+
     button {
       appearance: none;
       border: 1px solid var(--line);
@@ -217,8 +242,29 @@
       font-weight: 600;
     }
 
+    button.export-btn {
+      background: #0f1f35;
+      border-color: #1e3a5f;
+      color: #93c5fd;
+      font-size: 0.9rem;
+      padding: 10px 14px;
+    }
+
+    button.attach-btn {
+      background: #0f1f1a;
+      border-color: #1a3a2a;
+      color: #6ee7b7;
+      font-size: 0.9rem;
+      padding: 10px 14px;
+    }
+
     button:hover {
       opacity: 0.95;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
 
     .output-block {
@@ -396,10 +442,23 @@
         <div class="controls">
           <button class="primary" id="runBtn" type="button">Run analysis</button>
           <button id="copyResultBtn" type="button">Copy result</button>
-          <button id="downloadJsonBtn" type="button">Download JSON report</button>
-          <button id="downloadMarkdownBtn" type="button">Download Markdown report</button>
           <button id="loadExampleBtn" type="button">Try an example</button>
           <button id="clearBtn" type="button">Clear</button>
+        </div>
+
+        <div class="controls-export">
+          <button class="export-btn" id="downloadJsonBtn" type="button" disabled>Download JSON report</button>
+          <button class="export-btn" id="downloadMarkdownBtn" type="button" disabled>Download Markdown report</button>
+        </div>
+
+        <div class="strike-attach">
+          <input
+            id="strikeReferenceInput"
+            type="text"
+            placeholder="Strike reference (e.g. Strike-001)"
+            style="font-family: ui-monospace, monospace; font-size: 0.9rem;"
+          />
+          <button class="attach-btn" id="attachStrikeBtn" type="button" disabled>Attach to case</button>
         </div>
 
         <div class="status" id="statusText"></div>
@@ -492,16 +551,44 @@
     };
 
     const SIGNAL_MAP = {
-  TRANSITION_DETECTED: {
-    title: "Transition detected",
-    description: "Behavioural conditions changed across the submitted sequence."
-  },
-  ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-    title: "Escalation without response present",
-    description: "Escalation is occurring without institutional response."
-  }
-};
+      TRANSITION_DETECTED: {
+        title: "Transition detected",
+        description: "Behavioural conditions changed across the submitted sequence."
+      },
+      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
+        title: "Escalation without response present",
+        description: "Escalation is occurring without institutional response."
+      }
+    };
 
+    const SYSTEM_STATE_MAP = {
+      STABLE_DELAY: [
+        "Delay is present without confirmed structural escalation.",
+        "The matter remains open without transition to a more severe condition."
+      ],
+      TRANSFER_OF_BURDEN_PRESENT: [
+        "Procedural burden has shifted from the institution.",
+        "Responsibility now rests increasingly outside the responding body."
+      ],
+      ESCALATION_WITHOUT_RESPONSE_PRESENT: [
+        "Escalation has occurred without corresponding response.",
+        "The matter has advanced without institutional action."
+      ],
+      TRANSITION_TO_ESCALATION: [
+        "The sequence has transitioned into escalation.",
+        "Earlier delay has developed into escalation without response."
+      ],
+      STABLE_ESCALATION: [
+        "Escalation is present and sustained.",
+        "The case remains escalated without structural reversal."
+      ],
+      INSUFFICIENT_PATTERN_EVIDENCE: [
+        "Pattern evidence is insufficient.",
+        "The sequence does not support a stable interpretation."
+      ]
+    };
+
+    // Element references
     const describeTabBtn = document.getElementById("describeTabBtn");
     const jsonTabBtn = document.getElementById("jsonTabBtn");
     const describePanel = document.getElementById("describePanel");
@@ -512,6 +599,11 @@
     const runBtn = document.getElementById("runBtn");
     const loadExampleBtn = document.getElementById("loadExampleBtn");
     const clearBtn = document.getElementById("clearBtn");
+    const copyResultBtn = document.getElementById("copyResultBtn");
+    const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+    const downloadMarkdownBtn = document.getElementById("downloadMarkdownBtn");
+    const attachStrikeBtn = document.getElementById("attachStrikeBtn");
+    const strikeReferenceInput = document.getElementById("strikeReferenceInput");
 
     const simpleWhatHappened = document.getElementById("simpleWhatHappened");
     const simpleInstitution = document.getElementById("simpleInstitution");
@@ -532,12 +624,15 @@
 
     inputJson.value = JSON.stringify(examplePayload, null, 2);
 
+    // ============================================================
+    // Tab switching
+    // ============================================================
+
     describeTabBtn.addEventListener("click", () => switchMode("describe"));
     jsonTabBtn.addEventListener("click", () => switchMode("json"));
 
     function switchMode(mode) {
       currentMode = mode;
-
       if (mode === "describe") {
         describeTabBtn.classList.add("active");
         jsonTabBtn.classList.remove("active");
@@ -550,6 +645,10 @@
         describePanel.classList.remove("active");
       }
     }
+
+    // ============================================================
+    // Load example
+    // ============================================================
 
     loadExampleBtn.addEventListener("click", () => {
       if (currentMode === "json") {
@@ -566,366 +665,427 @@
       statusText.textContent = "Example loaded.";
     });
 
-clearBtn.addEventListener("click", () => {
-  inputJson.value = "";
-  simpleWhatHappened.value = "";
-  simpleInstitution.value = "";
-  simpleResponse.value = "acknowledged_only";
-  simpleDaysOpen.value = "";
-  simpleStage.value = "awaiting_response";
-  simpleUrgency.value = "medium";
-  simpleOutcome.value = "";
+    // ============================================================
+    // Clear
+    // ============================================================
 
-  latestReportData = null;
+    clearBtn.addEventListener("click", () => {
+      inputJson.value = "";
+      simpleWhatHappened.value = "";
+      simpleInstitution.value = "";
+      simpleResponse.value = "acknowledged_only";
+      simpleDaysOpen.value = "";
+      simpleStage.value = "awaiting_response";
+      simpleUrgency.value = "medium";
+      simpleOutcome.value = "";
+      strikeReferenceInput.value = "";
 
-  statusText.textContent = "";
-  whatIsHappening.textContent = "Awaiting input.";
-  whatItMeans.textContent = "Awaiting analysis.";
-  systemState.textContent = "Awaiting analysis.";
-  signalsBox.innerHTML = `
-    <div class="signal-card">
-      <div class="signal-description">Awaiting analysis.</div>
-    </div>
-  `;
-  rawOutput.textContent = "No result yet.";
-});
+      statusText.textContent = "";
+      whatIsHappening.textContent = "Awaiting input.";
+      whatItMeans.textContent = "Awaiting analysis.";
+      systemState.textContent = "Awaiting analysis.";
+      signalsBox.innerHTML = `
+        <div class="signal-card">
+          <div class="signal-description">Awaiting analysis.</div>
+        </div>
+      `;
+      rawOutput.textContent = "No result yet.";
+      latestReportData = null;
 
-const copyResultBtn = document.getElementById("copyResultBtn");
-const downloadJsonBtn = document.getElementById("downloadJsonBtn");
-const downloadMarkdownBtn = document.getElementById("downloadMarkdownBtn");
+      downloadJsonBtn.disabled = true;
+      downloadMarkdownBtn.disabled = true;
+      attachStrikeBtn.disabled = true;
+    });
 
+    // ============================================================
+    // Copy result
+    // ============================================================
 
-copyResultBtn.addEventListener("click", async () => {
-  const resultText = [
-    "WHAT IS HAPPENING",
-    whatIsHappening.textContent.trim(),
-    "",
-    "WHAT IT MEANS",
-    whatItMeans.textContent.trim(),
-    "",
-    "SYSTEM STATE",
-    systemState.textContent.trim(),
-    "",
-    "SIGNALS",
-    signalsBox.innerText.trim()
-  ].join("\n");
+    copyResultBtn.addEventListener("click", async () => {
+      const resultText = [
+        "WHAT IS HAPPENING",
+        whatIsHappening.textContent.trim(),
+        "",
+        "WHAT IT MEANS",
+        whatItMeans.textContent.trim(),
+        "",
+        "SYSTEM STATE",
+        systemState.textContent.trim(),
+        "",
+        "SIGNALS",
+        signalsBox.innerText.trim()
+      ].join("\n");
 
-  try {
-    await navigator.clipboard.writeText(resultText);
-    statusText.textContent = "Result copied.";
-  } catch (err) {
-    statusText.textContent = "Unable to copy result.";
-  }
-});
+      try {
+        await navigator.clipboard.writeText(resultText);
+        statusText.textContent = "Result copied.";
+      } catch (err) {
+        statusText.textContent = "Unable to copy result.";
+      }
+    });
 
-downloadJsonBtn.addEventListener("click", () => {
-  if (!latestReportData) {
-    statusText.textContent = "No report available yet.";
-    return;
-  }
+    // ============================================================
+    // Run analysis
+    // ============================================================
 
-  const blob = new Blob(
-    [JSON.stringify(latestReportData, null, 2)],
-    { type: "application/json" }
-  );
+    runBtn.addEventListener("click", async () => {
+      statusText.textContent = "Running analysis...";
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      let payload;
+      try {
+        payload = currentMode === "json"
+          ? JSON.parse(inputJson.value)
+          : buildPayloadFromForm();
+      } catch (err) {
+        statusText.textContent = "Invalid input. Please correct the form or JSON.";
+        return;
+      }
 
-  a.href = url;
-  a.download = `cde-report-${timestamp}.json`;
+      try {
+        const [timelineRes, patternRes] = await Promise.all([
+         fetch("/timeline", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          }),
+          fetch("/pattern", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          })
+        ]);
 
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+        const timelineData = await timelineRes.json();
+        const patternData = await patternRes.json();
 
-  statusText.textContent = "JSON report downloaded.";
-});
+        rawOutput.textContent = JSON.stringify(
+          { timeline: timelineData, pattern: patternData },
+          null,
+          2
+        );
 
- if (downloadMarkdownBtn) {
-  downloadMarkdownBtn.addEventListener("click", () => {
-    if (!latestReportData) {
-      statusText.textContent = "No report available yet.";
-      return;
+        renderResults(timelineData, patternData);
+
+        latestReportData = {
+          generated_at: new Date().toISOString(),
+          strike_reference: strikeReferenceInput.value.trim() || null,
+          input_mode: currentMode,
+          input_payload: payload,
+          output: {
+            timeline: timelineData,
+            pattern: patternData
+          },
+          rendered: {
+            what_is_happening: whatIsHappening.textContent.trim(),
+            what_it_means: whatItMeans.textContent.trim(),
+            system_state: systemState.textContent.trim(),
+            signals: signalsBox.innerText.trim()
+          }
+        };
+
+        downloadJsonBtn.disabled = false;
+        downloadMarkdownBtn.disabled = false;
+        attachStrikeBtn.disabled = false;
+
+        statusText.textContent = "Analysis complete.";
+      } catch (err) {
+        console.error(err);
+        statusText.textContent = "Error during analysis. Please try again.";
+      }
+    });
+
+    // ============================================================
+    // Download JSON report
+    // ============================================================
+
+    downloadJsonBtn.addEventListener("click", () => {
+      if (!latestReportData) {
+        statusText.textContent = "No report available yet.";
+        return;
+      }
+
+      const ref = latestReportData.strike_reference
+        ? `-${latestReportData.strike_reference}`
+        : "";
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `cde-report${ref}-${timestamp}.json`;
+
+      const blob = new Blob(
+        [JSON.stringify(latestReportData, null, 2)],
+        { type: "application/json" }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      statusText.textContent = `JSON report downloaded: ${filename}`;
+    });
+
+    // ============================================================
+    // Download Markdown report
+    // ============================================================
+
+    downloadMarkdownBtn.addEventListener("click", () => {
+      if (!latestReportData) {
+        statusText.textContent = "No report available yet.";
+        return;
+      }
+
+      const r = latestReportData;
+      const ref = r.strike_reference || "No reference attached";
+      const timestamp = r.generated_at;
+      const p = r.output?.pattern?.results?.[0] || {};
+      const t = r.output?.timeline?.results?.[0] || {};
+
+      const conditions = Array.isArray(t.conditions) && t.conditions.length
+        ? t.conditions.map(c => `- ${c}`).join("\n")
+        : "- None detected";
+
+      const signals = Array.isArray(p.signals) && p.signals.length
+        ? p.signals.map(s => {
+            const mapped = SIGNAL_MAP[s];
+            return mapped
+              ? `- **${mapped.title}** — ${mapped.description}`
+              : `- ${s}`;
+          }).join("\n")
+        : "- None returned";
+
+      const transitionText = t.moment_of_change?.from && t.moment_of_change?.to
+        ? `${t.moment_of_change.from} → ${t.moment_of_change.to}`
+        : "None detected";
+
+      const lines = [
+        `# Civic Decision Engine — Analysis Report`,
+        ``,
+        `**Generated:** ${timestamp}`,
+        `**Strike Reference:** ${ref}`,
+        `**Input Mode:** ${r.input_mode}`,
+        ``,
+        `---`,
+        ``,
+        `## What is happening`,
+        ``,
+        `**Conditions:**`,
+        conditions,
+        ``,
+        `**Trajectory:** ${(t.trajectory || "UNKNOWN").toUpperCase()}`,
+        ``,
+        `**Transition:** ${transitionText}`,
+        ``,
+        `---`,
+        ``,
+        `## What it means`,
+        ``,
+        r.rendered.what_it_means || "No interpretation returned.",
+        ``,
+        `---`,
+        ``,
+        `## System state`,
+        ``,
+        `\`${r.rendered.system_state || "No system state returned."}\``,
+        ``,
+        `---`,
+        ``,
+        `## Signals`,
+        ``,
+        signals,
+        ``,
+        `---`,
+        ``,
+        `## Pattern summary`,
+        ``,
+        p.pattern_summary || "No pattern summary returned.",
+        ``,
+        `---`,
+        ``,
+        `*Civic Decision Engine v10 — The record does not argue.*`,
+      ];
+
+      const markdown = lines.join("\n");
+      const blob = new Blob([markdown], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      const safeRef = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "") || "";
+      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${safeTimestamp}.md`;
+
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      statusText.textContent = `Markdown report downloaded: ${filename}`;
+    });
+
+    // ============================================================
+    // Attach to Strike reference
+    // ============================================================
+
+    attachStrikeBtn.addEventListener("click", () => {
+      if (!latestReportData) {
+        statusText.textContent = "No report available yet.";
+        return;
+      }
+
+      const ref = strikeReferenceInput.value.trim();
+      if (!ref) {
+        statusText.textContent = "Enter a Strike reference to attach.";
+        return;
+      }
+
+      latestReportData.strike_reference = ref;
+      statusText.textContent = `Report attached to ${ref}. Download to save.`;
+    });
+
+    // ============================================================
+    // Render results
+    // ============================================================
+
+    function renderResults(timelineData, patternData) {
+      const t = timelineData?.results?.[0] || {};
+      const p = patternData?.results?.[0] || {};
+
+      let meaningText = "";
+      const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
+      if (mappedMeaning) {
+        meaningText = mappedMeaning.join("\n\n");
+      } else if (p.pattern_summary) {
+        meaningText = p.pattern_summary.trim();
+      } else {
+        meaningText = "No interpretation returned.";
+      }
+
+      const conditions = Array.isArray(t.conditions) ? t.conditions : [];
+      const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
+
+      let transitionText = "– NONE";
+      if (t.moment_of_change?.from && t.moment_of_change?.to) {
+        transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
+      }
+
+      const happeningLines = [
+        "Conditions:",
+        ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
+        "",
+        "Trajectory:",
+        `– ${trajectory}`,
+        "",
+        "Transition:",
+        transitionText
+      ];
+
+      whatIsHappening.textContent = happeningLines.join("\n");
+      whatItMeans.textContent = meaningText;
+      systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
+
+      renderSignals(p.signals || []);
     }
 
-    const report = latestReportData.rendered;
+    // ============================================================
+    // Render signals
+    // ============================================================
 
-    const markdown = [
-      "# Civic Decision Engine Report",
-      "",
-      `Generated: ${latestReportData.generated_at}`,
-      "",
-      "## What is happening",
-      "",
-      report.what_is_happening,
-      "",
-      "## What it means",
-      "",
-      report.what_it_means,
-      "",
-      "## System state",
-      "",
-      report.system_state,
-      "",
-      "## Signals",
-      "",
-      report.signals,
-      "",
-      "---",
-      "",
-      "The system does not determine outcomes.",
-      
-      "It identifies what is already structurally present."
-    ].join("\n");
-
-    const blob = new Blob([markdown], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    a.href = url;
-    a.download = `cde-report-${timestamp}.md`;
-
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    statusText.textContent = "Markdown report downloaded.";
-  });
-}
-
-runBtn.addEventListener("click", async () => {
-  statusText.textContent = "Running analysis...";
-
-  let payload;
-  try {
-    payload = currentMode === "json"
-      ? JSON.parse(inputJson.value)
-      : buildPayloadFromForm();
-  } catch (err) {
-    statusText.textContent = "Invalid input. Please correct the form or JSON.";
-    return;
-  }
-
-  try {
-    const [timelineRes, patternRes] = await Promise.all([
-      fetch("/timeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      }),
-      fetch("/pattern", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
-    ]);
-
-    const timelineData = await timelineRes.json();
-    const patternData = await patternRes.json();
-
-    rawOutput.textContent = JSON.stringify(
-      { timeline: timelineData, pattern: patternData },
-      null,
-      2
-    );
-
-    renderResults(timelineData, patternData);
-
-    latestReportData = {
-      generated_at: new Date().toISOString(),
-      input_mode: currentMode,
-      input_payload: payload,
-      output: {
-        timeline: timelineData,
-        pattern: patternData
-      },
-      rendered: {
-        what_is_happening: whatIsHappening.textContent.trim(),
-        what_it_means: whatItMeans.textContent.trim(),
-        system_state: systemState.textContent.trim(),
-        signals: signalsBox.innerText.trim()
+    function renderSignals(signals) {
+      if (!Array.isArray(signals) || signals.length === 0) {
+        signalsBox.innerHTML = `
+          <div class="signal-card">
+            <div class="signal-description">No signals returned.</div>
+          </div>
+        `;
+        return;
       }
-    };
 
-    statusText.textContent = "Analysis complete.";
-  } catch (err) {
-    console.error(err);
-    statusText.textContent = "Error during analysis. Please try again.";
-  }
-});
+      signalsBox.innerHTML = signals.map(signal => {
+        const mapped = SIGNAL_MAP[signal] || { title: signal, description: "" };
+        return `
+          <div class="signal-card">
+            <div class="signal-title">${mapped.title}</div>
+            ${mapped.description ? `<div class="signal-description">${mapped.description}</div>` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ============================================================
+    // Build payload from form
+    // ============================================================
 
     function buildPayloadFromForm() {
-  const whatHappened = simpleWhatHappened.value.trim();
-  const institution = simpleInstitution.value.trim() || "Institution";
-  const response = simpleResponse.value;
-  const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
-  const stage = simpleStage.value;
-  const urgency = simpleUrgency.value;
-  const desiredOutcome =
-    simpleOutcome.value.trim() || "A clear substantive response.";
+      const whatHappened = simpleWhatHappened.value.trim();
+      const institution = simpleInstitution.value.trim() || "Institution";
+      const response = simpleResponse.value;
+      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
+      const stage = simpleStage.value;
+      const urgency = simpleUrgency.value;
+      const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
 
-  if (!whatHappened) {
-    throw new Error("Please describe the situation.");
-  }
-
-  if (!Number.isFinite(daysOpen) || daysOpen < 0) {
-    throw new Error("Please enter a valid number of days open.");
-  }
-
-  const earlierDays = Math.max(7, Math.min(daysOpen - 20, Math.floor(daysOpen * 0.4)));
-  const laterDays = Math.max(daysOpen, earlierDays + 20);
-
-  return {
-    cases: [
-      {
-        strike_reference: `Generated-${Date.now()}-A`,
-        case_title: "Earlier stage of submitted case",
-        civic_domain: "local_government",
-        decision_trigger: `${whatHappened} The matter was acknowledged but not substantively progressed.`,
-        desired_outcome: desiredOutcome,
-        urgency: urgency === "high" ? "medium" : urgency,
-        institutions: [institution],
-        case_lifecycle: {
-          current_stage: "awaiting_response",
-          status: "active",
-          stalled: false,
-          days_open: earlierDays
-        }
-      },
-      {
-        strike_reference: `Generated-${Date.now()}-B`,
-        case_title: "Later stage of submitted case",
-        civic_domain: "local_government",
-        decision_trigger:
-          response === "no_response"
-            ? `${whatHappened} No response has been received beyond the expected period.`
-            : response === "acknowledged_only"
-            ? `${whatHappened} The matter was acknowledged but no substantive response has been provided.`
-            : response === "partial_response"
-            ? `${whatHappened} A partial response was received without substantive progression.`
-            : response === "substantive_response"
-            ? `${whatHappened} A substantive response was received.`
-            : `${whatHappened}`,
-        desired_outcome: desiredOutcome,
-        urgency: urgency,
-        institutions: [institution],
-        case_lifecycle: {
-          current_stage: stage,
-          status: "active",
-          stalled:
-            response === "no_response" ||
-            response === "acknowledged_only" ||
-            stage === "delayed" ||
-            stage === "escalated",
-          days_open: laterDays
-        }
+      if (!whatHappened) {
+        throw new Error("Please describe the situation.");
       }
-    ]
-  };
-}
 
-function renderResults(timelineData, patternData) {
-  const t = timelineData?.results?.[0] || {};
-  const p = patternData?.results?.[0] || {};
+      if (!Number.isFinite(daysOpen) || daysOpen < 0) {
+        throw new Error("Please enter a valid number of days open.");
+      }
 
-  let meaningText = "";
-  const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
+      const earlierDays = Math.max(7, Math.min(daysOpen - 20, Math.floor(daysOpen * 0.4)));
+      const laterDays = Math.max(daysOpen, earlierDays + 20);
 
-  if (mappedMeaning) {
-    meaningText = mappedMeaning.join("\n\n");
-  } else if (p.pattern_summary) {
-    meaningText = p.pattern_summary.trim();
-  } else {
-    meaningText = "No interpretation returned.";
-  }
-
-  const conditions = Array.isArray(t.conditions) ? t.conditions : [];
-  const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
-
-  let transitionText = "– NONE";
-  if (t.moment_of_change?.from && t.moment_of_change?.to) {
-    transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
-  }
-
-  const happeningLines = [
-    "Conditions:",
-    ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
-    "",
-    "Trajectory:",
-    `– ${trajectory}`,
-    "",
-    "Transition:",
-    transitionText
-  ];
-
-  whatIsHappening.textContent = happeningLines.join("\n");
-  whatItMeans.textContent = meaningText;
-  systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
-
-  renderSignals(p.signals || []);
-}
-  
-function renderSignals(signals) {
-  if (!Array.isArray(signals) || signals.length === 0) {
-    signalsBox.innerHTML = `
-      <div class="signal-card">
-        <div class="signal-description">No signals returned.</div>
-      </div>
-    `;
-    return;
-  }
-
-  signalsBox.innerHTML = signals.map(signal => {
-    const mapped = SIGNAL_MAP[signal] || {
-      title: signal,
-      description: ""
-    };
-
-    return `
-      <div class="signal-card">
-        <div class="signal-title">${mapped.title}</div>
-        ${mapped.description ? `<div class="signal-description">${mapped.description}</div>` : ""}
-      </div>
-    `;
-  }).join("");
-}
-
-const SYSTEM_STATE_MAP = {
-  STABLE_DELAY: [
-    "Delay is present without confirmed structural escalation.",
-    "The matter remains open without transition to a more severe condition."
-  ],
-
-  TRANSFER_OF_BURDEN_PRESENT: [
-    "Procedural burden has shifted from the institution.",
-    "Responsibility now rests increasingly outside the responding body."
-  ],
-
-  ESCALATION_WITHOUT_RESPONSE_PRESENT: [
-    "Escalation has occurred without corresponding response.",
-    "The matter has advanced without institutional action."
-  ],
-
-  TRANSITION_TO_ESCALATION: [
-    "The sequence has transitioned into escalation.",
-    "Earlier delay has developed into escalation without response."
-  ],
-
-  STABLE_ESCALATION: [
-    "Escalation is present and sustained.",
-    "The case remains escalated without structural reversal."
-  ],
-
-  INSUFFICIENT_PATTERN_EVIDENCE: [
-    "Pattern evidence is insufficient.",
-    "The sequence does not support a stable interpretation."
-  ]
-};
+      return {
+        cases: [
+          {
+            strike_reference: `Generated-${Date.now()}-A`,
+            case_title: "Earlier stage of submitted case",
+            civic_domain: "local_government",
+            decision_trigger: `${whatHappened} The matter was acknowledged but not substantively progressed.`,
+            desired_outcome: desiredOutcome,
+            urgency: urgency === "high" ? "medium" : urgency,
+            institutions: [institution],
+            case_lifecycle: {
+              current_stage: "awaiting_response",
+              status: "active",
+              stalled: false,
+              days_open: earlierDays
+            }
+          },
+          {
+            strike_reference: `Generated-${Date.now()}-B`,
+            case_title: "Later stage of submitted case",
+            civic_domain: "local_government",
+            decision_trigger:
+              response === "no_response"
+                ? `${whatHappened} No response has been received beyond the expected period.`
+                : response === "acknowledged_only"
+                ? `${whatHappened} The matter was acknowledged but no substantive response has been provided.`
+                : response === "partial_response"
+                ? `${whatHappened} A partial response was received without substantive progression.`
+                : response === "substantive_response"
+                ? `${whatHappened} A substantive response was received.`
+                : `${whatHappened}`,
+            desired_outcome: desiredOutcome,
+            urgency: urgency,
+            institutions: [institution],
+            case_lifecycle: {
+              current_stage: stage,
+              status: "active",
+              stalled:
+                response === "no_response" ||
+                response === "acknowledged_only" ||
+                stage === "delayed" ||
+                stage === "escalated",
+              days_open: laterDays
+            }
+          }
+        ]
+      };
+    }
   </script>
 </body>
 </html>
