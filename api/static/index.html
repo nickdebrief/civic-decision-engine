@@ -397,6 +397,7 @@
           <button class="primary" id="runBtn" type="button">Run analysis</button>
           <button id="copyResultBtn" type="button">Copy result</button>
           <button id="downloadJsonBtn" type="button">Download JSON report</button>
+          <button id="downloadMarkdownBtn" type="button">Download Markdown report</button>
           <button id="loadExampleBtn" type="button">Try an example</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
@@ -591,6 +592,8 @@ clearBtn.addEventListener("click", () => {
 
 const copyResultBtn = document.getElementById("copyResultBtn");
 const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+const downloadMarkdownBtn = document.getElementById("downloadMarkdownBtn");
+
 
 copyResultBtn.addEventListener("click", async () => {
   const resultText = [
@@ -640,6 +643,60 @@ downloadJsonBtn.addEventListener("click", () => {
 
   statusText.textContent = "JSON report downloaded.";
 });
+
+ if (downloadMarkdownBtn) {
+  downloadMarkdownBtn.addEventListener("click", () => {
+    if (!latestReportData) {
+      statusText.textContent = "No report available yet.";
+      return;
+    }
+
+    const report = latestReportData.rendered;
+
+    const markdown = [
+      "# Civic Decision Engine Report",
+      "",
+      `Generated: ${latestReportData.generated_at}`,
+      "",
+      "## What is happening",
+      "",
+      report.what_is_happening,
+      "",
+      "## What it means",
+      "",
+      report.what_it_means,
+      "",
+      "## System state",
+      "",
+      report.system_state,
+      "",
+      "## Signals",
+      "",
+      report.signals,
+      "",
+      "---",
+      "",
+      "The system does not determine outcomes.",
+      
+      "It identifies what is already structurally present."
+    ].join("\n");
+
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `cde-report-${timestamp}.md`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    statusText.textContent = "Markdown report downloaded.";
+  });
+}
 
 runBtn.addEventListener("click", async () => {
   statusText.textContent = "Running analysis...";
