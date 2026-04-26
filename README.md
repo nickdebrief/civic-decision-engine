@@ -34,6 +34,19 @@ Outputs are:
 
 ---
 
+## Specifications
+
+These documents define the formal structure and meaning of the system outputs.
+
+- **Conditions Layer Specification v1.0**  
+  Defines named institutional behaviour states, detection logic, and system interpretation.  
+[`/docs/specs/conditions-layer-spec-v1.docx`](docs/specs/conditions-layer-spec-v1.docx)
+
+These documents define the formal structure and meaning of the system outputs.
+
+The schema guarantees structure. The specification defines interpretation.
+
+---
 ## One working example
 
 This example shows a transition from delay to escalation.
