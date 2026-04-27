@@ -39,8 +39,8 @@ Outputs are:
 These documents define the formal structure and meaning of the system outputs.
 
 - **Conditions Layer Specification v1.0**  
-  Defines named institutional behaviour states, detection logic, and system interpretation.  
-[`Conditions Layer Specification v1.0`](docs/specs/conditions-layer-spec-v1.docx)
+  [View (Markdown)](docs/specs/conditions-layer-spec-v1.md)  
+  [Download (.docx)](docs/specs/conditions-layer-spec-v1.docx)
 
 These documents define the formal structure and meaning of the system outputs.
 
