@@ -1,0 +1,473 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/nickdebrief/civic-decision-engine/schema/cde_output.schema.json",
+  "title": "CDE Output Schema",
+  "description": "Canonical output schema for the Civic Decision Engine v10. Covers /timeline, /pattern, and combined report export. This schema defines the public contract for all engine outputs.",
+  "version": "1.0.0",
+  "author": "Nick Moloney",
+
+  "definitions": {
+
+    "run_metadata": {
+      "type": "object",
+      "description": "Metadata produced by the engine for every run.",
+      "required": ["run_id", "generated_at", "mode", "case_count", "lineage"],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "description": "Unique identifier for this run. Format: {mode}-analysis-{YYYY-MM-DD-HHmmss}.",
+          "examples": ["civic-analysis-2026-04-26-120000"]
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when this run was generated."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["civic_analysis", "compare_analysis", "timeline_analysis", "pattern_analysis"],
+          "description": "The analysis mode that produced this output."
+        },
+        "case_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of cases processed in this run."
+        },
+        "lineage": {
+          "type": "object",
+          "description": "Run chain metadata for traceability.",
+          "properties": {
+            "previous_run_id": {
+              "type": ["string", "null"],
+              "description": "The run_id of the preceding run in the chain, or null if this is the first run."
+            },
+            "version": {
+              "type": "string",
+              "description": "Engine version that produced this output.",
+              "examples": ["v10"]
+            },
+            "depth": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "Position in the run chain. 1 = first run."
+            }
+          },
+          "required": ["version"]
+        }
+      }
+    },
+
+    "signals": {
+      "type": "object",
+      "description": "Behavioural signals extracted from the case lifecycle.",
+      "required": ["posture", "engagement", "escalation", "behaviour_index"],
+      "properties": {
+        "posture": {
+          "type": "string",
+          "enum": ["Neutral", "Cautious", "Defensive", "Withdrawn", "Closed"],
+          "description": "Institutional posture classification."
+        },
+        "engagement": {
+          "type": "string",
+          "enum": ["Normal", "Moderate", "Low", "Very low", "Terminal"],
+          "description": "Institutional engagement level."
+        },
+        "escalation": {
+          "type": "string",
+          "enum": ["Low", "Watch", "Increasing", "High", "Residual"],
+          "description": "Escalation status."
+        },
+        "behaviour_index": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 12,
+          "description": "Composite behavioural index. 3 = minimum (neutral/normal/low). 12 = terminal (closed/terminal/residual)."
+        }
+      }
+    },
+
+    "assessment": {
+      "type": "object",
+      "description": "Behavioural label and interpretation produced by the engine.",
+      "required": ["label", "interpretation"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "enum": [
+            "Response",
+            "Delayed response",
+            "Partial engagement",
+            "Resistance",
+            "Procedural completion without resolution"
+          ],
+          "description": "Classified behavioural label for this case."
+        },
+        "interpretation": {
+          "type": "string",
+          "description": "Human-readable interpretation of the label and posture."
+        }
+      }
+    },
+
+    "condition": {
+      "type": "object",
+      "description": "A single detected institutional behaviour condition.",
+      "required": ["condition_id", "name", "detected", "signals"],
+      "properties": {
+        "condition_id": {
+          "type": "string",
+          "enum": ["C001", "C002", "C003", "C004"],
+          "description": "Canonical condition identifier from the Conditions Layer."
+        },
+        "name": {
+          "type": "string",
+          "enum": [
+            "Stability Without Confirmation",
+            "Closure Without Containment",
+            "Process Completion Without Outcome",
+            "Procedural Completion Without Resolution"
+          ],
+          "description": "Human-readable condition name."
+        },
+        "detected": {
+          "type": "boolean",
+          "description": "Always true when present — conditions are only included in output when detected."
+        },
+        "signals": {
+          "type": "array",
+          "description": "Evidence signals that triggered this condition.",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      }
+    },
+
+    "civic_result": {
+      "type": "object",
+      "description": "The analysis result for a single civic case.",
+      "required": ["system_reference", "title", "domain", "signals", "condition", "assessment", "conditions_detected"],
+      "properties": {
+        "system_reference": {
+          "type": "string",
+          "description": "The strike_reference of the source case."
+        },
+        "title": {
+          "type": "string",
+          "description": "The case_title of the source case."
+        },
+        "domain": {
+          "type": "string",
+          "description": "Analysis domain. Always civic_case_analysis for civic mode."
+        },
+        "declared_purpose": {
+          "type": ["string", "null"],
+          "description": "The decision_trigger, case_description, or recall_question from the source case."
+        },
+        "signals": { "$ref": "#/definitions/signals" },
+        "condition": {
+          "type": "string",
+          "description": "The primary classified condition key. Maps to SIGNAL_MAP in the UI.",
+          "examples": [
+            "STABILITY_WITHOUT_CONFIRMATION",
+            "ESCALATION_WITHOUT_RESPONSE",
+            "TRANSFER_OF_BURDEN",
+            "RESISTANCE",
+            "ACKNOWLEDGEMENT_WITHOUT_ACTION",
+            "ADMINISTRATIVE_CONTAINMENT"
+          ]
+        },
+        "assessment": { "$ref": "#/definitions/assessment" },
+        "conditions_detected": {
+          "type": "array",
+          "description": "All Conditions Layer conditions detected for this case.",
+          "items": { "$ref": "#/definitions/condition" }
+        }
+      }
+    },
+
+    "moment_of_change": {
+      "type": ["object", "null"],
+      "description": "The first detected point of behavioural deterioration in the sequence. Null if no transition was detected.",
+      "required": ["from_event", "to_event", "from_label", "to_label", "from_index", "to_index", "direction"],
+      "properties": {
+        "from_event": {
+          "type": "string",
+          "description": "Timestamp or run_id of the event before the transition."
+        },
+        "to_event": {
+          "type": "string",
+          "description": "Timestamp or run_id of the event after the transition."
+        },
+        "from_label": {
+          "type": "string",
+          "description": "Behavioural label before the transition."
+        },
+        "to_label": {
+          "type": "string",
+          "description": "Behavioural label after the transition."
+        },
+        "from_index": {
+          "type": "integer",
+          "description": "Behaviour index before the transition."
+        },
+        "to_index": {
+          "type": "integer",
+          "description": "Behaviour index after the transition."
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["deteriorating", "improving", "stable"],
+          "description": "Direction of the transition."
+        }
+      }
+    },
+
+    "timeline_result": {
+      "type": "object",
+      "description": "Timeline analysis result produced from a sequence of civic runs.",
+      "required": [
+        "run_sequence",
+        "case_sequence",
+        "behaviour_indices",
+        "conditions",
+        "progression",
+        "trajectory",
+        "moment_of_change",
+        "interpretation"
+      ],
+      "properties": {
+        "run_sequence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered list of run_ids included in this timeline."
+        },
+        "case_sequence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered list of case references (system_reference) in this timeline."
+        },
+        "behaviour_indices": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 3, "maximum": 12 },
+          "description": "Behaviour index for each case in sequence order."
+        },
+        "conditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Distinct condition keys detected across the sequence."
+        },
+        "progression": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Behavioural labels in sequence order."
+        },
+        "trajectory": {
+          "type": "string",
+          "enum": ["Deteriorating", "Improving", "Stable", "Mixed", "single_event"],
+          "description": "Overall trajectory classification across the sequence."
+        },
+        "moment_of_change": { "$ref": "#/definitions/moment_of_change" },
+        "interpretation": {
+          "type": "string",
+          "description": "Human-readable interpretation of the timeline sequence."
+        }
+      }
+    },
+
+    "pattern_result": {
+      "type": "object",
+      "description": "Pattern analysis result produced from stored timeline outputs.",
+      "required": [
+        "dominant_conditions",
+        "dominant_labels",
+        "recurring_transitions",
+        "pattern_summary",
+        "pattern_interpretation",
+        "system_state",
+        "signals"
+      ],
+      "properties": {
+        "dominant_conditions": {
+          "type": "array",
+          "description": "Most frequently detected conditions across the stored sequence.",
+          "items": {
+            "type": "object",
+            "required": ["condition", "count"],
+            "properties": {
+              "condition": { "type": "string" },
+              "count":     { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "dominant_labels": {
+          "type": "array",
+          "description": "Most frequently detected behavioural labels across the stored sequence.",
+          "items": {
+            "type": "object",
+            "required": ["label", "count"],
+            "properties": {
+              "label": { "type": "string" },
+              "count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "recurring_transitions": {
+          "type": "array",
+          "description": "Transitions that appear more than once across the stored sequence.",
+          "items": {
+            "type": "object",
+            "required": ["from_label", "to_label", "count"],
+            "properties": {
+              "from_label": { "type": "string" },
+              "to_label":   { "type": "string" },
+              "count":      { "type": "integer", "minimum": 2 }
+            }
+          }
+        },
+        "pattern_summary": {
+          "type": "string",
+          "description": "Single-sentence summary of the detected pattern."
+        },
+        "pattern_interpretation": {
+          "type": "string",
+          "description": "Expanded interpretation of what the pattern means institutionally."
+        },
+        "system_state": {
+          "type": "string",
+          "enum": [
+            "STABLE_DELAY",
+            "TRANSFER_OF_BURDEN_PRESENT",
+            "ESCALATION_WITHOUT_RESPONSE_PRESENT",
+            "TRANSITION_TO_ESCALATION",
+            "STABLE_ESCALATION",
+            "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "REPEATED_ESCALATION_WITH_TRANSITION",
+            "INSUFFICIENT_PATTERN_EVIDENCE"
+          ],
+          "description": "Named system state classification. This is the highest-level diagnostic output."
+        },
+        "signals": {
+          "type": "array",
+          "description": "Signal keys detected at pattern level.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "TRANSITION_DETECTED",
+              "ESCALATION_WITHOUT_RESPONSE_PRESENT",
+              "TRANSFER_OF_BURDEN_PRESENT",
+              "RESISTANCE",
+              "ACKNOWLEDGEMENT_WITHOUT_ACTION",
+              "ADMINISTRATIVE_CONTAINMENT",
+              "STABILITY_WITHOUT_CONFIRMATION"
+            ]
+          }
+        }
+      }
+    }
+  },
+
+  "oneOf": [
+    {
+      "title": "Civic Run Output",
+      "description": "Output from POST /civic/analyse — a single civic case analysis.",
+      "type": "object",
+      "required": ["run_metadata", "results"],
+      "properties": {
+        "run_metadata": { "$ref": "#/definitions/run_metadata" },
+        "results": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/civic_result" },
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "title": "Timeline Run Output",
+      "description": "Output from GET|POST /analysis/timeline — timeline analysis across a sequence of civic runs.",
+      "type": "object",
+      "required": ["run_metadata", "results"],
+      "properties": {
+        "run_metadata": { "$ref": "#/definitions/run_metadata" },
+        "results": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/timeline_result" },
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "title": "Pattern Run Output",
+      "description": "Output from GET|POST /analysis/pattern — pattern analysis across stored timeline outputs.",
+      "type": "object",
+      "required": ["run_metadata", "results"],
+      "properties": {
+        "run_metadata": { "$ref": "#/definitions/run_metadata" },
+        "results": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/pattern_result" },
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "title": "Combined Report Export",
+      "description": "The full report object stored in the browser and exported as JSON. Combines timeline and pattern output with rendered UI state and metadata.",
+      "type": "object",
+      "required": ["generated_at", "input_mode", "output"],
+      "properties": {
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of when the report was generated."
+        },
+        "strike_reference": {
+          "type": ["string", "null"],
+          "description": "Strike reference attached to this report. Null if not attached."
+        },
+        "input_mode": {
+          "type": "string",
+          "enum": ["describe", "json"],
+          "description": "Input mode used when the analysis was run."
+        },
+        "trajectory": {
+          "type": ["string", "null"],
+          "description": "Top-level trajectory from the timeline result."
+        },
+        "system_state": {
+          "type": ["string", "null"],
+          "description": "Top-level system state from the pattern result."
+        },
+        "output": {
+          "type": "object",
+          "description": "Raw API outputs.",
+          "required": ["timeline", "pattern"],
+          "properties": {
+            "timeline": {
+              "type": "object",
+              "description": "Full timeline run output."
+            },
+            "pattern": {
+              "type": "object",
+              "description": "Full pattern run output."
+            }
+          }
+        },
+        "rendered": {
+          "type": "object",
+          "description": "Rendered UI state at time of export.",
+          "properties": {
+            "what_is_happening": { "type": "string" },
+            "transition":        { "type": "string" },
+            "what_it_means":     { "type": "string" },
+            "system_state":      { "type": "string" },
+            "signals":           { "type": "string" }
+          }
+        },
+        "input_payload": {
+          "type": "object",
+          "description": "The case payload submitted for this analysis."
+        }
+      }
+    }
+  ]
+}

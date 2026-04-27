@@ -4,6 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Civic Decision Engine</title>
+  <!-- author: Nick Moloney — civic-decision-engine v10 -->
+  <meta name="author" content="Nick Moloney" />
+  <meta name="description" content="Civic Decision Engine — A system for diagnosing institutional behaviour. Built by Nick Moloney." />
+  <link rel="icon" href="/static/favicon.ico">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-8405RVT76Q"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-8405RVT76Q');
+  </script>
   <style>
     :root {
       --bg: #05070b;
@@ -15,9 +29,7 @@
       --accent: #d1d5db;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -48,23 +60,9 @@
       letter-spacing: -0.03em;
     }
 
-    .hero-text .lead {
-      margin: 0 0 10px;
-      font-size: 1.25rem;
-      color: var(--accent);
-    }
-
-    .hero-text .sub {
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-size: 1.05rem;
-    }
-
-    .hero-text .record {
-      margin-top: 24px;
-      color: var(--text);
-      font-size: 0.98rem;
-    }
+    .hero-text .lead { margin: 0 0 10px; font-size: 1.25rem; color: var(--accent); }
+    .hero-text .sub  { margin: 0 0 10px; color: var(--muted); font-size: 1.05rem; }
+    .hero-text .record { margin-top: 24px; color: var(--text); font-size: 0.98rem; }
 
     .hero-image {
       border: 1px solid var(--line);
@@ -96,24 +94,11 @@
       min-height: 680px;
     }
 
-    .panel h2 {
-      margin: 0 0 8px;
-      font-size: 1.4rem;
-      letter-spacing: -0.02em;
-    }
+    .panel h2 { margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -0.02em; }
+    .panel p.meta { margin: 0 0 18px; color: var(--muted); font-size: 0.95rem; }
 
-    .panel p.meta {
-      margin: 0 0 18px;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin: 0 0 18px;
-      flex-wrap: wrap;
-    }
+    /* Tabs */
+    .tabs { display: flex; gap: 10px; margin: 0 0 18px; flex-wrap: wrap; }
 
     .tab-btn {
       appearance: none;
@@ -126,23 +111,12 @@
       cursor: pointer;
     }
 
-    .tab-btn.active {
-      background: #e5e7eb;
-      color: #05070b;
-      font-weight: 600;
-    }
+    .tab-btn.active { background: #e5e7eb; color: #05070b; font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
-    .tab-panel {
-      display: none;
-    }
-
-    .tab-panel.active {
-      display: block;
-    }
-
-    textarea,
-    input,
-    select {
+    /* Form */
+    textarea, input, select {
       width: 100%;
       padding: 14px 16px;
       border-radius: 14px;
@@ -159,46 +133,16 @@
       resize: vertical;
     }
 
-    textarea:focus,
-    input:focus,
-    select:focus {
-      border-color: #374151;
-    }
+    textarea:focus, input:focus, select:focus { border-color: #374151; }
 
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-    }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; margin: 0 0 8px; font-size: 0.92rem; color: var(--accent); }
+    .field.full { grid-column: 1 / -1; }
+    .plain-textarea { min-height: 140px; font-family: inherit; line-height: 1.5; resize: vertical; }
 
-    .field {
-      margin-bottom: 14px;
-    }
-
-    .field label {
-      display: block;
-      margin: 0 0 8px;
-      font-size: 0.92rem;
-      color: var(--accent);
-    }
-
-    .field.full {
-      grid-column: 1 / -1;
-    }
-
-    .plain-textarea {
-      min-height: 140px;
-      font-family: inherit;
-      line-height: 1.5;
-      resize: vertical;
-    }
-
-    .controls {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-      flex-wrap: wrap;
-    }
+    /* Controls */
+    .controls { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 
     .controls-export {
       display: flex;
@@ -236,42 +180,16 @@
       cursor: pointer;
     }
 
-    button.primary {
-      background: #e5e7eb;
-      color: #05070b;
-      font-weight: 600;
-    }
+    button.primary { background: #e5e7eb; color: #05070b; font-weight: 600; }
+    button.export-btn { background: #0f1f35; border-color: #1e3a5f; color: #93c5fd; font-size: 0.9rem; padding: 10px 14px; }
+    button.attach-btn { background: #0f1f1a; border-color: #1a3a2a; color: #6ee7b7; font-size: 0.9rem; padding: 10px 14px; }
+    button.history-btn { background: #1a1030; border-color: #2d1f5a; color: #c4b5fd; font-size: 0.9rem; padding: 10px 14px; }
+    button.print-btn { background: #1a1010; border-color: #3a1f1f; color: #fca5a5; font-size: 0.9rem; padding: 10px 14px; }
+    button:hover { opacity: 0.95; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    button.export-btn {
-      background: #0f1f35;
-      border-color: #1e3a5f;
-      color: #93c5fd;
-      font-size: 0.9rem;
-      padding: 10px 14px;
-    }
-
-    button.attach-btn {
-      background: #0f1f1a;
-      border-color: #1a3a2a;
-      color: #6ee7b7;
-      font-size: 0.9rem;
-      padding: 10px 14px;
-    }
-
-    button:hover {
-      opacity: 0.95;
-    }
-
-    button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .output-block {
-      border-top: 1px solid var(--line);
-      padding-top: 16px;
-      margin-top: 16px;
-    }
+    /* Output */
+    .output-block { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
 
     .output-block h3 {
       margin: 0 0 10px;
@@ -295,16 +213,7 @@
       word-break: break-word;
     }
 
-    .muted {
-      color: var(--muted);
-    }
-
-    .status {
-      margin-top: 8px;
-      min-height: 24px;
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
+    .status { margin-top: 8px; min-height: 24px; color: var(--muted); font-size: 0.95rem; }
 
     .footer-note {
       margin-top: 28px;
@@ -314,44 +223,235 @@
       font-size: 0.95rem;
     }
 
+    /* Trajectory badge */
+    .trajectory-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .trajectory-badge.green  { background: #052e16; border: 1px solid #166534; color: #86efac; }
+    .trajectory-badge.amber  { background: #1c1407; border: 1px solid #78350f; color: #fcd34d; }
+    .trajectory-badge.red    { background: #1c0a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    .trajectory-badge .dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .trajectory-badge.green .dot { background: #86efac; }
+    .trajectory-badge.amber .dot { background: #fcd34d; }
+    .trajectory-badge.red   .dot { background: #fca5a5; }
+
+    /* Condition cards */
+    .condition-card {
+      background: #060b14;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .condition-card:hover { border-color: #374151; }
+    .condition-card.expanded .condition-detail { display: block; }
+
+    .condition-name {
+      font-size: 0.94rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .expand-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.15s; }
+    .condition-card.expanded .expand-icon { transform: rotate(180deg); }
+
+    .condition-detail {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* Signal cards */
     .signal-card {
       background: #060b14;
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 14px 16px;
       margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
     }
+
+    .signal-card:hover { border-color: #374151; }
+    .signal-card.expanded .signal-detail { display: block; }
 
     .signal-title {
       font-weight: 600;
       color: var(--text);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .signal-card.expanded .expand-icon { transform: rotate(180deg); }
+
+    .signal-description { font-size: 0.92rem; color: var(--muted); line-height: 1.5; }
+
+    .signal-detail {
+      display: none;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* History sidebar */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+
+    .sidebar-overlay.open { display: block; }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 420px;
+      max-width: 95vw;
+      height: 100vh;
+      background: #0b1220;
+      border-left: 1px solid var(--line);
+      z-index: 101;
+      transition: right 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar.open { right: 0; }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+
+    .sidebar-header h3 { margin: 0; font-size: 1.1rem; letter-spacing: -0.01em; }
+
+    .sidebar-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+    }
+
+    .sidebar-close:hover { color: var(--text); }
+
+    .sidebar-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    .sidebar-empty { color: var(--muted); font-size: 0.95rem; margin-top: 8px; }
+
+    .history-item {
+      background: #060b14;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .history-item:hover { border-color: #374151; }
+
+    .history-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 6px;
     }
 
-    .signal-description {
-      font-size: 0.92rem;
-      color: var(--muted);
-      line-height: 1.5;
+    .history-item-ref { font-size: 0.88rem; font-weight: 600; color: var(--accent); font-family: ui-monospace, monospace; }
+    .history-item-time { font-size: 0.8rem; color: var(--muted); }
+    .history-item-state { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
+
+    .sidebar-clear {
+      width: 100%;
+      margin-top: 8px;
+      background: #1a0a0a;
+      border-color: #3a1f1f;
+      color: #fca5a5;
+      font-size: 0.88rem;
+      padding: 10px;
     }
 
+    /* Print */
+    @media print {
+      .wrap > section.hero,
+      .panel:first-child,
+      .sidebar,
+      .sidebar-overlay,
+      .controls,
+      .controls-export,
+      .strike-attach,
+      .status,
+      .tabs,
+      button { display: none !important; }
+
+      body { background: #fff; color: #000; }
+      .grid { grid-template-columns: 1fr; }
+      .panel { background: none; border: none; min-height: unset; padding: 0; }
+      .card, .signal-card, .condition-card { background: none; border: 1px solid #ccc; border-radius: 8px; }
+      .output-block h3 { color: #000; }
+      .panel h2 { color: #000; }
+      .signal-detail, .condition-detail { display: block; }
+      .footer-note { color: #555; }
+    }
+
+    /* Responsive */
     @media (max-width: 980px) {
-      .hero,
-      .grid,
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .panel {
-        min-height: unset;
-      }
-
-      textarea {
-        min-height: 320px;
-      }
+      .hero, .grid, .form-grid { grid-template-columns: 1fr; }
+      .panel { min-height: unset; }
+      textarea { min-height: 320px; }
+      .sidebar { width: 100%; right: -100%; }
     }
   </style>
 </head>
 <body>
+
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="sidebar" id="historySidebar">
+    <div class="sidebar-header">
+      <h3>Case history</h3>
+      <button class="sidebar-close" id="sidebarClose" type="button">✕</button>
+    </div>
+    <div class="sidebar-body" id="sidebarBody">
+      <p class="sidebar-empty">No analyses recorded yet.</p>
+    </div>
+  </div>
+
   <div class="wrap">
     <section class="hero">
       <div class="hero-text">
@@ -361,13 +461,13 @@
         <p class="sub">Not designed for attention. Designed for understanding.</p>
         <p class="record">The record does not argue.</p>
       </div>
-
       <div class="hero-image">
         <img src="/static/lens.jpeg" alt="Lens image" />
       </div>
     </section>
 
     <section class="grid">
+      <!-- INPUT PANEL -->
       <div class="panel">
         <h2>Enter a case</h2>
         <p class="meta">Describe the situation in plain language, or paste structured JSON.</p>
@@ -378,21 +478,17 @@
         </div>
 
         <div class="tab-panel active" id="describePanel">
-          <p class="meta">Enter the situation in plain language. The page will structure it for analysis.</p>
-
           <div class="form-grid">
             <div class="field full">
               <label for="simpleWhatHappened">What happened?</label>
               <textarea id="simpleWhatHappened" class="plain-textarea" placeholder="Describe the situation..."></textarea>
             </div>
-
             <div class="field">
               <label for="simpleInstitution">Who is involved?</label>
               <input id="simpleInstitution" type="text" placeholder="e.g. Local Authority" />
             </div>
-
             <div class="field">
-              <label for="simpleResponse">What response was received, if any?</label>
+              <label for="simpleResponse">What response was received?</label>
               <select id="simpleResponse">
                 <option value="no_response">No response</option>
                 <option value="acknowledged_only" selected>Acknowledged only</option>
@@ -401,12 +497,10 @@
                 <option value="other">Other</option>
               </select>
             </div>
-
             <div class="field">
               <label for="simpleDaysOpen">How long has it been open? (days)</label>
               <input id="simpleDaysOpen" type="number" min="0" placeholder="e.g. 45" />
             </div>
-
             <div class="field">
               <label for="simpleStage">What stage is it at?</label>
               <select id="simpleStage">
@@ -417,7 +511,6 @@
                 <option value="escalated">Escalated</option>
               </select>
             </div>
-
             <div class="field">
               <label for="simpleUrgency">How urgent is it?</label>
               <select id="simpleUrgency">
@@ -426,7 +519,6 @@
                 <option value="high">High</option>
               </select>
             </div>
-
             <div class="field full">
               <label for="simpleOutcome">What outcome is needed?</label>
               <input id="simpleOutcome" type="text" placeholder="e.g. A clear substantive response and procedural accountability" />
@@ -435,20 +527,22 @@
         </div>
 
         <div class="tab-panel" id="jsonPanel">
-          <p class="meta">Paste one or more civic cases in JSON. The page will run timeline and pattern analysis.</p>
+          <p class="meta">Paste one or more civic cases in JSON.</p>
           <textarea id="inputJson"></textarea>
         </div>
 
         <div class="controls">
           <button class="primary" id="runBtn" type="button">Run analysis</button>
           <button id="copyResultBtn" type="button">Copy result</button>
+          <button class="history-btn" id="historyBtn" type="button">Case history</button>
           <button id="loadExampleBtn" type="button">Try an example</button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
 
         <div class="controls-export">
-          <button class="export-btn" id="downloadJsonBtn" type="button" disabled>Download JSON report</button>
-          <button class="export-btn" id="downloadMarkdownBtn" type="button" disabled>Download Markdown report</button>
+          <button class="export-btn" id="downloadJsonBtn" type="button" disabled>Download JSON</button>
+          <button class="export-btn" id="downloadMarkdownBtn" type="button" disabled>Download Markdown</button>
+          <button class="print-btn" id="printBtn" type="button" disabled>Print report</button>
         </div>
 
         <div class="strike-attach">
@@ -464,13 +558,24 @@
         <div class="status" id="statusText"></div>
       </div>
 
+      <!-- OUTPUT PANEL -->
       <div class="panel">
         <h2>Analysis</h2>
         <p class="meta">Structured interpretation</p>
 
         <div class="output-block">
+          <h3>Trajectory</h3>
+          <div id="trajectoryBadge"></div>
+        </div>
+
+        <div class="output-block">
           <h3>What is happening</h3>
-          <div class="card mono" id="whatIsHappening">Awaiting input.</div>
+          <div id="conditionsBox">
+            <div class="condition-card">
+              <div class="condition-name">Awaiting input.</div>
+            </div>
+          </div>
+          <div class="card mono" id="transitionBox">Awaiting input.</div>
         </div>
 
         <div class="output-block">
@@ -497,14 +602,107 @@
           <div class="card mono" id="rawOutput">No result yet.</div>
         </div>
 
-        <div class="footer-note">
-          It becomes clear enough to be returned to.
-        </div>
+        <div class="footer-note">It becomes clear enough to be returned to.</div>
       </div>
     </section>
+
+    <footer style="margin-top:48px;padding-top:20px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <span style="color:var(--muted);font-size:0.88rem;">
+        &copy; <span id="copyrightYear"></span> Nick Moloney. All rights reserved.
+      </span>
+      <span style="color:var(--muted);font-size:0.82rem;font-family:ui-monospace,monospace;">
+        Civic Decision Engine v10 &mdash; The record does not argue.
+      </span>
+    </footer>
   </div>
 
   <script>
+    // ============================================================
+    // Copyright year
+    // ============================================================
+
+    document.getElementById("copyrightYear").textContent = new Date().getFullYear();
+
+    // ============================================================
+    // Analytics helpers
+    // ============================================================
+
+    function trackEvent(event_name, params = {}) {
+      if (typeof gtag === "function") {
+        gtag("event", event_name, params);
+      }
+    }
+
+    function trackConditionsLayer(timelineData, patternData) {
+      const t = timelineData?.results?.[0] || {};
+      const p = patternData?.results?.[0]  || {};
+
+      const conditions       = Array.isArray(t.conditions) ? t.conditions : [];
+      const trajectory       = t.trajectory   || "unknown";
+      const system_state     = p.system_state || "unknown";
+      const signals          = Array.isArray(p.signals) ? p.signals : [];
+      const has_transition   = !!(t.moment_of_change?.from && t.moment_of_change?.to);
+      const transition_label = has_transition
+        ? `${t.moment_of_change.from} → ${t.moment_of_change.to}`
+        : "none";
+
+      // Core analysis event
+      trackEvent("cde_analysis_run", {
+        input_mode:      currentMode,
+        trajectory,
+        system_state,
+        has_transition,
+        transition_label,
+        condition_count: conditions.length,
+        signal_count:    signals.length,
+      });
+
+      // One event per condition detected — this is the Conditions Layer schema
+      conditions.forEach(condition => {
+        trackEvent("cde_condition_detected", {
+          condition,
+          trajectory,
+          system_state,
+          has_transition,
+        });
+      });
+
+      // One event per signal detected
+      signals.forEach(signal => {
+        trackEvent("cde_signal_detected", {
+          signal,
+          trajectory,
+          system_state,
+          condition_count: conditions.length,
+        });
+      });
+
+      // Transition event — only fired when a moment of change is present
+      if (has_transition) {
+        trackEvent("cde_transition_detected", {
+          transition_label,
+          trajectory,
+          system_state,
+          conditions: conditions.join("|"),
+        });
+      }
+
+      // System state event — tracks what state the system is in
+      if (system_state !== "unknown") {
+        trackEvent("cde_system_state", {
+          system_state,
+          trajectory,
+          condition_count: conditions.length,
+          signal_count:    signals.length,
+          has_transition,
+        });
+      }
+    }
+
+    // ============================================================
+    // Data maps
+    // ============================================================
+
     const examplePayload = {
       cases: [
         {
@@ -512,9 +710,6 @@
           case_title: "Administrative complaint awaiting substantive response",
           civic_domain: "local_government",
           decision_trigger: "A public body acknowledged the complaint but has not yet provided a substantive response.",
-          recall_question: "What is the appropriate next step to preserve the record while allowing reasonable time for response?",
-          user_priority: "clarity, procedural footing, and record integrity",
-          desired_outcome: "A timely substantive response and confirmation of procedural handling",
           urgency: "medium",
           institutions: ["Local Authority Complaints Office"],
           case_lifecycle: {
@@ -522,8 +717,6 @@
             status: "active",
             stalled: false,
             days_open: 20,
-            next_decision_point: "assess_internal_deadline_expiry",
-            next_deadline: "2026-03-25",
             recommended_mode: "monitor_and_prepare"
           }
         },
@@ -532,9 +725,6 @@
           case_title: "Unresolved complaint with missed deadline",
           civic_domain: "local_government",
           decision_trigger: "A public body continued non-response beyond the stated internal deadline.",
-          recall_question: "At what point does delay become escalation?",
-          user_priority: "resolution, escalation readiness, preservation of record",
-          desired_outcome: "Escalation to the appropriate oversight route",
           urgency: "high",
           institutions: ["Local Authority Complaints Office"],
           case_lifecycle: {
@@ -542,8 +732,6 @@
             status: "active",
             stalled: true,
             days_open: 90,
-            next_decision_point: "trigger_external_escalation",
-            next_deadline: "2026-04-01",
             recommended_mode: "prepare_escalation"
           }
         }
@@ -553,97 +741,212 @@
     const SIGNAL_MAP = {
       TRANSITION_DETECTED: {
         title: "Transition detected",
-        description: "Behavioural conditions changed across the submitted sequence."
+        description: "Behavioural conditions changed across the submitted sequence.",
+        detail: "A transition means the institutional behaviour shifted between two defined states during the period under analysis. This is a structural signal — not an interpretation. It indicates that the case moved from one behavioural condition to another."
       },
       ESCALATION_WITHOUT_RESPONSE_PRESENT: {
         title: "Escalation without response present",
-        description: "Escalation is occurring without institutional response."
+        description: "Escalation is occurring without institutional response.",
+        detail: "The case has advanced to an escalation stage without a corresponding substantive response from the institution. This is the condition that precedes formal external escalation. The record at this point is particularly important to preserve."
+      }
+    };
+
+    const CONDITION_DEFINITIONS = {
+      "STABILITY_WITHOUT_CONFIRMATION": {
+        label: "Stability Without Confirmation",
+        definition: "The institution continues to function without producing external signals that confirm resolution. Operational continuity should not be mistaken for confirmed resolution.",
+        signals: ["Administrative continuity without confirmed resolution", "Absence of follow-up despite claimed completion", "Internal closure signals without external proof"]
+      },
+      "CLOSURE_WITHOUT_CONTAINMENT": {
+        label: "Closure Without Containment",
+        definition: "A process is formally closed but the underlying issue remains functionally unresolved. Administrative closure should not be mistaken for substantive resolution.",
+        signals: ["Formal closure notice issued", "Persistence of harm or unresolved issue", "No traceable remedial change"]
+      },
+      "PROCESS_COMPLETION_WITHOUT_OUTCOME": {
+        label: "Process Completion Without Outcome",
+        definition: "Required procedural steps are completed but produce no meaningful or traceable outcome. Procedural activity should not be mistaken for substantive effect.",
+        signals: ["Acknowledgement issued", "Review completed", "No corrective or enforceable outcome"]
+      },
+      "PROCEDURAL_COMPLETION_WITHOUT_RESOLUTION": {
+        label: "Procedural Completion Without Resolution",
+        definition: "A process has reached formal completion but the underlying issue remains substantively unresolved. The procedure ended. The problem did not.",
+        signals: ["Closure status recorded", "Resolution status: unresolved or partial", "No resolution event in timeline despite closure"]
       }
     };
 
     const SYSTEM_STATE_MAP = {
-      STABLE_DELAY: [
-        "Delay is present without confirmed structural escalation.",
-        "The matter remains open without transition to a more severe condition."
-      ],
-      TRANSFER_OF_BURDEN_PRESENT: [
-        "Procedural burden has shifted from the institution.",
-        "Responsibility now rests increasingly outside the responding body."
-      ],
-      ESCALATION_WITHOUT_RESPONSE_PRESENT: [
-        "Escalation has occurred without corresponding response.",
-        "The matter has advanced without institutional action."
-      ],
-      TRANSITION_TO_ESCALATION: [
-        "The sequence has transitioned into escalation.",
-        "Earlier delay has developed into escalation without response."
-      ],
-      STABLE_ESCALATION: [
-        "Escalation is present and sustained.",
-        "The case remains escalated without structural reversal."
-      ],
-      INSUFFICIENT_PATTERN_EVIDENCE: [
-        "Pattern evidence is insufficient.",
-        "The sequence does not support a stable interpretation."
-      ]
+      STABLE_DELAY: ["Delay is present without confirmed structural escalation.", "The matter remains open without transition to a more severe condition."],
+      TRANSFER_OF_BURDEN_PRESENT: ["Procedural burden has shifted from the institution.", "Responsibility now rests increasingly outside the responding body."],
+      ESCALATION_WITHOUT_RESPONSE_PRESENT: ["Escalation has occurred without corresponding response.", "The matter has advanced without institutional action."],
+      TRANSITION_TO_ESCALATION: ["The sequence has transitioned into escalation.", "Earlier delay has developed into escalation without response."],
+      STABLE_ESCALATION: ["Escalation is present and sustained.", "The case remains escalated without structural reversal."],
+      INSUFFICIENT_PATTERN_EVIDENCE: ["Pattern evidence is insufficient.", "The sequence does not support a stable interpretation."]
     };
 
-    // Element references
-    const describeTabBtn = document.getElementById("describeTabBtn");
-    const jsonTabBtn = document.getElementById("jsonTabBtn");
-    const describePanel = document.getElementById("describePanel");
-    const jsonPanel = document.getElementById("jsonPanel");
+    const TRAJECTORY_CONFIG = {
+      DETERIORATING: { class: "red",   label: "Deteriorating" },
+      IMPROVING:     { class: "green", label: "Improving" },
+      STABLE:        { class: "amber", label: "Stable" },
+      MIXED:         { class: "amber", label: "Mixed" },
+      UNKNOWN:       { class: "amber", label: "Unknown" }
+    };
 
-    const inputJson = document.getElementById("inputJson");
-    const statusText = document.getElementById("statusText");
-    const runBtn = document.getElementById("runBtn");
-    const loadExampleBtn = document.getElementById("loadExampleBtn");
-    const clearBtn = document.getElementById("clearBtn");
-    const copyResultBtn = document.getElementById("copyResultBtn");
-    const downloadJsonBtn = document.getElementById("downloadJsonBtn");
+    // ============================================================
+    // Element refs
+    // ============================================================
+
+    const describeTabBtn      = document.getElementById("describeTabBtn");
+    const jsonTabBtn          = document.getElementById("jsonTabBtn");
+    const describePanel       = document.getElementById("describePanel");
+    const jsonPanel           = document.getElementById("jsonPanel");
+    const inputJson           = document.getElementById("inputJson");
+    const statusText          = document.getElementById("statusText");
+    const runBtn              = document.getElementById("runBtn");
+    const loadExampleBtn      = document.getElementById("loadExampleBtn");
+    const clearBtn            = document.getElementById("clearBtn");
+    const copyResultBtn       = document.getElementById("copyResultBtn");
+    const downloadJsonBtn     = document.getElementById("downloadJsonBtn");
     const downloadMarkdownBtn = document.getElementById("downloadMarkdownBtn");
-    const attachStrikeBtn = document.getElementById("attachStrikeBtn");
-    const strikeReferenceInput = document.getElementById("strikeReferenceInput");
+    const printBtn            = document.getElementById("printBtn");
+    const attachStrikeBtn     = document.getElementById("attachStrikeBtn");
+    const strikeReferenceInput= document.getElementById("strikeReferenceInput");
+    const historyBtn          = document.getElementById("historyBtn");
+    const historySidebar      = document.getElementById("historySidebar");
+    const sidebarOverlay      = document.getElementById("sidebarOverlay");
+    const sidebarClose        = document.getElementById("sidebarClose");
+    const sidebarBody         = document.getElementById("sidebarBody");
 
-    const simpleWhatHappened = document.getElementById("simpleWhatHappened");
-    const simpleInstitution = document.getElementById("simpleInstitution");
-    const simpleResponse = document.getElementById("simpleResponse");
-    const simpleDaysOpen = document.getElementById("simpleDaysOpen");
-    const simpleStage = document.getElementById("simpleStage");
-    const simpleUrgency = document.getElementById("simpleUrgency");
-    const simpleOutcome = document.getElementById("simpleOutcome");
+    const simpleWhatHappened  = document.getElementById("simpleWhatHappened");
+    const simpleInstitution   = document.getElementById("simpleInstitution");
+    const simpleResponse      = document.getElementById("simpleResponse");
+    const simpleDaysOpen      = document.getElementById("simpleDaysOpen");
+    const simpleStage         = document.getElementById("simpleStage");
+    const simpleUrgency       = document.getElementById("simpleUrgency");
+    const simpleOutcome       = document.getElementById("simpleOutcome");
 
-    const whatIsHappening = document.getElementById("whatIsHappening");
-    const whatItMeans = document.getElementById("whatItMeans");
-    const systemState = document.getElementById("systemState");
-    const signalsBox = document.getElementById("signalsBox");
-    const rawOutput = document.getElementById("rawOutput");
+    const trajectoryBadge     = document.getElementById("trajectoryBadge");
+    const conditionsBox       = document.getElementById("conditionsBox");
+    const transitionBox       = document.getElementById("transitionBox");
+    const whatItMeans         = document.getElementById("whatItMeans");
+    const systemState         = document.getElementById("systemState");
+    const signalsBox          = document.getElementById("signalsBox");
+    const rawOutput           = document.getElementById("rawOutput");
 
-    let currentMode = "describe";
+    let currentMode      = "describe";
     let latestReportData = null;
+    let caseHistory      = [];
+
+    // ============================================================
+    // Restore from localStorage
+    // ============================================================
+
+    try {
+      const saved = localStorage.getItem("cde_last_result");
+      if (saved) {
+        latestReportData = JSON.parse(saved);
+        const { timeline, pattern } = latestReportData.output || {};
+        if (timeline && pattern) {
+          renderResults(timeline, pattern);
+          rawOutput.textContent = JSON.stringify({ timeline, pattern }, null, 2);
+          downloadJsonBtn.disabled     = false;
+          downloadMarkdownBtn.disabled = false;
+          printBtn.disabled            = false;
+          attachStrikeBtn.disabled     = false;
+          statusText.textContent = "Previous result restored.";
+        }
+      }
+      const savedHistory = localStorage.getItem("cde_history");
+      if (savedHistory) caseHistory = JSON.parse(savedHistory);
+    } catch(e) {}
 
     inputJson.value = JSON.stringify(examplePayload, null, 2);
 
     // ============================================================
-    // Tab switching
+    // Tabs
     // ============================================================
 
     describeTabBtn.addEventListener("click", () => switchMode("describe"));
-    jsonTabBtn.addEventListener("click", () => switchMode("json"));
+    jsonTabBtn.addEventListener("click",     () => switchMode("json"));
 
     function switchMode(mode) {
       currentMode = mode;
-      if (mode === "describe") {
-        describeTabBtn.classList.add("active");
-        jsonTabBtn.classList.remove("active");
-        describePanel.classList.add("active");
-        jsonPanel.classList.remove("active");
-      } else {
-        jsonTabBtn.classList.add("active");
-        describeTabBtn.classList.remove("active");
-        jsonPanel.classList.add("active");
-        describePanel.classList.remove("active");
+      describeTabBtn.classList.toggle("active", mode === "describe");
+      jsonTabBtn.classList.toggle("active", mode === "json");
+      describePanel.classList.toggle("active", mode === "describe");
+      jsonPanel.classList.toggle("active", mode === "json");
+    }
+
+    // ============================================================
+    // History sidebar
+    // ============================================================
+
+    historyBtn.addEventListener("click", () => {
+      renderHistorySidebar();
+      historySidebar.classList.add("open");
+      sidebarOverlay.classList.add("open");
+      trackEvent("cde_history_opened", { history_count: caseHistory.length });
+    });
+
+    sidebarClose.addEventListener("click",   closeSidebar);
+    sidebarOverlay.addEventListener("click", closeSidebar);
+
+    function closeSidebar() {
+      historySidebar.classList.remove("open");
+      sidebarOverlay.classList.remove("open");
+    }
+
+    function renderHistorySidebar() {
+      if (!caseHistory.length) {
+        sidebarBody.innerHTML = `<p class="sidebar-empty">No analyses recorded yet.</p>`;
+        return;
       }
+
+      const items = [...caseHistory].reverse().map((entry, i) => {
+        const ref   = entry.strike_reference || "No reference";
+        const time  = entry.generated_at ? new Date(entry.generated_at).toLocaleString() : "";
+        const state = entry.system_state   || "—";
+        const traj  = (entry.trajectory    || "").toUpperCase();
+        const cfg   = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+        const idx   = caseHistory.length - 1 - i;
+
+        return `
+          <div class="history-item" data-index="${idx}">
+            <div class="history-item-header">
+              <span class="history-item-ref">${ref}</span>
+              <span class="history-item-time">${time}</span>
+            </div>
+            <span class="trajectory-badge ${cfg.class}" style="margin-bottom:6px;">
+              <span class="dot"></span>${cfg.label}
+            </span>
+            <div class="history-item-state">${state}</div>
+          </div>
+        `;
+      }).join("");
+
+      sidebarBody.innerHTML = items + `<button class="sidebar-clear" id="clearHistoryBtn" type="button">Clear history</button>`;
+
+      sidebarBody.querySelectorAll(".history-item").forEach(el => {
+        el.addEventListener("click", () => {
+          const entry = caseHistory[parseInt(el.dataset.index, 10)];
+          if (entry?.output) {
+            latestReportData = entry;
+            renderResults(entry.output.timeline, entry.output.pattern);
+            rawOutput.textContent        = JSON.stringify(entry.output, null, 2);
+            downloadJsonBtn.disabled     = false;
+            downloadMarkdownBtn.disabled = false;
+            printBtn.disabled            = false;
+            attachStrikeBtn.disabled     = false;
+            statusText.textContent = `Restored: ${entry.strike_reference || "analysis"}`;
+            closeSidebar();
+          }
+        });
+      });
+
+      document.getElementById("clearHistoryBtn")?.addEventListener("click", () => {
+        caseHistory = [];
+        try { localStorage.removeItem("cde_history"); } catch(e) {}
+        renderHistorySidebar();
+      });
     }
 
     // ============================================================
@@ -655,12 +958,12 @@
         inputJson.value = JSON.stringify(examplePayload, null, 2);
       } else {
         simpleWhatHappened.value = "A complaint was submitted and acknowledged, but no substantive response was provided. The matter remained open beyond the expected response period.";
-        simpleInstitution.value = "Local Authority";
-        simpleResponse.value = "acknowledged_only";
-        simpleDaysOpen.value = "45";
-        simpleStage.value = "awaiting_response";
-        simpleUrgency.value = "medium";
-        simpleOutcome.value = "A clear substantive response and procedural accountability.";
+        simpleInstitution.value  = "Local Authority";
+        simpleResponse.value     = "acknowledged_only";
+        simpleDaysOpen.value     = "45";
+        simpleStage.value        = "awaiting_response";
+        simpleUrgency.value      = "medium";
+        simpleOutcome.value      = "A clear substantive response and procedural accountability.";
       }
       statusText.textContent = "Example loaded.";
     });
@@ -671,30 +974,25 @@
 
     clearBtn.addEventListener("click", () => {
       inputJson.value = "";
-      simpleWhatHappened.value = "";
-      simpleInstitution.value = "";
+      [simpleWhatHappened, simpleInstitution, simpleOutcome].forEach(el => el.value = "");
       simpleResponse.value = "acknowledged_only";
       simpleDaysOpen.value = "";
-      simpleStage.value = "awaiting_response";
-      simpleUrgency.value = "medium";
-      simpleOutcome.value = "";
+      simpleStage.value    = "awaiting_response";
+      simpleUrgency.value  = "medium";
       strikeReferenceInput.value = "";
 
-      statusText.textContent = "";
-      whatIsHappening.textContent = "Awaiting input.";
-      whatItMeans.textContent = "Awaiting analysis.";
-      systemState.textContent = "Awaiting analysis.";
-      signalsBox.innerHTML = `
-        <div class="signal-card">
-          <div class="signal-description">Awaiting analysis.</div>
-        </div>
-      `;
-      rawOutput.textContent = "No result yet.";
-      latestReportData = null;
+      statusText.textContent    = "";
+      trajectoryBadge.innerHTML = "";
+      conditionsBox.innerHTML   = `<div class="condition-card"><div class="condition-name">Awaiting input.</div></div>`;
+      transitionBox.textContent = "Awaiting input.";
+      whatItMeans.textContent   = "Awaiting analysis.";
+      systemState.textContent   = "Awaiting analysis.";
+      signalsBox.innerHTML      = `<div class="signal-card"><div class="signal-description">Awaiting analysis.</div></div>`;
+      rawOutput.textContent     = "No result yet.";
+      latestReportData          = null;
 
-      downloadJsonBtn.disabled = true;
-      downloadMarkdownBtn.disabled = true;
-      attachStrikeBtn.disabled = true;
+      [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = true);
+      try { localStorage.removeItem("cde_last_result"); } catch(e) {}
     });
 
     // ============================================================
@@ -702,24 +1000,19 @@
     // ============================================================
 
     copyResultBtn.addEventListener("click", async () => {
-      const resultText = [
-        "WHAT IS HAPPENING",
-        whatIsHappening.textContent.trim(),
-        "",
-        "WHAT IT MEANS",
-        whatItMeans.textContent.trim(),
-        "",
-        "SYSTEM STATE",
-        systemState.textContent.trim(),
-        "",
-        "SIGNALS",
-        signalsBox.innerText.trim()
+      const text = [
+        "TRAJECTORY", trajectoryBadge.textContent.trim(), "",
+        "WHAT IS HAPPENING", conditionsBox.innerText.trim(), "",
+        transitionBox.textContent.trim(), "",
+        "WHAT IT MEANS", whatItMeans.textContent.trim(), "",
+        "SYSTEM STATE", systemState.textContent.trim(), "",
+        "SIGNALS", signalsBox.innerText.trim()
       ].join("\n");
 
       try {
-        await navigator.clipboard.writeText(resultText);
+        await navigator.clipboard.writeText(text);
         statusText.textContent = "Result copied.";
-      } catch (err) {
+      } catch(e) {
         statusText.textContent = "Unable to copy result.";
       }
     });
@@ -736,14 +1029,14 @@
         payload = currentMode === "json"
           ? JSON.parse(inputJson.value)
           : buildPayloadFromForm();
-      } catch (err) {
+      } catch(err) {
         statusText.textContent = "Invalid input. Please correct the form or JSON.";
         return;
       }
 
       try {
         const [timelineRes, patternRes] = await Promise.all([
-         fetch("/timeline", {
+          fetch("/timeline",  {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
@@ -755,174 +1048,134 @@
           })
         ]);
 
+        if (!timelineRes.ok || !patternRes.ok) {
+          rawOutput.textContent = JSON.stringify({
+            timeline_status: timelineRes.status,
+            pattern_status:  patternRes.status
+          }, null, 2);
+          statusText.textContent = `Endpoint error: ${timelineRes.status} / ${patternRes.status}`;
+          return;
+        }
+
         const timelineData = await timelineRes.json();
-        const patternData = await patternRes.json();
+        const patternData  = await patternRes.json();
 
-        rawOutput.textContent = JSON.stringify(
-          { timeline: timelineData, pattern: patternData },
-          null,
-          2
-        );
-
+        rawOutput.textContent = JSON.stringify({ timeline: timelineData, pattern: patternData }, null, 2);
         renderResults(timelineData, patternData);
+        trackConditionsLayer(timelineData, patternData);
+
+        const t = timelineData?.results?.[0] || {};
+        const p = patternData?.results?.[0]  || {};
 
         latestReportData = {
-          generated_at: new Date().toISOString(),
+          generated_at:     new Date().toISOString(),
           strike_reference: strikeReferenceInput.value.trim() || null,
-          input_mode: currentMode,
-          input_payload: payload,
-          output: {
-            timeline: timelineData,
-            pattern: patternData
-          },
+          input_mode:       currentMode,
+          input_payload:    payload,
+          trajectory:       t.trajectory   || null,
+          system_state:     p.system_state || null,
+          output:           { timeline: timelineData, pattern: patternData },
           rendered: {
-            what_is_happening: whatIsHappening.textContent.trim(),
-            what_it_means: whatItMeans.textContent.trim(),
-            system_state: systemState.textContent.trim(),
-            signals: signalsBox.innerText.trim()
+            what_is_happening: conditionsBox.innerText.trim(),
+            transition:        transitionBox.textContent.trim(),
+            what_it_means:     whatItMeans.textContent.trim(),
+            system_state:      systemState.textContent.trim(),
+            signals:           signalsBox.innerText.trim()
           }
         };
 
-        downloadJsonBtn.disabled = false;
-        downloadMarkdownBtn.disabled = false;
-        attachStrikeBtn.disabled = false;
+        caseHistory.push({ ...latestReportData });
+        try {
+          localStorage.setItem("cde_last_result", JSON.stringify(latestReportData));
+          localStorage.setItem("cde_history",     JSON.stringify(caseHistory));
+        } catch(e) {}
 
+        [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = false);
         statusText.textContent = "Analysis complete.";
-      } catch (err) {
+
+      } catch(err) {
         console.error(err);
         statusText.textContent = "Error during analysis. Please try again.";
       }
     });
 
     // ============================================================
-    // Download JSON report
+    // Print
     // ============================================================
 
-    downloadJsonBtn.addEventListener("click", () => {
-      if (!latestReportData) {
-        statusText.textContent = "No report available yet.";
-        return;
-      }
-
-      const ref = latestReportData.strike_reference
-        ? `-${latestReportData.strike_reference}`
-        : "";
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `cde-report${ref}-${timestamp}.json`;
-
-      const blob = new Blob(
-        [JSON.stringify(latestReportData, null, 2)],
-        { type: "application/json" }
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      statusText.textContent = `JSON report downloaded: ${filename}`;
+    printBtn.addEventListener("click", () => {
+      trackEvent("cde_export", { format: "print" });
+      window.print();
     });
 
     // ============================================================
-    // Download Markdown report
+    // Download JSON
+    // ============================================================
+
+    downloadJsonBtn.addEventListener("click", () => {
+      if (!latestReportData) { statusText.textContent = "No report available yet."; return; }
+      const ref      = latestReportData.strike_reference ? `-${latestReportData.strike_reference}` : "";
+      const ts       = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `cde-report${ref}-${ts}.json`;
+      triggerDownload(JSON.stringify(latestReportData, null, 2), filename, "application/json");
+      statusText.textContent = `JSON downloaded: ${filename}`;
+      trackEvent("cde_export", { format: "json", strike_reference: latestReportData.strike_reference || "none" });
+    });
+
+    // ============================================================
+    // Download Markdown
     // ============================================================
 
     downloadMarkdownBtn.addEventListener("click", () => {
-      if (!latestReportData) {
-        statusText.textContent = "No report available yet.";
-        return;
-      }
+      if (!latestReportData) { statusText.textContent = "No report available yet."; return; }
 
-      const r = latestReportData;
+      const r   = latestReportData;
+      const p   = r.output?.pattern?.results?.[0]  || {};
+      const t   = r.output?.timeline?.results?.[0] || {};
       const ref = r.strike_reference || "No reference attached";
-      const timestamp = r.generated_at;
-      const p = r.output?.pattern?.results?.[0] || {};
-      const t = r.output?.timeline?.results?.[0] || {};
 
       const conditions = Array.isArray(t.conditions) && t.conditions.length
-        ? t.conditions.map(c => `- ${c}`).join("\n")
-        : "- None detected";
+        ? t.conditions.map(c => `- ${c}`).join("\n") : "- None detected";
 
       const signals = Array.isArray(p.signals) && p.signals.length
-        ? p.signals.map(s => {
-            const mapped = SIGNAL_MAP[s];
-            return mapped
-              ? `- **${mapped.title}** — ${mapped.description}`
-              : `- ${s}`;
-          }).join("\n")
+        ? p.signals.map(s => { const m = SIGNAL_MAP[s]; return m ? `- **${m.title}** — ${m.description}` : `- ${s}`; }).join("\n")
         : "- None returned";
 
+      const traj = (t.trajectory || "UNKNOWN").toUpperCase();
+      const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
       const transitionText = t.moment_of_change?.from && t.moment_of_change?.to
-        ? `${t.moment_of_change.from} → ${t.moment_of_change.to}`
-        : "None detected";
+        ? `${t.moment_of_change.from} → ${t.moment_of_change.to}` : "None detected";
 
-      const lines = [
-        `# Civic Decision Engine — Analysis Report`,
-        ``,
-        `**Generated:** ${timestamp}`,
+      const md = [
+        `# Civic Decision Engine — Analysis Report`, ``,
+        `**Generated:** ${r.generated_at}`,
         `**Strike Reference:** ${ref}`,
-        `**Input Mode:** ${r.input_mode}`,
-        ``,
-        `---`,
-        ``,
-        `## What is happening`,
-        ``,
-        `**Conditions:**`,
-        conditions,
-        ``,
-        `**Trajectory:** ${(t.trajectory || "UNKNOWN").toUpperCase()}`,
-        ``,
-        `**Transition:** ${transitionText}`,
-        ``,
-        `---`,
-        ``,
-        `## What it means`,
-        ``,
-        r.rendered.what_it_means || "No interpretation returned.",
-        ``,
-        `---`,
-        ``,
-        `## System state`,
-        ``,
-        `\`${r.rendered.system_state || "No system state returned."}\``,
-        ``,
-        `---`,
-        ``,
-        `## Signals`,
-        ``,
-        signals,
-        ``,
-        `---`,
-        ``,
-        `## Pattern summary`,
-        ``,
-        p.pattern_summary || "No pattern summary returned.",
-        ``,
-        `---`,
-        ``,
-        `*Civic Decision Engine v10 — The record does not argue.*`,
-      ];
+        `**Input Mode:** ${r.input_mode}`, ``,
+        `---`, ``,
+        `## Trajectory`, ``, `**${cfg.label}**`, ``,
+        `---`, ``,
+        `## What is happening`, ``,
+        `**Conditions:**`, conditions, ``,
+        `**Transition:** ${transitionText}`, ``,
+        `---`, ``,
+        `## What it means`, ``, r.rendered.what_it_means || "No interpretation returned.", ``,
+        `---`, ``,
+        `## System state`, ``, `\`${r.rendered.system_state || "No system state returned."}\``, ``,
+        `---`, ``,
+        `## Signals`, ``, signals, ``,
+        `---`, ``,
+        `## Pattern summary`, ``, p.pattern_summary || "No pattern summary returned.", ``,
+        `---`, ``,
+        `*Civic Decision Engine v10 — The record does not argue.*`
+      ].join("\n");
 
-      const markdown = lines.join("\n");
-      const blob = new Blob([markdown], { type: "text/markdown" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const safeRef = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");
+      const safeTs  = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${safeTs}.md`;
 
-      const safeRef = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "") || "";
-      const safeTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${safeTimestamp}.md`;
-
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      statusText.textContent = `Markdown report downloaded: ${filename}`;
+      triggerDownload(md, filename, "text/markdown");
+      statusText.textContent = `Markdown downloaded: ${filename}`;
+      trackEvent("cde_export", { format: "markdown", strike_reference: latestReportData.strike_reference || "none" });
     });
 
     // ============================================================
@@ -930,18 +1183,11 @@
     // ============================================================
 
     attachStrikeBtn.addEventListener("click", () => {
-      if (!latestReportData) {
-        statusText.textContent = "No report available yet.";
-        return;
-      }
-
+      if (!latestReportData) { statusText.textContent = "No report available yet."; return; }
       const ref = strikeReferenceInput.value.trim();
-      if (!ref) {
-        statusText.textContent = "Enter a Strike reference to attach.";
-        return;
-      }
-
+      if (!ref) { statusText.textContent = "Enter a Strike reference to attach."; return; }
       latestReportData.strike_reference = ref;
+      try { localStorage.setItem("cde_last_result", JSON.stringify(latestReportData)); } catch(e) {}
       statusText.textContent = `Report attached to ${ref}. Download to save.`;
     });
 
@@ -951,41 +1197,63 @@
 
     function renderResults(timelineData, patternData) {
       const t = timelineData?.results?.[0] || {};
-      const p = patternData?.results?.[0] || {};
+      const p = patternData?.results?.[0]  || {};
 
-      let meaningText = "";
-      const mappedMeaning = SYSTEM_STATE_MAP[p.system_state];
-      if (mappedMeaning) {
-        meaningText = mappedMeaning.join("\n\n");
-      } else if (p.pattern_summary) {
-        meaningText = p.pattern_summary.trim();
-      } else {
-        meaningText = "No interpretation returned.";
-      }
+      // Trajectory badge
+      const traj = (t.trajectory || "UNKNOWN").toUpperCase();
+      const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+      trajectoryBadge.innerHTML = `
+        <span class="trajectory-badge ${cfg.class}">
+          <span class="dot"></span>${cfg.label}
+        </span>
+      `;
 
+      // Conditions with expandable definitions
       const conditions = Array.isArray(t.conditions) ? t.conditions : [];
-      const trajectory = (t.trajectory || "UNKNOWN").toUpperCase();
+      if (conditions.length) {
+        conditionsBox.innerHTML = conditions.map(c => {
+          const key = c.replace(/\s+/g, "_").toUpperCase();
+          const def = CONDITION_DEFINITIONS[key];
+          if (def) {
+            const signalList = def.signals.map(s => `<li>${s}</li>`).join("");
+            return `
+              <div class="condition-card">
+                <div class="condition-name">
+                  ${def.label}
+                  <span class="expand-icon">▾</span>
+                </div>
+                <div class="condition-detail">
+                  <strong>Definition:</strong><br>${def.definition}
+                  <ul style="margin:8px 0 0;padding-left:16px;">${signalList}</ul>
+                </div>
+              </div>
+            `;
+          }
+          return `<div class="condition-card"><div class="condition-name">${c}</div></div>`;
+        }).join("");
 
-      let transitionText = "– NONE";
-      if (t.moment_of_change?.from && t.moment_of_change?.to) {
-        transitionText = `– ${t.moment_of_change.from} → ${t.moment_of_change.to}`;
+        conditionsBox.querySelectorAll(".condition-card").forEach(card => {
+          card.addEventListener("click", () => card.classList.toggle("expanded"));
+        });
+      } else {
+        conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">No conditions detected.</div></div>`;
       }
 
-      const happeningLines = [
-        "Conditions:",
-        ...(conditions.length ? conditions.map(c => `– ${c}`) : ["– NONE"]),
-        "",
-        "Trajectory:",
-        `– ${trajectory}`,
-        "",
-        "Transition:",
-        transitionText
-      ];
+      // Transition
+      transitionBox.textContent = t.moment_of_change?.from && t.moment_of_change?.to
+        ? `Transition: ${t.moment_of_change.from} → ${t.moment_of_change.to}`
+        : "Transition: None detected";
 
-      whatIsHappening.textContent = happeningLines.join("\n");
-      whatItMeans.textContent = meaningText;
-      systemState.textContent = p.system_state || "NO SYSTEM STATE RETURNED.";
+      // What it means
+      const mapped = SYSTEM_STATE_MAP[p.system_state];
+      whatItMeans.textContent = mapped
+        ? mapped.join("\n\n")
+        : p.pattern_summary?.trim() || "No interpretation returned.";
 
+      // System state
+      systemState.textContent = p.system_state || "No system state returned.";
+
+      // Signals
       renderSignals(p.signals || []);
     }
 
@@ -994,24 +1262,30 @@
     // ============================================================
 
     function renderSignals(signals) {
-      if (!Array.isArray(signals) || signals.length === 0) {
-        signalsBox.innerHTML = `
-          <div class="signal-card">
-            <div class="signal-description">No signals returned.</div>
-          </div>
-        `;
+      if (!Array.isArray(signals) || !signals.length) {
+        signalsBox.innerHTML = `<div class="signal-card"><div class="signal-description">No signals returned.</div></div>`;
         return;
       }
 
       signalsBox.innerHTML = signals.map(signal => {
-        const mapped = SIGNAL_MAP[signal] || { title: signal, description: "" };
+        const m = SIGNAL_MAP[signal] || { title: signal, description: "", detail: "" };
         return `
           <div class="signal-card">
-            <div class="signal-title">${mapped.title}</div>
-            ${mapped.description ? `<div class="signal-description">${mapped.description}</div>` : ""}
+            <div class="signal-title">
+              ${m.title}
+              ${m.detail ? `<span class="expand-icon">▾</span>` : ""}
+            </div>
+            ${m.description ? `<div class="signal-description">${m.description}</div>` : ""}
+            ${m.detail      ? `<div class="signal-detail">${m.detail}</div>`           : ""}
           </div>
         `;
       }).join("");
+
+      signalsBox.querySelectorAll(".signal-card").forEach(card => {
+        if (card.querySelector(".signal-detail")) {
+          card.addEventListener("click", () => card.classList.toggle("expanded"));
+        }
+      });
     }
 
     // ============================================================
@@ -1019,24 +1293,26 @@
     // ============================================================
 
     function buildPayloadFromForm() {
-      const whatHappened = simpleWhatHappened.value.trim();
-      const institution = simpleInstitution.value.trim() || "Institution";
-      const response = simpleResponse.value;
-      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
-      const stage = simpleStage.value;
-      const urgency = simpleUrgency.value;
+      const whatHappened   = simpleWhatHappened.value.trim();
+      const institution    = simpleInstitution.value.trim() || "Institution";
+      const response       = simpleResponse.value;
+      const daysOpen       = parseInt(simpleDaysOpen.value || "0", 10);
+      const stage          = simpleStage.value;
+      const urgency        = simpleUrgency.value;
       const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
 
-      if (!whatHappened) {
-        throw new Error("Please describe the situation.");
-      }
-
-      if (!Number.isFinite(daysOpen) || daysOpen < 0) {
-        throw new Error("Please enter a valid number of days open.");
-      }
+      if (!whatHappened) throw new Error("Please describe the situation.");
+      if (!Number.isFinite(daysOpen) || daysOpen < 0) throw new Error("Please enter a valid number of days open.");
 
       const earlierDays = Math.max(7, Math.min(daysOpen - 20, Math.floor(daysOpen * 0.4)));
-      const laterDays = Math.max(daysOpen, earlierDays + 20);
+      const laterDays   = Math.max(daysOpen, earlierDays + 20);
+
+      const triggerMap = {
+        no_response:          `${whatHappened} No response has been received beyond the expected period.`,
+        acknowledged_only:    `${whatHappened} The matter was acknowledged but no substantive response has been provided.`,
+        partial_response:     `${whatHappened} A partial response was received without substantive progression.`,
+        substantive_response: `${whatHappened} A substantive response was received.`
+      };
 
       return {
         cases: [
@@ -1059,33 +1335,36 @@
             strike_reference: `Generated-${Date.now()}-B`,
             case_title: "Later stage of submitted case",
             civic_domain: "local_government",
-            decision_trigger:
-              response === "no_response"
-                ? `${whatHappened} No response has been received beyond the expected period.`
-                : response === "acknowledged_only"
-                ? `${whatHappened} The matter was acknowledged but no substantive response has been provided.`
-                : response === "partial_response"
-                ? `${whatHappened} A partial response was received without substantive progression.`
-                : response === "substantive_response"
-                ? `${whatHappened} A substantive response was received.`
-                : `${whatHappened}`,
+            decision_trigger: triggerMap[response] || whatHappened,
             desired_outcome: desiredOutcome,
-            urgency: urgency,
+            urgency,
             institutions: [institution],
             case_lifecycle: {
               current_stage: stage,
               status: "active",
-              stalled:
-                response === "no_response" ||
-                response === "acknowledged_only" ||
-                stage === "delayed" ||
-                stage === "escalated",
+              stalled: ["no_response", "acknowledged_only"].includes(response) || ["delayed", "escalated"].includes(stage),
               days_open: laterDays
             }
           }
         ]
       };
     }
+
+    // ============================================================
+    // Utility
+    // ============================================================
+
+    function triggerDownload(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
   </script>
 </body>
 </html>
