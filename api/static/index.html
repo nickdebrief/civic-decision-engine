@@ -7,6 +7,9 @@
   <!-- author: Nick Moloney — civic-decision-engine v10 -->
   <meta name="author" content="Nick Moloney" />
   <meta name="description" content="Civic Decision Engine — A system for diagnosing institutional behaviour. Built by Nick Moloney." />
+  <link rel="icon" href="/static/favicon.ico" sizes="any">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-8405RVT76Q"></script>
@@ -1224,42 +1227,60 @@
 
     const SYSTEM_STATE_MAP = {
       STABLE_DELAY: {
-        en: [
-          "Delay is present without confirmed structural escalation.",
-          "The matter remains open without transition to a more severe condition."
-        ],
-        ga: [
-          "Tá moill i láthair gan ardú struchtúrach dearbhaithe.",
-          "Fanann an cás oscailte gan aistriú chuig coinníoll níos tromchúisí."
-        ]
+        label: {
+          en: "Stable Delay",
+          ga: "Moill Chobhsaí"
+        },
+        explanation: {
+          en: [
+            "Delay is present without confirmed structural escalation.",
+            "The matter remains open without transition to a more severe condition."
+          ],
+          ga: [
+            "Tá moill i láthair gan ardú struchtúrach dearbhaithe.",
+            "Fanann an cás oscailte gan aistriú chuig coinníoll níos tromchúisí."
+          ]
+        }
       },
-      
+
       TRANSFER_OF_BURDEN_PRESENT: {
-        en: [
-          "Procedural burden has shifted from the institution.",
-          "Responsibility now rests increasingly outside the responding body."
-        ],
-        ga: [
-          "Tá ualach nós imeachta aistrithe ón institiúid.",
-          "Tá freagracht anois ag bogadh níos mó lasmuigh den chomhlacht freagartha."
-        ]
+        label: {
+          en: "Transfer of Burden Present",
+          ga: "Aistriú an Ualaigh i Láthair"
+        },
+        explanation: {
+          en: [
+            "Procedural burden has shifted from the institution.",
+            "Responsibility now rests increasingly outside the responding body."
+          ],
+          ga: [
+            "Tá ualach nós imeachta aistrithe ón institiúid.",
+            "Tá freagracht anois ag bogadh níos mó lasmuigh den chomhlacht freagartha."
+          ]
+        }
       },
 
       ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-        en: [
-          "Escalation has occurred without corresponding response.",
-          "The matter has advanced without institutional action."
-        ],
-        ga: [
-          "Tharla ardú gan freagra comhfhreagrach.",
-          "Tá an cás tar éis dul chun cinn gan ghníomh institiúideach."
-        ]
+        label: {
+          en: "Escalation Without Response",
+          ga: "Ardú gan Freagra"
+        },
+        explanation: {
+          en: [
+            "Escalation has occurred without corresponding response.",
+            "The matter has advanced without institutional action."
+          ],
+          ga: [
+            "Tharla ardú gan freagra comhfhreagrach.",
+            "Tá an cás tar éis dul chun cinn gan ghníomh institiúideach."
+          ]
+        }
       },
 
       TRANSITION_TO_ESCALATION: {
         label: {
           en: "Transition to Escalation",
-          ga: "Aistriú go hardú"
+          ga: "Aistriú go hArdú"
         },
         explanation: {
           en: [
@@ -1274,25 +1295,37 @@
       },
 
       STABLE_ESCALATION: {
-        en: [
-          "Escalation is present and sustained.",
-          "The case remains escalated without structural reversal."
-        ],
-        ga: [
-          "Tá ardú i láthair agus á choinneáil.",
-          "Fanann an cás ardaithe gan aisiompú struchtúrach."
-        ]
+        label: {
+          en: "Stable Escalation",
+          ga: "Ardú Cobhsaí"
+        },
+        explanation: {
+          en: [
+            "Escalation is present and sustained.",
+            "The case remains escalated without structural reversal."
+          ],
+          ga: [
+            "Tá ardú i láthair agus á choinneáil.",
+            "Fanann an cás ardaithe gan aisiompú struchtúrach."
+          ]
+        }
       },
 
       INSUFFICIENT_PATTERN_EVIDENCE: {
-        en: [
-          "Pattern evidence is insufficient.",
-          "The sequence does not support a stable interpretation."
-        ],
-        ga: [
-          "Níl dóthain fianaise patrúin ann.",
-          "Ní thacaíonn an tsraith le léirmhíniú cobhsaí."
-        ]
+        label: {
+          en: "Insufficient Pattern Evidence",
+          ga: "Fianaise Phatrúin Neamhleor"
+        },
+        explanation: {
+          en: [
+            "Pattern evidence is insufficient.",
+            "The sequence does not support a stable interpretation."
+          ],
+          ga: [
+            "Níl dóthain fianaise patrúin ann.",
+            "Ní thacaíonn an tsraith le léirmhíniú cobhsaí."
+          ]
+        }
       }
     };
 
@@ -1482,7 +1515,7 @@
               <span class="history-item-time">${time}</span>
             </div>
             <span class="trajectory-badge ${cfg.class}" style="margin-bottom:6px;">
-              <span class="dot"></span>${cfg.label}
+              <span class="dot"></span>${cfg.label?.[currentLang] || cfg.label?.en || traj}
             </span>
             <div class="history-item-state">${state}</div>
           </div>
@@ -1645,6 +1678,12 @@
 
         const attachedRef = strikeReferenceInput.value.trim() || null;
 
+        trackEvent("cde_case_submitted", {
+          has_reference: !!attachedRef,
+          mode: currentMode,
+          urgency: payload?.cases?.[1]?.urgency || "unknown"
+        });
+
         latestReportData = {
           generated_at:     new Date().toISOString(),
           strike_reference: attachedRef,
@@ -1675,7 +1714,9 @@
 
       } catch(err) {
         console.error(err);
-       statusText.textContent = t("status_complete");
+       statusText.textContent = currentLang === "ga"
+  ? "Tharla earráid le linn na hanailíse. Bain triail eile as."
+  : "Error during analysis. Please try again.";
       }
     });
 
@@ -1703,8 +1744,56 @@
     });
 
     // ============================================================
-    // Download Markdown
+    // Download Markdown — fully bilingual, language-aware
     // ============================================================
+
+    // Report string map — all section headers and labels in each language
+    const REPORT_STRINGS = {
+      en: {
+        title:            "Civic Decision Engine — Analysis Report",
+        generated:        "Generated",
+        strike_ref:       "Strike Reference",
+        input_mode:       "Input Mode",
+        no_ref:           "No reference attached",
+        section_traj:     "Trajectory",
+        section_happening:"What is happening",
+        conditions_label: "Conditions",
+        none_detected:    "None detected",
+        transition_label: "Transition",
+        none_transition:  "None detected",
+        section_means:    "What it means",
+        no_interp:        "No interpretation returned.",
+        section_state:    "System state",
+        no_state:         "No system state returned.",
+        section_signals:  "Signals",
+        none_signals:     "None returned.",
+        section_summary:  "Pattern summary",
+        no_summary:       "No pattern summary returned.",
+        footer:           "Civic Decision Engine v10 — Nick Moloney — The record does not argue.",
+      },
+      ga: {
+        title:            "Inneall Cinnteoireachta Sibhialta — Tuarascáil Anailíse",
+        generated:        "Ginte",
+        strike_ref:       "Tagairt Strike",
+        input_mode:       "Mód ionchur",
+        no_ref:           "Gan tagairt ceangailte",
+        section_traj:     "Treocht",
+        section_happening:"Cad atá ag tarlú",
+        conditions_label: "Coinníollacha",
+        none_detected:    "Níl ceann aimsithe",
+        transition_label: "Aistriú",
+        none_transition:  "Níl ceann aimsithe",
+        section_means:    "Cad a chiallaíonn sé",
+        no_interp:        "Níor tugadh léirmhíniú ar ais.",
+        section_state:    "Staid an chórais",
+        no_state:         "Níl staid chórais ar fáil.",
+        section_signals:  "Comharthaí",
+        none_signals:     "Níor tugadh ceann ar ais.",
+        section_summary:  "Achoimre patrúin",
+        no_summary:       "Níor tugadh achoimre patrúin ar ais.",
+        footer:           "Inneall Cinnteoireachta Sibhialta v10 — Nick Moloney — Ní dhéanann an taifead argóint.",
+      }
+    };
 
     downloadMarkdownBtn.addEventListener("click", () => {
       if (!latestReportData) { statusText.textContent = t("status_no_report"); return; }
@@ -1712,50 +1801,106 @@
       const r   = latestReportData;
       const p   = r.output?.pattern?.results?.[0]  || {};
       const tR  = r.output?.timeline?.results?.[0] || {};
-      const ref = r.strike_reference || "No reference attached";
 
+      // Resolve report strings for current language, fall back to English
+      const rs  = REPORT_STRINGS[currentLang] || REPORT_STRINGS.en;
+      const ref = r.strike_reference || rs.no_ref;
+
+      // Resolve condition labels in current language
       const conditions = Array.isArray(tR.conditions) && tR.conditions.length
-        ? tR.conditions.map(c => `- ${c}`).join("\n") : "- None detected";
+        ? tR.conditions.map(c => {
+            const key = c.replace(/\s+/g, "_").toUpperCase();
+            const def = CONDITION_DEFINITIONS[key];
+            if (!def) return `- ${c}`;
+            const lbl = typeof def.label === "string"
+              ? def.label
+              : (def.label?.[currentLang] || def.label?.en || c);
+            return `- ${lbl}`;
+          }).join("\n")
+        : `- ${rs.none_detected}`;
 
+      // Resolve signal titles and descriptions in current language
       const signals = Array.isArray(p.signals) && p.signals.length
-        ? p.signals.map(s => { const m = SIGNAL_MAP[s]; return m ? `- **${m.title}** — ${m.description}` : `- ${s}`; }).join("\n")
-        : "- None returned";
+        ? p.signals.map(s => {
+            const m = SIGNAL_MAP[s];
+            if (!m) return `- ${s}`;
+            const title = typeof m.title === "string"
+              ? m.title : (m.title?.[currentLang] || m.title?.en || s);
+            const desc = typeof m.description === "string"
+              ? m.description : (m.description?.[currentLang] || m.description?.en || "");
+            return `- **${title}**${desc ? ` — ${desc}` : ""}`;
+          }).join("\n")
+        : `- ${rs.none_signals}`;
 
-      const traj = (tR.trajectory || "UNKNOWN").toUpperCase();
-      const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-      const transitionText = tR.moment_of_change?.from && tR.moment_of_change?.to
-        ? `${tR.moment_of_change.from} → ${tR.moment_of_change.to}` : "None detected";
+      // Resolve trajectory label in current language
+      const traj    = (tR.trajectory || "UNKNOWN").toUpperCase();
+      const cfg     = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+      const trajLabel = typeof cfg.label === "string"
+        ? cfg.label : (cfg.label?.[currentLang] || cfg.label?.en || traj);
+
+      // Resolve transition in current language
+      const fromKey = tR.moment_of_change?.from;
+      const toKey   = tR.moment_of_change?.to;
+      let transitionText = rs.none_transition;
+
+      if (fromKey && toKey) {
+        function resolveConditionLabel(key) {
+          const def = CONDITION_DEFINITIONS[key?.replace(/\s+/g, "_").toUpperCase()];
+          if (!def) return key;
+          return typeof def.label === "string"
+            ? def.label : (def.label?.[currentLang] || def.label?.en || key);
+        }
+        transitionText = `${resolveConditionLabel(fromKey)} → ${resolveConditionLabel(toKey)}`;
+      }
+
+      // Resolve system state from raw output — not from rendered label
+      const stateKey  = findSystemState(r.output || {});
+      const stateDef  = SYSTEM_STATE_MAP[stateKey];
+      const stateLabel = stateDef?.label
+        ? (typeof stateDef.label === "string"
+            ? stateDef.label
+            : (stateDef.label?.[currentLang] || stateDef.label?.en))
+        : stateKey || rs.no_state;
+
+      // Resolve what it means in current language
+      const whatItMeansText = r.rendered?.what_it_means || rs.no_interp;
 
       const md = [
-        `# Civic Decision Engine — Analysis Report`, ``,
-        `**Generated:** ${r.generated_at}`,
-        `**Strike Reference:** ${ref}`,
-        `**Input Mode:** ${r.input_mode}`, ``,
+        `# ${rs.title}`, ``,
+        `**${rs.generated}:** ${r.generated_at}`,
+        `**${rs.strike_ref}:** ${ref}`,
+        `**${rs.input_mode}:** ${r.input_mode}`, ``,
         `---`, ``,
-        `## Trajectory`, ``, `**${cfg.label}**`, ``,
+        `## ${rs.section_traj}`, ``, `**${trajLabel}**`, ``,
         `---`, ``,
-        `## What is happening`, ``,
-        `**Conditions:**`, conditions, ``,
-        `**Transition:** ${transitionText}`, ``,
+        `## ${rs.section_happening}`, ``,
+        `**${rs.conditions_label}:**`, conditions, ``,
+        `**${rs.transition_label}:** ${transitionText}`, ``,
         `---`, ``,
-        `## What it means`, ``, r.rendered.what_it_means || "No interpretation returned.", ``,
+        `## ${rs.section_means}`, ``, whatItMeansText, ``,
         `---`, ``,
-        `## System state`, ``, `\`${r.rendered.system_state || "No system state returned."}\``, ``,
+        `## ${rs.section_state}`, ``, `\`${stateLabel}\``, ``,
         `---`, ``,
-        `## Signals`, ``, signals, ``,
+        `## ${rs.section_signals}`, ``, signals, ``,
         `---`, ``,
-        `## Pattern summary`, ``, p.pattern_summary || "No pattern summary returned.", ``,
+        `## ${rs.section_summary}`, ``, p.pattern_summary || rs.no_summary, ``,
         `---`, ``,
-        `*Civic Decision Engine v10 — Nick Moloney — The record does not argue.*`
+        `*${rs.footer}*`
       ].join("\n");
 
       const safeRef  = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");
       const safeTs   = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${safeTs}.md`;
+      const filename = `cde-tuarascail${safeRef ? `-${safeRef}` : ""}-${currentLang}-${safeTs}.md`;
 
       triggerDownload(md, filename, "text/markdown");
-      statusText.textContent = `Markdown downloaded: ${filename}`;
-      trackEvent("cde_export", { format: "markdown", strike_reference: r.strike_reference || "none" });
+      statusText.textContent = currentLang === "ga"
+        ? `Markdown íoslódáilte: ${filename}`
+        : `Markdown downloaded: ${filename}`;
+      trackEvent("cde_export", {
+        format: "markdown",
+        language: currentLang,
+        strike_reference: r.strike_reference || "none"
+      });
     });
 
     // ============================================================
@@ -1849,8 +1994,6 @@
 
         const prefix = currentLang === "ga" ? "Aistriú idir" : "Transition";
         transitionBox.textContent = `${prefix} ${fromLabel} → ${toLabel}`;
-
-        transitionBox.textContent = `${prefix}: ${fromLabel} → ${toLabel}`;
       } else {
         transitionBox.textContent =
           currentLang === "ga"
@@ -1881,21 +2024,6 @@
       // ==========================
       // System state
       // ==========================
-     function findSystemState(obj) {
-        if (!obj || typeof obj !== "object") return null;
-
-        if (obj.system_state) return obj.system_state;
-
-        for (const value of Object.values(obj)) {
-          if (value && typeof value === "object") {
-            const found = findSystemState(value);
-            if (found) return found;
-          }
-        }
-
-        return null;
-      }
-
       const stateKey = findSystemState({ timelineData, patternData });
       const stateDef = SYSTEM_STATE_MAP[stateKey];
 
@@ -2014,6 +2142,18 @@
     // ============================================================
     // Utility
     // ============================================================
+
+    function findSystemState(obj) {
+      if (!obj || typeof obj !== "object") return null;
+      if (obj.system_state) return obj.system_state;
+      for (const value of Object.values(obj)) {
+        if (value && typeof value === "object") {
+          const found = findSystemState(value);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
 
     function triggerDownload(content, filename, type) {
       const blob = new Blob([content], { type });
