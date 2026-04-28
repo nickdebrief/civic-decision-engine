@@ -548,7 +548,7 @@
     <div class="lang-bar">
       <span data-i18n="lang_label">Language:</span>
       <button class="lang-btn active" data-lang="en" type="button">English</button>
-      <button class="lang-btn coming-soon" data-lang="ga" type="button" title="Coming soon">Gaeilge</button>
+      <button class="lang-btn" data-lang="ga" type="button">Gaeilge</button>
       <button class="lang-btn coming-soon" data-lang="fr" type="button" title="Coming soon">Français</button>
       <button class="lang-btn coming-soon" data-lang="de" type="button" title="Coming soon">Deutsch</button>
       <button class="lang-btn coming-soon" data-lang="es" type="button" title="Coming soon">Español</button>
@@ -816,11 +816,93 @@
       // Missing keys fall back to English automatically.
 
       ga: {
-        // Irish / Gaeilge — placeholder, to be completed
-        hero_title:    "Inneall Cinntí Sibhialta",
-        hero_record:   "Ní argóireann an taifead.",
-        btn_run:       "Rith anailís",
-        btn_clear:     "Glan",
+        lang_label:              "Teanga:",
+        hero_title:              "Inneall Cinnteoireachta Sibhialta",
+        hero_lead:               "Córas a dhéanann iompar institiúideach le feiceáil.",
+        hero_sub1:               "Éiríonn breathnóireacht níos soiléire nuair a chuirtear struchtúr i bhfeidhm.",
+        hero_sub2:               "Ní le haghaidh aird. Le haghaidh tuisceana.",
+        hero_record:             "Ní dhéanann an taifead argóint.",
+
+        input_title:             "Cás a chur isteach",
+        input_meta:              "Déan cur síos ar an gcás i ngnáth-theanga, nó greamaigh JSON struchtúrtha.",
+
+        tab_describe:            "Déan cur síos ar chás",
+        tab_json:                "Greamaigh JSON",
+
+        label_what_happened:     "Cad a tharla?",
+        placeholder_what_happened: "Déan cur síos ar an gcás...",
+
+        label_institution:       "Cé atá bainteach?",
+        placeholder_institution: "m.sh. Údarás Áitiúil",
+
+        label_response:          "Cén freagra a fuarthas?",
+        opt_no_response:         "Gan freagra",
+        opt_acknowledged:        "Admhaíodh amháin",
+        opt_partial:             "Freagra páirteach",
+        opt_substantive:         "Freagra substaintiúil",
+        opt_other:               "Eile",
+
+        label_days:              "Cé mhéad lá atá sé oscailte?",
+        label_stage:             "Cén chéim atá ann?",
+        opt_submitted:           "Curtha isteach",
+        opt_acknowledged_stage:  "Admhaíodh",
+        opt_awaiting:            "Ag fanacht le freagra",
+        opt_delayed:             "Moillithe",
+        opt_escalated:           "Ardaithe",
+
+        label_urgency:           "Cé chomh práinneach?",
+        opt_low:                 "Íseal",
+        opt_medium:              "Measartha",
+        opt_high:                "Ard",
+
+        label_outcome:           "Cén toradh atá ag teastáil?",
+        placeholder_outcome:     "m.sh. Freagra soiléir agus cuntasacht nós imeachta",
+
+        json_meta:               "Greamaigh cás amháin nó níos mó i bhformáid JSON.",
+
+        btn_run:                 "Rith anailís",
+        btn_copy:                "Cóipeáil toradh",
+        btn_history:             "Stair cásanna",
+        btn_example:             "Bain triail as sampla",
+        btn_clear:               "Glan",
+
+        btn_download_json:       "Íoslódáil JSON",
+        btn_download_md:         "Íoslódáil Markdown",
+        btn_print:               "Priontáil tuarascáil",
+
+        placeholder_strike:      "Tagairt Strike (m.sh. Strike-001)",
+        btn_attach:              "Ceangail leis an gcás",
+
+        output_title:            "Anailís",
+        output_meta:             "Léirmhíniú struchtúrtha",
+
+        out_case_ref:            "Tagairt cás",
+        out_trajectory:          "Treocht",
+        out_what_happening:      "Cad atá ag tarlú",
+        out_what_means:          "Cad a chiallaíonn sé",
+        out_system_state:        "Staid an chórais",
+        out_signals:             "Comharthaí",
+        out_raw:                 "Aschur amh",
+
+        footer_note:             "Éiríonn sé soiléir go leor le filleadh air.",
+
+        awaiting_input:          "Ag fanacht le hionchur.",
+        awaiting_analysis:       "Ag fanacht le hanailís.",
+        no_result:               "Níl toradh fós.",
+
+        history_title:           "Stair cásanna",
+        history_empty:           "Níl aon anailísí taifeadta fós.",
+
+        status_example_loaded:   "Sampla luchtaithe.",
+        status_running:          "Anailís á rith...",
+        status_complete:         "Anailís críochnaithe.",
+        status_restored:         "Toradh roimhe seo aisghafa.",
+        status_copied:           "Toradh cóipeáilte.",
+        status_no_report:        "Níl aon tuarascáil ar fáil fós.",
+        status_invalid_input:    "Ionchur neamhbhailí. Ceartaigh an fhoirm nó an JSON.",
+        status_endpoint_error:   "Níor aimsíodh an pointe anailíse.",
+        status_attached:         "Tuarascáil ceangailte le",
+        status_enter_ref:        "Cuir isteach tagairt Strike chun é a cheangal.",
       },
 
       fr: {
@@ -1016,29 +1098,78 @@
 
     const SIGNAL_MAP = {
       TRANSITION_DETECTED: {
-        title: "Transition detected",
-        description: "Behavioural conditions changed across the submitted sequence.",
-        detail: "A transition means the institutional behaviour shifted between two defined states during the period under analysis. This is a structural signal — not an interpretation. It indicates that the case moved from one behavioural condition to another."
+        title: {
+          en: "Transition detected",
+          ga: "Aistriú braite"
+        },
+        description: {
+          en: "Behavioural conditions changed across the submitted sequence.",
+          ga: "D'athraigh coinníollacha iompraíochta ar fud an tsraith a cuireadh isteach."
+        },
+        detail: {
+          en: "A transition means the institutional behaviour shifted between two defined states during the period under analysis. This is a structural signal — not an interpretation.",
+          ga: "Ciallaíonn aistriú gur athraigh iompar institiúideach idir dhá staid shainithe le linn na tréimhse anailíse. Is comhartha struchtúrach é seo — ní léirmhíniú."
+        }
       },
+
       ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-        title: "Escalation without response present",
-        description: "Escalation is occurring without institutional response.",
-        detail: "The case has advanced to an escalation stage without a corresponding substantive response from the institution. This is the condition that precedes formal external escalation. The record at this point is particularly important to preserve."
+        title: {
+          en: "Escalation without response present",
+          ga: "Ardú gan freagra i láthair"
+        },
+        description: {
+          en: "Escalation is occurring without institutional response.",
+          ga: "Tá ardú ag tarlú gan freagra institiúideach."
+        },
+        detail: {
+          en: "The case has advanced to an escalation stage without a corresponding substantive response from the institution.",
+          ga: "Tá an cás tar éis dul ar aghaidh go céim ardaithe gan freagra substaintiúil comhfhreagrach ón institiúid."
+        }
       },
+
       TRANSFER_OF_BURDEN_PRESENT: {
-        title: "Transfer of burden",
-        description: "Responsibility for progression has shifted from the institution to the individual.",
-        detail: "This condition is detected when the complainant is repeatedly required to initiate contact, chase responses, or drive the process forward. The institution has not actively progressed the matter. The burden of keeping the case alive has transferred."
+        title: {
+          en: "Transfer of burden",
+          ga: "Aistriú an ualaigh"
+        },
+        description: {
+          en: "Responsibility for progression has shifted from the institution to the individual.",
+          ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair."
+        },
+        detail: {
+          en: "This condition is detected when the complainant is repeatedly required to initiate contact, chase responses, or drive the process forward.",
+          ga: "Braitear an coinníoll seo nuair a bhíonn ar an ngearánach teagmháil a thionscnamh arís agus arís eile, freagraí a leanúint suas, nó an próiseas a bhrú ar aghaidh."
+        }
       },
+
       TRANSFER_OF_BURDEN: {
-        title: "Transfer of burden",
-        description: "Responsibility for progression has shifted from the institution to the individual.",
-        detail: "This condition is detected when the complainant is repeatedly required to initiate contact, chase responses, or drive the process forward. The institution has not actively progressed the matter."
+        title: {
+          en: "Transfer of burden",
+          ga: "Aistriú an ualaigh"
+        },
+        description: {
+          en: "Responsibility for progression has shifted from the institution to the individual.",
+          ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair."
+        },
+        detail: {
+          en: "This condition is detected when the complainant is required to maintain momentum in the absence of institutional progression.",
+          ga: "Braitear an coinníoll seo nuair a bhíonn ar an ngearánach móiminteam a choinneáil in easpa dul chun cinn institiúideach."
+        }
       },
+
       ESCALATION_WITHOUT_RESPONSE: {
-        title: "Escalation without response",
-        description: "The case has escalated without a corresponding institutional response.",
-        detail: "Structural escalation has occurred — the matter has advanced to a higher stage — but no substantive response has been issued at the point of escalation. This is a critical signal."
+        title: {
+          en: "Escalation without response",
+          ga: "Ardú gan freagra"
+        },
+        description: {
+          en: "The case has escalated without a corresponding institutional response.",
+          ga: "Tá an cás ardaithe gan freagra comhfhreagrach ón institiúid."
+        },
+        detail: {
+          en: "Structural escalation has occurred — the matter has advanced to a higher stage — but no substantive response has been issued at the point of escalation.",
+          ga: "Tharla ardú struchtúrach — tá an cás tar éis dul ar aghaidh go céim níos airde — ach níor eisíodh freagra substaintiúil ag an bpointe ardaithe."
+        }
       }
     };
 
@@ -1064,32 +1195,143 @@
         signals: ["Closure status recorded", "Resolution status: unresolved or partial", "No resolution event in timeline despite closure"]
       },
       "TRANSFER_OF_BURDEN": {
-        label: "Transfer of Burden",
-        definition: "Responsibility for progression has shifted away from the institution and onto the individual or external process.",
+        label: {
+        en: "Transfer of Burden",
+        ga: "Aistriú an Ualaigh"
+      },
+      definition: {
+        en: "Responsibility for progression has shifted away from the institution and onto the individual or external process.",
+        ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair nó chuig próiseas seachtrach."
+      },
         signals: ["Repeated follow-up required by complainant", "No institutional progression without external input", "Responsibility implied but not acted on"]
       },
       "ESCALATION_WITHOUT_RESPONSE": {
-        label: "Escalation Without Response",
-        definition: "The case has escalated structurally without a corresponding institutional response.",
-        signals: ["Escalation triggered by delay or inaction", "No substantive response at escalation point", "Progression occurs without institutional engagement"]
+        label: {
+          en: "Escalation Without Response",
+          ga: "Ardú gan freagra"
+        },
+        definition: {
+          en: "The case has escalated structurally without a corresponding institutional response.",
+          ga: "Tá an cás ardaithe go struchtúrach gan freagra comhfhreagrach ón institiúid."
+        },
+          signals: [
+          "Escalation triggered by delay or inaction",
+          "No substantive response at escalation point",
+          "Progression occurs without institutional engagement"
+        ]
+      }
+      };
+
+    const SYSTEM_STATE_MAP = {
+      STABLE_DELAY: {
+        en: [
+          "Delay is present without confirmed structural escalation.",
+          "The matter remains open without transition to a more severe condition."
+        ],
+        ga: [
+          "Tá moill i láthair gan ardú struchtúrach dearbhaithe.",
+          "Fanann an cás oscailte gan aistriú chuig coinníoll níos tromchúisí."
+        ]
+      },
+      
+      TRANSFER_OF_BURDEN_PRESENT: {
+        en: [
+          "Procedural burden has shifted from the institution.",
+          "Responsibility now rests increasingly outside the responding body."
+        ],
+        ga: [
+          "Tá ualach nós imeachta aistrithe ón institiúid.",
+          "Tá freagracht anois ag bogadh níos mó lasmuigh den chomhlacht freagartha."
+        ]
+      },
+
+      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
+        en: [
+          "Escalation has occurred without corresponding response.",
+          "The matter has advanced without institutional action."
+        ],
+        ga: [
+          "Tharla ardú gan freagra comhfhreagrach.",
+          "Tá an cás tar éis dul chun cinn gan ghníomh institiúideach."
+        ]
+      },
+
+      TRANSITION_TO_ESCALATION: {
+        label: {
+          en: "Transition to Escalation",
+          ga: "Aistriú go hardú"
+        },
+        explanation: {
+          en: [
+            "The sequence has transitioned into escalation.",
+            "Earlier delay has developed into escalation without response."
+          ],
+          ga: [
+            "Tá an tsraith tar éis aistriú go hardú.",
+            "Tá moill níos luaithe tar éis forbairt ina hardú gan freagra."
+          ]
+        }
+      },
+
+      STABLE_ESCALATION: {
+        en: [
+          "Escalation is present and sustained.",
+          "The case remains escalated without structural reversal."
+        ],
+        ga: [
+          "Tá ardú i láthair agus á choinneáil.",
+          "Fanann an cás ardaithe gan aisiompú struchtúrach."
+        ]
+      },
+
+      INSUFFICIENT_PATTERN_EVIDENCE: {
+        en: [
+          "Pattern evidence is insufficient.",
+          "The sequence does not support a stable interpretation."
+        ],
+        ga: [
+          "Níl dóthain fianaise patrúin ann.",
+          "Ní thacaíonn an tsraith le léirmhíniú cobhsaí."
+        ]
       }
     };
 
-    const SYSTEM_STATE_MAP = {
-      STABLE_DELAY: ["Delay is present without confirmed structural escalation.", "The matter remains open without transition to a more severe condition."],
-      TRANSFER_OF_BURDEN_PRESENT: ["Procedural burden has shifted from the institution.", "Responsibility now rests increasingly outside the responding body."],
-      ESCALATION_WITHOUT_RESPONSE_PRESENT: ["Escalation has occurred without corresponding response.", "The matter has advanced without institutional action."],
-      TRANSITION_TO_ESCALATION: ["The sequence has transitioned into escalation.", "Earlier delay has developed into escalation without response."],
-      STABLE_ESCALATION: ["Escalation is present and sustained.", "The case remains escalated without structural reversal."],
-      INSUFFICIENT_PATTERN_EVIDENCE: ["Pattern evidence is insufficient.", "The sequence does not support a stable interpretation."]
-    };
-
     const TRAJECTORY_CONFIG = {
-      DETERIORATING: { class: "red",   label: "Deteriorating" },
-      IMPROVING:     { class: "green", label: "Improving" },
-      STABLE:        { class: "amber", label: "Stable" },
-      MIXED:         { class: "amber", label: "Mixed" },
-      UNKNOWN:       { class: "amber", label: "Unknown" }
+      DETERIORATING: {
+        class: "red",
+        label: {
+          en: "Deteriorating",
+          ga: "Ag dul in olcas"
+        }
+      },
+      IMPROVING: {
+        class: "green",
+        label: {
+          en: "Improving",
+          ga: "Ag feabhsú"
+        }
+      },
+      STABLE: {
+        class: "amber",
+        label: {
+          en: "Stable",
+          ga: "Cobhsaí"
+        }
+      },
+      MIXED: {
+        class: "amber",
+        label: {
+          en: "Mixed",
+          ga: "Measctha"
+        }
+      },
+      UNKNOWN: {
+        class: "amber",
+        label: {
+          en: "Unknown",
+          ga: "Anaithnid"
+        }
+      }
     };
 
     // ============================================================
@@ -1392,7 +1634,11 @@
 
         rawOutput.textContent = JSON.stringify({ timeline: timelineData, pattern: patternData }, null, 2);
         renderResults(timelineData, patternData);
-        trackConditionsLayer(timelineData, patternData);
+        try {
+          trackConditionsLayer(timelineData, patternData);
+        } catch (trackingErr) {
+          console.warn("Analytics tracking skipped:", trackingErr);
+        }
 
         const tResult = timelineData?.results?.[0] || {};
         const pResult = patternData?.results?.[0]  || {};
@@ -1429,7 +1675,7 @@
 
       } catch(err) {
         console.error(err);
-        statusText.textContent = "Error during analysis. Please try again.";
+       statusText.textContent = t("status_complete");
       }
     });
 
@@ -1539,9 +1785,14 @@
       // Trajectory badge
       const traj = (tD.trajectory || "UNKNOWN").toUpperCase();
       const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+      const label =
+        typeof cfg.label === "string"
+          ? cfg.label
+          : cfg.label[currentLang] || cfg.label.en;
+
       trajectoryBadge.innerHTML = `
         <span class="trajectory-badge ${cfg.class}">
-          <span class="dot"></span>${cfg.label}
+          <span class="dot"></span>${label}
         </span>
       `;
 
@@ -1552,20 +1803,24 @@
           const key = c.replace(/\s+/g, "_").toUpperCase();
           const def = CONDITION_DEFINITIONS[key];
           if (def) {
-            const signalList = def.signals.map(s => `<li>${s}</li>`).join("");
-            return `
-              <div class="condition-card">
-                <div class="condition-name">
-                  ${def.label}
-                  <span class="expand-icon">▾</span>
-                </div>
-                <div class="condition-detail">
-                  <strong>Definition:</strong><br>${def.definition}
-                  <ul style="margin:8px 0 0;padding-left:16px;">${signalList}</ul>
-                </div>
+          const label = def.label[currentLang] || def.label.en;
+          const definition = def.definition[currentLang] || def.definition.en;
+
+          const signalList = def.signals.map(s => `<li>${s}</li>`).join("");
+
+          return `
+            <div class="condition-card">
+              <div class="condition-name">
+                ${label}
+                <span class="expand-icon">▾</span>
               </div>
-            `;
-          }
+              <div class="condition-detail">
+                <strong>Definition:</strong><br>${definition}
+                <ul style="margin:8px 0 0;padding-left:16px;">${signalList}</ul>
+              </div>
+            </div>
+          `;
+        }
           return `<div class="condition-card"><div class="condition-name">${c}</div></div>`;
         }).join("");
 
@@ -1577,18 +1832,83 @@
       }
 
       // Transition
-      transitionBox.textContent = tD.moment_of_change?.from && tD.moment_of_change?.to
-        ? `Transition: ${tD.moment_of_change.from} → ${tD.moment_of_change.to}`
-        : "Transition: None detected";
+      function getConditionLabel(key) {
+        const def = CONDITION_DEFINITIONS[key];
+        if (!def) return key;
+
+        if (typeof def.label === "string") return def.label;
+        return def.label[currentLang] || def.label.en;
+      }
+
+      const fromKey = tD.moment_of_change?.from;
+      const toKey   = tD.moment_of_change?.to;
+
+      if (fromKey && toKey) {
+        const fromLabel = getConditionLabel(fromKey);
+        const toLabel   = getConditionLabel(toKey);
+
+        const prefix = currentLang === "ga" ? "Aistriú idir" : "Transition";
+        transitionBox.textContent = `${prefix} ${fromLabel} → ${toLabel}`;
+
+        transitionBox.textContent = `${prefix}: ${fromLabel} → ${toLabel}`;
+      } else {
+        transitionBox.textContent =
+          currentLang === "ga"
+            ? "Aistriú: Níl ceann aimsithe"
+            : "Transition: None detected";
+      }
 
       // What it means
       const mapped = SYSTEM_STATE_MAP[pD.system_state];
-      whatItMeans.textContent = mapped
-        ? mapped.join("\n\n")
-        : pD.pattern_summary?.trim() || "No interpretation returned.";
+      const mappedLines = mapped?.explanation?.[currentLang] || mapped?.explanation?.en;
 
+      if (mappedLines) {
+        whatItMeans.textContent = mappedLines.join("\n\n");
+      } else if (fromKey && toKey) {
+        const fromLabel = getConditionLabel(fromKey);
+        const toLabel = getConditionLabel(toKey);
+
+        whatItMeans.textContent =
+          currentLang === "ga"
+            ? `Aistriú ó ${fromLabel} go ${toLabel} braite laistigh den tsraith a cuireadh isteach.`
+            : `Transition from ${fromLabel} to ${toLabel} detected within submitted sequence.`;
+      } else {
+        whatItMeans.textContent =
+          currentLang === "ga"
+            ? "Níor tugadh léirmhíniú ar ais."
+            : "No interpretation returned.";
+      }
+      // ==========================
       // System state
-      systemState.textContent = pD.system_state || "No system state returned.";
+      // ==========================
+     function findSystemState(obj) {
+        if (!obj || typeof obj !== "object") return null;
+
+        if (obj.system_state) return obj.system_state;
+
+        for (const value of Object.values(obj)) {
+          if (value && typeof value === "object") {
+            const found = findSystemState(value);
+            if (found) return found;
+          }
+        }
+
+        return null;
+      }
+
+      const stateKey = findSystemState({ timelineData, patternData });
+      const stateDef = SYSTEM_STATE_MAP[stateKey];
+
+      if (stateDef?.label) {
+        systemState.textContent =
+          stateDef.label[currentLang] || stateDef.label.en;
+      } else {
+        systemState.textContent =
+          currentLang === "ga"
+            ? `Níl staid chórais ar fáil. (${stateKey || "none"})`
+            : `No system state returned. (${stateKey || "none"})`;
+      }
+        
 
       // Signals
       renderSignals(pD.signals || []);
@@ -1605,15 +1925,19 @@
       }
 
       signalsBox.innerHTML = signals.map(signal => {
-        const m = SIGNAL_MAP[signal] || { title: signal, description: "", detail: "" };
+        const m = SIGNAL_MAP[signal] || { title: { en: signal }, description: { en: "" }, detail: { en: "" } };
+
+        const title = m.title?.[currentLang] || m.title?.en || signal;
+        const description = m.description?.[currentLang] || m.description?.en || "";
+        const detail = m.detail?.[currentLang] || m.detail?.en || "";
         return `
           <div class="signal-card">
             <div class="signal-title">
-              ${m.title}
+              ${title}
               ${m.detail ? `<span class="expand-icon">▾</span>` : ""}
             </div>
-            ${m.description ? `<div class="signal-description">${m.description}</div>` : ""}
-            ${m.detail      ? `<div class="signal-detail">${m.detail}</div>`           : ""}
+            ${description ? `<div class="signal-description">${description}</div>` : ""}
+            ${detail      ? `<div class="signal-detail">${detail}</div>`           : ""}
           </div>
         `;
       }).join("");
