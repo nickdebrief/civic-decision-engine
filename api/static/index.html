@@ -19,6 +19,10 @@
     gtag('js', new Date());
     gtag('config', 'G-8405RVT76Q');
   </script>
+
+  <!-- Translation data -->
+  <script src="/static/translations.js"></script>
+
   <style>
     :root {
       --bg: #05070b;
@@ -279,7 +283,6 @@
       font-size: 0.95rem;
     }
 
-    /* Case reference block — shown in output panel when Strike ref attached */
     .case-ref-block {
       background: #060b14;
       border: 1px solid #1e3a5f;
@@ -507,7 +510,6 @@
       .signal-detail, .condition-detail { display: block; }
       .footer-note { color: #555; }
 
-      /* Print header with attribution */
       .panel:last-child::before {
         content: "Civic Decision Engine v10 — Nick Moloney — " attr(data-generated);
         display: block;
@@ -547,17 +549,16 @@
 
   <div class="wrap">
 
-    <!-- Language bar -->
     <div class="lang-bar">
       <span data-i18n="lang_label">Language:</span>
       <button class="lang-btn active" data-lang="en" type="button">English</button>
       <button class="lang-btn" data-lang="ga" type="button">Gaeilge</button>
       <button class="lang-btn" data-lang="fr" type="button">Français</button>
-      <button class="lang-btn coming-soon" data-lang="de" type="button" title="Coming soon">Deutsch</button>
-      <button class="lang-btn coming-soon" data-lang="es" type="button" title="Coming soon">Español</button>
-      <button class="lang-btn coming-soon" data-lang="pl" type="button" title="Coming soon">Polski</button>
-      <button class="lang-btn coming-soon" data-lang="ro" type="button" title="Coming soon">Română</button>
-      <button class="lang-btn coming-soon" data-lang="uk" type="button" title="Coming soon">Українська</button>
+      <button class="lang-btn" data-lang="de" type="button">Deutsch</button>
+      <button class="lang-btn" data-lang="es" type="button">Español</button>
+      <button class="lang-btn" data-lang="pl" type="button">Polski</button>
+      <button class="lang-btn" data-lang="ro" type="button">Română</button>
+      <button class="lang-btn" data-lang="uk" type="button">Українська</button>
     </div>
 
     <section class="hero">
@@ -574,6 +575,7 @@
     </section>
 
     <section class="grid">
+
       <!-- INPUT PANEL -->
       <div class="panel">
         <h2 data-i18n="input_title">Enter a case</h2>
@@ -671,7 +673,6 @@
         <h2 data-i18n="output_title">Analysis</h2>
         <p class="meta" data-i18n="output_meta">Structured interpretation</p>
 
-        <!-- Case reference block — visible in output and print when Strike ref is attached -->
         <div class="output-block" id="attachedMetaBlock" style="display:none;">
           <h3 data-i18n="out_case_ref">Case reference</h3>
           <div class="case-ref-block" id="attachedMetaCard"></div>
@@ -732,415 +733,26 @@
 
   <script>
     // ============================================================
+    // Import translation data from translations.js
+    // ============================================================
+
+    const {
+      TRANSLATIONS,
+      CONDITION_DEFINITIONS,
+      SIGNAL_MAP,
+      SYSTEM_STATE_MAP,
+      TRAJECTORY_CONFIG,
+      REPORT_STRINGS
+    } = window.CDE_I18N;
+
+    // ============================================================
     // Copyright year
     // ============================================================
 
     document.getElementById("copyrightYear").textContent = new Date().getFullYear();
 
     // ============================================================
-    // i18n — Translation system
-    // ============================================================
-
-    const TRANSLATIONS = {
-      en: {
-        lang_label:              "Language:",
-        hero_title:              "Civic Decision Engine",
-        hero_lead:               "A system that makes institutional behaviour visible.",
-        hero_sub1:               "Observation sometimes becomes clearer when structure is applied.",
-        hero_sub2:               "Not designed for attention. Designed for understanding.",
-        hero_record:             "The record does not argue.",
-        input_title:             "Enter a case",
-        input_meta:              "Describe the situation in plain language, or paste structured JSON.",
-        tab_describe:            "Describe a case",
-        tab_json:                "Paste JSON",
-        label_what_happened:     "What happened?",
-        placeholder_what_happened: "Describe the situation...",
-        label_institution:       "Who is involved?",
-        placeholder_institution: "e.g. Local Authority",
-        label_response:          "What response was received?",
-        opt_no_response:         "No response",
-        opt_acknowledged:        "Acknowledged only",
-        opt_partial:             "Partial response",
-        opt_substantive:         "Substantive response",
-        opt_other:               "Other",
-        label_days:              "How long has it been open? (days)",
-        label_stage:             "What stage is it at?",
-        opt_submitted:           "Submitted",
-        opt_acknowledged_stage:  "Acknowledged",
-        opt_awaiting:            "Awaiting response",
-        opt_delayed:             "Delayed",
-        opt_escalated:           "Escalated",
-        label_urgency:           "How urgent is it?",
-        opt_low:                 "Low",
-        opt_medium:              "Medium",
-        opt_high:                "High",
-        label_outcome:           "What outcome is needed?",
-        placeholder_outcome:     "e.g. A clear substantive response and procedural accountability",
-        json_meta:               "Paste one or more civic cases in JSON.",
-        btn_run:                 "Run analysis",
-        btn_copy:                "Copy result",
-        btn_history:             "Case history",
-        btn_example:             "Try an example",
-        btn_clear:               "Clear",
-        btn_download_json:       "Download JSON",
-        btn_download_md:         "Download Markdown",
-        btn_print:               "Print report",
-        placeholder_strike:      "Strike reference (e.g. Strike-001)",
-        btn_attach:              "Attach to case",
-        output_title:            "Analysis",
-        output_meta:             "Structured interpretation",
-        out_case_ref:            "Case reference",
-        out_trajectory:          "Trajectory",
-        out_what_happening:      "What is happening",
-        out_what_means:          "What it means",
-        out_system_state:        "System state",
-        out_signals:             "Signals",
-        out_raw:                 "Raw output",
-        footer_note:             "It becomes clear enough to be returned to.",
-        awaiting_input:          "Awaiting input.",
-        awaiting_analysis:       "Awaiting analysis.",
-        no_result:               "No result yet.",
-        history_title:           "Case history",
-        history_empty:           "No analyses recorded yet.",
-        status_example_loaded:   "Example loaded.",
-        status_running:          "Running analysis...",
-        status_complete:         "Analysis complete.",
-        status_restored:         "Previous result restored.",
-        status_copied:           "Result copied.",
-        status_no_report:        "No report available yet.",
-        status_invalid_input:    "Invalid input. Please correct the form or JSON.",
-        status_endpoint_error:   "Analysis endpoint not found.",
-        status_attached:         "Report attached to",
-        status_enter_ref:        "Enter a Strike reference to attach.",
-      },
-
-      // ── Additional languages ──────────────────────────────────
-      // Each language object only needs to override the keys it translates.
-      // Missing keys fall back to English automatically.
-
-      ga: {
-        lang_label:              "Teanga:",
-        hero_title:              "Inneall Cinnteoireachta Sibhialta",
-        hero_lead:               "Córas a dhéanann iompar institiúideach le feiceáil.",
-        hero_sub1:               "Éiríonn breathnóireacht níos soiléire nuair a chuirtear struchtúr i bhfeidhm.",
-        hero_sub2:               "Ní le haghaidh aird. Le haghaidh tuisceana.",
-        hero_record:             "Ní dhéanann an taifead argóint.",
-
-        input_title:             "Cás a chur isteach",
-        input_meta:              "Déan cur síos ar an gcás i ngnáth-theanga, nó greamaigh JSON struchtúrtha.",
-
-        tab_describe:            "Déan cur síos ar chás",
-        tab_json:                "Greamaigh JSON",
-
-        label_what_happened:     "Cad a tharla?",
-        placeholder_what_happened: "Déan cur síos ar an gcás...",
-
-        label_institution:       "Cé atá bainteach?",
-        placeholder_institution: "m.sh. Údarás Áitiúil",
-
-        label_response:          "Cén freagra a fuarthas?",
-        opt_no_response:         "Gan freagra",
-        opt_acknowledged:        "Admhaíodh amháin",
-        opt_partial:             "Freagra páirteach",
-        opt_substantive:         "Freagra substaintiúil",
-        opt_other:               "Eile",
-
-        label_days:              "Cé mhéad lá atá sé oscailte?",
-        label_stage:             "Cén chéim atá ann?",
-        opt_submitted:           "Curtha isteach",
-        opt_acknowledged_stage:  "Admhaíodh",
-        opt_awaiting:            "Ag fanacht le freagra",
-        opt_delayed:             "Moillithe",
-        opt_escalated:           "Ardaithe",
-
-        label_urgency:           "Cé chomh práinneach?",
-        opt_low:                 "Íseal",
-        opt_medium:              "Measartha",
-        opt_high:                "Ard",
-
-        label_outcome:           "Cén toradh atá ag teastáil?",
-        placeholder_outcome:     "m.sh. Freagra soiléir agus cuntasacht nós imeachta",
-
-        json_meta:               "Greamaigh cás amháin nó níos mó i bhformáid JSON.",
-
-        btn_run:                 "Rith anailís",
-        btn_copy:                "Cóipeáil toradh",
-        btn_history:             "Stair cásanna",
-        btn_example:             "Bain triail as sampla",
-        btn_clear:               "Glan",
-
-        btn_download_json:       "Íoslódáil JSON",
-        btn_download_md:         "Íoslódáil Markdown",
-        btn_print:               "Priontáil tuarascáil",
-
-        placeholder_strike:      "Tagairt Strike (m.sh. Strike-001)",
-        btn_attach:              "Ceangail leis an gcás",
-
-        output_title:            "Anailís",
-        output_meta:             "Léirmhíniú struchtúrtha",
-
-        out_case_ref:            "Tagairt cás",
-        out_trajectory:          "Treocht",
-        out_what_happening:      "Cad atá ag tarlú",
-        out_what_means:          "Cad a chiallaíonn sé",
-        out_system_state:        "Staid an chórais",
-        out_signals:             "Comharthaí",
-        out_raw:                 "Aschur amh",
-
-        footer_note:             "Éiríonn sé soiléir go leor le filleadh air.",
-
-        awaiting_input:          "Ag fanacht le hionchur.",
-        awaiting_analysis:       "Ag fanacht le hanailís.",
-        no_result:               "Níl toradh fós.",
-
-        history_title:           "Stair cásanna",
-        history_empty:           "Níl aon anailísí taifeadta fós.",
-
-        status_example_loaded:   "Sampla luchtaithe.",
-        status_running:          "Anailís á rith...",
-        status_complete:         "Anailís críochnaithe.",
-        status_restored:         "Toradh roimhe seo aisghafa.",
-        status_copied:           "Toradh cóipeáilte.",
-        status_no_report:        "Níl aon tuarascáil ar fáil fós.",
-        status_invalid_input:    "Ionchur neamhbhailí. Ceartaigh an fhoirm nó an JSON.",
-        status_endpoint_error:   "Níor aimsíodh an pointe anailíse.",
-        status_attached:         "Tuarascáil ceangailte le",
-        status_enter_ref:        "Cuir isteach tagairt Strike chun é a cheangal.",
-      },
-
-      fr: {
-        lang_label:              "Langue :",
-        hero_title:              "Moteur de Décision Civique",
-        hero_lead:               "Un système qui rend le comportement institutionnel visible.",
-        hero_sub1:               "L'observation devient parfois plus claire lorsqu'une structure est appliquée.",
-        hero_sub2:               "Conçu non pour attirer l'attention, mais pour comprendre.",
-        hero_record:             "Le dossier ne débat pas.",
-
-        input_title:             "Soumettre un dossier",
-        input_meta:              "Décrivez la situation en langage courant, ou collez un JSON structuré.",
-
-        tab_describe:            "Décrire un dossier",
-        tab_json:                "Coller JSON",
-
-        label_what_happened:     "Que s'est-il passé ?",
-        placeholder_what_happened: "Décrivez la situation...",
-
-        label_institution:       "Qui est impliqué ?",
-        placeholder_institution: "ex. Autorité locale",
-
-        label_response:          "Quelle réponse a été reçue ?",
-        opt_no_response:         "Aucune réponse",
-        opt_acknowledged:        "Accusé de réception uniquement",
-        opt_partial:             "Réponse partielle",
-        opt_substantive:         "Réponse substantielle",
-        opt_other:               "Autre",
-
-        label_days:              "Depuis combien de jours est-il ouvert ?",
-        label_stage:             "À quelle étape en est-il ?",
-        opt_submitted:           "Soumis",
-        opt_acknowledged_stage:  "Accusé de réception",
-        opt_awaiting:            "En attente de réponse",
-        opt_delayed:             "Retardé",
-        opt_escalated:           "Escaladé",
-
-        label_urgency:           "Quel est le degré d'urgence ?",
-        opt_low:                 "Faible",
-        opt_medium:              "Modéré",
-        opt_high:                "Élevé",
-
-        label_outcome:           "Quel résultat est attendu ?",
-        placeholder_outcome:     "ex. Une réponse substantielle claire et une responsabilité procédurale",
-
-        json_meta:               "Collez un ou plusieurs dossiers civiques en JSON.",
-
-        btn_run:                 "Lancer l'analyse",
-        btn_copy:                "Copier le résultat",
-        btn_history:             "Historique des dossiers",
-        btn_example:             "Essayer un exemple",
-        btn_clear:               "Effacer",
-
-        btn_download_json:       "Télécharger JSON",
-        btn_download_md:         "Télécharger Markdown",
-        btn_print:               "Imprimer le rapport",
-
-        placeholder_strike:      "Référence de dossier (ex. Strike-001)",
-        btn_attach:              "Associer au dossier",
-
-        output_title:            "Analyse",
-        output_meta:             "Interprétation structurée",
-
-        out_case_ref:            "Référence de dossier",
-        out_trajectory:          "Trajectoire",
-        out_what_happening:      "Ce qui se passe",
-        out_what_means:          "Ce que cela signifie",
-        out_system_state:        "État du système",
-        out_signals:             "Signaux",
-        out_raw:                 "Sortie brute",
-
-        footer_note:             "Cela devient suffisamment clair pour y revenir.",
-
-        awaiting_input:          "En attente de données.",
-        awaiting_analysis:       "En attente d'analyse.",
-        no_result:               "Aucun résultat pour l'instant.",
-
-        history_title:           "Historique des dossiers",
-        history_empty:           "Aucune analyse enregistrée pour l'instant.",
-
-        status_example_loaded:   "Exemple chargé.",
-        status_running:          "Analyse en cours...",
-        status_complete:         "Analyse terminée.",
-        status_restored:         "Résultat précédent restauré.",
-        status_copied:           "Résultat copié.",
-        status_no_report:        "Aucun rapport disponible pour l'instant.",
-        status_invalid_input:    "Entrée invalide. Veuillez corriger le formulaire ou le JSON.",
-        status_endpoint_error:   "Point d'analyse introuvable.",
-        status_attached:         "Rapport associé à",
-        status_enter_ref:        "Entrez une référence de dossier à associer.",
-      },
-
-      de: {
-        // German / Deutsch — placeholder, to be completed
-        hero_title:    "Bürgerliche Entscheidungsmaschine",
-        hero_record:   "Die Akte argumentiert nicht.",
-        btn_run:       "Analyse starten",
-        btn_clear:     "Löschen",
-      },
-
-      es: {
-        // Spanish / Español — placeholder, to be completed
-        hero_title:    "Motor de Decisión Cívica",
-        hero_record:   "El expediente no argumenta.",
-        btn_run:       "Ejecutar análisis",
-        btn_clear:     "Borrar",
-      },
-
-      pl: {
-        // Polish / Polski — placeholder, to be completed
-        hero_title:    "Silnik Decyzji Obywatelskiej",
-        hero_record:   "Zapis nie argumentuje.",
-        btn_run:       "Uruchom analizę",
-        btn_clear:     "Wyczyść",
-      },
-
-      ro: {
-        // Romanian / Română — placeholder, to be completed
-        hero_title:    "Motorul de Decizie Civică",
-        hero_record:   "Dosarul nu argumentează.",
-        btn_run:       "Rulați analiza",
-        btn_clear:     "Șterge",
-      },
-
-      uk: {
-        // Ukrainian / Українська — placeholder, to be completed
-        hero_title:    "Система Громадських Рішень",
-        hero_record:   "Запис не сперечається.",
-        btn_run:       "Запустити аналіз",
-        btn_clear:     "Очистити",
-      },
-    };
-
-    let currentLang = "en";
-
-    function t(key) {
-      return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key])
-        || TRANSLATIONS.en[key]
-        || key;
-    }
-
-    function applyTranslations() {
-      document.getElementById("htmlRoot").lang = currentLang;
-
-      document.querySelectorAll("[data-i18n]").forEach(el => {
-        const key = el.getAttribute("data-i18n");
-        el.textContent = t(key);
-      });
-
-      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
-        const key = el.getAttribute("data-i18n-placeholder");
-        el.placeholder = t(key);
-      });
-
-      // Select options
-      document.querySelectorAll("option[data-i18n]").forEach(el => {
-        const key = el.getAttribute("data-i18n");
-        el.textContent = t(key);
-      });
-
-      // Update lang buttons
-      document.querySelectorAll(".lang-btn").forEach(btn => {
-        btn.classList.toggle("active", btn.dataset.lang === currentLang);
-      });
-
-      trackEvent("cde_language_change", { language: currentLang });
-    }
-
-    // Language button listeners
-    document.querySelectorAll(".lang-btn:not(.coming-soon)").forEach(btn => {
-      btn.addEventListener("click", () => {
-        currentLang = btn.dataset.lang;
-        try { localStorage.setItem("cde_lang", currentLang); } catch(e) {}
-        applyTranslations();
-      });
-    });
-
-    // Restore saved language
-    try {
-      const savedLang = localStorage.getItem("cde_lang");
-      if (savedLang && TRANSLATIONS[savedLang]) currentLang = savedLang;
-    } catch(e) {}
-
-    // ============================================================
-    // Analytics helpers
-    // ============================================================
-
-    function trackEvent(event_name, params = {}) {
-      if (typeof gtag === "function") {
-        gtag("event", event_name, { ...params, language: currentLang });
-      }
-    }
-
-    function trackConditionsLayer(timelineData, patternData) {
-      const t = timelineData?.results?.[0] || {};
-      const p = patternData?.results?.[0]  || {};
-
-      const conditions       = Array.isArray(t.conditions) ? t.conditions : [];
-      const trajectory       = t.trajectory   || "unknown";
-      const system_state     = p.system_state || "unknown";
-      const signals          = Array.isArray(p.signals) ? p.signals : [];
-      const has_transition   = !!(t.moment_of_change?.from && t.moment_of_change?.to);
-      const transition_label = has_transition
-        ? `${t.moment_of_change.from} → ${t.moment_of_change.to}` : "none";
-
-      trackEvent("cde_analysis_run", {
-        input_mode: currentMode, trajectory, system_state,
-        has_transition, transition_label,
-        condition_count: conditions.length, signal_count: signals.length,
-      });
-
-      conditions.forEach(condition => {
-        trackEvent("cde_condition_detected", { condition, trajectory, system_state, has_transition });
-      });
-
-      signals.forEach(signal => {
-        trackEvent("cde_signal_detected", { signal, trajectory, system_state, condition_count: conditions.length });
-      });
-
-      if (has_transition) {
-        trackEvent("cde_transition_detected", {
-          transition_label, trajectory, system_state, conditions: conditions.join("|")
-        });
-      }
-
-      if (system_state !== "unknown") {
-        trackEvent("cde_system_state", {
-          system_state, trajectory,
-          condition_count: conditions.length, signal_count: signals.length, has_transition,
-        });
-      }
-    }
-
-    // ============================================================
-    // Data maps
+    // Example payload
     // ============================================================
 
     const examplePayload = {
@@ -1178,242 +790,102 @@
       ]
     };
 
-    const SIGNAL_MAP = {
-      TRANSITION_DETECTED: {
-        title: {
-          en: "Transition detected",
-          ga: "Aistriú braite",
-          fr: "Transition détectée"
-        },
-        description: {
-          en: "Behavioural conditions changed across the submitted sequence.",
-          ga: "D'athraigh coinníollacha iompraíochta ar fud an tsraith a cuireadh isteach.",
-          fr: "Les conditions comportementales ont changé au cours de la séquence soumise."
-        },
-        detail: {
-          en: "A transition means the institutional behaviour shifted between two defined states during the period under analysis. This is a structural signal — not an interpretation.",
-          ga: "Ciallaíonn aistriú gur athraigh iompar institiúideach idir dhá staid shainithe le linn na tréimhse anailíse. Is comhartha struchtúrach é seo — ní léirmhíniú.",
-          fr: "Une transition signifie que le comportement institutionnel a évolué entre deux états définis au cours de la période analysée. Il s'agit d'un signal structurel — non d'une interprétation."
-        }
-      },
+    // ============================================================
+    // i18n helpers
+    // ============================================================
 
-      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-        title: {
-          en: "Escalation without response present",
-          ga: "Ardú gan freagra i láthair",
-          fr: "Escalade sans réponse présente"
-        },
-        description: {
-          en: "Escalation is occurring without institutional response.",
-          ga: "Tá ardú ag tarlú gan freagra institiúideach.",
-          fr: "Une escalade se produit sans réponse institutionnelle."
-        },
-        detail: {
-          en: "The case has advanced to an escalation stage without a corresponding substantive response from the institution.",
-          ga: "Tá an cás tar éis dul ar aghaidh go céim ardaithe gan freagra substaintiúil comhfhreagrach ón institiúid.",
-          fr: "Le dossier a atteint un stade d'escalade sans qu'une réponse substantielle correspondante ait été fournie par l'institution."
-        }
-      },
+    let currentLang = "en";
 
-      TRANSFER_OF_BURDEN_PRESENT: {
-        title: {
-          en: "Transfer of burden",
-          ga: "Aistriú an ualaigh",
-          fr: "Transfert de responsabilité"
-        },
-        description: {
-          en: "Responsibility for progression has shifted from the institution to the individual.",
-          ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair.",
-          fr: "La responsabilité de la progression a été transférée de l'institution à l'individu."
-        },
-        detail: {
-          en: "This condition is detected when the complainant is repeatedly required to initiate contact, chase responses, or drive the process forward.",
-          ga: "Braitear an coinníoll seo nuair a bhíonn ar an ngearánach teagmháil a thionscnamh arís agus arís eile, freagraí a leanúint suas, nó an próiseas a bhrú ar aghaidh.",
-          fr: "Cette condition est détectée lorsque le plaignant est régulièrement contraint d'initier le contact, de relancer les réponses ou de faire avancer le processus."
-        }
-      },
+    function t(key) {
+      return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key])
+        || TRANSLATIONS.en[key]
+        || key;
+    }
 
-      TRANSFER_OF_BURDEN: {
-        title: {
-          en: "Transfer of burden",
-          ga: "Aistriú an ualaigh",
-          fr: "Transfert de responsabilité"
-        },
-        description: {
-          en: "Responsibility for progression has shifted from the institution to the individual.",
-          ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair.",
-          fr: "La responsabilité de la progression a été transférée de l'institution à l'individu."
-        },
-        detail: {
-          en: "This condition is detected when the complainant is required to maintain momentum in the absence of institutional progression.",
-          ga: "Braitear an coinníoll seo nuair a bhíonn ar an ngearánach móiminteam a choinneáil in easpa dul chun cinn institiúideach.",
-          fr: "Cette condition est détectée lorsque le plaignant doit maintenir la dynamique en l'absence de progression institutionnelle."
-        }
-      },
+    function applyTranslations() {
+      document.getElementById("htmlRoot").lang = currentLang;
 
-      ESCALATION_WITHOUT_RESPONSE: {
-        title: {
-          en: "Escalation without response",
-          ga: "Ardú gan freagra",
-          fr: "Escalade sans réponse"
-        },
-        description: {
-          en: "The case has escalated without a corresponding institutional response.",
-          ga: "Tá an cás ardaithe gan freagra comhfhreagrach ón institiúid.",
-          fr: "Le dossier a été escaladé sans réponse institutionnelle correspondante."
-        },
-        detail: {
-          en: "Structural escalation has occurred — the matter has advanced to a higher stage — but no substantive response has been issued at the point of escalation.",
-          ga: "Tharla ardú struchtúrach — tá an cás tar éis dul ar aghaidh go céim níos airde — ach níor eisíodh freagra substaintiúil ag an bpointe ardaithe.",
-          fr: "Une escalade structurelle s'est produite — le dossier a progressé vers un stade supérieur — mais aucune réponse substantielle n'a été émise au moment de l'escalade."
-        }
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        el.textContent = t(el.getAttribute("data-i18n"));
+      });
+
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+      });
+
+      document.querySelectorAll("option[data-i18n]").forEach(el => {
+        el.textContent = t(el.getAttribute("data-i18n"));
+      });
+
+      document.querySelectorAll(".lang-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.lang === currentLang);
+      });
+
+      trackEvent("cde_language_change", { language: currentLang });
+    }
+
+    document.querySelectorAll(".lang-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentLang = btn.dataset.lang;
+        try { localStorage.setItem("cde_lang", currentLang); } catch(e) {}
+        applyTranslations();
+      });
+    });
+
+    try {
+      const savedLang = localStorage.getItem("cde_lang");
+      if (savedLang && TRANSLATIONS[savedLang]) currentLang = savedLang;
+    } catch(e) {}
+
+    // ============================================================
+    // Analytics
+    // ============================================================
+
+    function trackEvent(event_name, params = {}) {
+      if (typeof gtag === "function") {
+        gtag("event", event_name, { ...params, language: currentLang });
       }
-    };
+    }
 
-    const CONDITION_DEFINITIONS = {
-      "STABILITY_WITHOUT_CONFIRMATION": {
-        label: { en: "Stability Without Confirmation", ga: "Cobhsaíocht gan Deimhniú", fr: "Stabilité sans confirmation" },
-        definition: {
-          en: "The institution continues to function without producing external signals that confirm resolution. Operational continuity should not be mistaken for confirmed resolution.",
-          ga: "Leanann an institiúid ag feidhmiú gan comharthaí seachtracha a léiríonn réiteach. Ní ceart leanúnachas oibríochtúil a mheascadh le réiteach deimhnithe.",
-          fr: "L'institution continue de fonctionner sans produire de signaux externes confirmant la résolution. La continuité opérationnelle ne doit pas être confondue avec une résolution confirmée."
-        },
-        signals: {
-          en: ["Administrative continuity without confirmed resolution", "Absence of follow-up despite claimed completion", "Internal closure signals without external proof"],
-          ga: ["Leanúnachas riaracháin gan réiteach deimhnithe", "Easpa leantacht in ainneoin críochnaithe éilithe", "Comharthaí dúnta inmheánacha gan cruthúnas seachtrach"],
-          fr: ["Continuité administrative sans résolution confirmée", "Absence de suivi malgré l'achèvement déclaré", "Signaux de clôture internes sans preuve externe"]
-        }
-      },
-      "CLOSURE_WITHOUT_CONTAINMENT": {
-        label: { en: "Closure Without Containment", ga: "Dúnadh gan Coinneáil", fr: "Clôture sans traitement complet" },
-        definition: {
-          en: "A process is formally closed but the underlying issue remains functionally unresolved. Administrative closure should not be mistaken for substantive resolution.",
-          ga: "Tá próiseas dúnta go foirmiúil ach fanann an fhadhb bhunúsach gan réiteach go feidhmiúil. Ní ceart dúnadh riaracháin a mheascadh le réiteach substaintiúil.",
-          fr: "Un processus est formellement clôturé mais le problème sous-jacent reste fonctionnellement non résolu. La clôture administrative ne doit pas être confondue avec une résolution substantielle."
-        },
-        signals: {
-          en: ["Formal closure notice issued", "Persistence of harm or unresolved issue", "No traceable remedial change"],
-          ga: ["Fógra dúnta foirmiúil eisithe", "Leanúnachas dochair nó ceisteanna gan réiteach", "Gan athrú leighis inrianaithe"],
-          fr: ["Avis de clôture formel émis", "Persistance du préjudice ou du problème non résolu", "Aucun changement corrective traçable"]
-        }
-      },
-      "PROCESS_COMPLETION_WITHOUT_OUTCOME": {
-        label: { en: "Process Completion Without Outcome", ga: "Próiseas Críochnaithe gan Toradh", fr: "Processus achevé sans résultat" },
-        definition: {
-          en: "Required procedural steps are completed but produce no meaningful or traceable outcome. Procedural activity should not be mistaken for substantive effect.",
-          ga: "Críochnaítear céimeanna nós imeachta riachtanacha ach ní tháirgeann siad toradh meaningful nó inrianaithe. Ní ceart gníomhaíocht nós imeachta a mheascadh le héifeacht substaintiúil.",
-          fr: "Les étapes procédurales requises sont complétées mais ne produisent aucun résultat significatif ou traçable. L'activité procédurale ne doit pas être confondue avec un effet substantiel."
-        },
-        signals: {
-          en: ["Acknowledgement issued", "Review completed", "No corrective or enforceable outcome"],
-          ga: ["Admháil eisithe", "Athbhreithniú críochnaithe", "Gan toradh ceartaitheach nó infhorfheidhmithe"],
-          fr: ["Accusé de réception émis", "Examen complété", "Aucun résultat correctif ou exécutoire"]
-        }
-      },
-      "PROCEDURAL_COMPLETION_WITHOUT_RESOLUTION": {
-        label: { en: "Procedural Completion Without Resolution", ga: "Críochnú Nós Imeachta gan Réiteach", fr: "Achèvement de la procédure sans résolution" },
-        definition: {
-          en: "A process has reached formal completion but the underlying issue remains substantively unresolved. The procedure ended. The problem did not.",
-          ga: "Shroich próiseas críochnú foirmiúil ach fanann an fhadhb bhunúsach gan réiteach go substaintiúil. Chríochnaigh an nós imeachta. Níor chríochnaigh an fhadhb.",
-          fr: "Un processus a atteint son terme formel mais le problème sous-jacent reste substantiellement non résolu. La procédure s'est terminée. Le problème, non."
-        },
-        signals: {
-          en: ["Closure status recorded", "Resolution status: unresolved or partial", "No resolution event in timeline despite closure"],
-          ga: ["Stádas dúnta taifeadta", "Stádas réitigh: gan réiteach nó páirteach", "Gan imeacht réitigh sa líne ama d'ainneoin dúnadh"],
-          fr: ["Statut de clôture enregistré", "Statut de résolution : non résolu ou partiel", "Aucun événement de résolution dans la chronologie malgré la clôture"]
-        }
-      },
-      "TRANSFER_OF_BURDEN": {
-        label: { en: "Transfer of Burden", ga: "Aistriú an Ualaigh", fr: "Transfert de responsabilité" },
-        definition: {
-          en: "Responsibility for progression has shifted away from the institution and onto the individual or external process.",
-          ga: "Tá freagracht as dul chun cinn aistrithe ón institiúid chuig an duine aonair nó chuig próiseas seachtrach.",
-          fr: "La responsabilité de la progression a été transférée de l'institution vers l'individu ou un processus externe."
-        },
-        signals: {
-          en: ["Repeated follow-up required by complainant", "No institutional progression without external input", "Responsibility implied but not acted on"],
-          ga: ["Leantacht arís agus arís eile ag teastáil ón ngearánach", "Gan dul chun cinn institiúideach gan ionchur seachtrach", "Freagracht le tuigsin ach gan gníomhú uirthi"],
-          fr: ["Relances répétées requises par le plaignant", "Aucune progression institutionnelle sans intervention externe", "Responsabilité implicite mais non exercée"]
-        }
-      },
-      "ESCALATION_WITHOUT_RESPONSE": {
-        label: { en: "Escalation Without Response", ga: "Ardú gan Freagra", fr: "Escalade sans réponse" },
-        definition: {
-          en: "The case has escalated structurally without a corresponding institutional response.",
-          ga: "Tá an cás ardaithe go struchtúrach gan freagra comhfhreagrach ón institiúid.",
-          fr: "Le dossier a fait l'objet d'une escalade structurelle sans réponse institutionnelle correspondante."
-        },
-        signals: {
-          en: ["Escalation triggered by delay or inaction", "No substantive response at escalation point", "Progression occurs without institutional engagement"],
-          ga: ["Ardú spreagtha ag moill nó neamhghníomhaíocht", "Gan freagra substaintiúil ag pointe ardaithe", "Dul chun cinn gan rannpháirtíocht institiúideach"],
-          fr: ["Escalade déclenchée par un retard ou une inaction", "Aucune réponse substantielle au point d'escalade", "Progression sans engagement institutionnel"]
-        }
+    function trackConditionsLayer(timelineData, patternData) {
+      const tD = timelineData?.results?.[0] || {};
+      const pD = patternData?.results?.[0]  || {};
+
+      const conditions     = Array.isArray(tD.conditions) ? tD.conditions : [];
+      const trajectory     = tD.trajectory   || "unknown";
+      const system_state   = pD.system_state || "unknown";
+      const signals        = Array.isArray(pD.signals) ? pD.signals : [];
+      const has_transition = !!(tD.moment_of_change?.from && tD.moment_of_change?.to);
+      const transition_label = has_transition
+        ? `${tD.moment_of_change.from} → ${tD.moment_of_change.to}` : "none";
+
+      trackEvent("cde_analysis_run", {
+        input_mode: currentMode, trajectory, system_state,
+        has_transition, transition_label,
+        condition_count: conditions.length, signal_count: signals.length,
+      });
+
+      conditions.forEach(condition =>
+        trackEvent("cde_condition_detected", { condition, trajectory, system_state, has_transition })
+      );
+
+      signals.forEach(signal =>
+        trackEvent("cde_signal_detected", { signal, trajectory, system_state, condition_count: conditions.length })
+      );
+
+      if (has_transition) {
+        trackEvent("cde_transition_detected", {
+          transition_label, trajectory, system_state, conditions: conditions.join("|")
+        });
       }
-    };
 
-    const SYSTEM_STATE_MAP = {
-      STABLE_DELAY: {
-        label: { en: "Stable Delay", ga: "Moill Chobhsaí", fr: "Retard stable" },
-        explanation: {
-          en: ["Delay is present without confirmed structural escalation.", "The matter remains open without transition to a more severe condition."],
-          ga: ["Tá moill i láthair gan ardú struchtúrach dearbhaithe.", "Fanann an cás oscailte gan aistriú chuig coinníoll níos tromchúisí."],
-          fr: ["Un retard est présent sans escalade structurelle confirmée.", "Le dossier reste ouvert sans transition vers une condition plus grave."]
-        }
-      },
-
-      TRANSFER_OF_BURDEN_PRESENT: {
-        label: { en: "Transfer of Burden Present", ga: "Aistriú an Ualaigh i Láthair", fr: "Présence d'un transfert de responsabilité" },
-        explanation: {
-          en: ["Procedural burden has shifted from the institution.", "Responsibility now rests increasingly outside the responding body."],
-          ga: ["Tá ualach nós imeachta aistrithe ón institiúid.", "Tá freagracht anois ag bogadh níos mó lasmuigh den chomhlacht freagartha."],
-          fr: ["La charge procédurale a été transférée de l'institution.", "La responsabilité repose désormais de plus en plus en dehors de l'organisme répondant."]
-        }
-      },
-
-      ESCALATION_WITHOUT_RESPONSE_PRESENT: {
-        label: { en: "Escalation Without Response", ga: "Ardú gan Freagra", fr: "Escalade sans réponse" },
-        explanation: {
-          en: ["Escalation has occurred without corresponding response.", "The matter has advanced without institutional action."],
-          ga: ["Tharla ardú gan freagra comhfhreagrach.", "Tá an cás tar éis dul chun cinn gan ghníomh institiúideach."],
-          fr: ["Une escalade s'est produite sans réponse correspondante.", "Le dossier a progressé sans action institutionnelle."]
-        }
-      },
-
-      TRANSITION_TO_ESCALATION: {
-        label: { en: "Transition to Escalation", ga: "Aistriú go hArdú", fr: "Transition vers l'escalade" },
-        explanation: {
-          en: ["The sequence has transitioned into escalation.", "Earlier delay has developed into escalation without response."],
-          ga: ["Tá an tsraith tar éis aistriú go hardú.", "Tá moill níos luaithe tar éis forbairt ina hardú gan freagra."],
-          fr: ["La séquence a évolué vers une escalade.", "Le retard antérieur s'est transformé en escalade sans réponse."]
-        }
-      },
-
-      STABLE_ESCALATION: {
-        label: { en: "Stable Escalation", ga: "Ardú Cobhsaí", fr: "Escalade stable" },
-        explanation: {
-          en: ["Escalation is present and sustained.", "The case remains escalated without structural reversal."],
-          ga: ["Tá ardú i láthair agus á choinneáil.", "Fanann an cás ardaithe gan aisiompú struchtúrach."],
-          fr: ["Une escalade est présente et maintenue.", "Le dossier reste escaladé sans inversion structurelle."]
-        }
-      },
-
-      INSUFFICIENT_PATTERN_EVIDENCE: {
-        label: { en: "Insufficient Pattern Evidence", ga: "Fianaise Phatrúin Neamhleor", fr: "Preuves de schéma insuffisantes" },
-        explanation: {
-          en: ["Pattern evidence is insufficient.", "The sequence does not support a stable interpretation."],
-          ga: ["Níl dóthain fianaise patrúin ann.", "Ní thacaíonn an tsraith le léirmhíniú cobhsaí."],
-          fr: ["Les preuves de schéma sont insuffisantes.", "La séquence ne permet pas une interprétation stable."]
-        }
+      if (system_state !== "unknown") {
+        trackEvent("cde_system_state", {
+          system_state, trajectory,
+          condition_count: conditions.length, signal_count: signals.length, has_transition,
+        });
       }
-    };
-
-    const TRAJECTORY_CONFIG = {
-      DETERIORATING: { class: "red",   label: { en: "Deteriorating", ga: "Ag dul in olcas", fr: "En dégradation" } },
-      IMPROVING:     { class: "green", label: { en: "Improving",     ga: "Ag feabhsú",      fr: "En amélioration" } },
-      STABLE:        { class: "amber", label: { en: "Stable",        ga: "Cobhsaí",         fr: "Stable" } },
-      MIXED:         { class: "amber", label: { en: "Mixed",         ga: "Measctha",        fr: "Mixte" } },
-      UNKNOWN:       { class: "amber", label: { en: "Unknown",       ga: "Anaithnid",       fr: "Inconnu" } }
-    };
+    }
 
     // ============================================================
     // Element refs
@@ -1471,10 +943,7 @@
       if (!ref) { attachedMetaBlock.style.display = "none"; return; }
       attachedMetaCard.textContent = `${t("out_case_ref")}: ${ref}`;
       attachedMetaBlock.style.display = "block";
-      // Set data-generated on output panel for print header
-      outputPanel.setAttribute("data-generated",
-        new Date().toLocaleString() + " — " + ref
-      );
+      outputPanel.setAttribute("data-generated", new Date().toLocaleString() + " — " + ref);
     }
 
     // ============================================================
@@ -1504,8 +973,6 @@
     } catch(e) {}
 
     inputJson.value = JSON.stringify(examplePayload, null, 2);
-
-    // Apply translations after DOM is ready
     applyTranslations();
 
     // ============================================================
@@ -1554,6 +1021,7 @@
         const state = entry.system_state   || "—";
         const traj  = (entry.trajectory    || "").toUpperCase();
         const cfg   = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+        const lbl   = cfg.label?.[currentLang] || cfg.label?.en || traj;
         const idx   = caseHistory.length - 1 - i;
 
         return `
@@ -1563,14 +1031,14 @@
               <span class="history-item-time">${time}</span>
             </div>
             <span class="trajectory-badge ${cfg.class}" style="margin-bottom:6px;">
-              <span class="dot"></span>${cfg.label}
+              <span class="dot"></span>${lbl}
             </span>
             <div class="history-item-state">${state}</div>
           </div>
         `;
       }).join("");
 
-      sidebarBody.innerHTML = items + `<button class="sidebar-clear" id="clearHistoryBtn" type="button">Clear history</button>`;
+      sidebarBody.innerHTML = items + `<button class="sidebar-clear" id="clearHistoryBtn" type="button">${t("clear_history")}</button>`;
 
       sidebarBody.querySelectorAll(".history-item").forEach(el => {
         el.addEventListener("click", () => {
@@ -1583,7 +1051,7 @@
             downloadMarkdownBtn.disabled = false;
             printBtn.disabled            = false;
             attachStrikeBtn.disabled     = false;
-            statusText.textContent       = `Restored: ${entry.strike_reference || "analysis"}`;
+            statusText.textContent = `${t("restored_prefix")} ${entry.strike_reference || "analysis"}`;
             if (entry.strike_reference) showAttachedReference(entry.strike_reference);
             closeSidebar();
           }
@@ -1651,15 +1119,15 @@
     // ============================================================
 
     copyResultBtn.addEventListener("click", async () => {
-      const ref  = latestReportData?.strike_reference ? `Case Reference: ${latestReportData.strike_reference}\n\n` : "";
+      const ref  = latestReportData?.strike_reference ? `${t("out_case_ref")}: ${latestReportData.strike_reference}\n\n` : "";
       const text = [
         ref,
-        "TRAJECTORY", trajectoryBadge.textContent.trim(), "",
-        "WHAT IS HAPPENING", conditionsBox.innerText.trim(), "",
+        t("out_trajectory").toUpperCase(), trajectoryBadge.textContent.trim(), "",
+        t("out_what_happening").toUpperCase(), conditionsBox.innerText.trim(), "",
         transitionBox.textContent.trim(), "",
-        "WHAT IT MEANS", whatItMeans.textContent.trim(), "",
-        "SYSTEM STATE", systemState.textContent.trim(), "",
-        "SIGNALS", signalsBox.innerText.trim()
+        t("out_what_means").toUpperCase(), whatItMeans.textContent.trim(), "",
+        t("out_system_state").toUpperCase(), systemState.textContent.trim(), "",
+        t("out_signals").toUpperCase(), signalsBox.innerText.trim()
       ].join("\n");
 
       try {
@@ -1715,15 +1183,15 @@
 
         rawOutput.textContent = JSON.stringify({ timeline: timelineData, pattern: patternData }, null, 2);
         renderResults(timelineData, patternData);
+
         try {
           trackConditionsLayer(timelineData, patternData);
-        } catch (trackingErr) {
+        } catch(trackingErr) {
           console.warn("Analytics tracking skipped:", trackingErr);
         }
 
-        const tResult = timelineData?.results?.[0] || {};
-        const pResult = patternData?.results?.[0]  || {};
-
+        const tResult    = timelineData?.results?.[0] || {};
+        const pResult    = patternData?.results?.[0]  || {};
         const attachedRef = strikeReferenceInput.value.trim() || null;
 
         latestReportData = {
@@ -1756,7 +1224,7 @@
 
       } catch(err) {
         console.error(err);
-       statusText.textContent = t("status_complete");
+        statusText.textContent = t("status_endpoint_error");
       }
     });
 
@@ -1784,81 +1252,8 @@
     });
 
     // ============================================================
-    // Download Markdown — fully bilingual, language-aware
+    // Download Markdown — language-aware
     // ============================================================
-
-    // Report string map — all section headers and labels in each language
-
-    const REPORT_STRINGS = {
-  en: {
-    title: "Civic Decision Engine — Analysis Report",
-    generated: "Generated",
-    strike_ref: "Strike Reference",
-    input_mode: "Input Mode",
-    no_ref: "No reference attached",
-    section_traj: "Trajectory",
-    section_happening: "What is happening",
-    conditions_label: "Conditions",
-    none_detected: "None detected",
-    transition_label: "Transition",
-    none_transition: "None detected",
-    section_means: "What it means",
-    no_interp: "No interpretation returned.",
-    section_state: "System state",
-    no_state: "No system state returned.",
-    section_signals: "Signals",
-    none_signals: "None returned.",
-    section_summary: "Pattern summary",
-    no_summary: "No pattern summary returned.",
-    footer: "Civic Decision Engine v10 — Nick Moloney — The record does not argue.",
-  },
-
-  ga: {
-    title: "Inneall Cinnteoireachta Sibhialta — Tuarascáil Anailíse",
-    generated: "Ginte",
-    strike_ref: "Tagairt Strike",
-    input_mode: "Mód ionchur",
-    no_ref: "Gan tagairt ceangailte",
-    section_traj: "Treocht",
-    section_happening: "Cad atá ag tarlú",
-    conditions_label: "Coinníollacha",
-    none_detected: "Níl ceann aimsithe",
-    transition_label: "Aistriú",
-    none_transition: "Níl ceann aimsithe",
-    section_means: "Cad a chiallaíonn sé",
-    no_interp: "Níor tugadh léirmhíniú ar ais.",
-    section_state: "Staid an chórais",
-    no_state: "Níl staid chórais ar fáil.",
-    section_signals: "Comharthaí",
-    none_signals: "Níor tugadh ceann ar ais.",
-    section_summary: "Achoimre patrúin",
-    no_summary: "Níor tugadh achoimre patrúin ar ais.",
-    footer: "Inneall Cinnteoireachta Sibhialta v10 — Nick Moloney — Ní dhéanann an taifead argóint.",
-  },
-
-  fr: {
-    title: "Moteur de Décision Civique — Rapport d'analyse",
-    generated: "Généré le",
-    strike_ref: "Référence de dossier",
-    input_mode: "Mode de saisie",
-    no_ref: "Aucune référence associée",
-    section_traj: "Trajectoire",
-    section_happening: "Ce qui se passe",
-    conditions_label: "Conditions",
-    none_detected: "Aucune détectée",
-    transition_label: "Transition",
-    none_transition: "Aucune détectée",
-    section_means: "Ce que cela signifie",
-    no_interp: "Aucune interprétation retournée.",
-    section_state: "État du système",
-    no_state: "Aucun état du système retourné.",
-    section_signals: "Signaux",
-    none_signals: "Aucun retourné.",
-    section_summary: "Résumé du schéma",
-    no_summary: "Aucun résumé de schéma retourné.",
-    footer: "Moteur de Décision Civique v10 — Nick Moloney — Le dossier ne débat pas.",
-  }
-};
 
     downloadMarkdownBtn.addEventListener("click", () => {
       if (!latestReportData) { statusText.textContent = t("status_no_report"); return; }
@@ -1866,69 +1261,50 @@
       const r   = latestReportData;
       const p   = r.output?.pattern?.results?.[0]  || {};
       const tR  = r.output?.timeline?.results?.[0] || {};
-
-      // Resolve report strings for current language, fall back to English
       const rs  = REPORT_STRINGS[currentLang] || REPORT_STRINGS.en;
       const ref = r.strike_reference || rs.no_ref;
 
-      // Resolve condition labels in current language
       const conditions = Array.isArray(tR.conditions) && tR.conditions.length
         ? tR.conditions.map(c => {
             const key = c.replace(/\s+/g, "_").toUpperCase();
             const def = CONDITION_DEFINITIONS[key];
             if (!def) return `- ${c}`;
-            const lbl = typeof def.label === "string"
-              ? def.label
-              : (def.label?.[currentLang] || def.label?.en || c);
+            const lbl = typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || c);
             return `- ${lbl}`;
           }).join("\n")
         : `- ${rs.none_detected}`;
 
-      // Resolve signal titles and descriptions in current language
       const signals = Array.isArray(p.signals) && p.signals.length
         ? p.signals.map(s => {
             const m = SIGNAL_MAP[s];
             if (!m) return `- ${s}`;
-            const title = typeof m.title === "string"
-              ? m.title : (m.title?.[currentLang] || m.title?.en || s);
-            const desc = typeof m.description === "string"
-              ? m.description : (m.description?.[currentLang] || m.description?.en || "");
+            const title = typeof m.title === "string" ? m.title : (m.title?.[currentLang] || m.title?.en || s);
+            const desc  = typeof m.description === "string" ? m.description : (m.description?.[currentLang] || m.description?.en || "");
             return `- **${title}**${desc ? ` — ${desc}` : ""}`;
           }).join("\n")
         : `- ${rs.none_signals}`;
 
-      // Resolve trajectory label in current language
-      const traj    = (tR.trajectory || "UNKNOWN").toUpperCase();
-      const cfg     = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-      const trajLabel = typeof cfg.label === "string"
-        ? cfg.label : (cfg.label?.[currentLang] || cfg.label?.en || traj);
+      const traj      = (tR.trajectory || "UNKNOWN").toUpperCase();
+      const cfg       = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
+      const trajLabel = cfg.label?.[currentLang] || cfg.label?.en || traj;
 
-      // Resolve transition in current language
       const fromKey = tR.moment_of_change?.from;
       const toKey   = tR.moment_of_change?.to;
       let transitionText = rs.none_transition;
 
       if (fromKey && toKey) {
-        function resolveConditionLabel(key) {
-          const def = CONDITION_DEFINITIONS[key?.replace(/\s+/g, "_").toUpperCase()];
-          if (!def) return key;
-          return typeof def.label === "string"
-            ? def.label : (def.label?.[currentLang] || def.label?.en || key);
-        }
-        transitionText = `${resolveConditionLabel(fromKey)} → ${resolveConditionLabel(toKey)}`;
+        const fromDef = CONDITION_DEFINITIONS[fromKey?.replace(/\s+/g, "_").toUpperCase()];
+        const toDef   = CONDITION_DEFINITIONS[toKey?.replace(/\s+/g, "_").toUpperCase()];
+        const fromLbl = fromDef ? (typeof fromDef.label === "string" ? fromDef.label : (fromDef.label?.[currentLang] || fromDef.label?.en)) : fromKey;
+        const toLbl   = toDef   ? (typeof toDef.label   === "string" ? toDef.label   : (toDef.label?.[currentLang]   || toDef.label?.en))   : toKey;
+        transitionText = `${fromLbl} → ${toLbl}`;
       }
 
-      // Resolve system state from raw output — not from rendered label
       const stateKey  = findSystemState(r.output || {});
       const stateDef  = SYSTEM_STATE_MAP[stateKey];
       const stateLabel = stateDef?.label
-        ? (typeof stateDef.label === "string"
-            ? stateDef.label
-            : (stateDef.label?.[currentLang] || stateDef.label?.en))
+        ? (stateDef.label?.[currentLang] || stateDef.label?.en)
         : stateKey || rs.no_state;
-
-      // Resolve what it means in current language
-      const whatItMeansText = r.rendered?.what_it_means || rs.no_interp;
 
       const md = [
         `# ${rs.title}`, ``,
@@ -1942,7 +1318,7 @@
         `**${rs.conditions_label}:**`, conditions, ``,
         `**${rs.transition_label}:** ${transitionText}`, ``,
         `---`, ``,
-        `## ${rs.section_means}`, ``, whatItMeansText, ``,
+        `## ${rs.section_means}`, ``, r.rendered?.what_it_means || rs.no_interp, ``,
         `---`, ``,
         `## ${rs.section_state}`, ``, `\`${stateLabel}\``, ``,
         `---`, ``,
@@ -1955,17 +1331,11 @@
 
       const safeRef  = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");
       const safeTs   = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `cde-tuarascail${safeRef ? `-${safeRef}` : ""}-${currentLang}-${safeTs}.md`;
+      const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${currentLang}-${safeTs}.md`;
 
       triggerDownload(md, filename, "text/markdown");
-      statusText.textContent = currentLang === "ga"
-        ? `Markdown íoslódáilte: ${filename}`
-        : `Markdown downloaded: ${filename}`;
-      trackEvent("cde_export", {
-        format: "markdown",
-        language: currentLang,
-        strike_reference: r.strike_reference || "none"
-      });
+      statusText.textContent = `Markdown downloaded: ${filename}`;
+      trackEvent("cde_export", { format: "markdown", language: currentLang, strike_reference: r.strike_reference || "none" });
     });
 
     // ============================================================
@@ -1981,7 +1351,7 @@
       try { localStorage.setItem("cde_last_result", JSON.stringify(latestReportData)); } catch(e) {}
 
       showAttachedReference(ref);
-      statusText.textContent = `${t("status_attached")} ${ref}. Download to save.`;
+      statusText.textContent = `${t("status_attached")} ${ref}.`;
     });
 
     // ============================================================
@@ -1995,14 +1365,10 @@
       // Trajectory badge
       const traj = (tD.trajectory || "UNKNOWN").toUpperCase();
       const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-      const label =
-        typeof cfg.label === "string"
-          ? cfg.label
-          : cfg.label[currentLang] || cfg.label.en;
-
+      const lbl  = cfg.label?.[currentLang] || cfg.label?.en || traj;
       trajectoryBadge.innerHTML = `
         <span class="trajectory-badge ${cfg.class}">
-          <span class="dot"></span>${label}
+          <span class="dot"></span>${lbl}
         </span>
       `;
 
@@ -2013,28 +1379,23 @@
           const key = c.replace(/\s+/g, "_").toUpperCase();
           const def = CONDITION_DEFINITIONS[key];
           if (def) {
-          const label = def.label[currentLang] || def.label.en;
-          const definition = def.definition[currentLang] || def.definition.en;
-
-          const signals = Array.isArray(def.signals)
-            ? def.signals
-            : (def.signals?.[currentLang] || def.signals?.en || []);
-
-          const signalList = signals.map(s => `<li>${s}</li>`).join("");
-
-          return `
-            <div class="condition-card">
-              <div class="condition-name">
-                ${label}
-                <span class="expand-icon">▾</span>
+            const condLabel = typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || c);
+            const condDef   = typeof def.definition === "string" ? def.definition : (def.definition?.[currentLang] || def.definition?.en || "");
+            const condSigs  = Array.isArray(def.signals) ? def.signals : (def.signals?.[currentLang] || def.signals?.en || []);
+            const signalList = condSigs.map(s => `<li>${s}</li>`).join("");
+            return `
+              <div class="condition-card">
+                <div class="condition-name">
+                  ${condLabel}
+                  <span class="expand-icon">▾</span>
+                </div>
+                <div class="condition-detail">
+                  <strong>Definition:</strong><br>${condDef}
+                  ${signalList ? `<ul style="margin:8px 0 0;padding-left:16px;">${signalList}</ul>` : ""}
+                </div>
               </div>
-              <div class="condition-detail">
-                <strong>Definition:</strong><br>${definition}
-                <ul style="margin:8px 0 0;padding-left:16px;">${signalList}</ul>
-              </div>
-            </div>
-          `;
-        }
+            `;
+          }
           return `<div class="condition-card"><div class="condition-name">${c}</div></div>`;
         }).join("");
 
@@ -2042,16 +1403,14 @@
           card.addEventListener("click", () => card.classList.toggle("expanded"));
         });
       } else {
-        conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">No conditions detected.</div></div>`;
+        conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">${t("no_conditions")}</div></div>`;
       }
 
       // Transition
       function getConditionLabel(key) {
-        const def = CONDITION_DEFINITIONS[key];
+        const def = CONDITION_DEFINITIONS[key?.replace(/\s+/g, "_").toUpperCase()];
         if (!def) return key;
-
-        if (typeof def.label === "string") return def.label;
-        return def.label[currentLang] || def.label.en;
+        return typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || key);
       }
 
       const fromKey = tD.moment_of_change?.from;
@@ -2060,16 +1419,10 @@
       if (fromKey && toKey) {
         const fromLabel = getConditionLabel(fromKey);
         const toLabel   = getConditionLabel(toKey);
-
-        const prefix = currentLang === "ga" ? "Aistriú idir"
-          : currentLang === "fr" ? "Transition entre"
-          : "Transition";
+        const prefix    = t("transition_prefix");
         transitionBox.textContent = `${prefix} ${fromLabel} → ${toLabel}`;
       } else {
-        transitionBox.textContent =
-          currentLang === "ga" ? "Aistriú: Níl ceann aimsithe"
-          : currentLang === "fr" ? "Transition : Aucune détectée"
-          : "Transition: None detected";
+        transitionBox.textContent = t("transition_none");
       }
 
       // What it means
@@ -2080,40 +1433,18 @@
         whatItMeans.textContent = mappedLines.join("\n\n");
       } else if (fromKey && toKey) {
         const fromLabel = getConditionLabel(fromKey);
-        const toLabel = getConditionLabel(toKey);
-        whatItMeans.textContent =
-          currentLang === "ga"
-            ? `Aistriú ó ${fromLabel} go ${toLabel} braite laistigh den tsraith a cuireadh isteach.`
-            : currentLang === "fr"
-            ? `Transition de ${fromLabel} vers ${toLabel} détectée dans la séquence soumise.`
-            : `Transition from ${fromLabel} to ${toLabel} detected within submitted sequence.`;
+        const toLabel   = getConditionLabel(toKey);
+        whatItMeans.textContent = `${fromLabel} → ${toLabel}`;
       } else {
-        whatItMeans.textContent =
-          currentLang === "ga" ? "Níor tugadh léirmhíniú ar ais."
-          : currentLang === "fr" ? "Aucune interprétation retournée."
-          : "No interpretation returned.";
+        whatItMeans.textContent = t("awaiting_analysis");
       }
-      // ==========================
+
       // System state
-      // ==========================
-      
       const stateKey = findSystemState({ timelineData, patternData });
       const stateDef = SYSTEM_STATE_MAP[stateKey];
-
-      if (stateDef?.label) {
-        systemState.textContent =
-          stateDef.label[currentLang] || stateDef.label.en;
-      } else {
-      systemState.textContent =
-        currentLang === "ga"
-          ? `Níl staid chórais ar fáil. (${stateKey || "none"})`
-          : currentLang === "fr"
-          ? `Aucun état du système retourné. (${stateKey || "none"})`
-          : `No system state returned. (${stateKey || "none"})`;
-    }
-
-renderSignals(pD.signals || []);
-        
+      systemState.textContent = stateDef?.label
+        ? (stateDef.label[currentLang] || stateDef.label.en)
+        : stateKey || t("awaiting_analysis");
 
       // Signals
       renderSignals(pD.signals || []);
@@ -2125,24 +1456,24 @@ renderSignals(pD.signals || []);
 
     function renderSignals(signals) {
       if (!Array.isArray(signals) || !signals.length) {
-        signalsBox.innerHTML = `<div class="signal-card"><div class="signal-description">No signals returned.</div></div>`;
+        signalsBox.innerHTML = `<div class="signal-card"><div class="signal-description">${t("no_signals")}</div></div>`;
         return;
       }
 
       signalsBox.innerHTML = signals.map(signal => {
-        const m = SIGNAL_MAP[signal] || { title: { en: signal }, description: { en: "" }, detail: { en: "" } };
+        const m     = SIGNAL_MAP[signal] || { title: { en: signal }, description: { en: "" }, detail: { en: "" } };
+        const title = m.title?.[currentLang]       || m.title?.en       || signal;
+        const desc  = m.description?.[currentLang] || m.description?.en || "";
+        const det   = m.detail?.[currentLang]      || m.detail?.en      || "";
 
-        const title = m.title?.[currentLang] || m.title?.en || signal;
-        const description = m.description?.[currentLang] || m.description?.en || "";
-        const detail = m.detail?.[currentLang] || m.detail?.en || "";
         return `
           <div class="signal-card">
             <div class="signal-title">
               ${title}
-              ${m.detail ? `<span class="expand-icon">▾</span>` : ""}
+              ${det ? `<span class="expand-icon">▾</span>` : ""}
             </div>
-            ${description ? `<div class="signal-description">${description}</div>` : ""}
-            ${detail      ? `<div class="signal-detail">${detail}</div>`           : ""}
+            ${desc ? `<div class="signal-description">${desc}</div>` : ""}
+            ${det  ? `<div class="signal-detail">${det}</div>`       : ""}
           </div>
         `;
       }).join("");
@@ -2190,12 +1521,7 @@ renderSignals(pD.signals || []);
             desired_outcome: desiredOutcome,
             urgency: urgency === "high" ? "medium" : urgency,
             institutions: [institution],
-            case_lifecycle: {
-              current_stage: "awaiting_response",
-              status: "active",
-              stalled: false,
-              days_open: earlierDays
-            }
+            case_lifecycle: { current_stage: "awaiting_response", status: "active", stalled: false, days_open: earlierDays }
           },
           {
             strike_reference: `Generated-${Date.now()}-B`,
