@@ -184,6 +184,27 @@
 
     .controls { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 
+    /* Compare mode action separation */
+    #comparePanel .controls {
+      margin-top: 12px;
+      margin-bottom: 20px;
+    }
+
+    #comparePanel .controls::after {
+      content: "";
+      display: block;
+      margin-top: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    /* Optional: make Run comparison clearly primary */
+    #comparePanel #compareBtn {
+      margin-top: 8px;
+      background: #e5e7eb;
+      color: #05070b;
+      font-weight: 600;
+    }
+
     .controls-export {
       display: flex;
       gap: 10px;
