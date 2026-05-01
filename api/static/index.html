@@ -4,9 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Civic Decision Engine</title>
+
   <!-- author: Nick Moloney — civic-decision-engine v10 -->
   <meta name="author" content="Nick Moloney" />
   <meta name="description" content="Civic Decision Engine — A system for diagnosing institutional behaviour. Built by Nick Moloney." />
+
   <link rel="icon" href="/static/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -15,12 +17,12 @@
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-8405RVT76Q"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-8405RVT76Q');
+    function gtag(){ dataLayer.push(arguments); }
+    gtag("js", new Date());
+    gtag("config", "G-8405RVT76Q");
   </script>
 
-  <!-- Translation data -->
+  <!-- Required i18n dependency -->
   <script src="/static/translations.js"></script>
 
   <style>
@@ -49,10 +51,6 @@
       margin: 0 auto;
       padding: 40px 24px 64px;
     }
-
-    /* ============================================================
-       LANGUAGE BAR
-    ============================================================ */
 
     .lang-bar {
       display: flex;
@@ -83,11 +81,6 @@
 
     .lang-btn:hover { border-color: #374151; color: var(--text); }
     .lang-btn.active { border-color: #4b5563; color: var(--text); background: #1f2937; }
-    .lang-btn.coming-soon { opacity: 0.4; cursor: not-allowed; }
-
-    /* ============================================================
-       HERO
-    ============================================================ */
 
     .hero {
       display: grid;
@@ -124,10 +117,6 @@
       filter: brightness(0.9);
     }
 
-    /* ============================================================
-       GRID & PANELS
-    ============================================================ */
-
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -145,10 +134,6 @@
     .panel h2 { margin: 0 0 8px; font-size: 1.4rem; letter-spacing: -0.02em; }
     .panel p.meta { margin: 0 0 18px; color: var(--muted); font-size: 0.95rem; }
 
-    /* ============================================================
-       TABS
-    ============================================================ */
-
     .tabs { display: flex; gap: 10px; margin: 0 0 18px; flex-wrap: wrap; }
 
     .tab-btn {
@@ -163,12 +148,14 @@
     }
 
     .tab-btn.active { background: #e5e7eb; color: #05070b; font-weight: 600; }
+
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* ============================================================
-       FORM
-    ============================================================ */
+    /* Hide single-case controls when Compare Cases tab is active */
+    #inputPanel.compare-mode #runBtn,
+    #inputPanel.compare-mode .controls-export,
+    #inputPanel.compare-mode .strike-attach { display: none !important; }
 
     textarea, input, select {
       width: 100%;
@@ -194,10 +181,6 @@
     .field label { display: block; margin: 0 0 8px; font-size: 0.92rem; color: var(--accent); }
     .field.full { grid-column: 1 / -1; }
     .plain-textarea { min-height: 140px; font-family: inherit; line-height: 1.5; resize: vertical; }
-
-    /* ============================================================
-       CONTROLS
-    ============================================================ */
 
     .controls { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
 
@@ -245,10 +228,6 @@
     button:hover { opacity: 0.95; }
     button:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ============================================================
-       OUTPUT
-    ============================================================ */
-
     .output-block { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px; }
 
     .output-block h3 {
@@ -259,7 +238,7 @@
       letter-spacing: 0.06em;
     }
 
-    .card {
+    .card, .compare-card {
       background: #060b14;
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -294,10 +273,6 @@
       color: #93c5fd;
     }
 
-    /* ============================================================
-       TRAJECTORY BADGE
-    ============================================================ */
-
     .trajectory-badge {
       display: inline-flex;
       align-items: center;
@@ -319,11 +294,7 @@
     .trajectory-badge.amber .dot { background: #fcd34d; }
     .trajectory-badge.red   .dot { background: #fca5a5; }
 
-    /* ============================================================
-       CONDITION & SIGNAL CARDS
-    ============================================================ */
-
-    .condition-card {
+    .condition-card, .signal-card {
       background: #060b14;
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -333,10 +304,11 @@
       transition: border-color 0.15s;
     }
 
-    .condition-card:hover { border-color: #374151; }
-    .condition-card.expanded .condition-detail { display: block; }
+    .condition-card:hover, .signal-card:hover { border-color: #374151; }
+    .condition-card.expanded .condition-detail,
+    .signal-card.expanded .signal-detail { display: block; }
 
-    .condition-name {
+    .condition-name, .signal-title {
       font-size: 0.94rem;
       font-weight: 600;
       color: var(--text);
@@ -346,44 +318,10 @@
     }
 
     .expand-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.15s; }
-    .condition-card.expanded .expand-icon { transform: rotate(180deg); }
-
-    .condition-detail {
-      display: none;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px solid var(--line);
-      font-size: 0.88rem;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .signal-card {
-      background: #060b14;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-      cursor: pointer;
-      transition: border-color 0.15s;
-    }
-
-    .signal-card:hover { border-color: #374151; }
-    .signal-card.expanded .signal-detail { display: block; }
-
-    .signal-title {
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
+    .condition-card.expanded .expand-icon,
     .signal-card.expanded .expand-icon { transform: rotate(180deg); }
-    .signal-description { font-size: 0.92rem; color: var(--muted); line-height: 1.5; }
 
-    .signal-detail {
+    .condition-detail, .signal-detail {
       display: none;
       margin-top: 10px;
       padding-top: 10px;
@@ -393,9 +331,7 @@
       line-height: 1.6;
     }
 
-    /* ============================================================
-       HISTORY SIDEBAR
-    ============================================================ */
+    .signal-description { font-size: 0.92rem; color: var(--muted); line-height: 1.5; }
 
     .sidebar-overlay {
       display: none;
@@ -483,10 +419,6 @@
       padding: 10px;
     }
 
-    /* ============================================================
-       PRINT
-    ============================================================ */
-
     @media print {
       .lang-bar,
       .wrap > section.hero,
@@ -521,10 +453,6 @@
       }
     }
 
-    /* ============================================================
-       RESPONSIVE
-    ============================================================ */
-
     @media (max-width: 980px) {
       .hero, .grid, .form-grid { grid-template-columns: 1fr; }
       .panel { min-height: unset; }
@@ -533,8 +461,8 @@
     }
   </style>
 </head>
-<body>
 
+<body>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
   <div class="sidebar" id="historySidebar">
@@ -548,7 +476,6 @@
   </div>
 
   <div class="wrap">
-
     <div class="lang-bar">
       <span data-i18n="lang_label">Language:</span>
       <button class="lang-btn active" data-lang="en" type="button">English</button>
@@ -575,15 +502,14 @@
     </section>
 
     <section class="grid">
-
-      <!-- INPUT PANEL -->
-      <div class="panel">
+      <div class="panel" id="inputPanel">
         <h2 data-i18n="input_title">Enter a case</h2>
         <p class="meta" data-i18n="input_meta">Describe the situation in plain language, or paste structured JSON.</p>
 
-        <div class="tabs">
-          <button class="tab-btn active" id="describeTabBtn" type="button" data-i18n="tab_describe">Describe a case</button>
-          <button class="tab-btn" id="jsonTabBtn" type="button" data-i18n="tab_json">Paste JSON</button>
+        <div class="tabs" id="inputTabs">
+          <button class="tab-btn active" id="describeTabBtn" type="button" data-mode="describe" data-i18n="tab_describe">Describe a case</button>
+          <button class="tab-btn" id="jsonTabBtn" type="button" data-mode="json" data-i18n="tab_json">Paste JSON</button>
+          <button class="tab-btn" id="compareTabBtn" type="button" data-mode="compare" data-i18n="tab_compare">Compare Cases</button>
         </div>
 
         <div class="tab-panel active" id="describePanel">
@@ -592,10 +518,12 @@
               <label for="simpleWhatHappened" data-i18n="label_what_happened">What happened?</label>
               <textarea id="simpleWhatHappened" class="plain-textarea" data-i18n-placeholder="placeholder_what_happened" placeholder="Describe the situation..."></textarea>
             </div>
+
             <div class="field">
               <label for="simpleInstitution" data-i18n="label_institution">Who is involved?</label>
               <input id="simpleInstitution" type="text" data-i18n-placeholder="placeholder_institution" placeholder="e.g. Local Authority" />
             </div>
+
             <div class="field">
               <label for="simpleResponse" data-i18n="label_response">What response was received?</label>
               <select id="simpleResponse">
@@ -606,10 +534,12 @@
                 <option value="other" data-i18n="opt_other">Other</option>
               </select>
             </div>
+
             <div class="field">
               <label for="simpleDaysOpen" data-i18n="label_days">How long has it been open? (days)</label>
               <input id="simpleDaysOpen" type="number" min="0" placeholder="e.g. 45" />
             </div>
+
             <div class="field">
               <label for="simpleStage" data-i18n="label_stage">What stage is it at?</label>
               <select id="simpleStage">
@@ -620,6 +550,7 @@
                 <option value="escalated" data-i18n="opt_escalated">Escalated</option>
               </select>
             </div>
+
             <div class="field">
               <label for="simpleUrgency" data-i18n="label_urgency">How urgent is it?</label>
               <select id="simpleUrgency">
@@ -628,6 +559,7 @@
                 <option value="high" data-i18n="opt_high">High</option>
               </select>
             </div>
+
             <div class="field full">
               <label for="simpleOutcome" data-i18n="label_outcome">What outcome is needed?</label>
               <input id="simpleOutcome" type="text" data-i18n-placeholder="placeholder_outcome" placeholder="e.g. A clear substantive response and procedural accountability" />
@@ -638,6 +570,21 @@
         <div class="tab-panel" id="jsonPanel">
           <p class="meta" data-i18n="json_meta">Paste one or more civic cases in JSON.</p>
           <textarea id="inputJson"></textarea>
+        </div>
+
+        <div class="tab-panel" id="comparePanel">
+          <p class="meta" data-i18n="compare_meta">Paste an array of cases in JSON to detect patterns across them.</p>
+
+          <textarea id="compareInput" data-i18n-placeholder="compare_placeholder" placeholder="[
+  { ...case one... },
+  { ...case two... }
+]"></textarea>
+
+          <div class="controls">
+            <button id="compareBtn" type="button" data-i18n="btn_compare">Run comparison</button>
+          </div>
+
+          <div class="compare-card mono" id="compareOutput"></div>
         </div>
 
         <div class="controls">
@@ -668,7 +615,6 @@
         <div class="status" id="statusText"></div>
       </div>
 
-      <!-- OUTPUT PANEL -->
       <div class="panel" id="outputPanel">
         <h2 data-i18n="output_title">Analysis</h2>
         <p class="meta" data-i18n="output_meta">Structured interpretation</p>
@@ -732,9 +678,115 @@
   </div>
 
   <script>
-    // ============================================================
-    // Import translation data from translations.js
-    // ============================================================
+    if (!window.CDE_I18N) {
+      console.error("Missing /static/translations.js. The page will use a minimal English fallback.");
+      window.CDE_I18N = {
+        TRANSLATIONS: {
+          en: {
+            lang_label: "Language:",
+            hero_title: "Civic Decision Engine",
+            hero_lead: "A system that makes institutional behaviour visible.",
+            hero_sub1: "Observation sometimes becomes clearer when structure is applied.",
+            hero_sub2: "Not designed for attention. Designed for understanding.",
+            hero_record: "The record does not argue.",
+            input_title: "Enter a case",
+            input_meta: "Describe the situation in plain language, or paste structured JSON.",
+            tab_describe: "Describe a case",
+            tab_json: "Paste JSON",
+            tab_compare: "Compare Cases",
+            label_what_happened: "What happened?",
+            placeholder_what_happened: "Describe the situation...",
+            label_institution: "Who is involved?",
+            placeholder_institution: "e.g. Local Authority",
+            label_response: "What response was received?",
+            opt_no_response: "No response",
+            opt_acknowledged: "Acknowledged only",
+            opt_partial: "Partial response",
+            opt_substantive: "Substantive response",
+            opt_other: "Other",
+            label_days: "How long has it been open? (days)",
+            label_stage: "What stage is it at?",
+            opt_submitted: "Submitted",
+            opt_acknowledged_stage: "Acknowledged",
+            opt_awaiting: "Awaiting response",
+            opt_delayed: "Delayed",
+            opt_escalated: "Escalated",
+            label_urgency: "How urgent is it?",
+            opt_low: "Low",
+            opt_medium: "Medium",
+            opt_high: "High",
+            label_outcome: "What outcome is needed?",
+            placeholder_outcome: "e.g. A clear substantive response and procedural accountability",
+            json_meta: "Paste one or more civic cases in JSON.",
+            compare_meta: "Paste an array of cases in JSON to detect patterns across them.",
+            compare_placeholder: "[\n  { ...case one... },\n  { ...case two... }\n]",
+            btn_compare: "Run comparison",
+            btn_run: "Run analysis",
+            btn_copy: "Copy result",
+            btn_history: "Case history",
+            btn_example: "Try an example",
+            btn_clear: "Clear",
+            btn_download_json: "Download JSON",
+            btn_download_md: "Download Markdown",
+            btn_print: "Print report",
+            placeholder_strike: "Strike reference (e.g. Strike-001)",
+            btn_attach: "Attach to case",
+            output_title: "Analysis",
+            output_meta: "Structured interpretation",
+            out_case_ref: "Case reference",
+            out_trajectory: "Trajectory",
+            out_what_happening: "What is happening",
+            out_what_means: "What it means",
+            out_system_state: "System state",
+            out_signals: "Signals",
+            out_raw: "Raw output",
+            footer_note: "It becomes clear enough to be returned to.",
+            awaiting_input: "Awaiting input.",
+            awaiting_analysis: "Awaiting analysis.",
+            no_result: "No result yet.",
+            history_title: "Case history",
+            history_empty: "No analyses recorded yet.",
+            status_example_loaded: "Example loaded.",
+            status_running: "Running analysis...",
+            status_complete: "Analysis complete.",
+            status_restored: "Previous result restored.",
+            status_copied: "Result copied.",
+            status_no_report: "No report available yet.",
+            status_invalid_input: "Invalid input. Please correct the form or JSON.",
+            status_endpoint_error: "Analysis endpoint not found.",
+            status_attached: "Report attached to",
+            status_enter_ref: "Enter a Strike reference to attach.",
+            transition_prefix: "Transition",
+            transition_none: "Transition: None detected",
+            no_conditions: "No conditions detected.",
+            no_signals: "No signals returned.",
+            clear_history: "Clear history",
+            restored_prefix: "Restored:",
+            compare_error: "Comparison failed. Check your JSON and try again.",
+            compare_min_cases: "Paste at least two cases to compare.",
+            compare_complete: "Cross-case analysis complete.",
+            out_case_count: "Cases submitted",
+            out_repeated_conditions: "Repeated conditions",
+            out_shared_signals: "Shared signals",
+            out_divergent_signals: "Divergent signals",
+            out_pattern_class: "Pattern classification",
+            none_repeated: "No conditions repeated across all cases.",
+            none_shared: "No signals shared across all cases.",
+            none_divergent: "No divergent signals detected."
+          }
+        },
+        CONDITION_DEFINITIONS: {},
+        SIGNAL_MAP: {},
+        SYSTEM_STATE_MAP: {
+          CROSS_CASE_PATTERN_CONFIRMED: { label: { en: "Cross-Case Pattern Confirmed" } },
+          INSUFFICIENT_PATTERN_EVIDENCE: { label: { en: "Insufficient Pattern Evidence" } }
+        },
+        TRAJECTORY_CONFIG: {
+          UNKNOWN: { class: "amber", label: { en: "Unknown" } }
+        },
+        REPORT_STRINGS: { en: {} }
+      };
+    }
 
     const {
       TRANSLATIONS,
@@ -745,15 +797,7 @@
       REPORT_STRINGS
     } = window.CDE_I18N;
 
-    // ============================================================
-    // Copyright year
-    // ============================================================
-
     document.getElementById("copyrightYear").textContent = new Date().getFullYear();
-
-    // ============================================================
-    // Example payload
-    // ============================================================
 
     const examplePayload = {
       cases: [
@@ -790,16 +834,25 @@
       ]
     };
 
-    // ============================================================
-    // i18n helpers
-    // ============================================================
-
     let currentLang = "en";
+    let currentMode = "describe";
+    let latestReportData = null;
+    let caseHistory = [];
 
     function t(key) {
       return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key])
-        || TRANSLATIONS.en[key]
+        || (TRANSLATIONS.en && TRANSLATIONS.en[key])
         || key;
+    }
+
+    function langValue(obj, fallback = "") {
+      if (!obj) return fallback;
+      if (typeof obj === "string") return obj;
+      return obj[currentLang] || obj.en || fallback;
+    }
+
+    function normalizeKey(value) {
+      return String(value || "").replace(/\s+/g, "_").toUpperCase();
     }
 
     function applyTranslations() {
@@ -824,77 +877,25 @@
       trackEvent("cde_language_change", { language: currentLang });
     }
 
-    document.querySelectorAll(".lang-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        currentLang = btn.dataset.lang;
-        try { localStorage.setItem("cde_lang", currentLang); } catch(e) {}
-        applyTranslations();
-      });
-    });
-
-    try {
-      const savedLang = localStorage.getItem("cde_lang");
-      if (savedLang && TRANSLATIONS[savedLang]) currentLang = savedLang;
-    } catch(e) {}
-
-    // ============================================================
-    // Analytics
-    // ============================================================
-
-    function trackEvent(event_name, params = {}) {
+    function trackEvent(eventName, params = {}) {
       if (typeof gtag === "function") {
-        gtag("event", event_name, { ...params, language: currentLang });
+        gtag("event", eventName, { ...params, language: currentLang });
       }
     }
-
-    function trackConditionsLayer(timelineData, patternData) {
-      const tD = timelineData?.results?.[0] || {};
-      const pD = patternData?.results?.[0]  || {};
-
-      const conditions     = Array.isArray(tD.conditions) ? tD.conditions : [];
-      const trajectory     = tD.trajectory   || "unknown";
-      const system_state   = pD.system_state || "unknown";
-      const signals        = Array.isArray(pD.signals) ? pD.signals : [];
-      const has_transition = !!(tD.moment_of_change?.from && tD.moment_of_change?.to);
-      const transition_label = has_transition
-        ? `${tD.moment_of_change.from} → ${tD.moment_of_change.to}` : "none";
-
-      trackEvent("cde_analysis_run", {
-        input_mode: currentMode, trajectory, system_state,
-        has_transition, transition_label,
-        condition_count: conditions.length, signal_count: signals.length,
-      });
-
-      conditions.forEach(condition =>
-        trackEvent("cde_condition_detected", { condition, trajectory, system_state, has_transition })
-      );
-
-      signals.forEach(signal =>
-        trackEvent("cde_signal_detected", { signal, trajectory, system_state, condition_count: conditions.length })
-      );
-
-      if (has_transition) {
-        trackEvent("cde_transition_detected", {
-          transition_label, trajectory, system_state, conditions: conditions.join("|")
-        });
-      }
-
-      if (system_state !== "unknown") {
-        trackEvent("cde_system_state", {
-          system_state, trajectory,
-          condition_count: conditions.length, signal_count: signals.length, has_transition,
-        });
-      }
-    }
-
-    // ============================================================
-    // Element refs
-    // ============================================================
 
     const describeTabBtn      = document.getElementById("describeTabBtn");
     const jsonTabBtn          = document.getElementById("jsonTabBtn");
+    const compareTabBtn       = document.getElementById("compareTabBtn");
+    const inputTabs           = document.getElementById("inputTabs");
+
     const describePanel       = document.getElementById("describePanel");
     const jsonPanel           = document.getElementById("jsonPanel");
+    const comparePanel        = document.getElementById("comparePanel");
+
+    const compareInput        = document.getElementById("compareInput");
+    const compareBtn          = document.getElementById("compareBtn");
+    const compareOutput       = document.getElementById("compareOutput");
+
     const inputJson           = document.getElementById("inputJson");
     const statusText          = document.getElementById("statusText");
     const runBtn              = document.getElementById("runBtn");
@@ -931,82 +932,264 @@
     const signalsBox          = document.getElementById("signalsBox");
     const rawOutput           = document.getElementById("rawOutput");
 
-    let currentMode      = "describe";
-    let latestReportData = null;
-    let caseHistory      = [];
-
-    // ============================================================
-    // Helper — show Strike reference in output panel
-    // ============================================================
-
-    function showAttachedReference(ref) {
-      if (!ref) { attachedMetaBlock.style.display = "none"; return; }
-      attachedMetaCard.textContent = `${t("out_case_ref")}: ${ref}`;
-      attachedMetaBlock.style.display = "block";
-      outputPanel.setAttribute("data-generated", new Date().toLocaleString() + " — " + ref);
-    }
-
-    // ============================================================
-    // Restore from localStorage
-    // ============================================================
+    document.querySelectorAll(".lang-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        currentLang = btn.dataset.lang;
+        try { localStorage.setItem("cde_lang", currentLang); } catch(e) {}
+        applyTranslations();
+        if (latestReportData?.output) {
+          renderResults(latestReportData.output.timeline, latestReportData.output.pattern);
+        }
+      });
+    });
 
     try {
-      const saved = localStorage.getItem("cde_last_result");
-      if (saved) {
-        latestReportData = JSON.parse(saved);
-        const { timeline, pattern } = latestReportData.output || {};
-        if (timeline && pattern) {
-          renderResults(timeline, pattern);
-          rawOutput.textContent        = JSON.stringify({ timeline, pattern }, null, 2);
-          downloadJsonBtn.disabled     = false;
-          downloadMarkdownBtn.disabled = false;
-          printBtn.disabled            = false;
-          attachStrikeBtn.disabled     = false;
-          statusText.textContent       = t("status_restored");
-          if (latestReportData.strike_reference) {
-            showAttachedReference(latestReportData.strike_reference);
-          }
-        }
-      }
-      const savedHistory = localStorage.getItem("cde_history");
-      if (savedHistory) caseHistory = JSON.parse(savedHistory);
+      const savedLang = localStorage.getItem("cde_lang");
+      if (savedLang && TRANSLATIONS[savedLang]) currentLang = savedLang;
     } catch(e) {}
-
-    inputJson.value = JSON.stringify(examplePayload, null, 2);
-    applyTranslations();
-
-    // ============================================================
-    // Tabs
-    // ============================================================
-
-    describeTabBtn.addEventListener("click", () => switchMode("describe"));
-    jsonTabBtn.addEventListener("click",     () => switchMode("json"));
 
     function switchMode(mode) {
       currentMode = mode;
+
       describeTabBtn.classList.toggle("active", mode === "describe");
-      jsonTabBtn.classList.toggle("active",     mode === "json");
-      describePanel.classList.toggle("active",  mode === "describe");
-      jsonPanel.classList.toggle("active",      mode === "json");
+      jsonTabBtn.classList.toggle("active", mode === "json");
+      compareTabBtn.classList.toggle("active", mode === "compare");
+
+      describePanel.classList.toggle("active", mode === "describe");
+      jsonPanel.classList.toggle("active", mode === "json");
+      comparePanel.classList.toggle("active", mode === "compare");
+
+      // Hide/show single-case controls based on mode
+      const inputPanel = document.getElementById("inputPanel");
+      inputPanel.classList.toggle("compare-mode", mode === "compare");
+
+      // Restore or update output panel heading and transition box
+      const outputH2   = outputPanel.querySelector("h2");
+      const outputMeta = outputPanel.querySelector("p.meta");
+
+      if (mode === "compare") {
+        outputH2.textContent   = t("out_compare_title");
+        outputMeta.textContent = t("compare_meta");
+        transitionBox.style.display = "none";
+      } else {
+        outputH2.textContent   = t("output_title");
+        outputMeta.textContent = t("output_meta");
+        transitionBox.style.display = "";
+
+        // Clear output panel when returning from compare mode
+        trajectoryBadge.innerHTML = "";
+        conditionsBox.innerHTML   = `<div class="condition-card"><div class="condition-name">${t("awaiting_input")}</div></div>`;
+        transitionBox.textContent = t("awaiting_input");
+        whatItMeans.textContent   = t("awaiting_analysis");
+        systemState.textContent   = t("awaiting_analysis");
+        signalsBox.innerHTML      = `<div class="signal-card"><div class="signal-description">${t("awaiting_analysis")}</div></div>`;
+        rawOutput.textContent     = t("no_result");
+
+        // Restore what-is-happening heading
+        const happeningBlock = conditionsBox?.closest(".output-block");
+        const happeningH3    = happeningBlock?.querySelector("h3");
+        if (happeningH3) happeningH3.textContent = t("out_what_happening");
+      }
     }
 
-    // ============================================================
-    // History sidebar
-    // ============================================================
-
-    historyBtn.addEventListener("click", () => {
-      renderHistorySidebar();
-      historySidebar.classList.add("open");
-      sidebarOverlay.classList.add("open");
-      trackEvent("cde_history_opened", { history_count: caseHistory.length });
+    inputTabs.addEventListener("click", (event) => {
+      const button = event.target.closest(".tab-btn");
+      if (!button) return;
+      switchMode(button.dataset.mode);
     });
 
-    sidebarClose.addEventListener("click",   closeSidebar);
-    sidebarOverlay.addEventListener("click", closeSidebar);
+    compareBtn.addEventListener("click", () => {
+      const input = compareInput.value.trim();
 
-    function closeSidebar() {
-      historySidebar.classList.remove("open");
-      sidebarOverlay.classList.remove("open");
+      if (!input) {
+        statusText.textContent = t("compare_error");
+        return;
+      }
+
+      let cases;
+      try {
+        cases = JSON.parse(input);
+      } catch(err) {
+        statusText.textContent = t("compare_error");
+        return;
+      }
+
+      if (!Array.isArray(cases) || cases.length < 2) {
+        statusText.textContent = t("compare_min_cases");
+        return;
+      }
+
+      statusText.textContent = t("compare_running");
+
+      // ── Compute cross-case signals ───────────────────────────
+
+      const stages    = cases.map(c => c.case_lifecycle?.current_stage || "unknown");
+      const stalledArr= cases.map(c => c.case_lifecycle?.stalled === true);
+      const days      = cases.map(c => c.case_lifecycle?.days_open || 0);
+      const refs      = cases.map(c => c.strike_reference || `Case ${cases.indexOf(c) + 1}`);
+      const triggers  = cases.map(c => c.decision_trigger || "");
+      const institutions = cases.map(c => (c.institutions || []).join(", ") || "—");
+
+      const allSameStage   = new Set(stages).size === 1;
+      const allStalled     = stalledArr.every(Boolean);
+      const someStalled    = stalledArr.some(Boolean);
+      const allLongOpen    = days.every(d => d >= 30);
+      const uniqueStages   = [...new Set(stages)];
+      const uniqueInsts    = [...new Set(institutions)];
+      const crossInstitution = uniqueInsts.length > 1;
+
+      // Pattern classification
+      const patternClass = (allStalled || allSameStage || allLongOpen)
+        ? "CROSS_CASE_PATTERN_CONFIRMED"
+        : "INSUFFICIENT_PATTERN_EVIDENCE";
+
+      const stateDef      = SYSTEM_STATE_MAP[patternClass];
+      const stateLabel    = langValue(stateDef?.label, patternClass);
+      const stateLines    = stateDef?.explanation?.[currentLang] || stateDef?.explanation?.en || [];
+      const cfg           = patternClass === "CROSS_CASE_PATTERN_CONFIRMED"
+        ? { class: "red", label: stateLabel }
+        : { class: "amber", label: stateLabel };
+
+      // Repeated conditions
+      const repeatedConditions = [];
+      if (allSameStage)  repeatedConditions.push(`${t("label_stage")}: ${stages[0]}`);
+      if (allStalled)    repeatedConditions.push("Stalled: all cases stalled");
+      if (allLongOpen)   repeatedConditions.push(`Days open: all cases open 30+ days (${days.join(", ")})`);
+
+      // Shared signals
+      const sharedSignals = [];
+      if (allSameStage)  sharedSignals.push("Identical lifecycle stage across all cases");
+      if (allLongOpen)   sharedSignals.push("Extended open duration across all cases");
+      if (someStalled && !allStalled) sharedSignals.push("Stalled status present in some cases");
+      if (!crossInstitution) sharedSignals.push(`Same institution: ${uniqueInsts[0]}`);
+
+      // Divergent signals — per case
+      const divergentByCase = cases.map((c, i) => {
+        const parts = [];
+        const stg = c.case_lifecycle?.current_stage || "unknown";
+        const d   = c.case_lifecycle?.days_open || 0;
+        const stl = c.case_lifecycle?.stalled ? "stalled" : "active";
+        if (!allSameStage) parts.push(`stage: ${stg}`);
+        if (!allLongOpen)  parts.push(`days open: ${d}`);
+        parts.push(`status: ${stl}`);
+        if (crossInstitution) parts.push(`institution: ${institutions[i]}`);
+        return { ref: refs[i], signals: parts };
+      });
+
+      // ── Update output panel heading ─────────────────────────
+
+      const outputH2   = outputPanel.querySelector("h2");
+      const outputMeta = outputPanel.querySelector("p.meta");
+      outputH2.textContent   = t("out_compare_title");
+      outputMeta.textContent = `${t("out_case_count")}: ${cases.length}`;
+
+      // ── Trajectory badge → Pattern classification ───────────
+
+      trajectoryBadge.innerHTML = `
+        <span class="trajectory-badge ${cfg.class}">
+          <span class="dot"></span>${stateLabel}
+        </span>
+      `;
+
+      // ── Conditions box → Repeated conditions ────────────────
+
+      const outH3Happening = outputPanel.querySelector("#conditionsBox")?.previousElementSibling;
+      if (outH3Happening) outH3Happening.textContent = t("out_repeated_conditions");
+
+      if (repeatedConditions.length) {
+        conditionsBox.innerHTML = repeatedConditions.map(c => `
+          <div class="condition-card">
+            <div class="condition-name">${c}</div>
+          </div>
+        `).join("");
+      } else {
+        conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">${t("none_repeated")}</div></div>`;
+      }
+
+      // Hide transition box — not applicable in compare mode
+      transitionBox.style.display = "none";
+
+      // ── What it means → Cross-case meaning ──────────────────
+
+      whatItMeans.textContent = stateLines.join("\n\n") || t("none_repeated");
+
+      // ── System state ─────────────────────────────────────────
+
+      systemState.textContent = stateLabel;
+
+      // ── Signals box → Shared + divergent ────────────────────
+
+      let signalsHTML = "";
+
+      if (sharedSignals.length) {
+        signalsHTML += `
+          <div class="signal-card">
+            <div class="signal-title">${t("out_shared_signals")}</div>
+            ${sharedSignals.map(s => `<div class="signal-description">— ${s}</div>`).join("")}
+          </div>
+        `;
+      }
+
+      signalsHTML += `
+        <div class="signal-card">
+          <div class="signal-title">${t("out_divergent_signals")} <span class="expand-icon">▾</span></div>
+          <div class="signal-detail">
+            ${divergentByCase.map(c => `
+              <strong>${c.ref}</strong><br>
+              ${c.signals.map(s => `— ${s}`).join("<br>")}
+            `).join("<hr style='border:none;border-top:1px solid var(--line);margin:8px 0;'>")}</div>
+        </div>
+      `;
+
+      signalsBox.innerHTML = signalsHTML;
+      signalsBox.querySelectorAll(".signal-card").forEach(card => {
+        if (card.querySelector(".signal-detail")) {
+          card.addEventListener("click", () => card.classList.toggle("expanded"));
+        }
+      });
+
+      // ── Raw output → comparison summary JSON ─────────────────
+
+      const compareJSON = {
+        mode: "cross_case_comparison",
+        generated_at: new Date().toISOString(),
+        case_count: cases.length,
+        references: refs,
+        pattern_class: patternClass,
+        pattern_label: stateLabel,
+        repeated_conditions: repeatedConditions,
+        shared_signals: sharedSignals,
+        divergent_signals: divergentByCase,
+        cases_summary: cases.map((c, i) => ({
+          reference:     refs[i],
+          stage:         stages[i],
+          days_open:     days[i],
+          stalled:       stalledArr[i],
+          institution:   institutions[i],
+        }))
+      };
+
+      rawOutput.textContent = JSON.stringify(compareJSON, null, 2);
+      compareOutput.innerText = "";
+
+      statusText.textContent = t("compare_complete");
+
+      trackEvent("cde_compare_run", {
+        case_count: cases.length,
+        all_same_stage: allSameStage,
+        all_stalled: allStalled,
+        pattern_class: patternClass
+      });
+    });
+
+    function showAttachedReference(ref) {
+      if (!ref) {
+        attachedMetaBlock.style.display = "none";
+        return;
+      }
+      attachedMetaCard.textContent = `${t("out_case_ref")}: ${ref}`;
+      attachedMetaBlock.style.display = "block";
+      outputPanel.setAttribute("data-generated", new Date().toLocaleString() + " — " + ref);
     }
 
     function renderHistorySidebar() {
@@ -1015,23 +1198,23 @@
         return;
       }
 
-      const items = [...caseHistory].reverse().map((entry, i) => {
-        const ref   = entry.strike_reference || "No reference";
-        const time  = entry.generated_at ? new Date(entry.generated_at).toLocaleString() : "";
-        const state = entry.system_state   || "—";
-        const traj  = (entry.trajectory    || "").toUpperCase();
-        const cfg   = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-        const lbl   = cfg.label?.[currentLang] || cfg.label?.en || traj;
-        const idx   = caseHistory.length - 1 - i;
+      const items = [...caseHistory].reverse().map((entry, index) => {
+        const ref = entry.strike_reference || "No reference";
+        const time = entry.generated_at ? new Date(entry.generated_at).toLocaleString() : "";
+        const state = entry.system_state || "—";
+        const traj = (entry.trajectory || "UNKNOWN").toUpperCase();
+        const cfg = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN || { class: "amber", label: { en: "Unknown" } };
+        const label = langValue(cfg.label, traj);
+        const historyIndex = caseHistory.length - 1 - index;
 
         return `
-          <div class="history-item" data-index="${idx}">
+          <div class="history-item" data-index="${historyIndex}">
             <div class="history-item-header">
               <span class="history-item-ref">${ref}</span>
               <span class="history-item-time">${time}</span>
             </div>
             <span class="trajectory-badge ${cfg.class}" style="margin-bottom:6px;">
-              <span class="dot"></span>${lbl}
+              <span class="dot"></span>${label}
             </span>
             <div class="history-item-state">${state}</div>
           </div>
@@ -1044,13 +1227,13 @@
         el.addEventListener("click", () => {
           const entry = caseHistory[parseInt(el.dataset.index, 10)];
           if (entry?.output) {
-            latestReportData             = entry;
+            latestReportData = entry;
             renderResults(entry.output.timeline, entry.output.pattern);
-            rawOutput.textContent        = JSON.stringify(entry.output, null, 2);
-            downloadJsonBtn.disabled     = false;
+            rawOutput.textContent = JSON.stringify(entry.output, null, 2);
+            downloadJsonBtn.disabled = false;
             downloadMarkdownBtn.disabled = false;
-            printBtn.disabled            = false;
-            attachStrikeBtn.disabled     = false;
+            printBtn.disabled = false;
+            attachStrikeBtn.disabled = false;
             statusText.textContent = `${t("restored_prefix")} ${entry.strike_reference || "analysis"}`;
             if (entry.strike_reference) showAttachedReference(entry.strike_reference);
             closeSidebar();
@@ -1065,61 +1248,67 @@
       });
     }
 
-    // ============================================================
-    // Load example
-    // ============================================================
+    historyBtn.addEventListener("click", () => {
+      renderHistorySidebar();
+      historySidebar.classList.add("open");
+      sidebarOverlay.classList.add("open");
+      trackEvent("cde_history_opened", { history_count: caseHistory.length });
+    });
+
+    sidebarClose.addEventListener("click", closeSidebar);
+    sidebarOverlay.addEventListener("click", closeSidebar);
+
+    function closeSidebar() {
+      historySidebar.classList.remove("open");
+      sidebarOverlay.classList.remove("open");
+    }
 
     loadExampleBtn.addEventListener("click", () => {
       if (currentMode === "json") {
         inputJson.value = JSON.stringify(examplePayload, null, 2);
+      } else if (currentMode === "compare") {
+        compareInput.value = JSON.stringify(examplePayload.cases, null, 2);
       } else {
         simpleWhatHappened.value = "A complaint was submitted and acknowledged, but no substantive response was provided. The matter remained open beyond the expected response period.";
-        simpleInstitution.value  = "Local Authority";
-        simpleResponse.value     = "acknowledged_only";
-        simpleDaysOpen.value     = "45";
-        simpleStage.value        = "awaiting_response";
-        simpleUrgency.value      = "medium";
-        simpleOutcome.value      = "A clear substantive response and procedural accountability.";
+        simpleInstitution.value = "Local Authority";
+        simpleResponse.value = "acknowledged_only";
+        simpleDaysOpen.value = "45";
+        simpleStage.value = "awaiting_response";
+        simpleUrgency.value = "medium";
+        simpleOutcome.value = "A clear substantive response and procedural accountability.";
       }
       statusText.textContent = t("status_example_loaded");
     });
 
-    // ============================================================
-    // Clear
-    // ============================================================
-
     clearBtn.addEventListener("click", () => {
       inputJson.value = "";
+      compareInput.value = "";
+      compareOutput.innerText = "";
       [simpleWhatHappened, simpleInstitution, simpleOutcome].forEach(el => el.value = "");
-      simpleResponse.value       = "acknowledged_only";
-      simpleDaysOpen.value       = "";
-      simpleStage.value          = "awaiting_response";
-      simpleUrgency.value        = "medium";
+      simpleResponse.value = "acknowledged_only";
+      simpleDaysOpen.value = "";
+      simpleStage.value = "awaiting_response";
+      simpleUrgency.value = "medium";
       strikeReferenceInput.value = "";
 
-      statusText.textContent    = "";
+      statusText.textContent = "";
       trajectoryBadge.innerHTML = "";
-      conditionsBox.innerHTML   = `<div class="condition-card"><div class="condition-name">${t("awaiting_input")}</div></div>`;
+      conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">${t("awaiting_input")}</div></div>`;
       transitionBox.textContent = t("awaiting_input");
-      whatItMeans.textContent   = t("awaiting_analysis");
-      systemState.textContent   = t("awaiting_analysis");
-      signalsBox.innerHTML      = `<div class="signal-card"><div class="signal-description">${t("awaiting_analysis")}</div></div>`;
-      rawOutput.textContent     = t("no_result");
-      latestReportData          = null;
-
+      whatItMeans.textContent = t("awaiting_analysis");
+      systemState.textContent = t("awaiting_analysis");
+      signalsBox.innerHTML = `<div class="signal-card"><div class="signal-description">${t("awaiting_analysis")}</div></div>`;
+      rawOutput.textContent = t("no_result");
+      latestReportData = null;
       attachedMetaBlock.style.display = "none";
-      attachedMetaCard.textContent    = "";
+      attachedMetaCard.textContent = "";
 
       [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = true);
       try { localStorage.removeItem("cde_last_result"); } catch(e) {}
     });
 
-    // ============================================================
-    // Copy result
-    // ============================================================
-
     copyResultBtn.addEventListener("click", async () => {
-      const ref  = latestReportData?.strike_reference ? `${t("out_case_ref")}: ${latestReportData.strike_reference}\n\n` : "";
+      const ref = latestReportData?.strike_reference ? `${t("out_case_ref")}: ${latestReportData.strike_reference}\n\n` : "";
       const text = [
         ref,
         t("out_trajectory").toUpperCase(), trajectoryBadge.textContent.trim(), "",
@@ -1137,10 +1326,6 @@
         statusText.textContent = "Unable to copy result.";
       }
     });
-
-    // ============================================================
-    // Run analysis
-    // ============================================================
 
     runBtn.addEventListener("click", async () => {
       statusText.textContent = t("status_running");
@@ -1172,42 +1357,38 @@
         if (!timelineRes.ok || !patternRes.ok) {
           rawOutput.textContent = JSON.stringify({
             timeline_status: timelineRes.status,
-            pattern_status:  patternRes.status
+            pattern_status: patternRes.status
           }, null, 2);
           statusText.textContent = t("status_endpoint_error");
           return;
         }
 
         const timelineData = await timelineRes.json();
-        const patternData  = await patternRes.json();
+        const patternData = await patternRes.json();
 
         rawOutput.textContent = JSON.stringify({ timeline: timelineData, pattern: patternData }, null, 2);
         renderResults(timelineData, patternData);
 
-        try {
-          trackConditionsLayer(timelineData, patternData);
-        } catch(trackingErr) {
-          console.warn("Analytics tracking skipped:", trackingErr);
-        }
+        trackConditionsLayer(timelineData, patternData);
 
-        const tResult    = timelineData?.results?.[0] || {};
-        const pResult    = patternData?.results?.[0]  || {};
+        const tResult = timelineData?.results?.[0] || {};
+        const pResult = patternData?.results?.[0] || {};
         const attachedRef = strikeReferenceInput.value.trim() || null;
 
         latestReportData = {
-          generated_at:     new Date().toISOString(),
+          generated_at: new Date().toISOString(),
           strike_reference: attachedRef,
-          input_mode:       currentMode,
-          input_payload:    payload,
-          trajectory:       tResult.trajectory   || null,
-          system_state:     pResult.system_state || null,
-          output:           { timeline: timelineData, pattern: patternData },
+          input_mode: currentMode,
+          input_payload: payload,
+          trajectory: tResult.trajectory || null,
+          system_state: pResult.system_state || null,
+          output: { timeline: timelineData, pattern: patternData },
           rendered: {
             what_is_happening: conditionsBox.innerText.trim(),
-            transition:        transitionBox.textContent.trim(),
-            what_it_means:     whatItMeans.textContent.trim(),
-            system_state:      systemState.textContent.trim(),
-            signals:           signalsBox.innerText.trim()
+            transition: transitionBox.textContent.trim(),
+            what_it_means: whatItMeans.textContent.trim(),
+            system_state: systemState.textContent.trim(),
+            signals: signalsBox.innerText.trim()
           }
         };
 
@@ -1216,121 +1397,128 @@
         caseHistory.push({ ...latestReportData });
         try {
           localStorage.setItem("cde_last_result", JSON.stringify(latestReportData));
-          localStorage.setItem("cde_history",     JSON.stringify(caseHistory));
+          localStorage.setItem("cde_history", JSON.stringify(caseHistory));
         } catch(e) {}
 
         [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = false);
         statusText.textContent = t("status_complete");
-
       } catch(err) {
         console.error(err);
         statusText.textContent = t("status_endpoint_error");
       }
     });
 
-    // ============================================================
-    // Print
-    // ============================================================
+    function trackConditionsLayer(timelineData, patternData) {
+      const tD = timelineData?.results?.[0] || {};
+      const pD = patternData?.results?.[0]  || {};
+      const conditions = Array.isArray(tD.conditions) ? tD.conditions : [];
+      const trajectory = tD.trajectory || "unknown";
+      const system_state = pD.system_state || "unknown";
+      const signals = Array.isArray(pD.signals) ? pD.signals : [];
+      const has_transition = !!(tD.moment_of_change?.from && tD.moment_of_change?.to);
+      const transition_label = has_transition
+        ? `${tD.moment_of_change.from} → ${tD.moment_of_change.to}`
+        : "none";
+
+      trackEvent("cde_analysis_run", {
+        input_mode: currentMode,
+        trajectory,
+        system_state,
+        has_transition,
+        transition_label,
+        condition_count: conditions.length,
+        signal_count: signals.length,
+      });
+    }
 
     printBtn.addEventListener("click", () => {
       trackEvent("cde_export", { format: "print" });
       window.print();
     });
 
-    // ============================================================
-    // Download JSON
-    // ============================================================
-
     downloadJsonBtn.addEventListener("click", () => {
-      if (!latestReportData) { statusText.textContent = t("status_no_report"); return; }
-      const ref      = latestReportData.strike_reference ? `-${latestReportData.strike_reference}` : "";
-      const ts       = new Date().toISOString().replace(/[:.]/g, "-");
+      if (!latestReportData) {
+        statusText.textContent = t("status_no_report");
+        return;
+      }
+      const ref = latestReportData.strike_reference ? `-${latestReportData.strike_reference}` : "";
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
       const filename = `cde-report${ref}-${ts}.json`;
       triggerDownload(JSON.stringify(latestReportData, null, 2), filename, "application/json");
       statusText.textContent = `JSON downloaded: ${filename}`;
       trackEvent("cde_export", { format: "json", strike_reference: latestReportData.strike_reference || "none" });
     });
 
-    // ============================================================
-    // Download Markdown — language-aware
-    // ============================================================
-
     downloadMarkdownBtn.addEventListener("click", () => {
-      if (!latestReportData) { statusText.textContent = t("status_no_report"); return; }
+      if (!latestReportData) {
+        statusText.textContent = t("status_no_report");
+        return;
+      }
 
-      const r   = latestReportData;
-      const p   = r.output?.pattern?.results?.[0]  || {};
-      const tR  = r.output?.timeline?.results?.[0] || {};
-      const rs  = REPORT_STRINGS[currentLang] || REPORT_STRINGS.en;
-      const ref = r.strike_reference || rs.no_ref;
+      const r = latestReportData;
+      const p = r.output?.pattern?.results?.[0] || {};
+      const tR = r.output?.timeline?.results?.[0] || {};
+      const rs = REPORT_STRINGS[currentLang] || REPORT_STRINGS.en || {};
+      const ref = r.strike_reference || rs.no_ref || "No reference attached";
 
       const conditions = Array.isArray(tR.conditions) && tR.conditions.length
         ? tR.conditions.map(c => {
-            const key = c.replace(/\s+/g, "_").toUpperCase();
+            const key = normalizeKey(c);
             const def = CONDITION_DEFINITIONS[key];
-            if (!def) return `- ${c}`;
-            const lbl = typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || c);
-            return `- ${lbl}`;
+            return `- ${langValue(def?.label, c)}`;
           }).join("\n")
-        : `- ${rs.none_detected}`;
+        : `- ${rs.none_detected || "None detected"}`;
 
       const signals = Array.isArray(p.signals) && p.signals.length
         ? p.signals.map(s => {
             const m = SIGNAL_MAP[s];
-            if (!m) return `- ${s}`;
-            const title = typeof m.title === "string" ? m.title : (m.title?.[currentLang] || m.title?.en || s);
-            const desc  = typeof m.description === "string" ? m.description : (m.description?.[currentLang] || m.description?.en || "");
+            const title = langValue(m?.title, s);
+            const desc = langValue(m?.description, "");
             return `- **${title}**${desc ? ` — ${desc}` : ""}`;
           }).join("\n")
-        : `- ${rs.none_signals}`;
+        : `- ${rs.none_signals || "None returned"}`;
 
-      const traj      = (tR.trajectory || "UNKNOWN").toUpperCase();
-      const cfg       = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-      const trajLabel = cfg.label?.[currentLang] || cfg.label?.en || traj;
+      const traj = (tR.trajectory || "UNKNOWN").toUpperCase();
+      const cfg = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN || { label: { en: traj } };
+      const trajLabel = langValue(cfg.label, traj);
 
       const fromKey = tR.moment_of_change?.from;
-      const toKey   = tR.moment_of_change?.to;
-      let transitionText = rs.none_transition;
+      const toKey = tR.moment_of_change?.to;
+      let transitionText = rs.none_transition || "None detected";
 
       if (fromKey && toKey) {
-        const fromDef = CONDITION_DEFINITIONS[fromKey?.replace(/\s+/g, "_").toUpperCase()];
-        const toDef   = CONDITION_DEFINITIONS[toKey?.replace(/\s+/g, "_").toUpperCase()];
-        const fromLbl = fromDef ? (typeof fromDef.label === "string" ? fromDef.label : (fromDef.label?.[currentLang] || fromDef.label?.en)) : fromKey;
-        const toLbl   = toDef   ? (typeof toDef.label   === "string" ? toDef.label   : (toDef.label?.[currentLang]   || toDef.label?.en))   : toKey;
-        transitionText = `${fromLbl} → ${toLbl}`;
+        transitionText = `${getConditionLabel(fromKey)} → ${getConditionLabel(toKey)}`;
       }
 
-      const stateKey  = findSystemState(r.output || {});
-      const stateDef  = SYSTEM_STATE_MAP[stateKey];
-      const stateLabel = stateDef?.label
-        ? (stateDef.label?.[currentLang] || stateDef.label?.en)
-        : stateKey || rs.no_state;
+      const stateKey = findSystemState(r.output || {});
+      const stateDef = SYSTEM_STATE_MAP[stateKey];
+      const stateLabel = langValue(stateDef?.label, stateKey || rs.no_state || "No system state returned.");
 
       const md = [
-        `# ${rs.title}`, ``,
-        `**${rs.generated}:** ${r.generated_at}`,
-        `**${rs.strike_ref}:** ${ref}`,
-        `**${rs.input_mode}:** ${r.input_mode}`, ``,
+        `# ${rs.title || "Civic Decision Engine — Analysis Report"}`, ``,
+        `**${rs.generated || "Generated"}:** ${r.generated_at}`,
+        `**${rs.strike_ref || "Strike Reference"}:** ${ref}`,
+        `**${rs.input_mode || "Input Mode"}:** ${r.input_mode}`, ``,
         `---`, ``,
-        `## ${rs.section_traj}`, ``, `**${trajLabel}**`, ``,
+        `## ${rs.section_traj || "Trajectory"}`, ``, `**${trajLabel}**`, ``,
         `---`, ``,
-        `## ${rs.section_happening}`, ``,
-        `**${rs.conditions_label}:**`, conditions, ``,
-        `**${rs.transition_label}:** ${transitionText}`, ``,
+        `## ${rs.section_happening || "What is happening"}`, ``,
+        `**${rs.conditions_label || "Conditions"}:**`, conditions, ``,
+        `**${rs.transition_label || "Transition"}:** ${transitionText}`, ``,
         `---`, ``,
-        `## ${rs.section_means}`, ``, r.rendered?.what_it_means || rs.no_interp, ``,
+        `## ${rs.section_means || "What it means"}`, ``, r.rendered?.what_it_means || rs.no_interp || "No interpretation returned.", ``,
         `---`, ``,
-        `## ${rs.section_state}`, ``, `\`${stateLabel}\``, ``,
+        `## ${rs.section_state || "System state"}`, ``, `\`${stateLabel}\``, ``,
         `---`, ``,
-        `## ${rs.section_signals}`, ``, signals, ``,
+        `## ${rs.section_signals || "Signals"}`, ``, signals, ``,
         `---`, ``,
-        `## ${rs.section_summary}`, ``, p.pattern_summary || rs.no_summary, ``,
+        `## ${rs.section_summary || "Pattern summary"}`, ``, p.pattern_summary || rs.no_summary || "No pattern summary returned.", ``,
         `---`, ``,
-        `*${rs.footer}*`
+        `*${rs.footer || "Civic Decision Engine v10 — Nick Moloney — The record does not argue."}*`
       ].join("\n");
 
-      const safeRef  = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");
-      const safeTs   = new Date().toISOString().replace(/[:.]/g, "-");
+      const safeRef = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");
+      const safeTs = new Date().toISOString().replace(/[:.]/g, "-");
       const filename = `cde-report${safeRef ? `-${safeRef}` : ""}-${currentLang}-${safeTs}.md`;
 
       triggerDownload(md, filename, "text/markdown");
@@ -1338,51 +1526,63 @@
       trackEvent("cde_export", { format: "markdown", language: currentLang, strike_reference: r.strike_reference || "none" });
     });
 
-    // ============================================================
-    // Attach to Strike reference
-    // ============================================================
-
     attachStrikeBtn.addEventListener("click", () => {
-      if (!latestReportData) { statusText.textContent = t("status_no_report"); return; }
+      if (!latestReportData) {
+        statusText.textContent = t("status_no_report");
+        return;
+      }
       const ref = strikeReferenceInput.value.trim();
-      if (!ref) { statusText.textContent = t("status_enter_ref"); return; }
+      if (!ref) {
+        statusText.textContent = t("status_enter_ref");
+        return;
+      }
 
       latestReportData.strike_reference = ref;
       try { localStorage.setItem("cde_last_result", JSON.stringify(latestReportData)); } catch(e) {}
-
       showAttachedReference(ref);
       statusText.textContent = `${t("status_attached")} ${ref}.`;
     });
 
-    // ============================================================
-    // Render results
-    // ============================================================
-
     function renderResults(timelineData, patternData) {
       const tD = timelineData?.results?.[0] || {};
-      const pD = patternData?.results?.[0]  || {};
+      const pD = patternData?.results?.[0] || {};
 
-      // Trajectory badge
+      // Restore output panel heading and labels for single-case mode
+      const outputH2   = outputPanel.querySelector("h2");
+      const outputMeta = outputPanel.querySelector("p.meta");
+      if (outputH2)   outputH2.textContent   = t("output_title");
+      if (outputMeta) outputMeta.textContent  = t("output_meta");
+
+      // Restore what-is-happening heading
+      const happeningBlock = conditionsBox?.closest(".output-block");
+      const happeningH3    = happeningBlock?.querySelector("h3");
+      if (happeningH3) happeningH3.textContent = t("out_what_happening");
+
+      // Restore transition box visibility
+      transitionBox.style.display = "";
+
       const traj = (tD.trajectory || "UNKNOWN").toUpperCase();
-      const cfg  = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN;
-      const lbl  = cfg.label?.[currentLang] || cfg.label?.en || traj;
+      const cfg = TRAJECTORY_CONFIG[traj] || TRAJECTORY_CONFIG.UNKNOWN || { class: "amber", label: { en: traj } };
+      const label = langValue(cfg.label, traj);
+
       trajectoryBadge.innerHTML = `
         <span class="trajectory-badge ${cfg.class}">
-          <span class="dot"></span>${lbl}
+          <span class="dot"></span>${label}
         </span>
       `;
 
-      // Conditions with expandable definitions
       const conditions = Array.isArray(tD.conditions) ? tD.conditions : [];
       if (conditions.length) {
         conditionsBox.innerHTML = conditions.map(c => {
-          const key = c.replace(/\s+/g, "_").toUpperCase();
+          const key = normalizeKey(c);
           const def = CONDITION_DEFINITIONS[key];
+
           if (def) {
-            const condLabel = typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || c);
-            const condDef   = typeof def.definition === "string" ? def.definition : (def.definition?.[currentLang] || def.definition?.en || "");
-            const condSigs  = Array.isArray(def.signals) ? def.signals : (def.signals?.[currentLang] || def.signals?.en || []);
+            const condLabel = langValue(def.label, c);
+            const condDef = langValue(def.definition, "");
+            const condSigs = def.signals?.[currentLang] || def.signals?.en || [];
             const signalList = condSigs.map(s => `<li>${s}</li>`).join("");
+
             return `
               <div class="condition-card">
                 <div class="condition-name">
@@ -1396,6 +1596,7 @@
               </div>
             `;
           }
+
           return `<div class="condition-card"><div class="condition-name">${c}</div></div>`;
         }).join("");
 
@@ -1406,53 +1607,32 @@
         conditionsBox.innerHTML = `<div class="condition-card"><div class="condition-name">${t("no_conditions")}</div></div>`;
       }
 
-      // Transition
-      function getConditionLabel(key) {
-        const def = CONDITION_DEFINITIONS[key?.replace(/\s+/g, "_").toUpperCase()];
-        if (!def) return key;
-        return typeof def.label === "string" ? def.label : (def.label?.[currentLang] || def.label?.en || key);
-      }
-
       const fromKey = tD.moment_of_change?.from;
-      const toKey   = tD.moment_of_change?.to;
+      const toKey = tD.moment_of_change?.to;
 
       if (fromKey && toKey) {
-        const fromLabel = getConditionLabel(fromKey);
-        const toLabel   = getConditionLabel(toKey);
-        const prefix    = t("transition_prefix");
-        transitionBox.textContent = `${prefix} ${fromLabel} → ${toLabel}`;
+        transitionBox.textContent = `${t("transition_prefix")} ${getConditionLabel(fromKey)} → ${getConditionLabel(toKey)}`;
       } else {
         transitionBox.textContent = t("transition_none");
       }
 
-      // What it means
       const mapped = SYSTEM_STATE_MAP[pD.system_state];
       const mappedLines = mapped?.explanation?.[currentLang] || mapped?.explanation?.en;
 
       if (mappedLines) {
         whatItMeans.textContent = mappedLines.join("\n\n");
       } else if (fromKey && toKey) {
-        const fromLabel = getConditionLabel(fromKey);
-        const toLabel   = getConditionLabel(toKey);
-        whatItMeans.textContent = `${fromLabel} → ${toLabel}`;
+        whatItMeans.textContent = `${getConditionLabel(fromKey)} → ${getConditionLabel(toKey)}`;
       } else {
         whatItMeans.textContent = t("awaiting_analysis");
       }
 
-      // System state
       const stateKey = findSystemState({ timelineData, patternData });
       const stateDef = SYSTEM_STATE_MAP[stateKey];
-      systemState.textContent = stateDef?.label
-        ? (stateDef.label[currentLang] || stateDef.label.en)
-        : stateKey || t("awaiting_analysis");
+      systemState.textContent = langValue(stateDef?.label, stateKey || t("awaiting_analysis"));
 
-      // Signals
       renderSignals(pD.signals || []);
     }
-
-    // ============================================================
-    // Render signals
-    // ============================================================
 
     function renderSignals(signals) {
       if (!Array.isArray(signals) || !signals.length) {
@@ -1461,10 +1641,10 @@
       }
 
       signalsBox.innerHTML = signals.map(signal => {
-        const m     = SIGNAL_MAP[signal] || { title: { en: signal }, description: { en: "" }, detail: { en: "" } };
-        const title = m.title?.[currentLang]       || m.title?.en       || signal;
-        const desc  = m.description?.[currentLang] || m.description?.en || "";
-        const det   = m.detail?.[currentLang]      || m.detail?.en      || "";
+        const m = SIGNAL_MAP[signal] || { title: { en: signal }, description: { en: "" }, detail: { en: "" } };
+        const title = langValue(m.title, signal);
+        const desc = langValue(m.description, "");
+        const det = langValue(m.detail, "");
 
         return `
           <div class="signal-card">
@@ -1473,7 +1653,7 @@
               ${det ? `<span class="expand-icon">▾</span>` : ""}
             </div>
             ${desc ? `<div class="signal-description">${desc}</div>` : ""}
-            ${det  ? `<div class="signal-detail">${det}</div>`       : ""}
+            ${det ? `<div class="signal-detail">${det}</div>` : ""}
           </div>
         `;
       }).join("");
@@ -1485,29 +1665,25 @@
       });
     }
 
-    // ============================================================
-    // Build payload from form
-    // ============================================================
-
     function buildPayloadFromForm() {
-      const whatHappened   = simpleWhatHappened.value.trim();
-      const institution    = simpleInstitution.value.trim() || "Institution";
-      const response       = simpleResponse.value;
-      const daysOpen       = parseInt(simpleDaysOpen.value || "0", 10);
-      const stage          = simpleStage.value;
-      const urgency        = simpleUrgency.value;
+      const whatHappened = simpleWhatHappened.value.trim();
+      const institution = simpleInstitution.value.trim() || "Institution";
+      const response = simpleResponse.value;
+      const daysOpen = parseInt(simpleDaysOpen.value || "0", 10);
+      const stage = simpleStage.value;
+      const urgency = simpleUrgency.value;
       const desiredOutcome = simpleOutcome.value.trim() || "A clear substantive response.";
 
       if (!whatHappened) throw new Error(t("status_invalid_input"));
       if (!Number.isFinite(daysOpen) || daysOpen < 0) throw new Error(t("status_invalid_input"));
 
       const earlierDays = Math.max(7, Math.min(daysOpen - 20, Math.floor(daysOpen * 0.4)));
-      const laterDays   = Math.max(daysOpen, earlierDays + 20);
+      const laterDays = Math.max(daysOpen, earlierDays + 20);
 
       const triggerMap = {
-        no_response:          `${whatHappened} No response has been received beyond the expected period.`,
-        acknowledged_only:    `${whatHappened} The matter was acknowledged but no substantive response has been provided.`,
-        partial_response:     `${whatHappened} A partial response was received without substantive progression.`,
+        no_response: `${whatHappened} No response has been received beyond the expected period.`,
+        acknowledged_only: `${whatHappened} The matter was acknowledged but no substantive response has been provided.`,
+        partial_response: `${whatHappened} A partial response was received without substantive progression.`,
         substantive_response: `${whatHappened} A substantive response was received.`
       };
 
@@ -1521,7 +1697,12 @@
             desired_outcome: desiredOutcome,
             urgency: urgency === "high" ? "medium" : urgency,
             institutions: [institution],
-            case_lifecycle: { current_stage: "awaiting_response", status: "active", stalled: false, days_open: earlierDays }
+            case_lifecycle: {
+              current_stage: "awaiting_response",
+              status: "active",
+              stalled: false,
+              days_open: earlierDays
+            }
           },
           {
             strike_reference: `Generated-${Date.now()}-B`,
@@ -1542,9 +1723,10 @@
       };
     }
 
-    // ============================================================
-    // Utility
-    // ============================================================
+    function getConditionLabel(key) {
+      const def = CONDITION_DEFINITIONS[normalizeKey(key)];
+      return langValue(def?.label, key);
+    }
 
     function findSystemState(obj) {
       if (!obj || typeof obj !== "object") return null;
@@ -1560,15 +1742,41 @@
 
     function triggerDownload(content, filename, type) {
       const blob = new Blob([content], { type });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href = url; a.download = filename;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
 
+    try {
+      const saved = localStorage.getItem("cde_last_result");
+      if (saved) {
+        latestReportData = JSON.parse(saved);
+        const { timeline, pattern } = latestReportData.output || {};
+        if (timeline && pattern) {
+          renderResults(timeline, pattern);
+          rawOutput.textContent = JSON.stringify({ timeline, pattern }, null, 2);
+          downloadJsonBtn.disabled = false;
+          downloadMarkdownBtn.disabled = false;
+          printBtn.disabled = false;
+          attachStrikeBtn.disabled = false;
+          statusText.textContent = t("status_restored");
+          if (latestReportData.strike_reference) {
+            showAttachedReference(latestReportData.strike_reference);
+          }
+        }
+      }
+
+      const savedHistory = localStorage.getItem("cde_history");
+      if (savedHistory) caseHistory = JSON.parse(savedHistory);
+    } catch(e) {}
+
+    inputJson.value = JSON.stringify(examplePayload, null, 2);
+    applyTranslations();
   </script>
 </body>
 </html>

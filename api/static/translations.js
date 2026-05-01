@@ -97,6 +97,23 @@ window.CDE_I18N = {
       no_signals:              "No signals returned.",
       clear_history:           "Clear history",
       restored_prefix:         "Restored:",
+      tab_compare:             "Compare Cases",
+      compare_meta:            "Paste an array of cases in JSON to detect patterns across them.",
+      compare_placeholder:     "[\n  { ...case one... },\n  { ...case two... }\n]",
+      btn_compare:             "Run comparison",
+      compare_running:         "Running cross-case analysis...",
+      compare_complete:        "Cross-case analysis complete.",
+      compare_error:           "Comparison failed. Check your JSON and try again.",
+      compare_min_cases:       "Paste at least two cases to compare.",
+      out_compare_title:       "Cross-Case Analysis",
+      out_repeated_conditions: "Repeated conditions",
+      out_shared_signals:      "Shared signals",
+      out_divergent_signals:   "Divergent signals",
+      out_pattern_class:       "Pattern classification",
+      out_case_count:          "Cases submitted",
+      none_repeated:           "No conditions repeated across all cases.",
+      none_shared:             "No signals shared across all cases.",
+      none_divergent:          "No divergent signals detected.",
     },
 
     ga: {
@@ -175,6 +192,23 @@ window.CDE_I18N = {
       no_signals:              "Níor tugadh comharthaí ar ais.",
       clear_history:           "Glan stair",
       restored_prefix:         "Aisghairthe:",
+      tab_compare:             "Cuir cásanna i gcomparáid",
+      compare_meta:            "Greamaigh eagar cásanna i JSON chun patrúin a bhrath eatarthu.",
+      compare_placeholder:     "[\n  { ...cás a haon... },\n  { ...cás a dó... }\n]",
+      btn_compare:             "Rith comparáid",
+      compare_running:         "Anailís tras-cháis ar siúl...",
+      compare_complete:        "Anailís tras-cháis críochnaithe.",
+      compare_error:           "Theip ar an gcomparáid. Seiceáil do JSON.",
+      compare_min_cases:       "Greamaigh dhá chás ar a laghad le comparáid.",
+      out_compare_title:       "Anailís Tras-Cháis",
+      out_repeated_conditions: "Coinníollacha arís agus arís eile",
+      out_shared_signals:      "Comharthaí roinnte",
+      out_divergent_signals:   "Comharthaí éagsúla",
+      out_pattern_class:       "Aicmiú patrúin",
+      out_case_count:          "Cásanna curtha isteach",
+      none_repeated:           "Níl aon choinníollacha arís agus arís eile.",
+      none_shared:             "Níl comharthaí roinnte.",
+      none_divergent:          "Níl comharthaí éagsúla aimsithe.",
     },
 
     fr: {
@@ -253,6 +287,23 @@ window.CDE_I18N = {
       no_signals:              "Aucun signal retourné.",
       clear_history:           "Effacer l'historique",
       restored_prefix:         "Restauré :",
+      tab_compare:             "Comparer des dossiers",
+      compare_meta:            "Collez un tableau de dossiers en JSON pour détecter des schémas.",
+      compare_placeholder:     "[\n  { ...dossier un... },\n  { ...dossier deux... }\n]",
+      btn_compare:             "Lancer la comparaison",
+      compare_running:         "Analyse inter-dossiers en cours...",
+      compare_complete:        "Analyse inter-dossiers terminée.",
+      compare_error:           "La comparaison a échoué. Vérifiez votre JSON.",
+      compare_min_cases:       "Collez au moins deux dossiers pour comparer.",
+      out_compare_title:       "Analyse inter-dossiers",
+      out_repeated_conditions: "Conditions répétées",
+      out_shared_signals:      "Signaux partagés",
+      out_divergent_signals:   "Signaux divergents",
+      out_pattern_class:       "Classification du schéma",
+      out_case_count:          "Dossiers soumis",
+      none_repeated:           "Aucune condition répétée dans tous les dossiers.",
+      none_shared:             "Aucun signal partagé dans tous les dossiers.",
+      none_divergent:          "Aucun signal divergent détecté.",
     },
 
     de: {
@@ -331,6 +382,23 @@ window.CDE_I18N = {
       no_signals:              "Keine Signale zurückgegeben.",
       clear_history:           "Verlauf löschen",
       restored_prefix:         "Wiederhergestellt:",
+      tab_compare:             "Fälle vergleichen",
+      compare_meta:            "Fügen Sie ein JSON-Array von Fällen ein, um Muster zu erkennen.",
+      compare_placeholder:     "[\n  { ...Fall eins... },\n  { ...Fall zwei... }\n]",
+      btn_compare:             "Vergleich starten",
+      compare_running:         "Fallübergreifende Analyse läuft...",
+      compare_complete:        "Fallübergreifende Analyse abgeschlossen.",
+      compare_error:           "Vergleich fehlgeschlagen. JSON prüfen.",
+      compare_min_cases:       "Mindestens zwei Fälle zum Vergleichen einfügen.",
+      out_compare_title:       "Fallübergreifende Analyse",
+      out_repeated_conditions: "Wiederholte Zustände",
+      out_shared_signals:      "Gemeinsame Signale",
+      out_divergent_signals:   "Divergente Signale",
+      out_pattern_class:       "Mustereinstufung",
+      out_case_count:          "Eingereichte Fälle",
+      none_repeated:           "Keine wiederholten Zustände über alle Fälle.",
+      none_shared:             "Keine gemeinsamen Signale über alle Fälle.",
+      none_divergent:          "Keine divergenten Signale erkannt.",
     },
 
     es: {
@@ -409,6 +477,23 @@ window.CDE_I18N = {
       no_signals:              "No se devolvieron señales.",
       clear_history:           "Borrar historial",
       restored_prefix:         "Restaurado:",
+      tab_compare:             "Comparar casos",
+      compare_meta:            "Pegue una matriz de casos en JSON para detectar patrones.",
+      compare_placeholder:     "[\n  { ...caso uno... },\n  { ...caso dos... }\n]",
+      btn_compare:             "Ejecutar comparación",
+      compare_running:         "Análisis entre casos en curso...",
+      compare_complete:        "Análisis entre casos completado.",
+      compare_error:           "La comparación falló. Compruebe el JSON.",
+      compare_min_cases:       "Pegue al menos dos casos para comparar.",
+      out_compare_title:       "Análisis entre casos",
+      out_repeated_conditions: "Condiciones repetidas",
+      out_shared_signals:      "Señales compartidas",
+      out_divergent_signals:   "Señales divergentes",
+      out_pattern_class:       "Clasificación del patrón",
+      out_case_count:          "Casos presentados",
+      none_repeated:           "Sin condiciones repetidas en todos los casos.",
+      none_shared:             "Sin señales compartidas en todos los casos.",
+      none_divergent:          "Sin señales divergentes detectadas.",
     },
 
     pl: {
@@ -487,6 +572,23 @@ window.CDE_I18N = {
       no_signals:              "Nie zwrócono sygnałów.",
       clear_history:           "Wyczyść historię",
       restored_prefix:         "Przywrócono:",
+      tab_compare:             "Porównaj sprawy",
+      compare_meta:            "Wklej tablicę spraw w JSON, aby wykryć wzorce między nimi.",
+      compare_placeholder:     "[\n  { ...sprawa pierwsza... },\n  { ...sprawa druga... }\n]",
+      btn_compare:             "Uruchom porównanie",
+      compare_running:         "Trwa analiza między sprawami...",
+      compare_complete:        "Analiza między sprawami zakończona.",
+      compare_error:           "Porównanie nie powiodło się. Sprawdź JSON i spróbuj ponownie.",
+      compare_min_cases:       "Wklej co najmniej dwie sprawy do porównania.",
+      out_compare_title:       "Analiza między sprawami",
+      out_repeated_conditions: "Powtarzające się warunki",
+      out_shared_signals:      "Wspólne sygnały",
+      out_divergent_signals:   "Rozbieżne sygnały",
+      out_pattern_class:       "Klasyfikacja wzorca",
+      out_case_count:          "Przesłane sprawy",
+      none_repeated:           "Brak warunków powtarzających się we wszystkich sprawach.",
+      none_shared:             "Brak sygnałów wspólnych we wszystkich sprawach.",
+      none_divergent:          "Nie wykryto rozbieżnych sygnałów.",
     },
 
     ro: {
@@ -565,6 +667,23 @@ window.CDE_I18N = {
       no_signals:              "Nu s-au returnat semnale.",
       clear_history:           "Ștergeți istoricul",
       restored_prefix:         "Restaurat:",
+      tab_compare:             "Compară dosare",
+      compare_meta:            "Lipiți un array de dosare în JSON pentru a detecta modele între ele.",
+      compare_placeholder:     "[\n  { ...dosarul unu... },\n  { ...dosarul doi... }\n]",
+      btn_compare:             "Rulați comparația",
+      compare_running:         "Analiză între dosare în curs...",
+      compare_complete:        "Analiza între dosare este finalizată.",
+      compare_error:           "Comparația a eșuat. Verificați JSON-ul și încercați din nou.",
+      compare_min_cases:       "Lipiți cel puțin două dosare pentru comparație.",
+      out_compare_title:       "Analiză între dosare",
+      out_repeated_conditions: "Condiții repetate",
+      out_shared_signals:      "Semnale comune",
+      out_divergent_signals:   "Semnale divergente",
+      out_pattern_class:       "Clasificarea modelului",
+      out_case_count:          "Dosare trimise",
+      none_repeated:           "Nu există condiții repetate în toate dosarele.",
+      none_shared:             "Nu există semnale comune în toate dosarele.",
+      none_divergent:          "Nu au fost detectate semnale divergente.",
     },
 
     uk: {
@@ -643,6 +762,23 @@ window.CDE_I18N = {
       no_signals:              "Сигналів не повернуто.",
       clear_history:           "Очистити історію",
       restored_prefix:         "Відновлено:",
+      tab_compare:             "Порівняти справи",
+      compare_meta:            "Вставте масив справ у JSON, щоб виявити шаблони між ними.",
+      compare_placeholder:     "[\n  { ...справа перша... },\n  { ...справа друга... }\n]",
+      btn_compare:             "Запустити порівняння",
+      compare_running:         "Виконується міжсправовий аналіз...",
+      compare_complete:        "Міжсправовий аналіз завершено.",
+      compare_error:           "Порівняння не вдалося. Перевірте JSON і спробуйте ще раз.",
+      compare_min_cases:       "Вставте щонайменше дві справи для порівняння.",
+      out_compare_title:       "Міжсправовий аналіз",
+      out_repeated_conditions: "Повторювані умови",
+      out_shared_signals:      "Спільні сигнали",
+      out_divergent_signals:   "Розбіжні сигнали",
+      out_pattern_class:       "Класифікація шаблону",
+      out_case_count:          "Подані справи",
+      none_repeated:           "Немає умов, що повторюються в усіх справах.",
+      none_shared:             "Немає спільних сигналів в усіх справах.",
+      none_divergent:          "Розбіжних сигналів не виявлено.",
     },
 
   },
@@ -1115,6 +1251,53 @@ window.CDE_I18N = {
         pl: ["Dowody wzorca są niewystarczające.", "Sekwencja nie wspiera stabilnej interpretacji."],
         ro: ["Dovezile de model sunt insuficiente.", "Secvența nu susține o interpretare stabilă."],
         uk: ["Доказів шаблону недостатньо.", "Послідовність не підтримує стабільну інтерпретацію."]
+      }
+    },
+
+    CROSS_CASE_PATTERN_CONFIRMED: {
+      label: {
+        en: "Cross-Case Pattern Confirmed",
+        ga: "Patrún Tras-Cháis Deimhnithe",
+        fr: "Schéma inter-dossiers confirmé",
+        de: "Fallübergreifendes Muster bestätigt",
+        es: "Patrón entre casos confirmado",
+        pl: "Wzorzec między sprawami potwierdzony",
+        ro: "Model cross-dosar confirmat",
+        uk: "Міжсправовий шаблон підтверджено"
+      },
+      explanation: {
+        en: [
+          "The same structural behaviour appears across more than one submitted case.",
+          "The pattern is no longer confined to a single record."
+        ],
+        ga: [
+          "Tá an iompar struchtúrach céanna le feiceáil i níos mó ná cás amháin a cuireadh isteach.",
+          "Níl an patrún teoranta do thaifead amháin a thuilleadh."
+        ],
+        fr: [
+          "Le même comportement structurel apparaît dans plusieurs dossiers soumis.",
+          "Le schéma ne se limite plus à un seul dossier."
+        ],
+        de: [
+          "Dasselbe strukturelle Verhalten tritt in mehr als einem eingereichten Fall auf.",
+          "Das Muster beschränkt sich nicht mehr auf einen einzelnen Fall."
+        ],
+        es: [
+          "El mismo comportamiento estructural aparece en más de un caso presentado.",
+          "El patrón ya no se limita a un solo expediente."
+        ],
+        pl: [
+          "To samo zachowanie strukturalne pojawia się w więcej niż jednej złożonej sprawie.",
+          "Wzorzec nie ogranicza się już do jednego zapisu."
+        ],
+        ro: [
+          "Același comportament structural apare în mai mult de un dosar depus.",
+          "Modelul nu mai este limitat la un singur dosar."
+        ],
+        uk: [
+          "Та сама структурна поведінка спостерігається у більш ніж одній поданій справі.",
+          "Шаблон більше не обмежується одним записом."
+        ]
       }
     },
 
