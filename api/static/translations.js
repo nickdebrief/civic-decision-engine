@@ -114,6 +114,7 @@ window.CDE_I18N = {
       none_repeated:           "No conditions repeated across all cases.",
       none_shared:             "No signals shared across all cases.",
       none_divergent:          "No divergent signals detected.",
+      compare_not_saved:       "Comparison results are not stored in case history.",
     },
 
     ga: {
@@ -209,6 +210,7 @@ window.CDE_I18N = {
       none_repeated:           "Níl aon choinníollacha arís agus arís eile.",
       none_shared:             "Níl comharthaí roinnte.",
       none_divergent:          "Níl comharthaí éagsúla aimsithe.",
+      compare_not_saved:       "Ní stóráiltear torthaí comparáide i stair na gcásanna.",
     },
 
     fr: {
@@ -304,6 +306,7 @@ window.CDE_I18N = {
       none_repeated:           "Aucune condition répétée dans tous les dossiers.",
       none_shared:             "Aucun signal partagé dans tous les dossiers.",
       none_divergent:          "Aucun signal divergent détecté.",
+      compare_not_saved:       "Les résultats de comparaison ne sont pas enregistrés dans l’historique des dossiers.",
     },
 
     de: {
@@ -399,6 +402,7 @@ window.CDE_I18N = {
       none_repeated:           "Keine wiederholten Zustände über alle Fälle.",
       none_shared:             "Keine gemeinsamen Signale über alle Fälle.",
       none_divergent:          "Keine divergenten Signale erkannt.",
+      compare_not_saved:       "Vergleichsergebnisse werden nicht im Fallverlauf gespeichert.",
     },
 
     es: {
@@ -494,6 +498,7 @@ window.CDE_I18N = {
       none_repeated:           "Sin condiciones repetidas en todos los casos.",
       none_shared:             "Sin señales compartidas en todos los casos.",
       none_divergent:          "Sin señales divergentes detectadas.",
+      compare_not_saved:       "Los resultados de comparación no se guardan en el historial de casos.",
     },
 
     pl: {
@@ -589,6 +594,7 @@ window.CDE_I18N = {
       none_repeated:           "Brak warunków powtarzających się we wszystkich sprawach.",
       none_shared:             "Brak sygnałów wspólnych we wszystkich sprawach.",
       none_divergent:          "Nie wykryto rozbieżnych sygnałów.",
+      compare_not_saved:       "Wyniki porównania nie są zapisywane w historii spraw.",
     },
 
     ro: {
@@ -684,6 +690,7 @@ window.CDE_I18N = {
       none_repeated:           "Nu există condiții repetate în toate dosarele.",
       none_shared:             "Nu există semnale comune în toate dosarele.",
       none_divergent:          "Nu au fost detectate semnale divergente.",
+      compare_not_saved:       "Rezultatele comparației nu sunt salvate în istoricul dosarelor.",
     },
 
     uk: {
@@ -779,6 +786,7 @@ window.CDE_I18N = {
       none_repeated:           "Немає умов, що повторюються в усіх справах.",
       none_shared:             "Немає спільних сигналів в усіх справах.",
       none_divergent:          "Розбіжних сигналів не виявлено.",
+      compare_not_saved:       "Результати порівняння не зберігаються в історії справ.",
     },
 
   },
