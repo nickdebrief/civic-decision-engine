@@ -114,7 +114,6 @@ window.CDE_I18N = {
       none_repeated:           "No conditions repeated across all cases.",
       none_shared:             "No signals shared across all cases.",
       none_divergent:          "No divergent signals detected.",
-      compare_not_saved:       "Comparison results are not stored in case history.",
     },
 
     ga: {
@@ -210,7 +209,6 @@ window.CDE_I18N = {
       none_repeated:           "Níl aon choinníollacha arís agus arís eile.",
       none_shared:             "Níl comharthaí roinnte.",
       none_divergent:          "Níl comharthaí éagsúla aimsithe.",
-      compare_not_saved:       "Ní stóráiltear torthaí comparáide i stair na gcásanna.",
     },
 
     fr: {
@@ -306,7 +304,6 @@ window.CDE_I18N = {
       none_repeated:           "Aucune condition répétée dans tous les dossiers.",
       none_shared:             "Aucun signal partagé dans tous les dossiers.",
       none_divergent:          "Aucun signal divergent détecté.",
-      compare_not_saved:       "Les résultats de comparaison ne sont pas enregistrés dans l’historique des dossiers.",
     },
 
     de: {
@@ -402,7 +399,6 @@ window.CDE_I18N = {
       none_repeated:           "Keine wiederholten Zustände über alle Fälle.",
       none_shared:             "Keine gemeinsamen Signale über alle Fälle.",
       none_divergent:          "Keine divergenten Signale erkannt.",
-      compare_not_saved:       "Vergleichsergebnisse werden nicht im Fallverlauf gespeichert.",
     },
 
     es: {
@@ -498,7 +494,6 @@ window.CDE_I18N = {
       none_repeated:           "Sin condiciones repetidas en todos los casos.",
       none_shared:             "Sin señales compartidas en todos los casos.",
       none_divergent:          "Sin señales divergentes detectadas.",
-      compare_not_saved:       "Los resultados de comparación no se guardan en el historial de casos.",
     },
 
     pl: {
@@ -594,7 +589,6 @@ window.CDE_I18N = {
       none_repeated:           "Brak warunków powtarzających się we wszystkich sprawach.",
       none_shared:             "Brak sygnałów wspólnych we wszystkich sprawach.",
       none_divergent:          "Nie wykryto rozbieżnych sygnałów.",
-      compare_not_saved:       "Wyniki porównania nie są zapisywane w historii spraw.",
     },
 
     ro: {
@@ -690,7 +684,6 @@ window.CDE_I18N = {
       none_repeated:           "Nu există condiții repetate în toate dosarele.",
       none_shared:             "Nu există semnale comune în toate dosarele.",
       none_divergent:          "Nu au fost detectate semnale divergente.",
-      compare_not_saved:       "Rezultatele comparației nu sunt salvate în istoricul dosarelor.",
     },
 
     uk: {
@@ -786,7 +779,6 @@ window.CDE_I18N = {
       none_repeated:           "Немає умов, що повторюються в усіх справах.",
       none_shared:             "Немає спільних сигналів в усіх справах.",
       none_divergent:          "Розбіжних сигналів не виявлено.",
-      compare_not_saved:       "Результати порівняння не зберігаються в історії справ.",
     },
 
   },
@@ -1521,4 +1513,345 @@ window.CDE_I18N = {
     },
   },
 
+// ============================================================
+  // CONTINUATION_MAP — Projected Continuation
+  // Derived from structure, not speculation.
+  // Each entry maps a system state to what that structure
+  // tends to produce if conditions remain unchanged.
+  // ============================================================
+ 
+  CONTINUATION_MAP: {
+ 
+    STABLE_DELAY: {
+      next: {
+        en: "Transfer of Burden",
+        ga: "Aistriú an Ualaigh",
+        fr: "Transfert de responsabilité",
+        de: "Lastentransfer",
+        es: "Transferencia de responsabilidad",
+        pl: "Przeniesienie ciężaru",
+        ro: "Transferul responsabilității",
+        uk: "Перенесення тягаря"
+      },
+      conditions: {
+        en: [
+          "Continued delay beyond expected response window",
+          "No substantive institutional engagement",
+          "Responsibility gradually externalised to the complainant"
+        ],
+        ga: [
+          "Moill leanúnach thar fhuinneog freagartha ionchais",
+          "Gan rannpháirtíocht substaintiúil institiúideach",
+          "Freagracht á seachtrú de réir a chéile chuig an ngearánach"
+        ],
+        fr: [
+          "Retard continu au-delà de la fenêtre de réponse attendue",
+          "Aucun engagement institutionnel substantiel",
+          "Responsabilité progressivement externalisée vers le plaignant"
+        ],
+        de: [
+          "Anhaltende Verzögerung über das erwartete Antwortfenster hinaus",
+          "Keine inhaltliche institutionelle Beteiligung",
+          "Verantwortung schrittweise auf den Beschwerdeführer verlagert"
+        ],
+        es: [
+          "Retraso continuado más allá de la ventana de respuesta esperada",
+          "Sin participación institucional sustantiva",
+          "Responsabilidad gradualmente externalizada hacia el reclamante"
+        ],
+        pl: [
+          "Trwające opóźnienie poza oczekiwanym oknem odpowiedzi",
+          "Brak merytorycznego zaangażowania instytucjonalnego",
+          "Odpowiedzialność stopniowo przenoszona na skarżącego"
+        ],
+        ro: [
+          "Întârziere continuă dincolo de fereastra de răspuns așteptată",
+          "Niciun angajament instituțional substanțial",
+          "Responsabilitate externalizată treptat către reclamant"
+        ],
+        uk: [
+          "Тривала затримка поза очікуваним вікном відповіді",
+          "Відсутність змістовної інституційної участі",
+          "Відповідальність поступово переноситься на скаржника"
+        ]
+      }
+    },
+ 
+    TRANSFER_OF_BURDEN_PRESENT: {
+      next: {
+        en: "Escalation Without Response",
+        ga: "Ardú gan Freagra",
+        fr: "Escalade sans réponse",
+        de: "Eskalation ohne Antwort",
+        es: "Escalada sin respuesta",
+        pl: "Eskalacja bez odpowiedzi",
+        ro: "Escaladă fără răspuns",
+        uk: "Ескалація без відповіді"
+      },
+      conditions: {
+        en: [
+          "Responsibility remains externalised with no engagement event",
+          "Formal escalation pathway activation",
+          "No institutional response at the point of escalation"
+        ],
+        ga: [
+          "Fanann freagracht seachtraithe gan imeacht rannpháirtíochta",
+          "Gníomhachtú cosán ardaithe foirmiúil",
+          "Gan freagra institiúideach ag pointe an ardaithe"
+        ],
+        fr: [
+          "La responsabilité reste externalisée sans événement d'engagement",
+          "Activation du parcours d'escalade formel",
+          "Aucune réponse institutionnelle au point d'escalade"
+        ],
+        de: [
+          "Verantwortung bleibt externalisiert ohne Engagement-Ereignis",
+          "Aktivierung des formellen Eskalationspfads",
+          "Keine institutionelle Reaktion am Eskalationspunkt"
+        ],
+        es: [
+          "La responsabilidad permanece externalizada sin evento de participación",
+          "Activación de la vía formal de escalada",
+          "Sin respuesta institucional en el punto de escalada"
+        ],
+        pl: [
+          "Odpowiedzialność pozostaje zewnętrzna bez zdarzenia zaangażowania",
+          "Aktywacja formalnej ścieżki eskalacji",
+          "Brak reakcji instytucjonalnej w punkcie eskalacji"
+        ],
+        ro: [
+          "Responsabilitatea rămâne externalizată fără eveniment de implicare",
+          "Activarea căii formale de escaladă",
+          "Niciun răspuns instituțional la punctul de escaladă"
+        ],
+        uk: [
+          "Відповідальність залишається зовнішньою без події залучення",
+          "Активація формального шляху ескалації",
+          "Відсутність інституційної реакції в точці ескалації"
+        ]
+      }
+    },
+ 
+    ESCALATION_WITHOUT_RESPONSE_PRESENT: {
+      next: {
+        en: "Stable Escalation",
+        ga: "Ardú Cobhsaí",
+        fr: "Escalade stable",
+        de: "Stabile Eskalation",
+        es: "Escalada estable",
+        pl: "Stabilna eskalacja",
+        ro: "Escaladă stabilă",
+        uk: "Стабільна ескалація"
+      },
+      conditions: {
+        en: [
+          "Escalation sustained without institutional reversal",
+          "No substantive response at escalation stage",
+          "Case advances to external oversight without resolution"
+        ],
+        ga: [
+          "Ardú coinnithe gan aisiompú institiúideach",
+          "Gan freagra substaintiúil ag céim ardaithe",
+          "Cás ag dul ar aghaidh chuig maoirseacht sheachtrach gan réiteach"
+        ],
+        fr: [
+          "Escalade maintenue sans inversion institutionnelle",
+          "Aucune réponse substantielle au stade d'escalade",
+          "Le dossier passe à la surveillance externe sans résolution"
+        ],
+        de: [
+          "Eskalation anhaltend ohne institutionelle Umkehrung",
+          "Keine inhaltliche Antwort in der Eskalationsphase",
+          "Fall geht ohne Lösung zur externen Aufsicht über"
+        ],
+        es: [
+          "Escalada sostenida sin reversión institucional",
+          "Sin respuesta sustantiva en la etapa de escalada",
+          "El caso avanza a supervisión externa sin resolución"
+        ],
+        pl: [
+          "Eskalacja utrzymująca się bez odwrócenia instytucjonalnego",
+          "Brak merytorycznej odpowiedzi na etapie eskalacji",
+          "Sprawa przechodzi do zewnętrznego nadzoru bez rozwiązania"
+        ],
+        ro: [
+          "Escaladă susținută fără inversare instituțională",
+          "Niciun răspuns substanțial în etapa de escaladă",
+          "Cazul avansează la supraveghere externă fără rezolvare"
+        ],
+        uk: [
+          "Ескалація триває без інституційного розвороту",
+          "Відсутня змістовна відповідь на стадії ескалації",
+          "Справа переходить до зовнішнього нагляду без вирішення"
+        ]
+      }
+    },
+ 
+    TRANSITION_TO_ESCALATION: {
+      next: {
+        en: "Stable Escalation",
+        ga: "Ardú Cobhsaí",
+        fr: "Escalade stable",
+        de: "Stabile Eskalation",
+        es: "Escalada estable",
+        pl: "Stabilna eskalacja",
+        ro: "Escaladă stabilă",
+        uk: "Стабільна ескалація"
+      },
+      conditions: {
+        en: [
+          "Escalation consolidates without intervention",
+          "Delay becomes structural rather than incidental",
+          "External escalation route becomes the primary path"
+        ],
+        ga: [
+          "Comhdhlúthaíonn ardú gan idirghabháil",
+          "Éiríonn moill struchtúrach seachas teagmhasach",
+          "Éiríonn cosán ardaithe seachtrach mar phríomhchosán"
+        ],
+        fr: [
+          "L'escalade se consolide sans intervention",
+          "Le retard devient structurel plutôt qu'accidentel",
+          "La voie d'escalade externe devient le chemin principal"
+        ],
+        de: [
+          "Eskalation festigt sich ohne Intervention",
+          "Verzögerung wird strukturell statt zufällig",
+          "Externer Eskalationspfad wird zum Hauptweg"
+        ],
+        es: [
+          "La escalada se consolida sin intervención",
+          "El retraso se vuelve estructural en lugar de incidental",
+          "La vía de escalada externa se convierte en el camino principal"
+        ],
+        pl: [
+          "Eskalacja utrwala się bez interwencji",
+          "Opóźnienie staje się strukturalne, a nie incydentalne",
+          "Zewnętrzna ścieżka eskalacji staje się główną drogą"
+        ],
+        ro: [
+          "Escalada se consolidează fără intervenție",
+          "Întârzierea devine structurală mai degrabă decât incidentală",
+          "Calea de escaladă externă devine calea principală"
+        ],
+        uk: [
+          "Ескалація консолідується без втручання",
+          "Затримка стає структурною, а не випадковою",
+          "Зовнішній шлях ескалації стає основним"
+        ]
+      }
+    },
+ 
+    STABLE_ESCALATION: {
+      next: {
+        en: "Procedural Completion Without Resolution",
+        ga: "Críochnú Nós Imeachta gan Réiteach",
+        fr: "Achèvement de la procédure sans résolution",
+        de: "Verfahrensabschluss ohne Lösung",
+        es: "Finalización del procedimiento sin resolución",
+        pl: "Zakończenie procedury bez rozwiązania",
+        ro: "Finalizarea procedurii fără rezolvare",
+        uk: "Завершення процедури без вирішення"
+      },
+      conditions: {
+        en: [
+          "Escalation closes without substantive outcome",
+          "Process reaches formal completion without resolution",
+          "Stability Without Confirmation becomes the terminal state"
+        ],
+        ga: [
+          "Dúnann ardú gan toradh substaintiúil",
+          "Sroicheann próiseas críochnú foirmiúil gan réiteach",
+          "Éiríonn Cobhsaíocht gan Deimhniú mar staid dheiridh"
+        ],
+        fr: [
+          "L'escalade se clôture sans résultat substantiel",
+          "Le processus atteint son terme formel sans résolution",
+          "La stabilité sans confirmation devient l'état terminal"
+        ],
+        de: [
+          "Eskalation schließt ohne inhaltliches Ergebnis",
+          "Prozess erreicht formellen Abschluss ohne Lösung",
+          "Stabilität ohne Bestätigung wird zum Endzustand"
+        ],
+        es: [
+          "La escalada se cierra sin resultado sustantivo",
+          "El proceso alcanza su finalización formal sin resolución",
+          "La estabilidad sin confirmación se convierte en el estado terminal"
+        ],
+        pl: [
+          "Eskalacja kończy się bez merytorycznego wyniku",
+          "Proces osiąga formalne zakończenie bez rozwiązania",
+          "Stabilność bez potwierdzenia staje się stanem końcowym"
+        ],
+        ro: [
+          "Escalada se închide fără un rezultat substanțial",
+          "Procesul ajunge la finalizarea formală fără rezolvare",
+          "Stabilitatea fără confirmare devine starea terminală"
+        ],
+        uk: [
+          "Ескалація закривається без змістовного результату",
+          "Процес досягає офіційного завершення без вирішення",
+          "Стабільність без підтвердження стає кінцевим станом"
+        ]
+      }
+    },
+ 
+    CROSS_CASE_PATTERN_CONFIRMED: {
+      next: {
+        en: "Systemic Pattern — Evidence of Design",
+        ga: "Patrún Córasach — Fianaise Dearaidh",
+        fr: "Schéma systémique — Preuve de conception",
+        de: "Systemisches Muster — Hinweis auf Absicht",
+        es: "Patrón sistémico — Evidencia de diseño",
+        pl: "Wzorzec systemowy — dowód projektu",
+        ro: "Model sistemic — Dovadă de concepție",
+        uk: "Системний шаблон — Доказ конструкції"
+      },
+      conditions: {
+        en: [
+          "Pattern repeats across independent cases without variation",
+          "Structural behaviour is consistent regardless of individual context",
+          "The record moves from isolated incident to systemic evidence"
+        ],
+        ga: [
+          "Athluaitear patrún thar chásanna neamhspleácha gan athrú",
+          "Tá iompar struchtúrach comhsheasmhach beag beann ar chomhthéacs aonair",
+          "Bogann an taifead ó eachtra aonraithe go fianaise chórais"
+        ],
+        fr: [
+          "Le schéma se répète sur des dossiers indépendants sans variation",
+          "Le comportement structurel est cohérent indépendamment du contexte individuel",
+          "Le dossier passe d'un incident isolé à une preuve systémique"
+        ],
+        de: [
+          "Muster wiederholt sich über unabhängige Fälle ohne Variation",
+          "Strukturelles Verhalten ist unabhängig vom Einzelkontext konsistent",
+          "Die Akte wechselt vom Einzelfall zur systemischen Evidenz"
+        ],
+        es: [
+          "El patrón se repite en casos independientes sin variación",
+          "El comportamiento estructural es consistente independientemente del contexto individual",
+          "El expediente pasa de incidente aislado a evidencia sistémica"
+        ],
+        pl: [
+          "Wzorzec powtarza się w niezależnych sprawach bez różnic",
+          "Zachowanie strukturalne jest spójne niezależnie od indywidualnego kontekstu",
+          "Zapis przechodzi od izolowanego incydentu do dowodów systemowych"
+        ],
+        ro: [
+          "Modelul se repetă în cazuri independente fără variație",
+          "Comportamentul structural este consistent indiferent de contextul individual",
+          "Dosarul trece de la un incident izolat la dovezi sistemice"
+        ],
+        uk: [
+          "Шаблон повторюється в незалежних справах без варіацій",
+          "Структурна поведінка послідовна незалежно від індивідуального контексту",
+          "Запис переходить від ізольованого інциденту до системних доказів"
+        ]
+      }
+    }
+ 
+  },
+ 
 }; // end window.CDE_I18N
