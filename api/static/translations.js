@@ -105,6 +105,11 @@ window.CDE_I18N = {
       compare_complete:        "Cross-case analysis complete.",
       compare_error:           "Comparison failed. Check your JSON and try again.",
       compare_min_cases:       "Paste at least two cases to compare.",
+      compare_error:           "Comparison failed. Check your JSON and try again.",
+      compare_min_cases:       "Paste at least two cases to compare.",
+      compare_running:         "Running cross-case analysis...",
+      compare_complete:        "Cross-case analysis complete.",
+      compare_not_saved:       "Comparison results are not recorded as cases.",
       out_compare_title:       "Cross-Case Analysis",
       out_repeated_conditions: "Repeated conditions",
       out_shared_signals:      "Shared signals",
@@ -1520,8 +1525,6 @@ window.CDE_I18N = {
   // tends to produce if conditions remain unchanged.
   // ============================================================
  
-  CONTINUATION_MAP: {
- 
     STABLE_DELAY: {
       next: {
         en: "Transfer of Burden",
@@ -1851,7 +1854,5 @@ window.CDE_I18N = {
         ]
       }
     }
- 
-  },
  
 }; // end window.CDE_I18N
