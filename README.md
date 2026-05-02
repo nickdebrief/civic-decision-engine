@@ -9,6 +9,13 @@ Designed for understanding.
 
 ---
 
+Not designed for attention. Designed for understanding.
+
+Now publicly accessible:
+https://civic-decision-engine-production.up.railway.app/
+
+---
+
 ## What this is
 
 The Civic Decision Engine is a diagnostic system.
@@ -47,6 +54,24 @@ These documents define the formal structure and meaning of the system outputs.
 The schema guarantees structure. The specification defines interpretation.
 
 ---
+
+## Live Application
+
+https://civic-decision-engine-production.up.railway.app/
+
+No setup required. Paste a case or compare multiple cases directly.
+
+## Cross-Case Analysis
+
+The system supports cross-case comparison to identify repeated structural behaviour across submissions.
+
+Cross-case comparison operates independently and does not persist results.
+
+This mode reveals patterns.
+It does not create records.
+
+---
+
 ## One working example
 
 This example shows a transition from delay to escalation.
