@@ -791,6 +791,10 @@
             restored_prefix: "Restored:",
             compare_error: "Comparison failed. Check your JSON and try again.",
             compare_min_cases: "Paste at least two cases to compare.",
+            compare_running: "Running cross-case analysis...",
+            compare_complete: "Cross-case analysis complete.",
+            compare_not_saved: "Comparison results are not recorded as cases.",
+            compare_min_cases: "Paste at least two cases to compare.",
             compare_complete: "Cross-case analysis complete.",
             out_case_count: "Cases submitted",
             out_repeated_conditions: "Repeated conditions",
@@ -816,15 +820,45 @@
     }
 
     const {
-      TRANSLATIONS,
-      CONDITION_DEFINITIONS,
-      SIGNAL_MAP,
-      SYSTEM_STATE_MAP,
-      TRAJECTORY_CONFIG,
-      REPORT_STRINGS
-    } = window.CDE_I18N;
+        TRANSLATIONS,
+        CONDITION_DEFINITIONS,
+        SIGNAL_MAP,
+        SYSTEM_STATE_MAP,
+        TRAJECTORY_CONFIG,
+        REPORT_STRINGS
+      } = window.CDE_I18N;
 
-    document.getElementById("copyrightYear").textContent = new Date().getFullYear();
+    const REQUIRED_KEYS = [
+      "out_compare_title",
+      "compare_running",
+      "compare_complete",
+      "out_case_count",
+      "out_repeated_conditions",
+      "out_shared_signals",
+      "out_divergent_signals",
+      "none_repeated",
+      "none_shared",
+      "none_divergent",
+      "signal_same_stage",
+      "signal_long_open",
+      "signal_some_stalled",
+      "signal_same_institution",
+      "signal_stage",
+      "signal_days_open",
+      "signal_status",
+      "signal_institution",
+      "status_active",
+      "status_stalled",
+
+    ];
+
+      const fallback = TRANSLATIONS?.en || {};
+
+      REQUIRED_KEYS.forEach(key => {
+        if (!fallback[key]) {
+          console.warn(`[CDE i18n] Missing fallback translation: ${key}`);
+        }
+      });
 
     const examplePayload = {
       cases: [
@@ -1083,23 +1117,26 @@
       if (allStalled)    repeatedConditions.push("Stalled: all cases stalled");
       if (allLongOpen)   repeatedConditions.push(`Days open: all cases open 30+ days (${days.join(", ")})`);
 
-      // Shared signals
+     // Shared signals
       const sharedSignals = [];
-      if (allSameStage)  sharedSignals.push("Identical lifecycle stage across all cases");
-      if (allLongOpen)   sharedSignals.push("Extended open duration across all cases");
-      if (someStalled && !allStalled) sharedSignals.push("Stalled status present in some cases");
-      if (!crossInstitution) sharedSignals.push(`Same institution: ${uniqueInsts[0]}`);
+
+      if (allSameStage) sharedSignals.push(t("signal_same_stage"));
+      if (allLongOpen) sharedSignals.push(t("signal_long_open"));
+      if (someStalled && !allStalled) sharedSignals.push(t("signal_some_stalled"));
+      if (!crossInstitution) sharedSignals.push(`${t("signal_same_institution")}: ${uniqueInsts[0]}`);
 
       // Divergent signals — per case
       const divergentByCase = cases.map((c, i) => {
         const parts = [];
         const stg = c.case_lifecycle?.current_stage || "unknown";
         const d   = c.case_lifecycle?.days_open || 0;
-        const stl = c.case_lifecycle?.stalled ? "stalled" : "active";
+        const stl = c.case_lifecycle?.stalled ? t("status_stalled") : t("status_active");
         if (!allSameStage) parts.push(`stage: ${stg}`);
         if (!allLongOpen)  parts.push(`days open: ${d}`);
-        parts.push(`status: ${stl}`);
-        if (crossInstitution) parts.push(`institution: ${institutions[i]}`);
+        if (!allSameStage) parts.push(`${t("signal_stage")}: ${stg}`);
+        if (!allLongOpen)  parts.push(`${t("signal_days_open")}: ${d}`);
+        parts.push(`${t("signal_status")}: ${stl}`);
+        if (crossInstitution) parts.push(`${t("signal_institution")}: ${institutions[i]}`);
         return { ref: refs[i], signals: parts };
       });
 
@@ -1295,14 +1332,15 @@
         inputJson.value = JSON.stringify(examplePayload, null, 2);
       } else if (currentMode === "compare") {
         compareInput.value = JSON.stringify(examplePayload.cases, null, 2);
-      } else {
-        simpleWhatHappened.value = "A complaint was submitted and acknowledged, but no substantive response was provided. The matter remained open beyond the expected response period.";
-        simpleInstitution.value = "Local Authority";
+     } else {
+        simpleWhatHappened.value = t("example_what_happened") || "";
+        simpleInstitution.value = t("example_institution") || "";
+        simpleOutcome.value = t("example_outcome") || "";
+
         simpleResponse.value = "acknowledged_only";
         simpleDaysOpen.value = "45";
         simpleStage.value = "awaiting_response";
         simpleUrgency.value = "medium";
-        simpleOutcome.value = "A clear substantive response and procedural accountability.";
       }
       statusText.textContent = t("status_example_loaded");
     });
