@@ -480,6 +480,17 @@
       textarea { min-height: 320px; }
       .sidebar { width: 100%; right: -100%; }
     }
+    .signal-card.continuation .signal-title {
+    color: rgba(255, 120, 120, 0.9);
+}
+    .signal-card.continuation {
+    border-color: rgba(255, 80, 80, 0.4);
+    background: linear-gradient(
+    180deg,
+    rgba(255, 80, 80, 0.05),
+    rgba(0,0,0,0.2)
+  );
+}
   </style>
 </head>
 
@@ -849,7 +860,11 @@
       "signal_institution",
       "status_active",
       "status_stalled",
-
+      // Continuation-related keys
+      "section_continuation",
+      "continuation_next",
+      "continuation_if",
+      "continuation_note",
     ];
 
       const fallback = TRANSLATIONS?.en || {};
@@ -1117,28 +1132,107 @@
       if (allStalled)    repeatedConditions.push("Stalled: all cases stalled");
       if (allLongOpen)   repeatedConditions.push(`Days open: all cases open 30+ days (${days.join(", ")})`);
 
-     // Shared signals
-      const sharedSignals = [];
+   let signalsHTML = "";
 
-      if (allSameStage) sharedSignals.push(t("signal_same_stage"));
-      if (allLongOpen) sharedSignals.push(t("signal_long_open"));
-      if (someStalled && !allStalled) sharedSignals.push(t("signal_some_stalled"));
-      if (!crossInstitution) sharedSignals.push(`${t("signal_same_institution")}: ${uniqueInsts[0]}`);
+// Shared signals
+const sharedSignals = [];
 
-      // Divergent signals — per case
-      const divergentByCase = cases.map((c, i) => {
-        const parts = [];
-        const stg = c.case_lifecycle?.current_stage || "unknown";
-        const d   = c.case_lifecycle?.days_open || 0;
-        const stl = c.case_lifecycle?.stalled ? t("status_stalled") : t("status_active");
-        if (!allSameStage) parts.push(`stage: ${stg}`);
-        if (!allLongOpen)  parts.push(`days open: ${d}`);
-        if (!allSameStage) parts.push(`${t("signal_stage")}: ${stg}`);
-        if (!allLongOpen)  parts.push(`${t("signal_days_open")}: ${d}`);
-        parts.push(`${t("signal_status")}: ${stl}`);
-        if (crossInstitution) parts.push(`${t("signal_institution")}: ${institutions[i]}`);
-        return { ref: refs[i], signals: parts };
-      });
+if (allSameStage) sharedSignals.push(t("signal_same_stage"));
+if (allLongOpen) sharedSignals.push(t("signal_long_open"));
+if (someStalled && !allStalled) sharedSignals.push(t("signal_some_stalled"));
+if (!crossInstitution) sharedSignals.push(`${t("signal_same_institution")}: ${uniqueInsts[0]}`);
+
+
+
+// Divergent signals — per case
+const divergentByCase = cases.map((c, i) => {
+  const parts = [];
+
+  const stg = c.case_lifecycle?.current_stage || "unknown";
+  const d = c.case_lifecycle?.days_open || 0;
+  const stl = c.case_lifecycle?.stalled
+    ? t("status_stalled")
+    : t("status_active");
+
+  if (!allSameStage) {
+    parts.push(`${t("signal_stage")}: ${stg}`);
+  }
+
+  if (!allLongOpen) {
+    parts.push(`${t("signal_days_open")}: ${d}`);
+  }
+
+  parts.push(`${t("signal_status")}: ${stl}`);
+
+  if (crossInstitution) {
+    parts.push(`${t("signal_institution")}: ${institutions[i]}`);
+  }
+
+  return {
+    ref: refs[i],
+    signals: parts
+  };
+});
+if (sharedSignals.length) {
+  signalsHTML += `
+    <div class="signal-card">
+      <div class="signal-title">${t("out_shared_signals")}</div>
+      ${sharedSignals.map(s => `<div class="signal-description">— ${s}</div>`).join("")}
+    </div>
+  `;
+}
+
+signalsHTML += `
+  <div class="signal-card">
+    <div class="signal-title">${t("out_divergent_signals")} <span class="expand-icon">▾</span></div>
+    <div class="signal-detail">
+      ${divergentByCase.map(c => `
+        <strong>${c.ref}</strong><br>
+        ${c.signals.map(s => `— ${s}`).join("<br>")}
+      `).join("<hr style='border:none;border-top:1px solid var(--line);margin:8px 0;'>")}
+    </div>
+  </div>
+`;
+
+// ============================================================
+// CONTINUATION — rendered after shared + divergent signals
+// ============================================================
+
+const continuation = window.CDE_I18N.CONTINUATION_MAP?.[patternClass];
+console.log("patternClass:", patternClass);
+console.log("CONTINUATION_MAP:", window.CDE_I18N.CONTINUATION_MAP);
+console.log("continuation:", continuation);
+
+if (continuation) {
+  const nextStateText = langValue(continuation.next, "");
+  const continuationConditions =
+    continuation.conditions?.[currentLang] ||
+    continuation.conditions?.en ||
+    [];
+
+  signalsHTML += `
+    <div class="signal-card continuation">
+      <div class="signal-title">${t("section_continuation")}</div>
+      <div class="signal-description">
+        <strong>${t("continuation_next")}</strong> ${nextStateText}
+      </div>
+      <div class="signal-detail" style="display:block;">
+        <strong>${t("continuation_if")}</strong><br>
+        ${continuationConditions.map(c => `— ${c}`).join("<br>")}
+        <br><br>
+        ${t("continuation_note")}
+      </div>
+    </div>
+  `;
+}
+
+signalsBox.innerHTML = signalsHTML;
+
+signalsBox.querySelectorAll(".signal-card").forEach(card => {
+  if (card.querySelector(".signal-detail")) {
+    card.addEventListener("click", () => card.classList.toggle("expanded"));
+  }
+});
 
       // ── Update output panel heading ─────────────────────────
 
@@ -1180,37 +1274,6 @@
       // ── System state ─────────────────────────────────────────
 
       systemState.textContent = stateLabel;
-
-      // ── Signals box → Shared + divergent ────────────────────
-
-      let signalsHTML = "";
-
-      if (sharedSignals.length) {
-        signalsHTML += `
-          <div class="signal-card">
-            <div class="signal-title">${t("out_shared_signals")}</div>
-            ${sharedSignals.map(s => `<div class="signal-description">— ${s}</div>`).join("")}
-          </div>
-        `;
-      }
-
-      signalsHTML += `
-        <div class="signal-card">
-          <div class="signal-title">${t("out_divergent_signals")} <span class="expand-icon">▾</span></div>
-          <div class="signal-detail">
-            ${divergentByCase.map(c => `
-              <strong>${c.ref}</strong><br>
-              ${c.signals.map(s => `— ${s}`).join("<br>")}
-            `).join("<hr style='border:none;border-top:1px solid var(--line);margin:8px 0;'>")}</div>
-        </div>
-      `;
-
-      signalsBox.innerHTML = signalsHTML;
-      signalsBox.querySelectorAll(".signal-card").forEach(card => {
-        if (card.querySelector(".signal-detail")) {
-          card.addEventListener("click", () => card.classList.toggle("expanded"));
-        }
-      });
 
       // ── Raw output → comparison summary JSON ─────────────────
 

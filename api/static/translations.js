@@ -132,6 +132,10 @@ window.CDE_I18N = {
       signal_institution:      "institution",
       status_active:           "active",
       status_stalled:          "stalled",
+      section_continuation:    "Projected continuation",
+      continuation_next:       "Likely next state:",
+      continuation_if:         "If current conditions persist:",
+      continuation_note:       "Derived from current conditions. Assumes no change in input or intervention.",
     },
 
     ga: {
@@ -241,6 +245,10 @@ window.CDE_I18N = {
       signal_institution:      "institiúid",
       status_active:           "gníomhach",
       status_stalled:          "stoptha",
+      section_continuation:    "Leanúint réamh-mheasta",
+      continuation_next:       "An chéad staid eile is dóichí:",
+      continuation_if:         "Má leanann na coinníollacha reatha:",
+      continuation_note:       "Bunaithe ar na coinníollacha reatha. Glactar leis nach mbeidh aon athrú ar ionchur ná ar idirghabháil.",
     },
 
     fr: {
@@ -350,6 +358,10 @@ window.CDE_I18N = {
       signal_institution:      "institution",
       status_active:           "actif",
       status_stalled:          "bloqué",
+      section_continuation:    "Continuation prévue",
+      continuation_next:       "État suivant probable :",
+      continuation_if:         "Si les conditions actuelles persistent :",
+      continuation_note:       "Dérivé des conditions actuelles. Suppose aucune modification des entrées ou intervention.",
     },
 
     de: {
@@ -459,6 +471,10 @@ window.CDE_I18N = {
       signal_institution:      "Institution",
       status_active:           "aktiv",
       status_stalled:          "stockend",
+      section_continuation:    "Erwartete Fortsetzung",
+      continuation_next:       "Voraussichtlich nächster Zustand:",
+      continuation_if:         "Wenn die aktuellen Bedingungen bestehen bleiben:",
+      continuation_note:       "Abgeleitet aus den aktuellen Bedingungen. Es wird keine Änderung der Eingaben oder Intervention angenommen.",
     },
 
     es: {
@@ -568,6 +584,10 @@ window.CDE_I18N = {
       signal_institution:      "institución",
       status_active:           "activo",
       status_stalled:          "detenido",
+      section_continuation:    "Continuación prevista",
+      continuation_next:       "Siguiente estado probable:",
+      continuation_if:         "Si las condiciones actuales persisten:",
+      continuation_note:       "Derivado de las condiciones actuales. Se asume que no hay cambios en la entrada ni intervención.",
     },
 
     pl: {
@@ -677,6 +697,10 @@ window.CDE_I18N = {
       signal_institution:      "instytucja",
       status_active:           "aktywna",
       status_stalled:          "zatrzymana",
+      section_continuation:    "Przewidywana kontynuacja",
+      continuation_next:       "Prawdopodobny następny stan:",
+      continuation_if:         "Jeśli obecne warunki się utrzymają:",
+      continuation_note:       "Na podstawie obecnych warunków. Zakłada brak zmian w danych wejściowych lub interwencji.",
     },
 
     ro: {
@@ -786,6 +810,10 @@ window.CDE_I18N = {
       signal_institution:      "instituție",
       status_active:           "activ",
       status_stalled:          "blocat",
+      section_continuation:    "Continuare previzionată",
+      continuation_next:       "Starea probabilă următoare:",
+      continuation_if:         "Dacă condițiile actuale persistă:",
+      continuation_note:       "Derivat din condițiile actuale. Se presupune că nu există schimbări de intrare sau intervenție."
     },
 
     uk: {
@@ -870,7 +898,7 @@ window.CDE_I18N = {
       btn_compare:             "Запустити порівняння",
       compare_running:         "Виконується міжсправовий аналіз...",
       compare_complete:        "Міжсправовий аналіз завершено.",
-      compare_not_saved:       "Результати сравнения не сохраняются как дела.",
+      compare_not_saved:       "Результати порівняння не зберігаються як справи.",
       compare_error:           "Порівняння не вдалося. Перевірте JSON і спробуйте ще раз.",
       compare_min_cases:       "Вставте щонайменше дві справи для порівняння.",
       out_compare_title:       "Міжсправовий аналіз",
@@ -895,9 +923,71 @@ window.CDE_I18N = {
       signal_institution:      "інституція",
       status_active:           "активна",
       status_stalled:          "зупинена",
+      section_continuation:    "Прогнозоване продовження",
+      continuation_next:       "Ймовірний наступний стан:",
+      continuation_if:         "Якщо поточні умови збережуться:",
+      continuation_note:    "Виведено з поточних умов. Передбачається відсутність змін у введенні або втручання.",
     },
+  }, // end TRANSLATIONS
 
-  },
+  CONTINUATION_MAP: {
+
+    CROSS_CASE_PATTERN_CONFIRMED: {
+
+      next: {
+        en: "Continued delay or escalation pressure",
+        ga: "Moill leanúnach nó brú ardaithe",
+        fr: "Retard continu ou pression d’escalade",
+        de: "Anhaltende Verzögerung oder Eskalationsdruck",
+        es: "Retraso continuo o presión de escalada",
+        pl: "Dalsze opóźnienie lub presja eskalacji",
+        ro: "Întârziere continuă sau presiune de escaladare",
+        uk: "Подальша затримка або тиск ескалації"
+      },
+      conditions: {
+        en: [
+          "No substantive response is provided",
+          "The case remains in the same stage",
+          "No external intervention occurs"
+        ],
+        ga: [
+          "Ní chuirtear freagra substaintiúil ar fáil",
+          "Fanann an cás sa chéim chéanna",
+          "Ní tharlaíonn aon idirghabháil seachtrach"
+        ],
+        fr: [
+          "Aucune réponse substantielle n’est fournie",
+          "Le cas reste au même stade",
+          "Aucune intervention externe ne se produit"
+        ],
+        de: [
+          "Es wird keine substanzielle Antwort gegeben",
+          "Der Fall bleibt in derselben Phase",
+          "Es erfolgt keine externe Intervention"
+        ],
+        es: [
+          "No se proporciona una respuesta sustantiva",
+          "El caso permanece en la misma etapa",
+          "No ocurre intervención externa"
+        ],
+        pl: [
+          "Nie udzielono merytorycznej odpowiedzi",
+          "Sprawa pozostaje na tym samym etapie",
+          "Nie dochodzi do zewnętrznej interwencji"
+        ],
+        ro: [
+          "Nu este oferit niciun răspuns substanțial",
+          "Dosarul rămâne în aceeași etapă",
+          "Nu are loc nicio intervenție externă"
+        ],
+        uk: [
+          "Змістовної відповіді не надано",
+          "Справа залишається на тому самому етапі",
+          "Зовнішнього втручання не відбувається"
+        ]
+      }
+    }
+  }, // end window.CDE_I18N
 
   // ============================================================
   // CONDITION_DEFINITIONS
