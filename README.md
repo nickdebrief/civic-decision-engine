@@ -41,6 +41,19 @@ Outputs are:
 
 ---
 
+## Continuation Map (v1.1)
+
+This version introduces the first structured `CONTINUATION_MAP`.
+
+It does not predict outcomes.  
+It reflects what structure tends to produce when conditions remain unchanged.
+
+The map is derived from state, not interpretation.
+
+This marks the transition from describing cases to identifying structural continuation.
+
+---
+
 ## Specifications
 
 These documents define the formal structure and meaning of the system outputs.
