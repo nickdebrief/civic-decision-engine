@@ -439,6 +439,102 @@
       font-size: 0.88rem;
       padding: 10px;
     }
+        /* ============================================================
+       OBSERVED CONDITION DISTRIBUTION
+    ============================================================ */
+ 
+    .distribution-panel {
+      background: #060b14;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+    }
+ 
+    .distribution-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 0 0 12px;
+    }
+ 
+    .distribution-item {
+      margin-bottom: 10px;
+    }
+ 
+    .distribution-item-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+ 
+    .distribution-item-name {
+      font-size: 0.86rem;
+      color: var(--text);
+      font-weight: 500;
+    }
+ 
+    .distribution-item-stat {
+      font-size: 0.78rem;
+      color: var(--muted);
+      white-space: nowrap;
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+ 
+    .distribution-bar-track {
+      height: 3px;
+      background: #1f2937;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+ 
+    .distribution-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(90deg, #4c1d95, #7c3aed);
+      transition: width 0.4s ease;
+    }
+ 
+    .distribution-divider {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 14px 0;
+    }
+ 
+    .distribution-note {
+      font-size: 0.75rem;
+      color: var(--muted);
+      opacity: 0.65;
+      font-style: italic;
+      margin: 10px 0 0;
+    }
+
+    .distribution-bar-fill[data-full="true"] {
+      background: linear-gradient(
+      90deg,
+      rgba(255, 80, 80, 0.7),
+      rgba(255, 80, 80, 1)
+  );
+}
+    .distribution-bar-fill[data-full="true"][data-rank="0"] {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 80, 80, 0.9),
+    rgba(255, 80, 80, 1)
+  );
+}
+
+.distribution-bar-fill[data-full="true"]:not([data-rank="0"]) {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 80, 80, 0.6),
+    rgba(255, 80, 80, 0.85)
+  );
+}
 
     @media print {
       .lang-bar,
@@ -1199,9 +1295,9 @@ signalsHTML += `
 // ============================================================
 
 const continuation = window.CDE_I18N.CONTINUATION_MAP?.[patternClass];
-console.log("patternClass:", patternClass);
-console.log("CONTINUATION_MAP:", window.CDE_I18N.CONTINUATION_MAP);
-console.log("continuation:", continuation);
+//console.log("patternClass:", patternClass);
+// console.log("CONTINUATION_MAP:", window.CDE_I18N.CONTINUATION_MAP);
+// console.log("continuation:", continuation);
 
 if (continuation) {
   const nextStateText = langValue(continuation.next, "");
@@ -1319,6 +1415,86 @@ signalsBox.querySelectorAll(".signal-card").forEach(card => {
       outputPanel.setAttribute("data-generated", new Date().toLocaleString() + " — " + ref);
     }
 
+    // ============================================================
+// CONDITION DISTRIBUTION (helper)
+// ============================================================
+
+function computeConditionDistribution(caseHistory) {
+  const counts = {};
+  const total = caseHistory.length;
+
+  if (!total) return { total: 0, distribution: [] };
+
+  caseHistory.forEach(entry => {
+    const conditions =
+      entry?.output?.timeline?.results?.[0]?.conditions ||
+      entry?.output?.conditions ||
+      [];
+
+    conditions.forEach(c => {
+      const key = normalizeKey(c?.key || c);
+      counts[key] = (counts[key] || 0) + 1;
+  });
+  });
+
+  const distribution = Object.entries(counts)
+    .map(([key, count]) => ({
+      key,
+      count,
+      percentage: Math.round((count / total) * 100)
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return { total, distribution };
+}
+
+function renderConditionDistribution(caseHistory) {
+  if (!caseHistory || caseHistory.length < 3) return "";
+
+  const { total, distribution } = computeConditionDistribution(caseHistory);
+  if (!distribution.length) return "";
+
+  return `
+    <div class="distribution-panel">
+      <div class="distribution-title">
+        Observed Condition Distribution
+      </div>
+
+      ${distribution.map((item, i) => {
+        const label = langValue(
+          window.CDE_I18N.CONDITION_DEFINITIONS[item.key]?.label,
+          item.key
+        );
+
+        return `
+          <div class="distribution-item">
+            <div class="distribution-item-label">
+              <span class="distribution-item-name">${label}</span>
+              <span class="distribution-item-stat">
+                present in ${item.count}/${total} cases (${item.percentage}%)
+              </span>
+            </div>
+
+            <div class="distribution-bar-track">
+              <div 
+                class="distribution-bar-fill" 
+                style="width:${item.percentage}%"
+                data-full="${item.percentage === 100}"
+                data-rank="${i}"
+              ></div>
+            </div>
+        `;
+      }).join("")}
+
+      <hr class="distribution-divider">
+
+      <p class="distribution-note">
+        Based on stored local cases.
+      </p>
+    </div>
+  `;
+}
+    
     function renderHistorySidebar() {
       if (!caseHistory.length) {
         sidebarBody.innerHTML = `<p class="sidebar-empty">${t("history_empty")}</p>`;
@@ -1348,7 +1524,12 @@ signalsBox.querySelectorAll(".signal-card").forEach(card => {
         `;
       }).join("");
 
-      sidebarBody.innerHTML = items + `<button class="sidebar-clear" id="clearHistoryBtn" type="button">${t("clear_history")}</button>`;
+      const distributionHTML = renderConditionDistribution(caseHistory);
+
+      sidebarBody.innerHTML =
+          distributionHTML +
+          items +
+          `<button class="sidebar-clear" id="clearHistoryBtn" type="button">${t("clear_history")}</button>`;
 
       sidebarBody.querySelectorAll(".history-item").forEach(el => {
         el.addEventListener("click", () => {
