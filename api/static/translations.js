@@ -136,6 +136,11 @@ window.CDE_I18N = {
       continuation_next:       "Likely next state:",
       continuation_if:         "If current conditions persist:",
       continuation_note:       "Derived from current conditions. Assumes no change in input or intervention.",
+      distribution_title:      "Observed Condition Distribution",
+      distribution_present_in: "present in",
+      distribution_present_all:"present across all cases",
+      distribution_cases:      "cases",
+      distribution_note:       "Based on stored local cases.",
     },
 
     ga: {
@@ -249,6 +254,11 @@ window.CDE_I18N = {
       continuation_next:       "An chéad staid eile is dóichí:",
       continuation_if:         "Má leanann na coinníollacha reatha:",
       continuation_note:       "Bunaithe ar na coinníollacha reatha. Glactar leis nach mbeidh aon athrú ar ionchur ná ar idirghabháil.",
+      distribution_title:      "Dáileadh na gCoinníollacha Breathnaithe",
+      distribution_present_in: "i láthair i",
+      distribution_present_all:"i láthair i ngach cás",
+      distribution_cases:      "cásanna",
+      distribution_note:       "Bunaithe ar chásanna áitiúla atá stóráilte.",
     },
 
     fr: {
@@ -362,6 +372,11 @@ window.CDE_I18N = {
       continuation_next:       "État suivant probable :",
       continuation_if:         "Si les conditions actuelles persistent :",
       continuation_note:       "Dérivé des conditions actuelles. Suppose aucune modification des entrées ou intervention.",
+      distribution_title:      "Répartition des conditions observées",
+      distribution_present_in: "présent dans",
+      distribution_present_all:"présent dans tous les cas",
+      distribution_cases:      "cas",
+      distribution_note:       "Basé sur les cas locaux stockés.",
     },
 
     de: {
@@ -475,6 +490,11 @@ window.CDE_I18N = {
       continuation_next:       "Voraussichtlich nächster Zustand:",
       continuation_if:         "Wenn die aktuellen Bedingungen bestehen bleiben:",
       continuation_note:       "Abgeleitet aus den aktuellen Bedingungen. Es wird keine Änderung der Eingaben oder Intervention angenommen.",
+      distribution_title:      "Verteilung beobachteter Bedingungen",
+      distribution_present_in: "vorhanden in",
+      distribution_present_all:"in allen Fällen vorhanden",
+      distribution_cases:      "Fällen",
+      distribution_note:       "Basierend auf lokal gespeicherten Fällen.",
     },
 
     es: {
@@ -588,6 +608,11 @@ window.CDE_I18N = {
       continuation_next:       "Siguiente estado probable:",
       continuation_if:         "Si las condiciones actuales persisten:",
       continuation_note:       "Derivado de las condiciones actuales. Se asume que no hay cambios en la entrada ni intervención.",
+      distribution_title:      "Distribución de condiciones observadas",
+      distribution_present_in: "presente en",
+      distribution_present_all:"presente en todos los casos",
+      distribution_cases:      "casos",
+      distribution_note:       "Basado en casos locales almacenados.",
     },
 
     pl: {
@@ -701,6 +726,11 @@ window.CDE_I18N = {
       continuation_next:       "Prawdopodobny następny stan:",
       continuation_if:         "Jeśli obecne warunki się utrzymają:",
       continuation_note:       "Na podstawie obecnych warunków. Zakłada brak zmian w danych wejściowych lub interwencji.",
+      distribution_title:      "Rozkład zaobserwowanych warunków",
+      distribution_present_in: "obecne w",
+      distribution_present_all:"obecne we wszystkich przypadkach",
+      distribution_cases:      "przypadkach",
+      distribution_note:       "Na podstawie zapisanych lokalnie przypadków.",
     },
 
     ro: {
@@ -813,7 +843,12 @@ window.CDE_I18N = {
       section_continuation:    "Continuare previzionată",
       continuation_next:       "Starea probabilă următoare:",
       continuation_if:         "Dacă condițiile actuale persistă:",
-      continuation_note:       "Derivat din condițiile actuale. Se presupune că nu există schimbări de intrare sau intervenție."
+      continuation_note:       "Derivat din condițiile actuale. Se presupune că nu există schimbări de intrare sau intervenție.",
+      distribution_title:      "Distribuția condițiilor observate",
+      distribution_present_in: "prezent în",
+      distribution_present_all:"prezent în toate cazurile",
+      distribution_cases:      "cazuri",
+      distribution_note:       "Bazat pe cazurile locale stocate.",
     },
 
     uk: {
@@ -927,6 +962,11 @@ window.CDE_I18N = {
       continuation_next:       "Ймовірний наступний стан:",
       continuation_if:         "Якщо поточні умови збережуться:",
       continuation_note:    "Виведено з поточних умов. Передбачається відсутність змін у введенні або втручання.",
+      distribution_title:      "Розподіл спостережуваних умов",
+      distribution_present_in: "присутній у",
+      distribution_present_all:"присутній у всіх справах",
+      distribution_cases:      "справах",
+      distribution_note:       "На основі збережених локальних справ.",
     },
   }, // end TRANSLATIONS
 
