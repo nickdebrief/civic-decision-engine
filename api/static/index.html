@@ -587,11 +587,112 @@
     rgba(0,0,0,0.2)
   );
 }
+  /* ============================================================
+   PUBLIC RECORD CARD
+============================================================ */
+.record-card-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.72);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.record-card-modal.open { display: flex; }
+
+.record-card-inner {
+  background: #0b1220;
+  border: 1px solid #1f2937;
+  border-radius: 20px;
+  padding: 32px 28px 24px;
+  max-width: 540px;
+  width: 95vw;
+  position: relative;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+}
+
+.record-card-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.record-card-close:hover { color: var(--text); }
+
+.record-card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 18px;
+}
+
+.record-card-body {
+  font-size: 1.05rem;
+  color: var(--text);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  margin: 0 0 20px;
+}
+
+.record-card-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-bottom: 18px;
+  line-height: 1.8;
+}
+
+.record-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button.record-btn {
+  background: #0f1f35;
+  border-color: #1e3a5f;
+  color: #93c5fd;
+  font-size: 0.9rem;
+  padding: 10px 16px;
+}
+button.record-btn.copy-ok {
+  background: #052e16;
+  border-color: #166534;
+  color: #86efac;
+}
   </style>
 </head>
 
 <body>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- PUBLIC RECORD CARD MODAL -->
+<div class="record-card-modal" id="recordCardModal" role="dialog" aria-modal="true" aria-label="Public Record Card">
+  <div class="record-card-inner">
+    <button class="record-card-close" id="recordCardClose" type="button"></button>
+    <p class="record-card-label" data-i18n="record_label">
+  Public Record — Civic Decision Engine
+</p>
+    <div class="record-card-body" id="recordCardBody"></div>
+    <div class="record-card-meta" id="recordCardMeta"></div>
+    <div class="record-card-actions">
+      <button class="record-btn" id="recordCopyBtn" type="button" data-i18n="btn_copy_card">Copy card</button>
+      <button class="record-btn" id="recordDownloadBtn" type="button" data-i18n="btn_download_txt">Download .txt</button>
+      
+    </div>
+  </div>
+</div>
 
   <div class="sidebar" id="historySidebar">
     <div class="sidebar-header">
@@ -733,6 +834,7 @@
           <button class="export-btn" id="downloadJsonBtn" type="button" disabled data-i18n="btn_download_json">Download JSON</button>
           <button class="export-btn" id="downloadMarkdownBtn" type="button" disabled data-i18n="btn_download_md">Download Markdown</button>
           <button class="print-btn" id="printBtn" type="button" disabled data-i18n="btn_print">Print report</button>
+          <button class="record-btn" id="exportRecordBtn" type="button" disabled data-i18n="btn_export_record">Export public record</button>
         </div>
 
         <div class="strike-attach">
@@ -1546,6 +1648,7 @@ function renderConditionDistribution(caseHistory) {
             downloadMarkdownBtn.disabled = false;
             printBtn.disabled = false;
             attachStrikeBtn.disabled = false;
+            exportRecordBtn.disabled = false;
             statusText.textContent = `${t("restored_prefix")} ${entry.strike_reference || "analysis"}`;
             if (entry.strike_reference) showAttachedReference(entry.strike_reference);
             closeSidebar();
@@ -1616,7 +1719,7 @@ function renderConditionDistribution(caseHistory) {
       attachedMetaBlock.style.display = "none";
       attachedMetaCard.textContent = "";
 
-      [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = true);
+      [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn, exportRecordBtn].forEach(b => b.disabled = true);
       try { localStorage.removeItem("cde_last_result"); } catch(e) {}
     });
 
@@ -1713,7 +1816,7 @@ function renderConditionDistribution(caseHistory) {
           localStorage.setItem("cde_history", JSON.stringify(caseHistory));
         } catch(e) {}
 
-        [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn].forEach(b => b.disabled = false);
+        [downloadJsonBtn, downloadMarkdownBtn, printBtn, attachStrikeBtn, exportRecordBtn].forEach(b => b.disabled = false);
         statusText.textContent = t("status_complete");
       } catch(err) {
         console.error(err);
@@ -2064,6 +2167,107 @@ function renderConditionDistribution(caseHistory) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+    // ── PUBLIC RECORD EXPORT ─────────────────────────────────
+const exportRecordBtn   = document.getElementById("exportRecordBtn");
+const recordCardModal   = document.getElementById("recordCardModal");
+const recordCardClose   = document.getElementById("recordCardClose");
+const recordCardBody    = document.getElementById("recordCardBody");
+const recordCardMeta    = document.getElementById("recordCardMeta");
+const recordCopyBtn     = document.getElementById("recordCopyBtn");
+const recordDownloadBtn = document.getElementById("recordDownloadBtn");
+
+function buildRecordCard(reportData) {
+  const { output, strike_reference } = reportData || {};
+  const tD = output?.timeline?.results?.[0] || {};
+  const pD = output?.pattern?.results?.[0]  || {};
+
+  const traj       = (tD.trajectory || "").toUpperCase();
+  const cfg        = TRAJECTORY_CONFIG[traj] || {};
+  const trajLabel  = langValue(cfg.label, traj) || traj || "—";
+
+  const conditions = Array.isArray(tD.conditions) ? tD.conditions : [];
+  const condLabels = conditions.map(c => {
+    const def = CONDITION_DEFINITIONS[normalizeKey(c)];
+    return langValue(def?.label, c);
+  });
+
+  const stateKey   = findSystemState({ output });
+  const stateDef   = SYSTEM_STATE_MAP[stateKey];
+  const stateLabel = langValue(stateDef?.label, stateKey || "—");
+
+  const mapped      = SYSTEM_STATE_MAP[pD.system_state];
+  const explanation = mapped?.explanation?.[currentLang] || mapped?.explanation?.en || [];
+
+  const date = new Date().toLocaleDateString("en-IE", {
+    day: "2-digit", month: "long", year: "numeric"
+  });
+
+  const finding = explanation.length
+    ? explanation.join("\n\n")
+    : (trajLabel ? `Trajectory recorded as: ${trajLabel}.` : "No finding available.");
+
+  const conditionLine = condLabels.length
+  ? `${t("record_conditions")}: ${condLabels.join(", ")}`
+  : "";
+
+  const body = [
+  t("record_finding"),
+  "───────",
+  finding,
+  "",
+  `${t("record_trajectory")}: ${trajLabel}`,
+  conditionLine
+].filter(Boolean).join("\n");
+
+  const meta =
+`${t("record_date")}: ${date}
+${t("record_system_state")}: ${stateLabel}
+${strike_reference ? `${t("record_reference")}: ${strike_reference}` : ""}
+${t("record_generated_by")}: Civic Decision Engine`.trim();
+
+  return { body, meta, full: body + "\n\n" + meta };
+}
+
+exportRecordBtn.addEventListener("click", () => {
+  if (!latestReportData) return;
+  const { body, meta } = buildRecordCard(latestReportData);
+  recordCardBody.textContent = body;
+  recordCardMeta.textContent = meta;
+  recordCopyBtn.classList.remove("copy-ok");
+  recordCopyBtn.textContent = t("btn_copy_card");
+  recordCardModal.classList.add("open");
+});
+
+recordCardClose.addEventListener("click", () => recordCardModal.classList.remove("open"));
+recordCardModal.addEventListener("click", e => {
+  if (e.target === recordCardModal) recordCardModal.classList.remove("open");
+});
+
+recordCopyBtn.addEventListener("click", () => {
+  if (!latestReportData) return;
+
+  const { full } = buildRecordCard(latestReportData);
+
+  navigator.clipboard.writeText(full).then(() => {
+    recordCopyBtn.textContent = t("btn_copied");
+    recordCopyBtn.classList.add("copy-ok");
+
+    setTimeout(() => {
+      recordCopyBtn.textContent = t("btn_copy_card"); // ← IMPORTANT
+      recordCopyBtn.classList.remove("copy-ok");
+    }, 2000);
+  });
+});
+
+recordDownloadBtn.addEventListener("click", () => {
+  if (!latestReportData) return;
+  const { full } = buildRecordCard(latestReportData);
+  const date = new Date().toISOString().slice(0, 10);
+  const ref  = latestReportData.strike_reference
+    ? `-${latestReportData.strike_reference}`
+    : "";
+  triggerDownload(full, `public-record${ref}-${date}.txt`, "text/plain");
+});
 
     try {
       const saved = localStorage.getItem("cde_last_result");
@@ -2077,6 +2281,7 @@ function renderConditionDistribution(caseHistory) {
           downloadMarkdownBtn.disabled = false;
           printBtn.disabled = false;
           attachStrikeBtn.disabled = false;
+          exportRecordBtn.disabled = false;
           statusText.textContent = t("status_restored");
           if (latestReportData.strike_reference) {
             showAttachedReference(latestReportData.strike_reference);
