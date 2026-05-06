@@ -659,7 +659,7 @@
   gap: 10px;
   flex-wrap: wrap;
 }
-.record-card-notice {
+.record-warning {
   font-size: 0.78rem;
   color: #f87171;
   font-family: ui-monospace, monospace;
@@ -764,8 +764,10 @@ button.record-btn.copy-ok {
 
 <div class="record-card-body" id="recordCardBody"></div>
 <div class="record-card-meta" id="recordCardMeta"></div>
-<div class="record-card-notice" id="recordCardNotice">
+<div class="record-warning" id="recordWarning" data-i18n="record_attach_required">
+
   Attach a structured reference before exporting a public record.
+
 </div>
 <div class="record-card-qr" id="recordCardQrDark" style="display:none; margin-top:18px; margin-bottom:18px; align-items:flex-start; gap:14px;">
   <div id="recordCardQrCodeDark" style="width:56px; height:56px; flex-shrink:0;"></div>
@@ -2449,11 +2451,14 @@ exportRecordBtn.addEventListener("click", () => {
   }
 
   const hasRef = !!latestReportData?.strike_reference;
-  const notice = document.getElementById("recordCardNotice");
-  notice.style.display = hasRef ? "none" : "block";
+  const notice = document.getElementById("recordWarning");
+
+  if (notice) notice.style.display = hasRef ? "none" : "block";
+
   recordDownloadBtn.disabled = !hasRef;
   recordDownloadWhiteBtn.disabled = !hasRef;
   recordDownloadDarkBtn.disabled = !hasRef;
+
   recordDownloadBtn.style.opacity = hasRef ? "" : "0.4";
   recordDownloadWhiteBtn.style.opacity = hasRef ? "" : "0.4";
   recordDownloadDarkBtn.style.opacity = hasRef ? "" : "0.4";
@@ -2574,7 +2579,7 @@ recordDownloadWhiteBtn.addEventListener("click", async () => {
   const { body, meta } = buildRecordCard(latestReportData);
   recordCardPrintBody.textContent = body;
   recordCardPrintMeta.textContent = meta;
-  
+
   const verifyUrl = buildVerifyUrl(latestReportData);
   if (verifyUrl) {
     document.getElementById("recordCardQrUrl").textContent = verifyUrl;
@@ -2599,14 +2604,17 @@ recordDownloadWhiteBtn.addEventListener("click", async () => {
 // Dark PDF
 recordDownloadDarkBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
-  const actions = document.querySelector(".record-card-actions");
-  actions.style.display = "none";
+
+  if (recordCardActions) recordCardActions.style.display = "none";
+
   await new Promise(r => setTimeout(r, 40));
+
   await exportCardAsPdf(
     document.querySelector(".record-card-inner"),
     getPdfFilename(latestReportData, "dark")
   );
-  actions.style.display = "";
+
+  if (recordCardActions) recordCardActions.style.display = "";
 });
 </script>
 </body>

@@ -155,6 +155,7 @@ window.CDE_I18N = {
       record_system_state:     "System state",
       record_label:            "Public Record — Civic Decision Engine",
       record_reference:        "Reference",
+      record_attach_required:  "Attach a structured reference before exporting a public record.",
     },
 
     ga: {
@@ -287,6 +288,7 @@ window.CDE_I18N = {
       record_system_state:     "Staid an chórais",
       record_label:            "Taifead Poiblí — Civic Decision Engine",
       record_reference:        "Tagairt",
+      record_attach_required:  "Ceangail tagairt struchtúrtha sula n-onnmhairítear taifead poiblí.",
     },
 
     fr: {
@@ -419,6 +421,7 @@ window.CDE_I18N = {
       record_system_state:     "État du système",
       record_label:            "Dossier public — Civic Decision Engine",
       record_reference:        "Référence",
+      record_attach_required:  "Ajoutez une référence structurée avant d’exporter un dossier public.",
     },
 
     de: {
@@ -551,6 +554,7 @@ window.CDE_I18N = {
       record_system_state:     "Systemstatus",
       record_label:            "Öffentlicher Datensatz — Civic Decision Engine",
       record_reference:        "Referenz",
+      record_attach_required:  "Fügen Sie eine strukturierte Referenz hinzu, bevor Sie einen öffentlichen Datensatz exportieren.",
     },
 
     es: {
@@ -683,6 +687,7 @@ window.CDE_I18N = {
       record_system_state:     "Estado del sistema",
       record_label:            "Registro público — Civic Decision Engine",
       record_reference:        "Referencia",
+      record_attach_required:  "Adjunte una referencia estructurada antes de exportar un registro público.",
     },
 
     pl: {
@@ -815,6 +820,7 @@ window.CDE_I18N = {
       record_system_state:     "Stan systemu",
       record_label:            "Rejestr publiczny — Civic Decision Engine",
       record_reference:        "Referencja",
+       record_attach_required: "Dołącz uporządkowane odniesienie przed wyeksportowaniem publicznego rejestru.",
     },
 
     ro: {
@@ -947,6 +953,7 @@ window.CDE_I18N = {
       record_system_state:     "Starea sistemului",
       record_label:            "Înregistrare publică — Civic Decision Engine",
       record_reference:        "Referință",
+      record_attach_required:  "Atașați o referință structurată înainte de a exporta o înregistrare publică.",
     },
 
     uk: {
@@ -1079,6 +1086,7 @@ window.CDE_I18N = {
       record_system_state:     "Стан системи",
       record_label:            "Публічний запис — Civic Decision Engine",
       record_reference:        "Посилання",
+      record_attach_required:  "Додайте структуроване посилання перед експортом публічного запису.",
     },
   }, // end TRANSLATIONS
 
