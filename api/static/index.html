@@ -659,6 +659,17 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.record-card-notice {
+  font-size: 0.78rem;
+  color: #f87171;
+  font-family: ui-monospace, monospace;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: 8px;
+  display: none;
+}
 
 /* Dev mode i18n flags */
 .i18n-missing {
@@ -753,7 +764,9 @@ button.record-btn.copy-ok {
 
 <div class="record-card-body" id="recordCardBody"></div>
 <div class="record-card-meta" id="recordCardMeta"></div>
-
+<div class="record-card-notice" id="recordCardNotice">
+  Attach a structured reference before exporting a public record.
+</div>
 <div class="record-card-qr" id="recordCardQrDark" style="display:none; margin-top:18px; margin-bottom:18px; align-items:flex-start; gap:14px;">
   <div id="recordCardQrCodeDark" style="width:56px; height:56px; flex-shrink:0;"></div>
   <div style="font-family:ui-monospace,monospace; font-size:0.72rem; color:var(--muted); line-height:1.6; padding-top:2px;">
@@ -2435,6 +2448,16 @@ exportRecordBtn.addEventListener("click", () => {
     document.getElementById("recordCardQrDark").style.display = "none";
   }
 
+  const hasRef = !!latestReportData?.strike_reference;
+  const notice = document.getElementById("recordCardNotice");
+  notice.style.display = hasRef ? "none" : "block";
+  recordDownloadBtn.disabled = !hasRef;
+  recordDownloadWhiteBtn.disabled = !hasRef;
+  recordDownloadDarkBtn.disabled = !hasRef;
+  recordDownloadBtn.style.opacity = hasRef ? "" : "0.4";
+  recordDownloadWhiteBtn.style.opacity = hasRef ? "" : "0.4";
+  recordDownloadDarkBtn.style.opacity = hasRef ? "" : "0.4";
+
   recordCopyBtn.classList.remove("copy-ok");
   recordCopyBtn.textContent = t("btn_copy_card");
   recordCardModal.classList.add("open");
@@ -2549,10 +2572,9 @@ recordDownloadWhiteBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
 
   const { body, meta } = buildRecordCard(latestReportData);
-
   recordCardPrintBody.textContent = body;
   recordCardPrintMeta.textContent = meta;
-
+  
   const verifyUrl = buildVerifyUrl(latestReportData);
   if (verifyUrl) {
     document.getElementById("recordCardQrUrl").textContent = verifyUrl;
