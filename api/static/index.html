@@ -644,6 +644,7 @@
 }
 
 .record-card-meta {
+  white-space: pre-wrap; 
   font-size: 0.8rem;
   color: var(--muted);
   font-family: ui-monospace, monospace;
@@ -671,7 +672,64 @@ button.record-btn.copy-ok {
   border-color: #166534;
   color: #86efac;
 }
+
+/* Export card — white print version (hidden but renderable) */
+.record-card-print {
+  display: none;
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 600px;
+  background: #ffffff;
+  padding: 48px 44px 40px;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #111111;
+  border: 1px solid #e0e0e0;
+  box-shadow: none;
+}
+.record-card-print .rcp-rule {
+  border: none;
+  border-top: 2px solid #111;
+  margin: 0 0 24px;
+  width: 100%;
+}
+.record-card-print .rcp-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #666;
+  margin: 0 0 24px;
+}
+.record-card-print .rcp-body {
+  font-size: 1rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin: 0 0 28px;
+  color: #111;
+}
+.record-card-print .rcp-meta {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: #444;
+  line-height: 1.9;
+  border-top: 1px solid #ccc;
+  padding-top: 16px;
+  white-space: pre-wrap;   /* ← add this */
+}
+
+.record-card-print .rcp-footer {
+  margin-top: 32px;
+  font-size: 0.68rem;
+  color: #999;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
   </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 </head>
 
 <body>
@@ -682,16 +740,40 @@ button.record-btn.copy-ok {
   <div class="record-card-inner">
     <button class="record-card-close" id="recordCardClose" type="button"></button>
     <p class="record-card-label" data-i18n="record_label">
+
+ <p class="record-card-label" data-i18n="record_label">
   Public Record — Civic Decision Engine
 </p>
-    <div class="record-card-body" id="recordCardBody"></div>
-    <div class="record-card-meta" id="recordCardMeta"></div>
-    <div class="record-card-actions">
-      <button class="record-btn" id="recordCopyBtn" type="button" data-i18n="btn_copy_card">Copy card</button>
-      <button class="record-btn" id="recordDownloadBtn" type="button" data-i18n="btn_download_txt">Download .txt</button>
-      
-    </div>
-  </div>
+
+<div class="record-card-body" id="recordCardBody"></div>
+<div class="record-card-meta" id="recordCardMeta"></div>
+
+<div class="record-card-actions">
+  <button class="record-btn" id="recordCopyBtn" type="button" data-i18n="btn_copy_card">
+    Copy card
+  </button>
+
+  <button class="record-btn" id="recordDownloadBtn" type="button" data-i18n="btn_download_txt">
+    Download .txt
+  </button>
+
+  <button class="record-btn" id="recordDownloadWhiteBtn" type="button" data-i18n="btn_download_pdf_white">
+    Download PDF (white)
+  </button>
+
+  <button class="record-btn" id="recordDownloadDarkBtn" type="button" data-i18n="btn_download_pdf_dark">
+    Download PDF (dark)
+  </button>
+</div>
+</div>
+</div>
+   <!-- Off-screen white card for PDF rendering — sibling of modal, not child -->
+<div class="record-card-print" id="recordCardPrint" aria-hidden="true">
+  <hr class="rcp-rule">
+  <p class="rcp-label">Public Record — Civic Decision Engine</p>
+  <div class="rcp-body" id="recordCardPrintBody"></div>
+  <div class="rcp-meta" id="recordCardPrintMeta"></div>
+  <p class="rcp-footer">Civic Decision Engine — The record does not argue.</p>
 </div>
 
   <div class="sidebar" id="historySidebar">
@@ -837,15 +919,38 @@ button.record-btn.copy-ok {
           <button class="record-btn" id="exportRecordBtn" type="button" disabled data-i18n="btn_export_record">Export public record</button>
         </div>
 
-        <div class="strike-attach">
-          <input
-            id="strikeReferenceInput"
-            type="text"
-            data-i18n-placeholder="placeholder_strike"
-            placeholder="Strike reference (e.g. Strike-001)"
-            style="font-family: ui-monospace, monospace; font-size: 0.9rem;"
-          />
-          <button class="attach-btn" id="attachStrikeBtn" type="button" disabled data-i18n="btn_attach">Attach to case</button>
+       <div class="strike-attach">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label for="strikeTypeSelect" style="font-size:0.75rem; color:var(--muted); letter-spacing:0.05em;">Institution type</label>
+              <select id="strikeTypeSelect" style="font-family:ui-monospace,monospace; font-size:0.9rem; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px;">
+                <option value="LA">LA — Local Authority</option>
+                <option value="HS">HS — Health Service</option>
+                <option value="ED">ED — Education</option>
+                <option value="HO">HO — Housing</option>
+                <option value="PL">PL — Planning</option>
+                <option value="GV">GV — Government</option>
+                <option value="OT">OT — Other</option>
+              </select>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label for="strikeSequenceInput" style="font-size:0.75rem; color:var(--muted); letter-spacing:0.05em;">Sequence number</label>
+              <input
+                id="strikeSequenceInput"
+                type="number"
+                min="1"
+                max="999"
+                placeholder="1"
+                style="font-family:ui-monospace,monospace; font-size:0.9rem; width:80px;"
+              />
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <label style="font-size:0.75rem; color:var(--muted); letter-spacing:0.05em;">Generated reference</label>
+              <div id="strikeReferencePreview" style="font-family:ui-monospace,monospace; font-size:0.9rem; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-width:220px; letter-spacing:0.04em;">Strike-LA-20260506-001</div>
+            </div>
+            <button class="attach-btn" id="attachStrikeBtn" type="button" disabled data-i18n="btn_attach">Attach to case</button>
+          </div>
+          <div id="strikeValidationMsg" style="font-size:0.78rem; color:#f87171; margin-top:6px; display:none;"></div>
         </div>
 
         <div class="status" id="statusText"></div>
@@ -1705,7 +1810,9 @@ function renderConditionDistribution(caseHistory) {
       simpleDaysOpen.value = "";
       simpleStage.value = "awaiting_response";
       simpleUrgency.value = "medium";
-      strikeReferenceInput.value = "";
+      strikeSequenceInput.value = "";
+      strikeTypeSelect.value = "LA";
+      updateStrikePreview();
 
       statusText.textContent = "";
       trajectoryBadge.innerHTML = "";
@@ -1789,7 +1896,7 @@ function renderConditionDistribution(caseHistory) {
 
         const tResult = timelineData?.results?.[0] || {};
         const pResult = patternData?.results?.[0] || {};
-        const attachedRef = strikeReferenceInput.value.trim() || null;
+        const attachedRef = null;
 
         latestReportData = {
           generated_at: new Date().toISOString(),
@@ -1942,17 +2049,48 @@ function renderConditionDistribution(caseHistory) {
       trackEvent("cde_export", { format: "markdown", language: currentLang, strike_reference: r.strike_reference || "none" });
     });
 
+    // ── STRUCTURED STRIKE REFERENCE ──────────────────────────
+    const strikeTypeSelect       = document.getElementById("strikeTypeSelect");
+    const strikeSequenceInput    = document.getElementById("strikeSequenceInput");
+    const strikeReferencePreview = document.getElementById("strikeReferencePreview");
+    const strikeValidationMsg    = document.getElementById("strikeValidationMsg");
+
+    function buildStrikeReference() {
+      const type = strikeTypeSelect.value.toUpperCase();
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const seq  = parseInt(strikeSequenceInput.value || "1", 10);
+      if (isNaN(seq) || seq < 1 || seq > 999) return null;
+      return `Strike-${type}-${date}-${String(seq).padStart(3, "0")}`;
+    }
+
+    function updateStrikePreview() {
+      const ref = buildStrikeReference();
+      if (ref) {
+        strikeReferencePreview.textContent = ref;
+        strikeReferencePreview.style.color = "var(--text)";
+        strikeValidationMsg.style.display  = "none";
+      } else {
+        strikeReferencePreview.textContent = "Invalid sequence";
+        strikeReferencePreview.style.color = "#f87171";
+        strikeValidationMsg.textContent    = "Sequence must be between 1 and 999.";
+        strikeValidationMsg.style.display  = "block";
+      }
+    }
+
+    strikeTypeSelect.addEventListener("change", updateStrikePreview);
+    strikeSequenceInput.addEventListener("input", updateStrikePreview);
+    updateStrikePreview();
+
     attachStrikeBtn.addEventListener("click", () => {
       if (!latestReportData) {
         statusText.textContent = t("status_no_report");
         return;
       }
-      const ref = strikeReferenceInput.value.trim();
+      const ref = buildStrikeReference();
       if (!ref) {
-        statusText.textContent = t("status_enter_ref");
+        statusText.textContent = "Invalid reference — check sequence number.";
         return;
       }
-
       latestReportData.strike_reference = ref;
       try { localStorage.setItem("cde_last_result", JSON.stringify(latestReportData)); } catch(e) {}
       showAttachedReference(ref);
@@ -2175,6 +2313,11 @@ const recordCardBody    = document.getElementById("recordCardBody");
 const recordCardMeta    = document.getElementById("recordCardMeta");
 const recordCopyBtn     = document.getElementById("recordCopyBtn");
 const recordDownloadBtn = document.getElementById("recordDownloadBtn");
+const recordDownloadWhiteBtn = document.getElementById("recordDownloadWhiteBtn");
+const recordDownloadDarkBtn  = document.getElementById("recordDownloadDarkBtn");
+const recordCardPrint        = document.getElementById("recordCardPrint");
+const recordCardPrintBody    = document.getElementById("recordCardPrintBody");
+const recordCardPrintMeta    = document.getElementById("recordCardPrintMeta");
 
 function buildRecordCard(reportData) {
   const { output, strike_reference } = reportData || {};
@@ -2219,11 +2362,12 @@ function buildRecordCard(reportData) {
   conditionLine
 ].filter(Boolean).join("\n");
 
-  const meta =
-`${t("record_date")}: ${date}
-${t("record_system_state")}: ${stateLabel}
-${strike_reference ? `${t("record_reference")}: ${strike_reference}` : ""}
-${t("record_generated_by")}: Civic Decision Engine`.trim();
+const meta = [
+    `${t("record_date")}: ${date}`,
+    `${t("record_system_state")}: ${stateLabel}`,
+    strike_reference ? `${t("record_reference")}: ${strike_reference}` : null,
+    `${t("record_generated_by")}: Civic Decision Engine`
+  ].filter(Boolean).join("\n");
 
   return { body, meta, full: body + "\n\n" + meta };
 }
@@ -2270,31 +2414,90 @@ recordDownloadBtn.addEventListener("click", () => {
 });
 
     try {
-      const saved = localStorage.getItem("cde_last_result");
-      if (saved) {
-        latestReportData = JSON.parse(saved);
-        const { timeline, pattern } = latestReportData.output || {};
-        if (timeline && pattern) {
-          renderResults(timeline, pattern);
-          rawOutput.textContent = JSON.stringify({ timeline, pattern }, null, 2);
-          downloadJsonBtn.disabled = false;
-          downloadMarkdownBtn.disabled = false;
-          printBtn.disabled = false;
-          attachStrikeBtn.disabled = false;
-          exportRecordBtn.disabled = false;
-          statusText.textContent = t("status_restored");
-          if (latestReportData.strike_reference) {
-            showAttachedReference(latestReportData.strike_reference);
-          }
+    const saved = localStorage.getItem("cde_last_result");
+    if (saved) {
+      latestReportData = JSON.parse(saved);
+      const { timeline, pattern } = latestReportData.output || {};
+      if (timeline && pattern) {
+        renderResults(timeline, pattern);
+        rawOutput.textContent = JSON.stringify({ timeline, pattern }, null, 2);
+        downloadJsonBtn.disabled = false;
+        downloadMarkdownBtn.disabled = false;
+        printBtn.disabled = false;
+        attachStrikeBtn.disabled = false;
+        exportRecordBtn.disabled = false;
+        statusText.textContent = t("status_restored");
+        if (latestReportData.strike_reference) {
+          showAttachedReference(latestReportData.strike_reference);
         }
       }
+    }
+    const savedHistory = localStorage.getItem("cde_history");
+    if (savedHistory) caseHistory = JSON.parse(savedHistory);
+  } catch(e) {}
 
-      const savedHistory = localStorage.getItem("cde_history");
-      if (savedHistory) caseHistory = JSON.parse(savedHistory);
-    } catch(e) {}
+  // ── PDF EXPORT — outside try block ──────────────────────
+async function exportCardAsPdf(sourceEl, filename) {
+  const { jsPDF } = window.jspdf;
+  const canvas = await html2canvas(sourceEl, {
+    scale: 2,
+    useCORS: true,
+    scrollX: 0,
+    scrollY: -window.scrollY,
+    windowWidth: sourceEl.scrollWidth,   // ← captures full element width
+    backgroundColor: sourceEl === recordCardPrint ? "#ffffff" : null
+  });
 
-    inputJson.value = JSON.stringify(examplePayload, null, 2);
-    applyTranslations();
-  </script>
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "px",
+    format: [canvas.width / 2, canvas.height / 2]
+  });
+  pdf.addImage(imgData, "PNG", 0, 0, canvas.width / 2, canvas.height / 2);
+  pdf.save(filename);
+}
+
+function getPdfFilename(reportData, variant) {
+  const ref  = reportData.strike_reference
+    ? `-${reportData.strike_reference}`
+    : "";
+  const date = new Date().toISOString().slice(0, 10);
+  return `public-record${ref}-${variant}-${date}.pdf`;
+}
+
+// White PDF
+recordDownloadWhiteBtn.addEventListener("click", async () => {
+  if (!latestReportData) return;
+
+  const { body, meta } = buildRecordCard(latestReportData);
+
+  recordCardPrintBody.textContent = body;
+  recordCardPrintMeta.textContent = meta;
+
+  recordCardPrint.style.display = "block";
+
+  await new Promise(r => setTimeout(r, 80));
+
+  await exportCardAsPdf(
+    recordCardPrint,
+    getPdfFilename(latestReportData, "white")
+  );
+
+  recordCardPrint.style.display = "none";
+});
+// Dark PDF
+recordDownloadDarkBtn.addEventListener("click", async () => {
+  if (!latestReportData) return;
+  const actions = document.querySelector(".record-card-actions");
+  actions.style.display = "none";                                    // ← hide buttons
+  await new Promise(r => setTimeout(r, 40));                        // ← let DOM settle
+  await exportCardAsPdf(
+    document.querySelector(".record-card-inner"),
+    getPdfFilename(latestReportData, "dark")
+  );
+  actions.style.display = "";                                        // ← restore buttons
+});
+      </script>
 </body>
 </html>
