@@ -154,6 +154,7 @@ window.CDE_I18N = {
       record_date:             "Date",
       record_system_state:     "System state",
       record_label:            "Public Record — Civic Decision Engine",
+      record_reference:        "Reference",
     },
 
     ga: {
@@ -285,6 +286,7 @@ window.CDE_I18N = {
       record_date:             "Dáta",
       record_system_state:     "Staid an chórais",
       record_label:            "Taifead Poiblí — Civic Decision Engine",
+      record_reference:        "Tagairt",
     },
 
     fr: {
@@ -416,6 +418,7 @@ window.CDE_I18N = {
       record_date:             "Date",
       record_system_state:     "État du système",
       record_label:            "Dossier public — Civic Decision Engine",
+      record_reference:        "Référence",
     },
 
     de: {
@@ -547,6 +550,7 @@ window.CDE_I18N = {
       record_date:             "Datum",
       record_system_state:     "Systemstatus",
       record_label:            "Öffentlicher Datensatz — Civic Decision Engine",
+      record_reference:        "Referenz",
     },
 
     es: {
@@ -678,6 +682,7 @@ window.CDE_I18N = {
       record_date:             "Fecha",
       record_system_state:     "Estado del sistema",
       record_label:            "Registro público — Civic Decision Engine",
+      record_reference:        "Referencia",
     },
 
     pl: {
@@ -809,6 +814,7 @@ window.CDE_I18N = {
       record_date:             "Data",
       record_system_state:     "Stan systemu",
       record_label:            "Rejestr publiczny — Civic Decision Engine",
+      record_reference:        "Referencja",
     },
 
     ro: {
@@ -940,6 +946,7 @@ window.CDE_I18N = {
       record_date:             "Data",
       record_system_state:     "Starea sistemului",
       record_label:            "Înregistrare publică — Civic Decision Engine",
+      record_reference:        "Referință",
     },
 
     uk: {
@@ -1071,6 +1078,7 @@ window.CDE_I18N = {
       record_date:             "Дата",
       record_system_state:     "Стан системи",
       record_label:            "Публічний запис — Civic Decision Engine",
+      record_reference:        "Посилання",
     },
   }, // end TRANSLATIONS
 

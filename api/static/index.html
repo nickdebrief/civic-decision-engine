@@ -660,6 +660,13 @@
   flex-wrap: wrap;
 }
 
+/* Dev mode i18n flags */
+.i18n-missing {
+  outline: 2px dashed #f87171;
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: 3px;
+}
+
 button.record-btn {
   background: #0f1f35;
   border-color: #1e3a5f;
@@ -728,7 +735,8 @@ button.record-btn.copy-ok {
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 </head>
 
@@ -740,13 +748,19 @@ button.record-btn.copy-ok {
   <div class="record-card-inner">
     <button class="record-card-close" id="recordCardClose" type="button"></button>
     <p class="record-card-label" data-i18n="record_label">
-
- <p class="record-card-label" data-i18n="record_label">
   Public Record — Civic Decision Engine
 </p>
 
 <div class="record-card-body" id="recordCardBody"></div>
 <div class="record-card-meta" id="recordCardMeta"></div>
+
+<div class="record-card-qr" id="recordCardQrDark" style="display:none; margin-top:18px; margin-bottom:18px; align-items:flex-start; gap:14px;">
+  <div id="recordCardQrCodeDark" style="width:56px; height:56px; flex-shrink:0;"></div>
+  <div style="font-family:ui-monospace,monospace; font-size:0.72rem; color:var(--muted); line-height:1.6; padding-top:2px;">
+    Verify this record at<br>
+    <span id="recordCardQrUrlDark" style="color:var(--accent); word-break:break-all;"></span>
+  </div>
+</div>
 
 <div class="record-card-actions">
   <button class="record-btn" id="recordCopyBtn" type="button" data-i18n="btn_copy_card">
@@ -768,11 +782,18 @@ button.record-btn.copy-ok {
 </div>
 </div>
    <!-- Off-screen white card for PDF rendering — sibling of modal, not child -->
-<div class="record-card-print" id="recordCardPrint" aria-hidden="true">
+  <div class="record-card-print" id="recordCardPrint" aria-hidden="true">
   <hr class="rcp-rule">
   <p class="rcp-label">Public Record — Civic Decision Engine</p>
   <div class="rcp-body" id="recordCardPrintBody"></div>
   <div class="rcp-meta" id="recordCardPrintMeta"></div>
+  <div class="rcp-qr" id="recordCardQr" style="margin-top:24px; display:flex; align-items:flex-start; gap:16px;">
+    <div id="recordCardQrCode" style="width:72px; height:72px; flex-shrink:0;"></div>
+    <div style="font-family:ui-monospace,monospace; font-size:0.7rem; color:#666; line-height:1.6; padding-top:4px;">
+      Verify this record at<br>
+      <span id="recordCardQrUrl" style="color:#333; word-break:break-all;"></span>
+    </div>
+  </div>
   <p class="rcp-footer">Civic Decision Engine — The record does not argue.</p>
 </div>
 
@@ -927,6 +948,8 @@ button.record-btn.copy-ok {
                 <option value="LA">LA — Local Authority</option>
                 <option value="HS">HS — Health Service</option>
                 <option value="FS">FS — Financial Services</option>
+                <option value="LE">LE — Law Enforcement</option>
+                <option value="LG">LG — Legal Services</option>
                 <option value="ED">ED — Education</option>
                 <option value="HO">HO — Housing</option>
                 <option value="PL">PL — Planning</option>
@@ -1133,6 +1156,9 @@ button.record-btn.copy-ok {
         REPORT_STRINGS: { en: {} }
       };
     }
+    const DEV_MODE = true; // set to false before production deploy
+
+
 
     const {
         TRANSLATIONS,
@@ -1169,6 +1195,19 @@ button.record-btn.copy-ok {
       "continuation_next",
       "continuation_if",
       "continuation_note",
+      "record_label",
+      "record_finding",
+      "record_trajectory",
+      "record_conditions",
+      "record_date",
+      "record_system_state",
+      "record_reference",
+      "record_generated_by",
+      "btn_copy_card",
+      "btn_copied",
+      "btn_download_txt",
+      "btn_download_pdf_white",
+      "btn_download_pdf_dark",
     ];
 
       const fallback = TRANSLATIONS?.en || {};
@@ -1220,10 +1259,15 @@ button.record-btn.copy-ok {
     let caseHistory = [];
 
     function t(key) {
-      return (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key])
-        || (TRANSLATIONS.en && TRANSLATIONS.en[key])
-        || key;
-    }
+  const inLang = TRANSLATIONS[currentLang]?.[key];
+  if (inLang) return inLang;
+  const inEn = TRANSLATIONS["en"]?.[key];
+  if (DEV_MODE) {
+    console.warn(`[i18n] Missing key "${key}" for lang "${currentLang}"${inEn ? " — fell back to EN" : " — NO FALLBACK"}`);
+  }
+  if (inEn) return DEV_MODE ? `⚠ ${inEn}` : inEn;
+  return DEV_MODE ? `[MISSING: ${key}]` : key;
+}
 
     function langValue(obj, fallback = "") {
       if (!obj) return fallback;
@@ -2378,6 +2422,19 @@ exportRecordBtn.addEventListener("click", () => {
   const { body, meta } = buildRecordCard(latestReportData);
   recordCardBody.textContent = body;
   recordCardMeta.textContent = meta;
+ 
+  const verifyUrl = buildVerifyUrl(latestReportData);
+  if (verifyUrl) {
+    document.getElementById("recordCardQrUrlDark").textContent = verifyUrl;
+    renderQrCode("recordCardQrCodeDark", verifyUrl, {
+      width: 56, height: 56,
+      dark: "#93c5fd", light: "#0b1220"
+    });
+    document.getElementById("recordCardQrDark").style.display = "flex";
+  } else {
+    document.getElementById("recordCardQrDark").style.display = "none";
+  }
+
   recordCopyBtn.classList.remove("copy-ok");
   recordCopyBtn.textContent = t("btn_copy_card");
   recordCardModal.classList.add("open");
@@ -2466,6 +2523,26 @@ function getPdfFilename(reportData, variant) {
   const date = new Date().toISOString().slice(0, 10);
   return `public-record${ref}-${variant}-${date}.pdf`;
 }
+// ── QR CODE ──────────────────────────────────────────────
+function buildVerifyUrl(reportData) {
+  const ref = reportData?.strike_reference;
+  if (!ref) return null;
+  return `https://civic-decision-engine-production.up.railway.app/verify?ref=${encodeURIComponent(ref)}`;
+}
+
+function renderQrCode(containerId, url, options = {}) {
+  const el = document.getElementById(containerId);
+  if (!el || !url) return;
+  el.innerHTML = "";
+  new QRCode(el, {
+    text: url,
+    width:  options.width  || 72,
+    height: options.height || 72,
+    colorDark:  options.dark  || "#111111",
+    colorLight: options.light || "#ffffff",
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
 
 // White PDF
 recordDownloadWhiteBtn.addEventListener("click", async () => {
@@ -2476,29 +2553,39 @@ recordDownloadWhiteBtn.addEventListener("click", async () => {
   recordCardPrintBody.textContent = body;
   recordCardPrintMeta.textContent = meta;
 
+  const verifyUrl = buildVerifyUrl(latestReportData);
+  if (verifyUrl) {
+    document.getElementById("recordCardQrUrl").textContent = verifyUrl;
+    renderQrCode("recordCardQrCode", verifyUrl, {
+      width: 72, height: 72,
+      dark: "#111111", light: "#ffffff"
+    });
+    document.getElementById("recordCardQr").style.display = "flex";
+  } else {
+    document.getElementById("recordCardQr").style.display = "none";
+  }
+
   recordCardPrint.style.display = "block";
-
-  await new Promise(r => setTimeout(r, 80));
-
+  await new Promise(r => setTimeout(r, 120));
   await exportCardAsPdf(
     recordCardPrint,
     getPdfFilename(latestReportData, "white")
   );
-
-  recordCardPrint.style.display = "none";
+  recordCardPrint.style.display = "none";   // ← after export, not before
 });
+
 // Dark PDF
 recordDownloadDarkBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
   const actions = document.querySelector(".record-card-actions");
-  actions.style.display = "none";                                    // ← hide buttons
-  await new Promise(r => setTimeout(r, 40));                        // ← let DOM settle
+  actions.style.display = "none";
+  await new Promise(r => setTimeout(r, 40));
   await exportCardAsPdf(
     document.querySelector(".record-card-inner"),
     getPdfFilename(latestReportData, "dark")
   );
-  actions.style.display = "";                                        // ← restore buttons
+  actions.style.display = "";
 });
-      </script>
+</script>
 </body>
 </html>
