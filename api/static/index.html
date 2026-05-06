@@ -2603,18 +2603,23 @@ recordDownloadWhiteBtn.addEventListener("click", async () => {
 
 // Dark PDF
 recordDownloadDarkBtn.addEventListener("click", async () => {
-  if (!latestReportData) return;
+  if (!latestReportData?.strike_reference) return;
 
-  if (recordCardActions) recordCardActions.style.display = "none";
+  const cardInner = document.querySelector(".record-card-inner");
+  const actions = document.getElementById("recordCardActions");
 
-  await new Promise(r => setTimeout(r, 40));
+  if (!cardInner) return;
+
+  if (actions) actions.style.display = "none";
+
+  await new Promise(r => setTimeout(r, 80));
 
   await exportCardAsPdf(
-    document.querySelector(".record-card-inner"),
+    cardInner,
     getPdfFilename(latestReportData, "dark")
   );
 
-  if (recordCardActions) recordCardActions.style.display = "";
+  if (actions) actions.style.display = "";
 });
 </script>
 </body>
