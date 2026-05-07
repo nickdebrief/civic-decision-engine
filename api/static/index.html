@@ -757,7 +757,7 @@ button.record-btn.copy-ok {
   <!-- PUBLIC RECORD CARD MODAL -->
 <div class="record-card-modal" id="recordCardModal" role="dialog" aria-modal="true" aria-label="Public Record Card">
   <div class="record-card-inner">
-    <button class="record-card-close" id="recordCardClose" type="button"></button>
+    <button class="record-card-close" id="recordCardClose" type="button">x</button>
     <p class="record-card-label" data-i18n="record_label">
   Public Record — Civic Decision Engine
 </p>
@@ -777,7 +777,7 @@ button.record-btn.copy-ok {
   </div>
 </div>
 
-<div class="record-card-actions">
+<div class="record-card-actions" id="recordCardActions">
   <button class="record-btn" id="recordCopyBtn" type="button" data-i18n="btn_copy_card">
     Copy card
   </button>
@@ -2379,6 +2379,22 @@ const recordCardPrint        = document.getElementById("recordCardPrint");
 const recordCardPrintBody    = document.getElementById("recordCardPrintBody");
 const recordCardPrintMeta    = document.getElementById("recordCardPrintMeta");
 
+recordCardClose.addEventListener("click", () => {
+  recordCardModal.classList.remove("open");
+});
+
+recordCardModal.addEventListener("click", (e) => {
+  if (e.target === recordCardModal) {
+    recordCardModal.classList.remove("open");
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    recordCardModal.classList.remove("open");
+  }
+});
+
 function buildRecordCard(reportData) {
   const { output, strike_reference } = reportData || {};
   const tD = output?.timeline?.results?.[0] || {};
@@ -2434,23 +2450,37 @@ const meta = [
 
 exportRecordBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
-  try {
 
-  //console.log(latestReportData);  
-  const savedRecord = await persistPublicRecord(latestReportData);
+  const hasRef = !!latestReportData?.strike_reference;
+  const notice = document.getElementById("recordWarning");
 
-  latestReportData.verify_url = savedRecord.verify_url;
-  latestReportData.verification_hash = savedRecord.verification_hash;
-  latestReportData.record_version = savedRecord.version;
+  // Show notice and gate exports if no reference attached
+  if (notice) notice.style.display = hasRef ? "none" : "block";
+  recordDownloadBtn.disabled = !hasRef;
+  recordDownloadWhiteBtn.disabled = !hasRef;
+  recordDownloadDarkBtn.disabled = !hasRef;
+  recordDownloadBtn.style.opacity = hasRef ? "" : "0.4";
+  recordDownloadWhiteBtn.style.opacity = hasRef ? "" : "0.4";
+  recordDownloadDarkBtn.style.opacity = hasRef ? "" : "0.4";
 
-} catch (err) {
-  console.error(err);
-  return;
-}
+  // Only persist and open modal — don't return here even without ref
+  // so the notice is visible inside the open modal
+  if (hasRef) {
+    try {
+      const savedRecord = await persistPublicRecord(latestReportData);
+      latestReportData.verify_url = savedRecord.verify_url;
+      latestReportData.verification_hash = savedRecord.verification_hash;
+      latestReportData.record_version = savedRecord.version;
+    } catch (err) {
+      console.error("[record] Persist failed", err);
+      // Continue — modal opens, exports work offline
+    }
+  }
+
   const { body, meta } = buildRecordCard(latestReportData);
   recordCardBody.textContent = body;
   recordCardMeta.textContent = meta;
- 
+
   const verifyUrl = buildVerifyUrl(latestReportData);
   if (verifyUrl) {
     document.getElementById("recordCardQrUrlDark").textContent = verifyUrl;
@@ -2463,43 +2493,30 @@ exportRecordBtn.addEventListener("click", async () => {
     document.getElementById("recordCardQrDark").style.display = "none";
   }
 
-  const hasRef = !!latestReportData?.strike_reference;
-  const notice = document.getElementById("recordWarning");
-
-  if (notice) notice.style.display = hasRef ? "none" : "block";
-
-  recordDownloadBtn.disabled = !hasRef;
-  recordDownloadWhiteBtn.disabled = !hasRef;
-  recordDownloadDarkBtn.disabled = !hasRef;
-
-  recordDownloadBtn.style.opacity = hasRef ? "" : "0.4";
-  recordDownloadWhiteBtn.style.opacity = hasRef ? "" : "0.4";
-  recordDownloadDarkBtn.style.opacity = hasRef ? "" : "0.4";
-
   recordCopyBtn.classList.remove("copy-ok");
   recordCopyBtn.textContent = t("btn_copy_card");
   recordCardModal.classList.add("open");
 });
 
-recordCardClose.addEventListener("click", () => recordCardModal.classList.remove("open"));
-recordCardModal.addEventListener("click", e => {
-  if (e.target === recordCardModal) recordCardModal.classList.remove("open");
-});
-
-recordCopyBtn.addEventListener("click", () => {
+recordCopyBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
 
-  const { full } = buildRecordCard(latestReportData);
+  const card = buildRecordCard(latestReportData);
+  const text = card.full || `${card.body}\n\n${card.meta}`;
 
-  navigator.clipboard.writeText(full).then(() => {
+  try {
+    await navigator.clipboard.writeText(text);
+
     recordCopyBtn.textContent = t("btn_copied");
     recordCopyBtn.classList.add("copy-ok");
 
     setTimeout(() => {
-      recordCopyBtn.textContent = t("btn_copy_card"); // ← IMPORTANT
+      recordCopyBtn.textContent = t("btn_copy_card");
       recordCopyBtn.classList.remove("copy-ok");
     }, 2000);
-  });
+  } catch (err) {
+    console.error(err);
+  }
 });
 
 recordDownloadBtn.addEventListener("click", () => {
