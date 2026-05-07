@@ -1,16 +1,13 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from api.routes import records
 
 from api.routes import health, civic, adaptation, timeline, pattern
 
 app = FastAPI(
     title="Civic Decision Engine API",
-    description=(
-        "Structured API for civic case analysis, "
-        "timeline detection, and pattern classification. "
-        "Input → Structured processing → Classified output."
-    ),
+    description="Structured API for civic case analysis, timeline detection, and pattern classification.",
     version="v10",
 )
 
@@ -27,3 +24,4 @@ app.include_router(civic.router)
 app.include_router(adaptation.router)
 app.include_router(timeline.router)
 app.include_router(pattern.router)
+app.include_router(records.router)

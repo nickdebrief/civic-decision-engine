@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 from pydantic import BaseModel, Field
 
-
 # ============================================================
 # Request Models
 # ============================================================
@@ -129,3 +128,35 @@ class AdaptationResultResponse(BaseModel):
 class AdaptationRunResponse(BaseModel):
     run_metadata: RunMetadataResponse
     results: list[AdaptationResultResponse]
+
+
+# ============================================================
+# Public Record Models
+# ============================================================
+
+
+class RecordPayload(BaseModel):
+    reference: str
+    generated_at: str
+
+    trajectory: str = ""
+    system_state: str = ""
+
+    conditions: list[str] = Field(default_factory=list)
+    signals: list[str] = Field(default_factory=list)
+
+    finding: str = ""
+
+    report: dict[str, Any] = Field(default_factory=dict)
+
+    language: str = "en"
+
+    supersedes: str | None = None
+
+
+class RecordResponse(BaseModel):
+    reference: str
+    version: int
+    verification_hash: str
+    verify_url: str
+    is_superseding: bool

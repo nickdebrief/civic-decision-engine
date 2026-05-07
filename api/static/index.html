@@ -2432,8 +2432,21 @@ const meta = [
   return { body, meta, full: body + "\n\n" + meta };
 }
 
-exportRecordBtn.addEventListener("click", () => {
+exportRecordBtn.addEventListener("click", async () => {
   if (!latestReportData) return;
+  try {
+
+  //console.log(latestReportData);  
+  const savedRecord = await persistPublicRecord(latestReportData);
+
+  latestReportData.verify_url = savedRecord.verify_url;
+  latestReportData.verification_hash = savedRecord.verification_hash;
+  latestReportData.record_version = savedRecord.version;
+
+} catch (err) {
+  console.error(err);
+  return;
+}
   const { body, meta } = buildRecordCard(latestReportData);
   recordCardBody.textContent = body;
   recordCardMeta.textContent = meta;
@@ -2551,11 +2564,49 @@ function getPdfFilename(reportData, variant) {
   const date = new Date().toISOString().slice(0, 10);
   return `public-record${ref}-${variant}-${date}.pdf`;
 }
+async function persistPublicRecord(reportData) {
+  if (!reportData?.strike_reference) {
+    throw new Error("No structured reference attached.");
+  }
+
+  const { body } = buildRecordCard(reportData);
+
+  const tD = reportData.output?.timeline?.results?.[0] || {};
+  const pD = reportData.output?.pattern?.results?.[0] || {};
+
+  const payload = {
+    reference: reportData.strike_reference,
+    generated_at: reportData.generated_at || new Date().toISOString(),
+    trajectory: tD.trajectory || "",
+    system_state: pD.system_state || "",
+    conditions: Array.isArray(tD.conditions) ? tD.conditions : [],
+    signals: Array.isArray(pD.signals) ? pD.signals : [],
+    finding: body,
+    report: reportData.output || {},
+    language: currentLang
+  };
+
+  const res = await fetch("/records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    throw new Error("Public record could not be persisted.");
+  }
+
+  return await res.json();
+}
+
 // ── QR CODE ──────────────────────────────────────────────
 function buildVerifyUrl(reportData) {
+  if (reportData?.verify_url) return reportData.verify_url;
+
   const ref = reportData?.strike_reference;
   if (!ref) return null;
-  return `https://civic-decision-engine-production.up.railway.app/verify?ref=${encodeURIComponent(ref)}`;
+
+  return `https://civic-decision-engine-production.up.railway.app/verify/${encodeURIComponent(ref)}`;
 }
 
 function renderQrCode(containerId, url, options = {}) {
