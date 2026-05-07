@@ -743,6 +743,12 @@ button.record-btn.copy-ok {
   text-transform: uppercase;
 }
 
+.record-card-qr {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -769,7 +775,9 @@ button.record-btn.copy-ok {
   Attach a structured reference before exporting a public record.
 
 </div>
-<div class="record-card-qr" id="recordCardQrDark" style="display:none; margin-top:18px; margin-bottom:18px; align-items:flex-start; gap:14px;">
+<div class="record-card-qr"
+     id="recordCardQrDark"
+     style="display:none; margin-top:18px; margin-bottom:18px; align-items:flex-start; gap:28px;">
   <div id="recordCardQrCodeDark" style="width:56px; height:56px; flex-shrink:0;"></div>
   <div style="font-family:ui-monospace,monospace; font-size:0.72rem; color:var(--muted); line-height:1.6; padding-top:2px;">
     Verify this record at<br>
@@ -2485,9 +2493,11 @@ exportRecordBtn.addEventListener("click", async () => {
   if (verifyUrl) {
     document.getElementById("recordCardQrUrlDark").textContent = verifyUrl;
     renderQrCode("recordCardQrCodeDark", verifyUrl, {
-      width: 56, height: 56,
-      dark: "#93c5fd", light: "#0b1220"
-    });
+  width: 72,
+  height: 72,
+  dark: "#ffffff",
+  light: "#0b1220"
+});
     document.getElementById("recordCardQrDark").style.display = "flex";
   } else {
     document.getElementById("recordCardQrDark").style.display = "none";
