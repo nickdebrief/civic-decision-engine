@@ -156,6 +156,7 @@ window.CDE_I18N = {
       record_label:            "Public Record — Civic Decision Engine",
       record_reference:        "Reference",
       record_attach_required:  "Attach a structured reference before exporting a public record.",
+      public_record_index:     "Public Record Index",
     },
 
     ga: {
@@ -289,6 +290,7 @@ window.CDE_I18N = {
       record_label:            "Taifead Poiblí — Civic Decision Engine",
       record_reference:        "Tagairt",
       record_attach_required:  "Ceangail tagairt struchtúrtha sula n-onnmhairítear taifead poiblí.",
+      public_record_index:     "Innéacs Taifead Poiblí",
     },
 
     fr: {
@@ -422,6 +424,7 @@ window.CDE_I18N = {
       record_label:            "Dossier public — Civic Decision Engine",
       record_reference:        "Référence",
       record_attach_required:  "Ajoutez une référence structurée avant d’exporter un dossier public.",
+      public_record_index:     "Index des Registres Publics",
     },
 
     de: {
@@ -555,6 +558,7 @@ window.CDE_I18N = {
       record_label:            "Öffentlicher Datensatz — Civic Decision Engine",
       record_reference:        "Referenz",
       record_attach_required:  "Fügen Sie eine strukturierte Referenz hinzu, bevor Sie einen öffentlichen Datensatz exportieren.",
+      public_record_index:     "Öffentliches Registerverzeichnis",
     },
 
     es: {
@@ -688,6 +692,7 @@ window.CDE_I18N = {
       record_label:            "Registro público — Civic Decision Engine",
       record_reference:        "Referencia",
       record_attach_required:  "Adjunte una referencia estructurada antes de exportar un registro público.",
+      public_record_index:     "Índice de Registros Públicos",
     },
 
     pl: {
@@ -821,6 +826,7 @@ window.CDE_I18N = {
       record_label:            "Rejestr publiczny — Civic Decision Engine",
       record_reference:        "Referencja",
        record_attach_required: "Dołącz uporządkowane odniesienie przed wyeksportowaniem publicznego rejestru.",
+      public_record_index:     "Indeks Rejestru Publicznego",
     },
 
     ro: {
@@ -954,6 +960,7 @@ window.CDE_I18N = {
       record_label:            "Înregistrare publică — Civic Decision Engine",
       record_reference:        "Referință",
       record_attach_required:  "Atașați o referință structurată înainte de a exporta o înregistrare publică.",
+      public_record_index:     "Indexul Registrului Public",
     },
 
     uk: {
@@ -1087,6 +1094,7 @@ window.CDE_I18N = {
       record_label:            "Публічний запис — Civic Decision Engine",
       record_reference:        "Посилання",
       record_attach_required:  "Додайте структуроване посилання перед експортом публічного запису.",
+      public_record_index:     "Індекс публічного реєстру",
     },
   }, // end TRANSLATIONS
 

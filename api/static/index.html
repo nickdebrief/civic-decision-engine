@@ -748,7 +748,9 @@ button.record-btn.copy-ok {
   align-items: center;
   gap: 16px;
 }
-
+.public-record-btn:hover {
+  border-color: rgba(255,255,255,0.22);
+}
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -865,6 +867,7 @@ button.record-btn.copy-ok {
           <button class="tab-btn active" id="describeTabBtn" type="button" data-mode="describe" data-i18n="tab_describe">Describe a case</button>
           <button class="tab-btn" id="jsonTabBtn" type="button" data-mode="json" data-i18n="tab_json">Paste JSON</button>
           <button class="tab-btn" id="compareTabBtn" type="button" data-mode="compare" data-i18n="tab_compare">Compare Cases</button>
+          <button class="tab-btn" id="publicRecordBtn" type="button" data-i18n="public_record_index"> Public Record Card</button>
         </div>
 
         <div class="tab-panel active" id="describePanel">
@@ -1440,10 +1443,15 @@ button.record-btn.copy-ok {
     }
 
     inputTabs.addEventListener("click", (event) => {
-      const button = event.target.closest(".tab-btn");
-      if (!button) return;
-      switchMode(button.dataset.mode);
-    });
+    const button = event.target.closest(".tab-btn");
+    if (!button || !button.dataset.mode) return;
+    switchMode(button.dataset.mode);
+  });
+
+    document.getElementById("publicRecordBtn")
+      .addEventListener("click", () => {
+      window.open("/records", "_blank", "noopener,noreferrer");
+  });
 
     compareBtn.addEventListener("click", () => {
       const input = compareInput.value.trim();
