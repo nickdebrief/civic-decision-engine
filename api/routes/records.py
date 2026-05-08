@@ -83,6 +83,14 @@ def compute_verification_hash(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def extract_institution_type(reference: str) -> str:
+    """Extract institution type code from structured reference e.g. Strike-LA-20260508-001 → LA"""
+    parts = reference.split("-")
+    if len(parts) >= 2:
+        return parts[1].upper()
+    return "OT"
+
+
 @router.post("/records", response_model=RecordResponse)
 async def create_record(payload: RecordPayload):
     conn = get_db()
@@ -155,6 +163,382 @@ async def create_record(payload: RecordPayload):
             verify_url=verify_url,
             is_superseding=is_superseding,
         )
+
+    finally:
+        conn.close()
+
+
+@router.get("/records", response_class=HTMLResponse)
+async def records_index(trajectory: str = None, institution: str = None):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Build filtered query
+        conditions_parts = ["is_latest = 1"]
+        params = []
+
+        if trajectory:
+            conditions_parts.append("LOWER(trajectory) = LOWER(?)")
+            params.append(trajectory)
+
+        if institution:
+            conditions_parts.append("reference LIKE ?")
+            params.append(f"Strike-{institution.upper()}-%")
+
+        where = " AND ".join(conditions_parts)
+
+        cur.execute(
+            f"SELECT reference, trajectory, system_state, conditions_json, "
+            f"exported_at, language, version FROM records "
+            f"WHERE {where} ORDER BY exported_at DESC",
+            params,
+        )
+        records = cur.fetchall()
+
+        # Get distinct trajectories and institution types for filters
+        cur.execute(
+            "SELECT DISTINCT trajectory FROM records WHERE is_latest = 1 AND trajectory != '' ORDER BY trajectory"
+        )
+        trajectories = [r["trajectory"] for r in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT reference FROM records WHERE is_latest = 1")
+        all_refs = cur.fetchall()
+        institution_types = sorted(
+            set(extract_institution_type(r["reference"]) for r in all_refs)
+        )
+
+        INSTITUTION_LABELS = {
+            "LA": "Local Authority",
+            "HS": "Health Service",
+            "ED": "Education",
+            "HO": "Housing",
+            "PL": "Planning",
+            "GV": "Government",
+            "FS": "Fire Service",
+            "LE": "Law Enforcement",
+            "LG": "Legal",
+            "OT": "Other",
+        }
+
+        total = len(records)
+
+        # Build filter pills HTML
+        def filter_pill(label, param, value, current):
+            active = current == value
+            base_url = "/records"
+            other_param = "institution" if param == "trajectory" else "trajectory"
+            other_value = institution if param == "trajectory" else trajectory
+            if active:
+                href = (
+                    f"{base_url}?{other_param}={other_value}"
+                    if other_value
+                    else base_url
+                )
+                cls = "pill pill-active"
+            else:
+                href = f"{base_url}?{param}={value}"
+                if other_value:
+                    href += f"&{other_param}={other_value}"
+                cls = "pill"
+            return f'<a href="{escape(href)}" class="{cls}">{escape(label)}</a>'
+
+        traj_pills = '<a href="/records{}" class="pill {}">All</a>'.format(
+            f"?institution={institution}" if institution else "",
+            "pill-active" if not trajectory else "",
+        )
+        for t in trajectories:
+            traj_pills += filter_pill(t, "trajectory", t, trajectory)
+
+        inst_pills = '<a href="/records{}" class="pill {}">All</a>'.format(
+            f"?trajectory={trajectory}" if trajectory else "",
+            "pill-active" if not institution else "",
+        )
+        for code in institution_types:
+            label = INSTITUTION_LABELS.get(code, code)
+            inst_pills += filter_pill(
+                f"{code} — {label}", "institution", code, institution
+            )
+
+        # Build record rows
+        rows_html = ""
+        if not records:
+            rows_html = '<tr><td colspan="5" class="empty-state">No records match the current filters.</td></tr>'
+        else:
+            for rec in records:
+                conditions = json.loads(rec["conditions_json"] or "[]")
+                cond_text = ", ".join(conditions) if conditions else "—"
+                inst_code = extract_institution_type(rec["reference"])
+                inst_label = INSTITUTION_LABELS.get(inst_code, inst_code)
+                exported = rec["exported_at"][:10] if rec["exported_at"] else "—"
+                version_badge = (
+                    f' <span class="version-badge">v{rec["version"]}</span>'
+                    if rec["version"] > 1
+                    else ""
+                )
+                rows_html += f"""
+                <tr>
+                  <td class="col-ref">
+                    <a href="/verify/{escape(rec['reference'])}" class="ref-link">
+                      {escape(rec['reference'])}{version_badge}
+                    </a>
+                  </td>
+                  <td class="col-inst">{escape(inst_label)}</td>
+                  <td class="col-traj">{escape(rec['trajectory'] or '—')}</td>
+                  <td class="col-cond">{escape(cond_text)}</td>
+                  <td class="col-date">{escape(exported)}</td>
+                </tr>"""
+
+        active_filter_note = ""
+        if trajectory or institution:
+            parts = []
+            if trajectory:
+                parts.append(f"Trajectory: {escape(trajectory)}")
+            if institution:
+                parts.append(
+                    f"Institution: {escape(INSTITUTION_LABELS.get(institution.upper(), institution))}"
+                )
+            active_filter_note = (
+                f'<p class="filter-note">Filtered by — {" · ".join(parts)}</p>'
+            )
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Public Record Index — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.6;
+    }}
+    .document {{
+      max-width: 960px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 48px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 36px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .filter-section {{
+      margin-bottom: 28px;
+    }}
+    .filter-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #aaa;
+      margin: 0 0 8px;
+    }}
+    .pill-group {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }}
+    .pill {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      padding: 4px 10px;
+      border: 1px solid #d0cec8;
+      border-radius: 20px;
+      color: #555;
+      text-decoration: none;
+      background: #f8f7f4;
+      transition: all 0.15s;
+    }}
+    .pill:hover {{ background: #eee; color: #1a1a1a; border-color: #999; }}
+    .pill-active {{
+      background: #1a1a1a;
+      color: #fff;
+      border-color: #1a1a1a;
+    }}
+    .pill-active:hover {{ background: #333; }}
+    .filter-note {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      margin: 0 0 20px;
+    }}
+    .records-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .records-table thead tr {{
+      border-bottom: 2px solid #1a1a1a;
+    }}
+    .records-table th {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      padding: 0 12px 10px 0;
+      text-align: left;
+      font-weight: normal;
+    }}
+    .records-table tbody tr {{
+      border-bottom: 1px solid #f0ede8;
+    }}
+    .records-table tbody tr:hover {{ background: #faf9f7; }}
+    .records-table td {{
+      padding: 12px 12px 12px 0;
+      vertical-align: top;
+      color: #333;
+    }}
+    .col-ref {{ width: 220px; }}
+    .col-inst {{ width: 140px; }}
+    .col-traj {{ width: 130px; }}
+    .col-cond {{ }}
+    .col-date {{ width: 100px; white-space: nowrap; }}
+    .ref-link {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 1px solid #ccc;
+    }}
+    .ref-link:hover {{ border-color: #1a1a1a; }}
+    .version-badge {{
+      display: inline-block;
+      font-size: 0.6rem;
+      background: #eee;
+      color: #666;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }}
+    .empty-state {{
+      text-align: center;
+      color: #aaa;
+      font-style: italic;
+      padding: 40px 0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+    }}
+    .doc-footer {{
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 700px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-count {{ text-align: left; }}
+      .col-cond, .col-inst {{ display: none; }}
+      .doc-footer {{ flex-direction: column; }}
+      .footer-note {{ text-align: left; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div><div class="doc-engine">Civic Decision Engine</div></div>
+      <div>
+        <div class="doc-title">Public Record Index</div>
+        <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
+      </div>
+    </header>
+
+    <div class="filter-section">
+      <p class="filter-label">Trajectory</p>
+      <div class="pill-group">{traj_pills}</div>
+      <p class="filter-label">Institution type</p>
+      <div class="pill-group">{inst_pills}</div>
+    </div>
+
+    {active_filter_note}
+
+    <table class="records-table">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Institution</th>
+          <th>Trajectory</th>
+          <th>Conditions</th>
+          <th>Exported</th>
+        </tr>
+      </thead>
+      <tbody>{rows_html}</tbody>
+    </table>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Public records are generated by the Civic Decision Engine and stored
+        at the time of export. Each record is independently verifiable via its reference URL.
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
 
     finally:
         conn.close()
@@ -501,7 +885,12 @@ async def verify_record(reference: str):
 <body>
   <div class="document">
     <header class="doc-header">
-      <div><div class="doc-engine">{s["engine"]}</div></div>
+      <div>
+  <div class="doc-engine">{s["engine"]}</div>
+  <a href="/records" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;">
+    ← Public record index
+  </a>
+</div>
       <div>
         <div class="doc-record-label">{s["record_label"]}</div>
         <div class="doc-reference">{safe['reference']}</div>
