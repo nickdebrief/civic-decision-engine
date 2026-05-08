@@ -2598,6 +2598,16 @@ async function persistPublicRecord(reportData) {
 
   const { body } = buildRecordCard(reportData);
 
+// Extract raw explanation text — skip card header lines
+const findingLines = body.split("\n").filter((line, i) => {
+  const t = line.trim();
+  if (t === "") return false;
+  if (/^[─—\-]{3,}$/.test(t)) return false;
+  if (t === t.toUpperCase() && t.length < 20) return false; // short allcaps headers
+  return true;
+});
+const finding = findingLines.join("\n").trim();
+
   const tD = reportData.output?.timeline?.results?.[0] || {};
   const pD = reportData.output?.pattern?.results?.[0] || {};
 
@@ -2622,7 +2632,7 @@ async function persistPublicRecord(reportData) {
     system_state: stateLabel,
     conditions:   condLabels,
     signals:      Array.isArray(pD.signals) ? pD.signals : [],
-    finding:      body,
+    finding:      finding,
     report:       reportData.output || {},
     language:     currentLang
   };
