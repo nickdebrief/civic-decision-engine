@@ -2598,6 +2598,7 @@ async function persistPublicRecord(reportData) {
 
   const { body } = buildRecordCard(reportData);
 
+// Extract raw explanation text — skip card header lines
 // Pull explanation directly from source before card formatting is applied
 const pD2 = latestReportData.output?.pattern?.results?.[0] || {};
 const tD2 = latestReportData.output?.timeline?.results?.[0] || {};
@@ -2609,8 +2610,6 @@ const trajLabel2 = langValue(cfg2.label, traj2) || tD2.trajectory || "";
 const finding = explanation2.length
   ? explanation2.join("\n\n")
   : (trajLabel2 ? `Trajectory recorded as: ${trajLabel2}.` : "No finding available.");
-
-
 
   const tD = reportData.output?.timeline?.results?.[0] || {};
   const pD = reportData.output?.pattern?.results?.[0] || {};
