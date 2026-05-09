@@ -498,7 +498,10 @@ async def records_index(trajectory: str = None, institution: str = None):
 <body>
   <div class="document">
     <header class="doc-header">
-      <div><div class="doc-engine">Civic Decision Engine</div></div>
+      <div>
+  <div class="doc-engine">Civic Decision Engine</div>
+    <a href="/api/docs" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;margin-top:6px;display:inline-block;">API documentation</a>
+  </div>
       <div>
         <div class="doc-title">Public Record Index</div>
         <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
@@ -696,6 +699,561 @@ async def api_records_index(
 
     finally:
         conn.close()
+
+
+@router.get("/api/docs", response_class=HTMLResponse)
+async def api_docs():
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Public API Documentation — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    .document {
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .doc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }
+    .doc-engine {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }
+    .doc-index-link {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      margin-top: 6px;
+      display: inline-block;
+    }
+    .doc-index-link:hover { color: #1a1a1a; border-color: #999; }
+    .doc-title {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }
+    .doc-subtitle {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }
+    h2 {
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }
+    h3 {
+      font-size: 1rem;
+      font-family: Georgia, serif;
+      font-weight: bold;
+      margin: 28px 0 8px;
+      color: #1a1a1a;
+    }
+    p { margin: 0 0 16px; color: #333; }
+    ul { margin: 0 0 16px; padding-left: 20px; color: #333; }
+    li { margin-bottom: 6px; }
+    code {
+      font-family: ui-monospace, monospace;
+      font-size: 0.85em;
+      background: #f0ede8;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .endpoint {
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #1a1a1a;
+      border-radius: 4px;
+      padding: 16px 20px;
+      margin: 16px 0 24px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+    }
+    .method {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    .path { color: #1a1a1a; vertical-align: middle; }
+    .param-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin: 12px 0 20px;
+    }
+    .param-table th {
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      text-align: left;
+      padding: 4px 12px 8px 0;
+      border-bottom: 1px solid #e8e6e0;
+      font-weight: normal;
+    }
+    .param-table td {
+      padding: 8px 12px 8px 0;
+      border-bottom: 1px solid #f4f2ee;
+      vertical-align: top;
+      color: #333;
+    }
+    .param-table td:first-child {
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #1a1a1a;
+      width: 160px;
+    }
+    .param-table td:nth-child(2) {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      width: 80px;
+    }
+    .code-block {
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 16px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: #333;
+      overflow-x: auto;
+      margin: 12px 0 24px;
+      white-space: pre;
+    }
+    .curl-block {
+      background: #1a1a1a;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: #e8e6e0;
+      overflow-x: auto;
+      margin: 12px 0 24px;
+      white-space: pre;
+    }
+    .curl-label {
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+    .hash-note {
+      background: #faf9f7;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-size: 0.875rem;
+      color: #444;
+      margin: 16px 0;
+      font-style: italic;
+      line-height: 1.65;
+    }
+    .ref-anatomy {
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 20px 24px;
+      margin: 16px 0 24px;
+      font-family: ui-monospace, monospace;
+    }
+    .ref-example {
+      font-size: 1.1rem;
+      letter-spacing: 0.06em;
+      color: #1a1a1a;
+      margin-bottom: 16px;
+    }
+    .ref-parts {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+    }
+    .ref-part {
+      text-align: center;
+      padding: 6px 12px;
+      font-size: 0.72rem;
+    }
+    .ref-part-value {
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: #1a1a1a;
+      border-bottom: 2px solid #1a1a1a;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+    .ref-part-label {
+      font-size: 0.62rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .status-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin: 12px 0 20px;
+    }
+    .status-table td {
+      padding: 8px 12px 8px 0;
+      border-bottom: 1px solid #f4f2ee;
+      vertical-align: top;
+    }
+    .status-table td:first-child {
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #1a1a1a;
+      width: 80px;
+    }
+    .status-table td:last-child { color: #555; }
+    .version-note {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #aaa;
+      margin-top: 6px;
+    }
+    .doc-footer {
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }
+    .footer-tagline {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }
+    .footer-note {
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }
+    @media (max-width: 640px) {
+      .document { padding: 28px 20px; }
+      .doc-header { flex-direction: column; gap: 12px; }
+      .doc-title, .doc-subtitle { text-align: left; }
+      .doc-footer { flex-direction: column; align-items: flex-start; }
+      .footer-note { text-align: left; }
+      .ref-parts { flex-wrap: wrap; }
+    }
+    @media print {
+      body { background: white; padding: 0; }
+      .document { border: none; box-shadow: none; padding: 32px; }
+      .curl-block { background: #f0f0f0; color: #1a1a1a; }
+    }
+  </style>
+</head>
+<body>
+  <div class="document">
+
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <a href="/records" class="doc-index-link">← Public record index</a>
+      </div>
+      <div>
+        <div class="doc-title">Public API Documentation</div>
+        <div class="doc-subtitle">Machine-readable civic record access</div>
+      </div>
+    </header>
+
+    <h2>Overview</h2>
+    <p>The Civic Decision Engine exposes a public read API for accessing verified civic records. These endpoints allow journalists, researchers, advocacy organisations, and automated systems to retrieve, verify, and archive structured civic evidence programmatically.</p>
+    <p>All endpoints return JSON. All records exposed through this API are the same records accessible via the public verification pages — this is not a separate dataset.</p>
+
+    <h2>Authentication</h2>
+    <p>No authentication is required for read operations. These records are intentionally public — they are generated and published by consent at the point of export. Write operations (record creation, superseding) are not exposed through this API.</p>
+
+    <h2>Base URL</h2>
+    <div class="code-block">https://civic-decision-engine-production.up.railway.app</div>
+
+    <h2>Canonical Reference Format</h2>
+    <p>Every public record carries a structured reference that encodes its origin. The format is:</p>
+    <div class="ref-anatomy">
+      <div class="ref-example">Strike-LA-20260508-001</div>
+      <div class="ref-parts">
+        <div class="ref-part">
+          <div class="ref-part-value">Strike</div>
+          <div class="ref-part-label">System prefix</div>
+        </div>
+        <div class="ref-part" style="padding: 6px 4px; color:#ccc; font-size:1.2rem; align-self:flex-start; padding-top:10px;">—</div>
+        <div class="ref-part">
+          <div class="ref-part-value">LA</div>
+          <div class="ref-part-label">Institution type</div>
+        </div>
+        <div class="ref-part" style="padding: 6px 4px; color:#ccc; font-size:1.2rem; align-self:flex-start; padding-top:10px;">—</div>
+        <div class="ref-part">
+          <div class="ref-part-value">20260508</div>
+          <div class="ref-part-label">Export date (YYYYMMDD)</div>
+        </div>
+        <div class="ref-part" style="padding: 6px 4px; color:#ccc; font-size:1.2rem; align-self:flex-start; padding-top:10px;">—</div>
+        <div class="ref-part">
+          <div class="ref-part-value">001</div>
+          <div class="ref-part-label">Sequence number</div>
+        </div>
+      </div>
+      <p style="margin:0; font-size:0.78rem; color:#666;">References are case-sensitive. Institution type codes are always two uppercase letters. Sequence numbers are zero-padded to three digits. The same reference may have multiple versions — the API always returns the latest unless version history is requested via <code>?full=true</code>.</p>
+    </div>
+
+    <h2>Endpoints</h2>
+
+    <h3>Retrieve a single record</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/verify/{reference}</span>
+    </div>
+    <p>Returns the latest version of a public record by its structured reference. The minimal response includes the fields necessary to verify, cite, and archive the record.</p>
+
+    <table class="param-table">
+      <thead>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>reference</td>
+          <td>path</td>
+          <td>Structured reference identifier, e.g. <code>Strike-LA-20260508-001</code></td>
+        </tr>
+        <tr>
+          <td>full</td>
+          <td>query</td>
+          <td>Optional. Pass <code>?full=true</code> to include complete metadata and version history.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Minimal response (default):</p>
+    <div class="code-block">{
+  "reference": "Strike-LA-20260508-001",
+  "finding": "The sequence has transitioned into escalation.\\n\\nEarlier delay has developed into escalation without response.",
+  "trajectory": "Deteriorating",
+  "conditions": [
+    "Transfer of Burden",
+    "Escalation Without Response"
+  ],
+  "system_state": "Transition to Escalation",
+  "verification_hash": "935e0a79c9f9283e8a03cfa1d3e8e3d5ff4aea7bc01cef8b3ea64ec0d510b1ff",
+  "version": 1
+}</div>
+
+    <p>Full response (<code>?full=true</code>) additionally includes:</p>
+    <div class="code-block">{
+  "generated_at": "2026-05-08T12:58:54.870Z",
+  "exported_at": "2026-05-08T12:59:04.562034+00:00",
+  "language": "en",
+  "supersedes": null,
+  "generated_by": "Civic Decision Engine",
+  "version_history": [
+    {
+      "version": 1,
+      "exported_at": "2026-05-08T12:59:04.562034+00:00",
+      "verification_hash": "935e0a79c9f9283e8a03cfa1d3e8e3d5ff4aea7bc01cef8b3ea64ec0d510b1ff"
+    }
+  ]
+}</div>
+
+    <div class="curl-label">Example request</div>
+    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/verify/Strike-LA-20260508-001</div>
+
+    <h3>Retrieve the record index</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/records</span>
+    </div>
+    <p>Returns a paginated list of the latest version of all public records, most recent first. Supports filtering by trajectory and institution type.</p>
+
+    <table class="param-table">
+      <thead>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>trajectory</td>
+          <td>query</td>
+          <td>Filter by trajectory value, e.g. <code>Deteriorating</code></td>
+        </tr>
+        <tr>
+          <td>institution</td>
+          <td>query</td>
+          <td>Filter by institution type code, e.g. <code>LA</code>, <code>HS</code>, <code>ED</code></td>
+        </tr>
+        <tr>
+          <td>limit</td>
+          <td>query</td>
+          <td>Maximum records to return. Default 50, maximum 200.</td>
+        </tr>
+        <tr>
+          <td>offset</td>
+          <td>query</td>
+          <td>Pagination offset. Default 0.</td>
+        </tr>
+        <tr>
+          <td>full</td>
+          <td>query</td>
+          <td>Pass <code>?full=true</code> to include finding, language, and supersedes per record.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">{
+  "total": 12,
+  "offset": 0,
+  "limit": 50,
+  "filters": {
+    "trajectory": null,
+    "institution": null
+  },
+  "records": [
+    {
+      "reference": "Strike-LA-20260508-001",
+      "trajectory": "Deteriorating",
+      "conditions": ["Transfer of Burden", "Escalation Without Response"],
+      "system_state": "Transition to Escalation",
+      "institution_type": "LA",
+      "exported_at": "2026-05-08T12:59:04.562034+00:00",
+      "version": 1,
+      "verification_hash": "935e0a79..."
+    }
+  ]
+}</div>
+
+    <div class="curl-label">Example requests</div>
+    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/records
+
+curl https://civic-decision-engine-production.up.railway.app/api/records?trajectory=Deteriorating
+
+curl https://civic-decision-engine-production.up.railway.app/api/records?institution=LA&limit=10</div>
+
+    <h2>Verification Integrity</h2>
+    <div class="hash-note">
+      Verification hashes are computed from canonical record fields at the time of export using SHA-256. The canonical fields are: reference, generated_at, finding, trajectory, conditions, system_state, and generated_by. Any alteration to those fields after export will produce a different hash. The hash displayed on the verification page and returned by this API can be independently recomputed to confirm the record has not been altered since publication.
+    </div>
+
+    <h2>Response Formats</h2>
+    <p>All responses are <code>application/json</code>. All timestamps are ISO 8601. Conditions are returned as human-readable label arrays.</p>
+
+    <h2>Status Codes</h2>
+    <table class="status-table">
+      <tbody>
+        <tr>
+          <td>200</td>
+          <td>OK — record found and returned successfully.</td>
+        </tr>
+        <tr>
+          <td>404</td>
+          <td>Not Found — no record exists for the given reference. Returns a structured error body.</td>
+        </tr>
+        <tr>
+          <td>422</td>
+          <td>Unprocessable — query parameters are malformed or out of range.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>404 error body:</p>
+    <div class="code-block">{
+  "error": "not_found",
+  "message": "No public record found for reference: Strike-XX-00000000-000"
+}</div>
+
+    <h2>Versioning</h2>
+    <p>All endpoints return the latest version of each record by default. When a record is superseded, the previous version is preserved and remains accessible via <code>?full=true</code>. The <code>version</code> field indicates which version is currently returned. The <code>supersedes</code> field identifies the prior version reference when applicable.</p>
+    <p>Published record versions remain preserved once exported. Corrections or amendments result in a new version, with all prior versions retained in the version history.</p>
+    <p class="version-note">API version: v1 — stable. No breaking changes will be made without a version increment.</p>
+
+    <h2>Institution Type Codes</h2>
+    <table class="param-table">
+      <thead>
+        <tr><th>Code</th><th></th><th>Institution type</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>LA</td><td></td><td>Local Authority</td></tr>
+        <tr><td>HS</td><td></td><td>Health Service</td></tr>
+        <tr><td>ED</td><td></td><td>Education</td></tr>
+        <tr><td>HO</td><td></td><td>Housing</td></tr>
+        <tr><td>PL</td><td></td><td>Planning</td></tr>
+        <tr><td>GV</td><td></td><td>Government</td></tr>
+        <tr><td>FS</td><td></td><td>Fire Service</td></tr>
+        <tr><td>LE</td><td></td><td>Law Enforcement</td></tr>
+        <tr><td>LG</td><td></td><td>Legal</td></tr>
+        <tr><td>OT</td><td></td><td>Other</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Notes on Public Records</h2>
+    <p>Records accessible through this API are structured evidentiary documents generated by the Civic Decision Engine at the time of export. Published record versions remain preserved once exported. Corrections or amendments result in a new version, with the original preserved in the version history.</p>
+    <p>These records are designed for use in civic, administrative, and formal complaint proceedings. They are not legal advice and do not constitute official determinations by any public body. They are observation instruments — structured accounts of institutional behaviour as experienced and recorded by the person submitting the case.</p>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Civic Decision Engine public API — open access, read only.
+        For the human-readable record index, see
+        <a href="/records" style="color:#888;">civic-decision-engine-production.up.railway.app/records</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)
 
 
 @router.get("/verify/{reference}", response_class=HTMLResponse)
