@@ -8,8 +8,8 @@ from html import escape
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.models import RecordPayload, RecordResponse
 
@@ -539,6 +539,160 @@ async def records_index(trajectory: str = None, institution: str = None):
 </html>"""
 
         return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
+
+
+@router.get("/api/verify/{reference}")
+async def api_verify_record(
+    reference: str,
+    full: bool = Query(
+        default=False,
+        description="Return full record including metadata and version history",
+    ),
+):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT * FROM records WHERE reference = ? AND is_latest = 1",
+            (reference,),
+        )
+        record = cur.fetchone()
+
+        if not record:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "not_found",
+                    "message": f"No public record found for reference: {reference}",
+                },
+            )
+
+        conditions = json.loads(record["conditions_json"] or "[]")
+
+        # Minimal response — always returned
+        response: dict = {
+            "reference": record["reference"],
+            "finding": record["finding"] or "",
+            "trajectory": record["trajectory"] or "",
+            "conditions": conditions,
+            "system_state": record["system_state"] or "",
+            "verification_hash": record["verification_hash"],
+            "version": record["version"],
+        }
+
+        if full:
+            # Fetch version history
+            cur.execute(
+                "SELECT version, exported_at, verification_hash FROM records "
+                "WHERE reference = ? ORDER BY version ASC",
+                (reference,),
+            )
+            history = [
+                {
+                    "version": row["version"],
+                    "exported_at": row["exported_at"],
+                    "verification_hash": row["verification_hash"],
+                }
+                for row in cur.fetchall()
+            ]
+
+            response.update(
+                {
+                    "generated_at": record["generated_at"] or "",
+                    "exported_at": record["exported_at"] or "",
+                    "language": record["language"] or "en",
+                    "supersedes": record["supersedes"],
+                    "generated_by": record["generated_by"] or "",
+                    "version_history": history,
+                }
+            )
+
+        return JSONResponse(content=response)
+
+    finally:
+        conn.close()
+
+
+@router.get("/api/records")
+async def api_records_index(
+    trajectory: str = Query(default=None, description="Filter by trajectory"),
+    institution: str = Query(
+        default=None, description="Filter by institution type code e.g. LA, HS, ED"
+    ),
+    limit: int = Query(default=50, le=200, description="Maximum records to return"),
+    offset: int = Query(default=0, description="Pagination offset"),
+    full: bool = Query(default=False, description="Include full fields per record"),
+):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        conditions_parts = ["is_latest = 1"]
+        params: list = []
+
+        if trajectory:
+            conditions_parts.append("LOWER(trajectory) = LOWER(?)")
+            params.append(trajectory)
+
+        if institution:
+            conditions_parts.append("reference LIKE ?")
+            params.append(f"Strike-{institution.upper()}-%")
+
+        where = " AND ".join(conditions_parts)
+
+        # Total count
+        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
+        total = cur.fetchone()[0]
+
+        # Paginated results
+        cur.execute(
+            f"SELECT * FROM records WHERE {where} "
+            f"ORDER BY exported_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        )
+        rows = cur.fetchall()
+
+        records_out = []
+        for rec in rows:
+            conditions = json.loads(rec["conditions_json"] or "[]")
+            item: dict = {
+                "reference": rec["reference"],
+                "trajectory": rec["trajectory"] or "",
+                "conditions": conditions,
+                "system_state": rec["system_state"] or "",
+                "institution_type": extract_institution_type(rec["reference"]),
+                "exported_at": rec["exported_at"] or "",
+                "version": rec["version"],
+                "verification_hash": rec["verification_hash"],
+            }
+            if full:
+                item.update(
+                    {
+                        "finding": rec["finding"] or "",
+                        "generated_at": rec["generated_at"] or "",
+                        "language": rec["language"] or "en",
+                        "supersedes": rec["supersedes"],
+                        "generated_by": rec["generated_by"] or "",
+                    }
+                )
+            records_out.append(item)
+
+        return JSONResponse(
+            content={
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+                "filters": {
+                    "trajectory": trajectory,
+                    "institution": institution,
+                },
+                "records": records_out,
+            }
+        )
 
     finally:
         conn.close()

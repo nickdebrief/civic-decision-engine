@@ -160,3 +160,46 @@ class RecordResponse(BaseModel):
     verification_hash: str
     verify_url: str
     is_superseding: bool
+
+
+# ── API Response Models ───────────────────────────────────────
+class RecordMinimalResponse(BaseModel):
+    reference: str
+    finding: str
+    trajectory: str
+    conditions: list[str]
+    system_state: str
+    verification_hash: str
+    version: int
+
+
+class RecordFullResponse(BaseModel):
+    reference: str
+    finding: str
+    trajectory: str
+    conditions: list[str]
+    system_state: str
+    verification_hash: str
+    version: int
+    generated_at: str
+    exported_at: str
+    language: str
+    supersedes: str | None
+    generated_by: str
+    version_history: list[dict[str, Any]]
+
+
+class RecordIndexItem(BaseModel):
+    reference: str
+    trajectory: str
+    conditions: list[str]
+    system_state: str
+    institution_type: str
+    exported_at: str
+    version: int
+
+
+class RecordIndexResponse(BaseModel):
+    total: int
+    filters: dict[str, Any]
+    records: list[RecordIndexItem]
