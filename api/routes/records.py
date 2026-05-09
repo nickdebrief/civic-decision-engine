@@ -91,6 +91,98 @@ def extract_institution_type(reference: str) -> str:
     return "OT"
 
 
+CONDITION_REGISTRY = [
+    {
+        "id": "transfer_of_burden",
+        "name": "Transfer of Burden",
+        "code": "TRANSFER_OF_BURDEN",
+        "description": (
+            "A condition in which responsibility for progression, clarification, "
+            "or resolution is shifted away from the institution and onto the person "
+            "seeking remedy. The institution remains nominally engaged while "
+            "substantive movement depends entirely on continued effort from the complainant."
+        ),
+        "indicators": [
+            "Repeated requests for restatement of previously submitted information",
+            "Unresolved procedural loops requiring re-entry at earlier stages",
+            "Responsibility for follow-up displaced onto the complainant",
+            "Absence of substantive institutional movement between contacts",
+            "Requests for documentation already held by the institution",
+        ],
+    },
+    {
+        "id": "escalation_without_response",
+        "name": "Escalation Without Response",
+        "code": "ESCALATION_WITHOUT_RESPONSE",
+        "description": (
+            "A condition in which the severity or urgency of a case has increased "
+            "over time, but institutional engagement has not adjusted to reflect that "
+            "change. Earlier delay has developed into active escalation without a "
+            "corresponding substantive response from the institution."
+        ),
+        "indicators": [
+            "Case severity or urgency has increased since initial submission",
+            "Institutional response pattern unchanged despite escalating conditions",
+            "No acknowledgement of changed circumstances by the institution",
+            "Escalation documented but not addressed in correspondence",
+            "Timeline extended beyond reasonable expectation without explanation",
+        ],
+    },
+    {
+        "id": "institutional_delay",
+        "name": "Institutional Delay",
+        "code": "INSTITUTIONAL_DELAY",
+        "description": (
+            "A condition in which the institution has failed to progress a case "
+            "within a timeframe that can be considered reasonable given the nature "
+            "of the submission. Delay is recorded as a structural observation, not "
+            "an attribution of intent."
+        ),
+        "indicators": [
+            "Response or progression has not occurred within expected timeframes",
+            "No substantive update provided during the delay period",
+            "Deadlines, statutory or otherwise, have passed without action",
+            "Acknowledgement received but no progression recorded",
+            "Pattern of delay consistent across multiple contact points",
+        ],
+    },
+    {
+        "id": "procedural_deflection",
+        "name": "Procedural Deflection",
+        "code": "PROCEDURAL_DEFLECTION",
+        "description": (
+            "A condition in which procedural mechanisms are invoked by the institution "
+            "in a manner that redirects engagement without addressing substantive issues. "
+            "Process is used as a substitute for response rather than a pathway to resolution."
+        ),
+        "indicators": [
+            "Case redirected to alternative process without substantive engagement",
+            "Procedural requirements cited that were not previously communicated",
+            "Form, format, or channel requirements used to delay substantive response",
+            "Multiple procedural stages invoked sequentially without resolution",
+            "Referral to another body without facilitation or continuity",
+        ],
+    },
+    {
+        "id": "repeated_contact_without_resolution",
+        "name": "Repeated Contact Without Resolution",
+        "code": "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+        "description": (
+            "A condition in which the person seeking remedy has made multiple contacts "
+            "across an extended period without achieving substantive progress. Each "
+            "contact restarts engagement without building on previous exchanges."
+        ),
+        "indicators": [
+            "Three or more contacts recorded without substantive progression",
+            "Each contact treated as a new submission rather than continuation",
+            "No accumulated institutional understanding across contact history",
+            "Repeated acknowledgement without action",
+            "Contact history not referenced or incorporated in responses",
+        ],
+    },
+]
+
+
 @router.post("/records", response_model=RecordResponse)
 async def create_record(payload: RecordPayload):
     conn = get_db()
@@ -1024,6 +1116,8 @@ async def api_docs():
     <h2>Base URL</h2>
     <div class="code-block">https://civic-decision-engine-production.up.railway.app</div>
 
+
+
     <h2>Canonical Reference Format</h2>
     <p>Every public record carries a structured reference that encodes its origin. The format is:</p>
     <div class="ref-anatomy">
@@ -1181,6 +1275,16 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?traject
 
 curl https://civic-decision-engine-production.up.railway.app/api/records?institution=LA&limit=10</div>
 
+    <h3>Retrieve the condition registry</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/conditions</span>
+    </div>
+    <p>Returns the canonical condition registry — the civic observation taxonomy used to classify case sequences. Each entry includes the condition name, internal code, formal description, and detection indicators.</p>
+
+    <div class="curl-label">Example request</div>
+    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/conditions</div>
+
     <h2>Verification Integrity</h2>
     <div class="hash-note">
       Verification hashes are computed from canonical record fields at the time of export using SHA-256. The canonical fields are: reference, generated_at, finding, trajectory, conditions, system_state, and generated_by. Any alteration to those fields after export will produce a different hash. The hash displayed on the verification page and returned by this API can be independently recomputed to confirm the record has not been altered since publication.
@@ -1254,6 +1358,278 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
 </body>
 </html>"""
     return HTMLResponse(content=html, status_code=200)
+
+
+@router.get("/conditions", response_class=HTMLResponse)
+async def conditions_registry():
+    entries_html = ""
+    for condition in CONDITION_REGISTRY:
+        indicators_html = "".join(
+            f"<li>{escape(ind)}</li>" for ind in condition["indicators"]
+        )
+        entries_html += f"""
+        <section class="condition-entry" id="{escape(condition['id'])}">
+          <div class="condition-header">
+            <h3 class="condition-name">{escape(condition['name'])}</h3>
+            <span class="condition-code">{escape(condition['code'])}</span>
+          </div>
+          <p class="condition-description">{escape(condition['description'])}</p>
+          <div class="indicators-label">Indicators</div>
+          <ul class="indicators-list">{indicators_html}</ul>
+        </section>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Condition Registry — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    .document {{
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .intro {{ margin-bottom: 36px; color: #444; }}
+    .condition-entry {{
+      margin-bottom: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .condition-entry:last-child {{
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }}
+    .condition-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 12px;
+      gap: 16px;
+    }}
+    .condition-name {{
+      font-size: 1.1rem;
+      font-family: Georgia, serif;
+      font-weight: bold;
+      margin: 0;
+      color: #1a1a1a;
+    }}
+    .condition-code {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #aaa;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }}
+    .condition-description {{
+      font-size: 0.95rem;
+      color: #333;
+      line-height: 1.75;
+      margin: 0 0 20px;
+    }}
+    .indicators-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #aaa;
+      margin-bottom: 10px;
+    }}
+    .indicators-list {{
+      margin: 0;
+      padding-left: 20px;
+      color: #444;
+      font-size: 0.9rem;
+      line-height: 1.75;
+    }}
+    .indicators-list li {{ margin-bottom: 6px; }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin: 40px 0 0;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .condition-header {{ flex-direction: column; gap: 4px; }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; padding: 32px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/records">← Public record index</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div>
+        <div class="doc-title">Condition Registry</div>
+        <div class="doc-subtitle">Civic observation taxonomy</div>
+      </div>
+    </header>
+
+    <p class="intro">
+      Conditions are structured civic observation categories assigned to cases by the
+      Civic Decision Engine. Each condition represents a documented pattern of
+      institutional behaviour observable across a case sequence. Conditions are not
+      attributions of intent — they are structural observations derived from the
+      submitted record.
+    </p>
+
+    <div class="section-header">Conditions — {len(CONDITION_REGISTRY)} defined</div>
+
+    {entries_html}
+
+    <div class="api-note">
+      Machine-readable access: <a href="/api/conditions">GET /api/conditions</a>
+      &nbsp;·&nbsp; Returns this registry as JSON for programmatic use.
+    </div>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Conditions are versioned alongside the engine. This registry reflects
+        the current active taxonomy. Earlier records may reference condition
+        codes from prior versions.
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)
+
+
+@router.get("/api/conditions")
+async def api_conditions():
+    return JSONResponse(
+        content={
+            "version": "v1",
+            "count": len(CONDITION_REGISTRY),
+            "conditions": [
+                {
+                    "id": c["id"],
+                    "name": c["name"],
+                    "code": c["code"],
+                    "description": c["description"],
+                    "indicators": c["indicators"],
+                }
+                for c in CONDITION_REGISTRY
+            ],
+        }
+    )
 
 
 @router.get("/verify/{reference}", response_class=HTMLResponse)
