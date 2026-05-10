@@ -307,7 +307,7 @@ async def records_index(trajectory: str = None, institution: str = None):
             "HO": "Housing",
             "PL": "Planning",
             "GV": "Government",
-            "FS": "Fire Service",
+            "FS": "Financial Services",
             "LE": "Law Enforcement",
             "LG": "Legal",
             "OT": "Other",
@@ -1373,7 +1373,7 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
         <tr><td>HO</td><td></td><td>Housing</td></tr>
         <tr><td>PL</td><td></td><td>Planning</td></tr>
         <tr><td>GV</td><td></td><td>Government</td></tr>
-        <tr><td>FS</td><td></td><td>Fire Service</td></tr>
+        <tr><td>FS</td><td></td><td>Financial Services</td></tr>
         <tr><td>LE</td><td></td><td>Law Enforcement</td></tr>
         <tr><td>LG</td><td></td><td>Legal</td></tr>
         <tr><td>OT</td><td></td><td>Other</td></tr>
@@ -1710,7 +1710,7 @@ async def stats_page():
             "HO": "Housing",
             "PL": "Planning",
             "GV": "Government",
-            "FS": "Fire Service",
+            "FS": "Financial Services",
             "LE": "Law Enforcement",
             "LG": "Legal",
             "OT": "Other",
