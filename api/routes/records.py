@@ -590,10 +590,13 @@ async def records_index(trajectory: str = None, institution: str = None):
 <body>
   <div class="document">
     <header class="doc-header">
-      <div>
-  <div class="doc-engine">Civic Decision Engine</div>
-    <a href="/api/docs" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;margin-top:6px;display:inline-block;">API documentation</a>
-  </div>
+    <div>
+      <div class="doc-engine">Civic Decision Engine</div>
+      <div class="doc-nav" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">
+        <a href="/api/docs" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;width:fit-content;">API documentation</a>
+        <a href="/stats" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;width:fit-content;">Archive statistics</a>
+      </div>
+</div>
       <div>
         <div class="doc-title">Public Record Index</div>
         <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
@@ -1099,6 +1102,7 @@ async def api_docs():
       <div>
         <div class="doc-engine">Civic Decision Engine</div>
         <a href="/records" class="doc-index-link">← Public record index</a>
+        <a href="/stats" class="doc-index-link" style="margin-top:4px;display:inline-block;">Archive statistics</a> 
       </div>
       <div>
         <div class="doc-title">Public API Documentation</div>
@@ -1205,6 +1209,41 @@ async def api_docs():
 
     <div class="curl-label">Example request</div>
     <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/verify/Strike-LA-20260508-001</div>
+
+    <h3>Retrieve archive statistics</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/stats</span>
+    </div>
+    <p>Returns a summary of the public record archive — total records, superseded versions, and distributions by institution type, trajectory, and condition. Statistics reflect only the latest version of each record.</p>
+
+    <div class="code-block">{
+      "total_records": 22,
+      "total_superseded": 18,
+      "latest_export": "2026-05-09T17:24:27.559+00:00",
+      "by_institution": {
+        "OT": 3,
+        "GV": 3,
+        "PL": 3,
+        "HO": 3,
+        "ED": 3,
+        "LG": 3,
+        "LE": 3,
+        "FS": 2,
+        "HS": 2,
+        "LA": 1
+      },
+      "by_trajectory": {
+        "Deteriorating": 22
+      },
+      "by_condition": {
+        "Transfer of Burden": 22,
+        "Escalation Without Response": 22
+      }
+    }</div>
+
+        <div class="curl-label">Example request</div>
+        <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/stats</div>
 
     <h3>Retrieve the record index</h3>
     <div class="endpoint">
@@ -1630,6 +1669,442 @@ async def api_conditions():
             ],
         }
     )
+
+
+@router.get("/stats", response_class=HTMLResponse)
+async def stats_page():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Total records (latest versions only)
+        cur.execute("SELECT COUNT(*) FROM records WHERE is_latest = 1")
+        total_records = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM records")
+        total_versions = cur.fetchone()[0]
+
+        # Superseded records
+        cur.execute("SELECT COUNT(*) FROM records WHERE is_latest = 0")
+        total_superseded = cur.fetchone()[0]
+
+        # Latest export date
+        cur.execute(
+            "SELECT exported_at FROM records WHERE is_latest = 1 ORDER BY exported_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        latest_export = row["exported_at"][:10] if row else "—"
+
+        # By institution type
+        cur.execute("SELECT reference FROM records WHERE is_latest = 1")
+        all_refs = cur.fetchall()
+        institution_counts: dict[str, int] = {}
+        for r in all_refs:
+            code = extract_institution_type(r["reference"])
+            institution_counts[code] = institution_counts.get(code, 0) + 1
+
+        INSTITUTION_LABELS = {
+            "LA": "Local Authority",
+            "HS": "Health Service",
+            "ED": "Education",
+            "HO": "Housing",
+            "PL": "Planning",
+            "GV": "Government",
+            "FS": "Fire Service",
+            "LE": "Law Enforcement",
+            "LG": "Legal",
+            "OT": "Other",
+        }
+
+        # By trajectory
+        cur.execute(
+            "SELECT trajectory, COUNT(*) as count FROM records "
+            "WHERE is_latest = 1 AND trajectory != '' "
+            "GROUP BY trajectory ORDER BY count DESC"
+        )
+        trajectory_counts = [(r["trajectory"], r["count"]) for r in cur.fetchall()]
+
+        # By condition
+        cur.execute("SELECT conditions_json FROM records WHERE is_latest = 1")
+        condition_counts: dict[str, int] = {}
+        for r in cur.fetchall():
+            conditions = json.loads(r["conditions_json"] or "[]")
+            for c in conditions:
+                condition_counts[c] = condition_counts.get(c, 0) + 1
+        condition_counts_sorted = sorted(
+            condition_counts.items(), key=lambda x: x[1], reverse=True
+        )
+
+        # Build institution rows
+        inst_rows = ""
+        for code, count in sorted(
+            institution_counts.items(), key=lambda x: x[1], reverse=True
+        ):
+            label = INSTITUTION_LABELS.get(code, code)
+            pct = round((count / total_records) * 100) if total_records else 0
+            inst_rows += (
+                f"<tr>"
+                f'<td class="stat-label">{escape(code)}</td>'
+                f'<td class="stat-desc">{escape(label)}</td>'
+                f'<td class="stat-count">{count}</td>'
+                f'<td class="stat-bar-cell"><div class="stat-bar" style="width:{pct}%"></div></td>'
+                f"</tr>"
+            )
+
+        # Build trajectory rows
+        traj_rows = ""
+        for traj, count in trajectory_counts:
+            pct = round((count / total_records) * 100) if total_records else 0
+            traj_rows += (
+                f"<tr>"
+                f'<td class="stat-label" colspan="2">{escape(traj)}</td>'
+                f'<td class="stat-count">{count}</td>'
+                f'<td class="stat-bar-cell"><div class="stat-bar" style="width:{pct}%"></div></td>'
+                f"</tr>"
+            )
+
+        # Build condition rows
+        cond_rows = ""
+        for cond, count in condition_counts_sorted:
+            pct = round((count / total_records) * 100) if total_records else 0
+            cond_rows += (
+                f"<tr>"
+                f'<td class="stat-label" colspan="2">{escape(cond)}</td>'
+                f'<td class="stat-count">{count}</td>'
+                f'<td class="stat-bar-cell"><div class="stat-bar" style="width:{pct}%"></div></td>'
+                f"</tr>"
+            )
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Archive Statistics — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    .document {{
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+    }}
+    .summary-card {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 18px 20px;
+    }}
+    .summary-value {{
+      font-family: ui-monospace, monospace;
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1;
+      margin-bottom: 6px;
+    }}
+    .summary-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+    }}
+    .stat-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 8px;
+    }}
+    .stat-table tr {{ border-bottom: 1px solid #f0ede8; }}
+    .stat-table tr:last-child {{ border-bottom: none; }}
+    .stat-table td {{ padding: 10px 8px 10px 0; vertical-align: middle; }}
+    .stat-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #1a1a1a;
+      width: 56px;
+    }}
+    .stat-desc {{
+      color: #444;
+      width: 180px;
+    }}
+    .stat-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      color: #1a1a1a;
+      text-align: right;
+      width: 40px;
+      padding-right: 16px;
+    }}
+    .stat-bar-cell {{ width: 100%; }}
+    .stat-bar {{
+      height: 6px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      min-width: 2px;
+      transition: width 0.3s ease;
+    }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 40px;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .summary-grid {{ grid-template-columns: repeat(2, 1fr); }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+      .stat-desc {{ display: none; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; padding: 32px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/records">← Public record index</a>
+          <a href="/conditions">Condition registry</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div>
+        <div class="doc-title">Archive Statistics</div>
+        <div class="doc-subtitle">Public record distribution</div>
+      </div>
+    </header>
+
+    <div class="section-header">Summary</div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-value">{total_records}</div>
+        <div class="summary-label">Public records</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">{total_superseded}</div>
+        <div class="summary-label">Superseded versions</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">{latest_export}</div>
+        <div class="summary-label">Latest export</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-value">{total_versions}</div>
+        <div class="summary-label">Total versions written</div>
+      </div>
+    </div>
+
+    <div class="section-header">By institution type</div>
+    <table class="stat-table">
+      <tbody>{inst_rows}</tbody>
+    </table>
+
+    <div class="section-header">By trajectory</div>
+    <table class="stat-table">
+      <tbody>{traj_rows}</tbody>
+    </table>
+
+    <div class="section-header">By condition</div>
+    <table class="stat-table">
+      <tbody>{cond_rows}</tbody>
+    </table>
+
+    <div class="api-note">
+      Machine-readable access: <a href="/api/stats">GET /api/stats</a>
+      &nbsp;·&nbsp; Returns these metrics as JSON.
+    </div>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Statistics reflect the current state of the public archive.
+        Only the latest version of each record is counted.
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
+
+
+@router.get("/api/stats")
+async def api_stats():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM records WHERE is_latest = 1")
+        total_records = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM records WHERE is_latest = 0")
+        total_superseded = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM records")
+        total_versions = cur.fetchone()[0]
+
+        cur.execute(
+            "SELECT exported_at FROM records WHERE is_latest = 1 "
+            "ORDER BY exported_at DESC LIMIT 1"
+        )
+        row = cur.fetchone()
+        latest_export = row["exported_at"] if row else None
+
+        cur.execute("SELECT reference FROM records WHERE is_latest = 1")
+        all_refs = cur.fetchall()
+        institution_counts: dict[str, int] = {}
+        for r in all_refs:
+            code = extract_institution_type(r["reference"])
+            institution_counts[code] = institution_counts.get(code, 0) + 1
+
+        cur.execute(
+            "SELECT trajectory, COUNT(*) as count FROM records "
+            "WHERE is_latest = 1 AND trajectory != '' "
+            "GROUP BY trajectory ORDER BY count DESC"
+        )
+        trajectory_counts = {r["trajectory"]: r["count"] for r in cur.fetchall()}
+
+        cur.execute("SELECT conditions_json FROM records WHERE is_latest = 1")
+        condition_counts: dict[str, int] = {}
+        for r in cur.fetchall():
+            conditions = json.loads(r["conditions_json"] or "[]")
+            for c in conditions:
+                condition_counts[c] = condition_counts.get(c, 0) + 1
+        condition_counts_sorted = dict(
+            sorted(condition_counts.items(), key=lambda x: x[1], reverse=True)
+        )
+
+        return JSONResponse(
+            content={
+                "total_records": total_records,
+                "total_superseded": total_superseded,
+                "total_versions": total_versions,
+                "latest_export": latest_export,
+                "by_institution": dict(
+                    sorted(institution_counts.items(), key=lambda x: x[1], reverse=True)
+                ),
+                "by_trajectory": trajectory_counts,
+                "by_condition": condition_counts_sorted,
+            }
+        )
+
+    finally:
+        conn.close()
 
 
 @router.get("/verify/{reference}", response_class=HTMLResponse)
