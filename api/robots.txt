@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://civic-decision-engine-production.up.railway.app/sitemap.xml

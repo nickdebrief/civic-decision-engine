@@ -19,6 +19,16 @@ def root():
     return FileResponse("api/static/index.html")
 
 
+@app.get("/robots.txt")
+def robots():
+    return FileResponse("robots.txt")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    return FileResponse("sitemap.xml")
+
+
 app.include_router(health.router)
 app.include_router(civic.router)
 app.include_router(adaptation.router)
