@@ -1324,6 +1324,48 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
     <div class="curl-label">Example request</div>
     <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/conditions</div>
 
+    <h3>Download verification manifest</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/verify/{reference}/manifest</span>
+    </div>
+    <p>Returns a downloadable JSON manifest for a public record. The manifest contains all canonical fields, the verification hash, and a recomputation instruction that allows independent offline verification of record integrity.</p>
+
+    <div class="code-block">{
+  "manifest_version": "1.0",
+  "manifest_type": "civic_decision_engine_record",
+  "reference": "Strike-LA-20260508-001",
+  "version": 1,
+  "supersedes": null,
+  "generated_at": "2026-05-08T12:58:54.870Z",
+  "exported_at": "2026-05-08T12:59:04.562034+00:00",
+  "language": "en",
+  "generated_by": "Civic Decision Engine",
+  "finding": "The sequence has transitioned into escalation...",
+  "trajectory": "Deteriorating",
+  "conditions": ["Escalation Without Response", "Transfer of Burden"],
+  "system_state": "Transition to Escalation",
+  "verification_hash": "935e0a79...",
+  "canonical_fields": {
+    "conditions": ["Escalation Without Response", "Transfer of Burden"],
+    "finding": "The sequence has transitioned into escalation...",
+    "generated_at": "2026-05-08T12:58:54.870Z",
+    "generated_by": "Civic Decision Engine",
+    "reference": "Strike-LA-20260508-001",
+    "system_state": "Transition to Escalation",
+    "trajectory": "Deteriorating"
+  },
+  "recomputation_instruction": {
+    "algorithm": "SHA-256",
+    "method": "Serialize canonical_fields as JSON with keys in sorted order, no spaces, and conditions sorted alphabetically. Compute SHA-256 of the UTF-8 encoded string. The result must match verification_hash.",
+    "canonical_serialization": "{\"conditions\":[...],\"finding\":\"...\"}",
+    "verify_url": "https://civic-decision-engine-production.up.railway.app/verify/Strike-LA-20260508-001"
+  }
+}</div>
+
+    <div class="curl-label">Example request</div>
+    <div class="curl-block">curl -O https://civic-decision-engine-production.up.railway.app/verify/Strike-LA-20260508-001/manifest</div>
+
     <h2>Verification Integrity</h2>
     <div class="hash-note">
       Verification hashes are computed from canonical record fields at the time of export using SHA-256. The canonical fields are: reference, generated_at, finding, trajectory, conditions, system_state, and generated_by. Any alteration to those fields after export will produce a different hash. The hash displayed on the verification page and returned by this API can be independently recomputed to confirm the record has not been altered since publication.
@@ -2481,7 +2523,15 @@ async def verify_record(reference: str):
     <section class="section">
       <h2 class="section-title">{s["section_integrity"]}</h2>
       <div class="hash-block">SHA-256: {safe['hash']}</div>
-      <p class="integrity-note">{s["integrity_note"]}</p>
+    <p class="integrity-note">{s["integrity_note"]}</p>
+    <a href="/verify/{safe['reference']}/manifest"
+       download
+       style="font-family:ui-monospace,monospace;font-size:0.72rem;color:#888;
+              text-decoration:none;border-bottom:1px solid #ddd;display:inline-block;
+              margin-top:10px;">
+      Download verification manifest (.json)
+    </a>
+    
     </section>
     {history_section}
     <footer class="doc-footer">
@@ -2491,8 +2541,84 @@ async def verify_record(reference: str):
   </div>
 </body>
 </html>"""
-
         return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
+
+
+@router.get("/verify/{reference}/manifest")
+async def record_manifest(reference: str):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM records WHERE reference = ? AND is_latest = 1",
+            (reference,),
+        )
+        record = cur.fetchone()
+
+        if not record:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "not_found",
+                    "message": f"No public record found for reference: {reference}",
+                },
+            )
+
+        conditions = json.loads(record["conditions_json"] or "[]")
+
+        canonical_fields = {
+            "reference": record["reference"],
+            "generated_at": record["generated_at"] or "",
+            "finding": record["finding"] or "",
+            "trajectory": record["trajectory"] or "",
+            "conditions": sorted(conditions),
+            "system_state": record["system_state"] or "",
+            "generated_by": record["generated_by"] or "Civic Decision Engine",
+        }
+
+        manifest = {
+            "manifest_version": "1.0",
+            "manifest_type": "civic_decision_engine_record",
+            "reference": record["reference"],
+            "version": record["version"],
+            "supersedes": record["supersedes"],
+            "generated_at": record["generated_at"] or "",
+            "exported_at": record["exported_at"] or "",
+            "language": record["language"] or "en",
+            "generated_by": record["generated_by"] or "",
+            "finding": record["finding"] or "",
+            "trajectory": record["trajectory"] or "",
+            "conditions": conditions,
+            "system_state": record["system_state"] or "",
+            "verification_hash": record["verification_hash"],
+            "canonical_fields": canonical_fields,
+            "recomputation_instruction": {
+                "algorithm": "SHA-256",
+                "method": (
+                    "Serialize canonical_fields as JSON with keys in sorted order, "
+                    "no spaces, and conditions sorted alphabetically. "
+                    "Compute SHA-256 of the UTF-8 encoded string. "
+                    "The result must match verification_hash."
+                ),
+                "canonical_serialization": json.dumps(
+                    canonical_fields, separators=(",", ":"), sort_keys=True
+                ),
+                "verify_url": f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}",
+            },
+        }
+
+        filename = f"manifest-{record['reference']}-v{record['version']}.json"
+
+        return JSONResponse(
+            content=manifest,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/json",
+            },
+        )
 
     finally:
         conn.close()

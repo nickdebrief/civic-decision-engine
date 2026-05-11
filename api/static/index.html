@@ -43,9 +43,9 @@
   "https://www.linkedin.com/in/nick-moloney-32369624/",
   "https://github.com/nickdebrief",
   "https://www.instagram.com/nickdebrief/",
-  "https://www.tiktok.com/@nick.de.brief"
+  "https://www.tiktok.com/@nick.de.brief",
+  "https://substack.com/@nickdebrief"
   ]
-    ]
   },
   "description": "Civic Decision Engine is a diagnostic framework for analysing institutional behaviour, public records, and civic decision systems."
 }
@@ -840,7 +840,12 @@ button.record-btn.copy-ok {
 
   <button class="record-btn" id="recordDownloadDarkBtn" type="button" data-i18n="btn_download_pdf_dark">
     Download PDF (dark)
-  </button>
+    </button>
+  <button class="record-btn" id="recordDownloadManifestBtn" type="button" disabled>
+      Download manifest
+    </button>
+  </div>
+  
 </div>
 </div>
 </div>
@@ -1220,9 +1225,7 @@ button.record-btn.copy-ok {
         REPORT_STRINGS: { en: {} }
       };
     }
-    const DEV_MODE = true; // set to false before production deploy
-
-
+    const DEV_MODE = false; // set to false before production deploy
 
     const {
         TRANSLATIONS,
@@ -2429,6 +2432,7 @@ const recordCopyBtn     = document.getElementById("recordCopyBtn");
 const recordDownloadBtn = document.getElementById("recordDownloadBtn");
 const recordDownloadWhiteBtn = document.getElementById("recordDownloadWhiteBtn");
 const recordDownloadDarkBtn  = document.getElementById("recordDownloadDarkBtn");
+const recordDownloadManifestBtn = document.getElementById("recordDownloadManifestBtn");
 const recordCardPrint        = document.getElementById("recordCardPrint");
 const recordCardPrintBody    = document.getElementById("recordCardPrintBody");
 const recordCardPrintMeta    = document.getElementById("recordCardPrintMeta");
@@ -2515,6 +2519,8 @@ exportRecordBtn.addEventListener("click", async () => {
   recordDownloadDarkBtn.disabled = !hasRef;
   recordDownloadBtn.style.opacity = hasRef ? "" : "0.4";
   recordDownloadWhiteBtn.style.opacity = hasRef ? "" : "0.4";
+  recordDownloadManifestBtn.disabled = !hasRef;
+  recordDownloadManifestBtn.style.opacity = hasRef ? "" : "0.4";
   recordDownloadDarkBtn.style.opacity = hasRef ? "" : "0.4";
 
   // Only persist and open modal — don't return here even without ref
@@ -2699,6 +2705,20 @@ const finding = explanation2.length
   return await res.json();
 }
 
+recordDownloadManifestBtn.addEventListener("click", () => {
+  if (!latestReportData?.strike_reference) return;
+  const ref = latestReportData.strike_reference;
+  const url = latestReportData.verify_url
+    ? `${latestReportData.verify_url}/manifest`
+    : `https://civic-decision-engine-production.up.railway.app/verify/${encodeURIComponent(ref)}/manifest`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `manifest-${ref}-v${latestReportData.record_version || 1}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+});
+
 // ── QR CODE ──────────────────────────────────────────────
 function buildVerifyUrl(reportData) {
   if (reportData?.verify_url) return reportData.verify_url;
@@ -2772,6 +2792,7 @@ recordDownloadDarkBtn.addEventListener("click", async () => {
 
   if (actions) actions.style.display = "";
 });
+
 </script>
 </body>
 </html>
