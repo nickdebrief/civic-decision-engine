@@ -435,6 +435,19 @@ async def records_index(trajectory: str = None, institution: str = None):
       text-transform: uppercase;
       color: #666;
     }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      width: fit-content;
+    }}
+
+    .doc-nav a:hover {{
+      color: #1a1a1a;
+      border-color: #999;
+    }}
     .doc-title {{
       font-family: ui-monospace, monospace;
       font-size: 0.68rem;
@@ -465,15 +478,15 @@ async def records_index(trajectory: str = None, institution: str = None):
     .pill-group {{
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      margin-bottom: 12px;
+      gap: 12px;
+      margin-bottom: 18px;
     }}
     .pill {{
       font-family: ui-monospace, monospace;
-      font-size: 0.72rem;
-      padding: 4px 10px;
+      font-size: 0.78rem;
+      padding: 8px 14px;
       border: 1px solid #d0cec8;
-      border-radius: 20px;
+      border-radius: 24px;
       color: #555;
       text-decoration: none;
       background: #f8f7f4;
@@ -595,6 +608,8 @@ async def records_index(trajectory: str = None, institution: str = None):
       <div class="doc-nav" style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">
         <a href="/api/docs" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;width:fit-content;">API documentation</a>
         <a href="/stats" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;width:fit-content;">Archive statistics</a>
+        <a href="/patterns">Condition patterns</a>
+        <a href="/graph">Interactive graph</a>
       </div>
 </div>
       <div>
@@ -1102,7 +1117,7 @@ async def api_docs():
       <div>
         <div class="doc-engine">Civic Decision Engine</div>
         <a href="/records" class="doc-index-link">← Public record index</a>
-        <a href="/stats" class="doc-index-link" style="margin-top:4px;display:inline-block;">Archive statistics</a> 
+        &nbsp; <a href="/stats" class="doc-index-link" style="margin-top:4px;display:inline-block;">Archive statistics</a> 
       </div>
       <div>
         <div class="doc-title">Public API Documentation</div>
@@ -1654,11 +1669,13 @@ async def conditions_registry():
         <div class="doc-nav">
           <a href="/records">← Public record index</a>
           <a href="/api/docs">API documentation</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/graph">Interactive graph</a>
         </div>
       </div>
       <div>
         <div class="doc-title">Condition Registry</div>
-        <div class="doc-subtitle">Civic observation taxonomy</div>
+        <div class="doc-subtitle">Civic observation taxonomy</div>       
       </div>
     </header>
 
@@ -2020,6 +2037,8 @@ async def stats_page():
           <a href="/records">← Public record index</a>
           <a href="/conditions">Condition registry</a>
           <a href="/api/docs">API documentation</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/graph">Interactive graph</a>
         </div>
       </div>
       <div>
@@ -2147,6 +2166,1041 @@ async def api_stats():
 
     finally:
         conn.close()
+
+
+@router.get("/api/graph")
+async def api_graph(
+    institution: str = Query(
+        default=None, description="Filter by institution type code"
+    ),
+    trajectory: str = Query(default=None, description="Filter by trajectory"),
+):
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        conditions_parts = ["is_latest = 1"]
+        params: list = []
+
+        if institution:
+            conditions_parts.append("reference LIKE ?")
+            params.append(f"Strike-{institution.upper()}-%")
+        if trajectory:
+            conditions_parts.append("LOWER(trajectory) = LOWER(?)")
+            params.append(trajectory)
+
+        where = " AND ".join(conditions_parts)
+
+        cur.execute(
+            f"SELECT reference, conditions_json, trajectory, exported_at "
+            f"FROM records WHERE {where} ORDER BY exported_at ASC",
+            params,
+        )
+        rows = cur.fetchall()
+
+        # Build nodes — one per condition
+        condition_counts: dict[str, int] = {}
+        condition_institutions: dict[str, dict[str, int]] = {}
+        condition_trajectories: dict[str, dict[str, int]] = {}
+        condition_records: dict[str, list[str]] = {}
+
+        # Build edges — co-occurrence pairs
+        edge_counts: dict[tuple[str, str], int] = {}
+
+        for row in rows:
+            conditions = json.loads(row["conditions_json"] or "[]")
+            ref = row["reference"]
+            traj = row["trajectory"] or ""
+            inst = extract_institution_type(ref)
+
+            for c in conditions:
+                condition_counts[c] = condition_counts.get(c, 0) + 1
+
+                if c not in condition_institutions:
+                    condition_institutions[c] = {}
+                condition_institutions[c][inst] = (
+                    condition_institutions[c].get(inst, 0) + 1
+                )
+
+                if c not in condition_trajectories:
+                    condition_trajectories[c] = {}
+                condition_trajectories[c][traj] = (
+                    condition_trajectories[c].get(traj, 0) + 1
+                )
+
+                if c not in condition_records:
+                    condition_records[c] = []
+                if ref not in condition_records[c]:
+                    condition_records[c].append(ref)
+
+            # Co-occurrence edges
+            sorted_conditions = sorted(set(conditions))
+            for i in range(len(sorted_conditions)):
+                for j in range(i + 1, len(sorted_conditions)):
+                    pair = (sorted_conditions[i], sorted_conditions[j])
+                    edge_counts[pair] = edge_counts.get(pair, 0) + 1
+
+        nodes = [
+            {
+                "id": cond,
+                "label": cond,
+                "count": count,
+                "institutions": condition_institutions.get(cond, {}),
+                "trajectories": condition_trajectories.get(cond, {}),
+                "records": condition_records.get(cond, []),
+            }
+            for cond, count in sorted(
+                condition_counts.items(), key=lambda x: x[1], reverse=True
+            )
+        ]
+
+        edges = [
+            {
+                "source": pair[0],
+                "target": pair[1],
+                "weight": weight,
+            }
+            for pair, weight in sorted(
+                edge_counts.items(), key=lambda x: x[1], reverse=True
+            )
+        ]
+
+        return JSONResponse(
+            content={
+                "filters": {
+                    "institution": institution,
+                    "trajectory": trajectory,
+                },
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+                "nodes": nodes,
+                "edges": edges,
+            }
+        )
+
+    finally:
+        conn.close()
+
+
+@router.get("/patterns", response_class=HTMLResponse)
+async def patterns_page():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT reference, conditions_json, trajectory FROM records WHERE is_latest = 1"
+        )
+        rows = cur.fetchall()
+
+        condition_counts: dict[str, int] = {}
+        condition_institutions: dict[str, dict[str, int]] = {}
+        condition_trajectories: dict[str, dict[str, int]] = {}
+        edge_counts: dict[tuple[str, str], int] = {}
+
+        INSTITUTION_LABELS = {
+            "LA": "Local Authority",
+            "HS": "Health Service",
+            "ED": "Education",
+            "HO": "Housing",
+            "PL": "Planning",
+            "GV": "Government",
+            "FS": "Financial Services",
+            "LE": "Law Enforcement",
+            "LG": "Legal",
+            "OT": "Other",
+        }
+
+        for row in rows:
+            conditions = json.loads(row["conditions_json"] or "[]")
+            inst = extract_institution_type(row["reference"])
+            traj = row["trajectory"] or ""
+
+            for c in conditions:
+                condition_counts[c] = condition_counts.get(c, 0) + 1
+                if c not in condition_institutions:
+                    condition_institutions[c] = {}
+                condition_institutions[c][inst] = (
+                    condition_institutions[c].get(inst, 0) + 1
+                )
+                if c not in condition_trajectories:
+                    condition_trajectories[c] = {}
+                condition_trajectories[c][traj] = (
+                    condition_trajectories[c].get(traj, 0) + 1
+                )
+
+            sorted_conditions = sorted(set(conditions))
+            for i in range(len(sorted_conditions)):
+                for j in range(i + 1, len(sorted_conditions)):
+                    pair = (sorted_conditions[i], sorted_conditions[j])
+                    edge_counts[pair] = edge_counts.get(pair, 0) + 1
+
+        total_records = len(rows)
+
+        # Build condition cards
+        condition_cards = ""
+        for cond, count in sorted(
+            condition_counts.items(), key=lambda x: x[1], reverse=True
+        ):
+            pct = round((count / total_records) * 100) if total_records else 0
+            inst_breakdown = ", ".join(
+                f"{INSTITUTION_LABELS.get(k, k)} ({v})"
+                for k, v in sorted(
+                    condition_institutions.get(cond, {}).items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+            )
+            traj_breakdown = ", ".join(
+                f"{k} ({v})"
+                for k, v in sorted(
+                    condition_trajectories.get(cond, {}).items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+            )
+            condition_cards += f"""
+            <div class="pattern-card">
+              <div class="pattern-header">
+                <span class="pattern-name">{escape(cond)}</span>
+                <span class="pattern-count">{count} record{"s" if count != 1 else ""}</span>
+              </div>
+              <div class="pattern-bar-wrap">
+                <div class="pattern-bar" style="width:{pct}%"></div>
+              </div>
+              <div class="pattern-meta">
+                <span class="pattern-meta-label">Institutions:</span> {escape(inst_breakdown) if inst_breakdown else "—"}
+              </div>
+              <div class="pattern-meta">
+                <span class="pattern-meta-label">Trajectory:</span> {escape(traj_breakdown) if traj_breakdown else "—"}
+              </div>
+              <a href="/records?condition={escape(cond)}" class="pattern-link">
+                View records →
+              </a>
+            </div>"""
+
+        # Build co-occurrence rows
+        cooccurrence_rows = ""
+        for (a, b), weight in sorted(
+            edge_counts.items(), key=lambda x: x[1], reverse=True
+        ):
+            cooccurrence_rows += (
+                f"<tr>"
+                f'<td class="co-cond">{escape(a)}</td>'
+                f'<td class="co-plus">+</td>'
+                f'<td class="co-cond">{escape(b)}</td>'
+                f'<td class="co-count">{weight}</td>'
+                f"</tr>"
+            )
+
+        if not cooccurrence_rows:
+            cooccurrence_rows = '<tr><td colspan="4" class="empty-state">No co-occurrences recorded yet.</td></tr>'
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Condition Patterns — Civic Decision Engine</title>
+  <meta name="description" content="Structural pattern analysis of civic conditions across verified public records. Shows condition co-occurrence, institutional clustering, and trajectory distribution.">
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    .document {{
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 16px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .intro {{ color: #444; margin-bottom: 8px; }}
+    .graph-link-block {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #1a1a1a;
+      border-radius: 4px;
+      padding: 14px 20px;
+      margin-bottom: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }}
+    .graph-link-block p {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #555;
+      margin: 0;
+    }}
+    .graph-link-block a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 2px solid #1a1a1a;
+      white-space: nowrap;
+    }}
+    .pattern-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 8px;
+    }}
+    .pattern-card {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 16px 18px;
+    }}
+    .pattern-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+      gap: 8px;
+    }}
+    .pattern-name {{
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #1a1a1a;
+      font-family: Georgia, serif;
+    }}
+    .pattern-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.7rem;
+      color: #888;
+      white-space: nowrap;
+    }}
+    .pattern-bar-wrap {{
+      background: #e8e6e0;
+      border-radius: 2px;
+      height: 4px;
+      margin-bottom: 10px;
+    }}
+    .pattern-bar {{
+      background: #1a1a1a;
+      height: 4px;
+      border-radius: 2px;
+      min-width: 2px;
+    }}
+    .pattern-meta {{
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 4px;
+      line-height: 1.5;
+    }}
+    .pattern-meta-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #aaa;
+    }}
+    .pattern-link {{
+      display: inline-block;
+      margin-top: 10px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+    }}
+    .pattern-link:hover {{ color: #1a1a1a; border-color: #999; }}
+    .co-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .co-table tr {{ border-bottom: 1px solid #f0ede8; }}
+    .co-table tr:last-child {{ border-bottom: none; }}
+    .co-table td {{ padding: 10px 8px 10px 0; vertical-align: middle; }}
+    .co-cond {{ color: #1a1a1a; }}
+    .co-plus {{
+      font-family: ui-monospace, monospace;
+      color: #ccc;
+      width: 24px;
+      text-align: center;
+    }}
+    .co-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #888;
+      text-align: right;
+      width: 80px;
+    }}
+    .empty-state {{
+      color: #aaa;
+      font-style: italic;
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      padding: 20px 0;
+    }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 40px;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .pattern-grid {{ grid-template-columns: 1fr; }}
+      .graph-link-block {{ flex-direction: column; align-items: flex-start; }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; padding: 32px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/records">← Public record index</a>
+          <a href="/conditions">Condition registry</a>
+          <a href="/stats">Archive statistics</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div>
+        <div class="doc-title">Condition Patterns</div>
+        <div class="doc-subtitle">Structural pattern analysis</div>
+      </div>
+    </header>
+
+    <p class="intro">
+      Conditions are not isolated observations — they recur across institutions,
+      trajectories, and time. This page shows how conditions cluster, co-occur,
+      and distribute across the verified public record archive.
+    </p>
+
+    <div class="graph-link-block">
+      <p>For interactive exploration — nodes, edges, filters, and drill-through to individual records:</p>
+      <a href="/graph">Open interactive graph →</a>
+    </div>
+
+    <div class="section-header">Condition distribution — {total_records} records</div>
+    <div class="pattern-grid">{condition_cards}</div>
+
+    <div class="section-header">Condition co-occurrence</div>
+    <table class="co-table">
+      <tbody>{cooccurrence_rows}</tbody>
+    </table>
+
+    <div class="api-note">
+      Machine-readable access: <a href="/api/graph">GET /api/graph</a>
+      &nbsp;·&nbsp; Returns nodes, edges, and weights as JSON.
+      Supports <code>?institution=LA</code> and <code>?trajectory=Deteriorating</code> filters.
+    </div>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Patterns are derived from verified public records only.
+        Each record is independently verifiable via its reference URL.
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
+
+
+@router.get("/graph", response_class=HTMLResponse)
+async def graph_page():
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Condition Graph — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 0;
+    }
+    #app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+    }
+    .graph-header {
+      background: #ffffff;
+      border-bottom: 2px solid #1a1a1a;
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .graph-header-left {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .graph-engine {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888;
+    }
+    .graph-title {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+    }
+    .graph-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .graph-controls select {
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      background: #f8f7f4;
+      border: 1px solid #d0cec8;
+      border-radius: 4px;
+      padding: 5px 10px;
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    .graph-controls select:focus { outline: none; border-color: #1a1a1a; }
+    .back-link {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+    }
+    .back-link:hover { color: #1a1a1a; }
+    #graph-container {
+      position: relative;
+      overflow: hidden;
+      background: #faf9f7;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #tooltip {
+      position: absolute;
+      background: #1a1a1a;
+      color: #fff;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      padding: 10px 14px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      max-width: 280px;
+      line-height: 1.6;
+      z-index: 10;
+    }
+    #panel {
+      position: absolute;
+      right: 20px;
+      top: 20px;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 3px solid #1a1a1a;
+      border-radius: 4px;
+      padding: 16px 18px;
+      width: 260px;
+      font-size: 0.82rem;
+      display: none;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    }
+    #panel h3 {
+      font-size: 0.9rem;
+      margin: 0 0 8px;
+      font-family: Georgia, serif;
+    }
+    #panel .panel-meta {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      margin-bottom: 12px;
+    }
+    #panel .panel-records {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #panel .panel-records a {
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      width: fit-content;
+    }
+    #panel .panel-records a:hover { border-color: #1a1a1a; }
+    #panel-close {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #888;
+      font-size: 1rem;
+    }
+    #status {
+      position: absolute;
+      bottom: 16px;
+      left: 20px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="graph-header">
+      <div class="graph-header-left">
+        <span class="graph-engine">Civic Decision Engine</span>
+        <span class="graph-title">Condition Graph</span>
+      </div>
+      <div class="graph-controls">
+        <select id="filterInstitution">
+          <option value="">All institutions</option>
+          <option value="LA">Local Authority</option>
+          <option value="HS">Health Service</option>
+          <option value="ED">Education</option>
+          <option value="HO">Housing</option>
+          <option value="PL">Planning</option>
+          <option value="GV">Government</option>
+          <option value="FS">Fire Service</option>
+          <option value="LE">Law Enforcement</option>
+          <option value="LG">Legal</option>
+          <option value="OT">Other</option>
+        </select>
+        <select id="filterTrajectory">
+          <option value="">All trajectories</option>
+          <option value="Deteriorating">Deteriorating</option>
+          <option value="Stable">Stable</option>
+          <option value="Improving">Improving</option>
+        </select>
+        <a href="/patterns" class="back-link">← Pattern summary</a>
+      </div>
+    </div>
+
+    <div id="graph-container">
+      <canvas id="canvas"></canvas>
+      <div id="tooltip"></div>
+      <div id="panel">
+        <button id="panel-close">✕</button>
+        <h3 id="panel-name"></h3>
+        <div class="panel-meta" id="panel-meta"></div>
+        <div class="panel-records" id="panel-records"></div>
+      </div>
+      <div id="status">Loading graph data...</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const tooltip = document.getElementById("tooltip");
+    const panel = document.getElementById("panel");
+    const status = document.getElementById("status");
+
+    let nodes = [], edges = [], animFrame;
+    let transform = { x: 0, y: 0, scale: 1 };
+    let dragging = false, dragStart = null, lastTransform = null;
+    let hoveredNode = null;
+
+    const COLORS = [
+      "#1a1a1a", "#4a4a8a", "#8a4a4a", "#4a8a4a",
+      "#8a7a2a", "#2a6a8a", "#7a2a6a", "#2a8a6a"
+    ];
+
+    function resize() {
+      const container = document.getElementById("graph-container");
+      canvas.width  = container.clientWidth  * devicePixelRatio;
+      canvas.height = container.clientHeight * devicePixelRatio;
+      canvas.style.width  = container.clientWidth  + "px";
+      canvas.style.height = container.clientHeight + "px";
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+      draw();
+    }
+
+    function layoutNodes(nodeList, w, h) {
+      const cx = w / 2, cy = h / 2;
+      if (nodeList.length === 1) {
+        nodeList[0].x = cx;
+        nodeList[0].y = cy;
+        return;
+      }
+      nodeList.forEach((n, i) => {
+        const angle = (i / nodeList.length) * Math.PI * 2 - Math.PI / 2;
+        const r = Math.min(w, h) * 0.38;
+        n.x = cx + Math.cos(angle) * r;
+        n.y = cy + Math.sin(angle) * r;
+        n.vx = 0;
+        n.vy = 0;
+      });
+    }
+
+    function simulate() {
+      const k = 180;
+      const gravity = 0.008;
+      const w = canvas.width / devicePixelRatio;
+      const h = canvas.height / devicePixelRatio;
+
+      nodes.forEach(n => {
+        // Gravity toward center
+        n.vx += (w / 2 - n.x) * gravity;
+        n.vy += (h / 2 - n.y) * gravity;
+
+        // Repulsion
+        nodes.forEach(m => {
+          if (m === n) return;
+          const dx = n.x - m.x, dy = n.y - m.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const force = (k * k) / dist;
+          n.vx += (dx / dist) * force * 0.01;
+          n.vy += (dy / dist) * force * 0.01;
+        });
+      });
+
+      // Attraction along edges
+      edges.forEach(e => {
+        const s = nodes.find(n => n.id === e.source);
+        const t = nodes.find(n => n.id === e.target);
+        if (!s || !t) return;
+        const dx = t.x - s.x, dy = t.y - s.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = (dist * dist) / (k * 3);
+        const fx = (dx / dist) * force * 0.01;
+        const fy = (dy / dist) * force * 0.01;
+        s.vx += fx; s.vy += fy;
+        t.vx -= fx; t.vy -= fy;
+      });
+
+      nodes.forEach(n => {
+        n.vx *= 0.85;
+        n.vy *= 0.85;
+        n.x += n.vx;
+        n.y += n.vy;
+      });
+    }
+
+    let simSteps = 0;
+    function tick() {
+      if (simSteps < 220) { simulate(); simSteps++; }
+      draw();
+      animFrame = requestAnimationFrame(tick);
+    }
+
+    function draw() {
+      const w = canvas.width / devicePixelRatio;
+      const h = canvas.height / devicePixelRatio;
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+      ctx.translate(transform.x, transform.y);
+      ctx.scale(transform.scale, transform.scale);
+
+      const maxWeight = Math.max(...edges.map(e => e.weight), 1);
+
+      // Draw edges
+      edges.forEach(e => {
+        const s = nodes.find(n => n.id === e.source);
+        const t = nodes.find(n => n.id === e.target);
+        if (!s || !t) return;
+        const alpha = 0.15 + (e.weight / maxWeight) * 0.5;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(26,26,26,${alpha})`;
+        ctx.lineWidth = 1 + (e.weight / maxWeight) * 3;
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+        ctx.stroke();
+      });
+
+      // Draw nodes
+      const maxCount = Math.max(...nodes.map(n => n.count), 1);
+      nodes.forEach((n, i) => {
+        const r = 38 + (n.count / maxCount) * 36;
+        n._r = r;
+        const isHovered = n === hoveredNode;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = isHovered ? "#1a1a1a" : (COLORS[i % COLORS.length] + "cc");
+        ctx.fill();
+        if (isHovered) {
+          ctx.strokeStyle = "#1a1a1a";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.fillStyle = "#ffffff";
+        const fontSize = Math.max(11, Math.min(18, r * 0.18));
+        const lineHeight = fontSize * 0.9;
+        ctx.font = `bold ${fontSize}px ui-monospace, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const words = n.label.split(" ");
+        if (words.length > 1 && r > 20) {
+          const mid = Math.ceil(words.length / 2);
+          ctx.fillText(words.slice(0, mid).join(" "), n.x, n.y - lineHeight / 2);
+          ctx.fillText(words.slice(mid).join(" "), n.x, n.y + lineHeight / 2);
+        } else {
+          ctx.fillText(n.label.length > 24 ? n.label.slice(0, 13) + "…" : n.label, n.x, n.y);
+        }
+      });
+
+      ctx.restore();
+    }
+
+    function getMouseNode(mx, my) {
+      const wx = (mx - transform.x) / transform.scale;
+      const wy = (my - transform.y) / transform.scale;
+      return nodes.find(n => {
+        const dx = wx - n.x, dy = wy - n.y;
+        return Math.sqrt(dx * dx + dy * dy) < (n._r || 20);
+      });
+    }
+
+    canvas.addEventListener("mousemove", e => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (dragging && dragStart) {
+        transform.x = lastTransform.x + (e.clientX - dragStart.x);
+        transform.y = lastTransform.y + (e.clientY - dragStart.y);
+        draw();
+        return;
+      }
+
+      const node = getMouseNode(mx, my);
+      hoveredNode = node || null;
+      canvas.style.cursor = node ? "pointer" : "grab";
+
+      if (node) {
+        const insts = Object.entries(node.institutions || {})
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ");
+        tooltip.innerHTML = `<strong>${node.label}</strong><br>${node.count} record${node.count !== 1 ? "s" : ""}<br>${insts || ""}`;
+        tooltip.style.opacity = "1";
+        tooltip.style.left = (mx + 14) + "px";
+        tooltip.style.top  = (my - 10) + "px";
+      } else {
+        tooltip.style.opacity = "0";
+      }
+      draw();
+    });
+
+    canvas.addEventListener("mousedown", e => {
+      dragging = true;
+      dragStart = { x: e.clientX, y: e.clientY };
+      lastTransform = { ...transform };
+      canvas.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      canvas.style.cursor = "grab";
+    });
+
+    canvas.addEventListener("click", e => {
+      const rect = canvas.getBoundingClientRect();
+      const node = getMouseNode(e.clientX - rect.left, e.clientY - rect.top);
+      if (!node) { panel.style.display = "none"; return; }
+
+      document.getElementById("panel-name").textContent = node.label;
+      const insts = Object.entries(node.institutions || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k} (${v})`)
+        .join(" · ");
+      const trajs = Object.entries(node.trajectories || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => `${k} (${v})`)
+        .join(" · ");
+      document.getElementById("panel-meta").innerHTML =
+        `${node.count} record${node.count !== 1 ? "s" : ""}<br>${insts}<br>${trajs}`;
+      const recordsEl = document.getElementById("panel-records");
+      recordsEl.innerHTML = (node.records || []).map(ref =>
+        `<a href="/verify/${encodeURIComponent(ref)}" target="_blank">${ref}</a>`
+      ).join("");
+      panel.style.display = "block";
+    });
+
+    canvas.addEventListener("wheel", e => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      transform.x = mx - (mx - transform.x) * factor;
+      transform.y = my - (my - transform.y) * factor;
+      transform.scale *= factor;
+      draw();
+    }, { passive: false });
+
+    document.getElementById("panel-close").addEventListener("click", () => {
+      panel.style.display = "none";
+    });
+
+    async function loadGraph() {
+      const inst = document.getElementById("filterInstitution").value;
+      const traj = document.getElementById("filterTrajectory").value;
+      let url = "/api/graph";
+      const params = [];
+      if (inst) params.push(`institution=${encodeURIComponent(inst)}`);
+      if (traj) params.push(`trajectory=${encodeURIComponent(traj)}`);
+      if (params.length) url += "?" + params.join("&");
+
+      status.textContent = "Loading graph data...";
+      try {
+        const res  = await fetch(url);
+        const data = await res.json();
+        nodes = data.nodes.map(n => ({ ...n, x: 0, y: 0, vx: 0, vy: 0 }));
+        edges = data.edges;
+
+        const w = canvas.width  / devicePixelRatio;
+        const h = canvas.height / devicePixelRatio;
+        layoutNodes(nodes, w, h);
+        transform = { x: 0, y: 0, scale: 1 };
+        simSteps = 0;
+        panel.style.display = "none";
+        status.textContent = `${data.node_count} condition${data.node_count !== 1 ? "s" : ""} · ${data.edge_count} connection${data.edge_count !== 1 ? "s" : ""}`;
+      } catch(err) {
+        status.textContent = "Failed to load graph data.";
+        console.error(err);
+      }
+    }
+
+    document.getElementById("filterInstitution").addEventListener("change", loadGraph);
+    document.getElementById("filterTrajectory").addEventListener("change", loadGraph);
+
+    window.addEventListener("resize", resize);
+    resize();
+    loadGraph().then(() => { cancelAnimationFrame(animFrame); tick(); });
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)
 
 
 @router.get("/verify/{reference}", response_class=HTMLResponse)
@@ -2485,6 +3539,18 @@ async def verify_record(reference: str):
       .footer-note {{ text-align: left; }}
       .detail-table td:first-child {{ width: 120px; }}
     }}
+      .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      width: fit-content;
+    }}
+      .doc-nav a:hover {{
+        color: #1a1a1a;
+      border-color: #999;
+    }}
   </style>
 </head>
 <body>
@@ -2492,10 +3558,11 @@ async def verify_record(reference: str):
     <header class="doc-header">
       <div>
   <div class="doc-engine">{s["engine"]}</div>
-  <a href="/records" style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#888;text-decoration:none;border-bottom:1px solid #ddd;">
-    ← Public record index
-  </a>
-</div>
+  <div class="doc-nav">
+    <a href="/records">← Public record index</a>
+    <a href="/patterns">Condition patterns</a>
+    <a href="/graph">Interactive graph</a>
+  </div>
       <div>
         <div class="doc-record-label">{s["record_label"]}</div>
         <div class="doc-reference">{safe['reference']}</div>
