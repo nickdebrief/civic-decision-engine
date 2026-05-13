@@ -3316,6 +3316,45 @@ async def verify_record(reference: str):
             "version": str(record["version"]),
         }
 
+        # ── Citation data ─────────────────────────────────────────
+        verify_url = f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}"
+        export_year = (record["exported_at"] or "")[:4] or "2026"
+        ref_id = record["reference"].replace("-", "")
+
+        apa = (
+            f"Civic Decision Engine. ({export_year}). "
+            f"{record['reference']}. "
+            f"Verified civic record. {verify_url}"
+        )
+
+        mla = (
+            f'Civic Decision Engine. "{record["reference"]}." '
+            f"Verified Civic Record, {export_year}, {verify_url}"
+        )
+
+        bibtex = (
+            f"@misc{{{ref_id},\n"
+            f"  title  = {{{{{record['reference']}}}}},\n"
+            f"  author = {{{{Civic Decision Engine}}}},\n"
+            f"  year   = {{{export_year}}},\n"
+            f"  url    = {{{verify_url}}},\n"
+            f"  note   = {{Verified civic record. "
+            f"SHA-256: {record['verification_hash']}}}\n"
+            f"}}"
+        )
+
+        csl_json = json.dumps(
+            {
+                "type": "webpage",
+                "title": record["reference"],
+                "author": [{"literal": "Civic Decision Engine"}],
+                "issued": {"date-parts": [[int(export_year)]]},
+                "URL": verify_url,
+                "note": f"Verified civic record. SHA-256: {record['verification_hash']}",
+            },
+            indent=2,
+        )
+
         # ── Version history rows ──────────────────────────────────
         history_rows = ""
         if len(history) > 1:
@@ -3551,23 +3590,93 @@ async def verify_record(reference: str):
         color: #1a1a1a;
       border-color: #999;
     }}
+    .cite-section {{ margin-bottom: 36px; }}
+    .cite-tabs {{
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #e8e6e0;
+      margin-bottom: 16px;
+    }}
+    .cite-tab {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #aaa;
+      padding: 6px 14px 8px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      transition: color 0.15s;
+    }}
+    .cite-tab:hover {{ color: #1a1a1a; }}
+    .cite-tab.active {{
+      color: #1a1a1a;
+      border-bottom-color: #1a1a1a;
+    }}
+    .cite-panel {{ display: none; }}
+    .cite-panel.active {{ display: block; }}
+    .cite-block {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 14px 16px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      line-height: 1.7;
+      color: #333;
+      white-space: pre-wrap;
+      word-break: break-all;
+      position: relative;
+    }}
+    .cite-copy {{
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: #fff;
+      border: 1px solid #e8e6e0;
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+      color: #888;
+    }}
+    .cite-copy:hover {{ color: #1a1a1a; border-color: #999; }}
+    .cite-permalink {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      margin-top: 12px;
+      line-height: 1.6;
+      font-style: italic;
+    }}
+
   </style>
 </head>
 <body>
-  <div class="document">
+<div class="document">
     <header class="doc-header">
       <div>
-  <div class="doc-engine">{s["engine"]}</div>
-  <div class="doc-nav">
-    <a href="/records">← Public record index</a>
-    <a href="/patterns">Condition patterns</a>
-    <a href="/graph">Interactive graph</a>
-  </div>
+        <div class="doc-engine">{s["engine"]}</div>
+        <div class="doc-nav">
+          <a href="/records">← Public record index</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/graph">Interactive graph</a>
+        </div>
+      </div>
       <div>
         <div class="doc-record-label">{s["record_label"]}</div>
         <div class="doc-reference">{safe['reference']}</div>
       </div>
     </header>
+    
     <section class="section">
       <h2 class="section-title">{s["section_finding"]}</h2>
       <div class="finding">{safe['finding']}</div>
@@ -3601,11 +3710,63 @@ async def verify_record(reference: str):
     
     </section>
     {history_section}
+    <section class="section cite-section">
+      <h2 class="section-title">Cite this record</h2>
+      <div class="cite-tabs">
+        <button class="cite-tab active" onclick="showCite('apa', this)">APA</button>
+        <button class="cite-tab" onclick="showCite('mla', this)">MLA</button>
+        <button class="cite-tab" onclick="showCite('bibtex', this)">BibTeX</button>
+        <button class="cite-tab" onclick="showCite('csl', this)">CSL JSON</button>
+      </div>
+
+      <div id="cite-apa" class="cite-panel active">
+        <div class="cite-block">{escape(apa)}<button class="cite-copy" onclick="copyCite('cite-apa')">Copy</button></div>
+      </div>
+
+      <div id="cite-mla" class="cite-panel">
+        <div class="cite-block">{escape(mla)}<button class="cite-copy" onclick="copyCite('cite-mla')">Copy</button></div>
+      </div>
+
+      <div id="cite-bibtex" class="cite-panel">
+        <div class="cite-block">{escape(bibtex)}<button class="cite-copy" onclick="copyCite('cite-bibtex')">Copy</button></div>
+      </div>
+
+      <div id="cite-csl" class="cite-panel">
+        <div class="cite-block">{escape(csl_json)}<button class="cite-copy" onclick="copyCite('cite-csl')">Copy</button></div>
+      </div>
+
+      <p class="cite-permalink">
+        Permalink snapshot: This record is versioned, hash-verified, and preserved
+        as a canonical civic record. The URL above resolves permanently to the latest
+        version of this reference. Version history and prior hashes are accessible
+        via <a href="{verify_url}?full=true" style="color:#888;">/api/verify/{escape(record['reference'])}?full=true</a>.
+      </p>
+    </section>
+    
     <footer class="doc-footer">
       <div class="footer-tagline">{s["footer_tagline"]}</div>
       <div class="footer-note">{s["footer_note"]}</div>
     </footer>
   </div>
+  <script>
+    function showCite(id, btn) {{
+      document.querySelectorAll(".cite-panel").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".cite-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("cite-" + id).classList.add("active");
+      btn.classList.add("active");
+    }}
+
+    function copyCite(panelId) {{
+      const block = document.querySelector("#" + panelId + " .cite-block");
+      const text = block.childNodes[0].textContent.trim();
+      navigator.clipboard.writeText(text).then(() => {{
+        const btn = block.querySelector(".cite-copy");
+        const orig = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => {{ btn.textContent = orig; }}, 1500);
+      }});
+    }}
+  </script>
 </body>
 </html>"""
         return HTMLResponse(content=html, status_code=200)
