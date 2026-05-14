@@ -261,7 +261,9 @@ async def create_record(payload: RecordPayload):
 
 
 @router.get("/records", response_class=HTMLResponse)
-async def records_index(trajectory: str = None, institution: str = None):
+async def records_index(
+    trajectory: str = None, institution: str = None, page: int = 1, search: str = None
+):
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -277,14 +279,28 @@ async def records_index(trajectory: str = None, institution: str = None):
         if institution:
             conditions_parts.append("reference LIKE ?")
             params.append(f"Strike-{institution.upper()}-%")
+        if search:
+            conditions_parts.append(
+                "(LOWER(reference) LIKE LOWER(?) OR LOWER(conditions_json) LIKE LOWER(?))"
+            )
+            params.append(f"%{search}%")
 
         where = " AND ".join(conditions_parts)
+
+        PER_PAGE = 25
+        offset = (page - 1) * PER_PAGE
+
+        # Total count for pagination
+        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
+        total_count = cur.fetchone()[0]
+        total_pages = max(1, -(-total_count // PER_PAGE))  # ceiling division
 
         cur.execute(
             f"SELECT reference, trajectory, system_state, conditions_json, "
             f"exported_at, language, version FROM records "
-            f"WHERE {where} ORDER BY exported_at DESC",
-            params,
+            f"WHERE {where} ORDER BY exported_at DESC "
+            f"LIMIT ? OFFSET ?",
+            params + [PER_PAGE, offset],
         )
         records = cur.fetchall()
 
@@ -313,7 +329,9 @@ async def records_index(trajectory: str = None, institution: str = None):
             "OT": "Other",
         }
 
-        total = len(records)
+        total = total_count
+        page_start = offset + 1 if total_count else 0
+        page_end = min(offset + PER_PAGE, total_count)
 
         # Build filter pills HTML
         def filter_pill(label, param, value, current):
@@ -382,7 +400,7 @@ async def records_index(trajectory: str = None, institution: str = None):
                 </tr>"""
 
         active_filter_note = ""
-        if trajectory or institution:
+        if trajectory or institution or search:
             parts = []
             if trajectory:
                 parts.append(f"Trajectory: {escape(trajectory)}")
@@ -390,9 +408,87 @@ async def records_index(trajectory: str = None, institution: str = None):
                 parts.append(
                     f"Institution: {escape(INSTITUTION_LABELS.get(institution.upper(), institution))}"
                 )
+            if search:
+                parts.append(f"Search: {escape(search)}")
             active_filter_note = (
                 f'<p class="filter-note">Filtered by — {" · ".join(parts)}</p>'
             )
+        # Build search form
+        filter_base = ""
+        if trajectory:
+            filter_base += (
+                f'<input type="hidden" name="trajectory" value="{escape(trajectory)}">'
+            )
+        if institution:
+            filter_base += f'<input type="hidden" name="institution" value="{escape(institution)}">'
+
+        clear_search_url = (
+            page_url(1)
+            .replace(f"search={escape(search)}&", "")
+            .replace(f"&search={escape(search)}", "")
+            .replace(f"search={escape(search)}", "")
+            if search
+            else ""
+        )
+
+        clear_link = (
+            f'<a href="{clear_search_url or "/records"}" class="search-clear">Clear</a>'
+            if search
+            else ""
+        )
+
+        search_form_html = f"""
+        <div class="search-section">
+          <form method="get" action="/records" class="search-form">
+            {filter_base}
+            <input
+              class="search-input"
+              type="text"
+              name="search"
+              value="{escape(search) if search else ""}"
+              placeholder="Search by reference or condition..."
+              autocomplete="off"
+            >
+            <button class="search-btn" type="submit">Search</button>
+            {clear_link}
+          </form>
+        </div>"""
+
+        def page_url(p: int) -> str:
+            parts = []
+            if trajectory:
+                parts.append(f"trajectory={trajectory}")
+            if institution:
+                parts.append(f"institution={institution}")
+            if search:
+                parts.append(f"search={escape(search)}")
+            if p > 1:
+                parts.append(f"page={p}")
+            return "/records" + (f"?{'&'.join(parts)}" if parts else "")
+
+        prev_url = page_url(page - 1) if page > 1 else None
+        next_url = page_url(page + 1) if page < total_pages else None
+
+        pagination_html = ""
+        if total_count > PER_PAGE:
+            prev_btn = (
+                f'<a href="{escape(prev_url)}" class="page-btn">← Previous</a>'
+                if prev_url
+                else '<span class="page-btn page-btn-disabled">← Previous</span>'
+            )
+            next_btn = (
+                f'<a href="{escape(next_url)}" class="page-btn">Next →</a>'
+                if next_url
+                else '<span class="page-btn page-btn-disabled">Next →</span>'
+            )
+            pagination_html = f"""
+            <div class="pagination">
+              <span class="page-info">Showing {page_start}–{page_end} of {total_count} records</span>
+              <div class="page-controls">
+                {prev_btn}
+                {next_btn}
+              </div>
+            </div>"""
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -598,6 +694,85 @@ async def records_index(trajectory: str = None, institution: str = None):
       body {{ background: white; padding: 0; }}
       .document {{ border: none; box-shadow: none; }}
     }}
+    .pagination {{
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #f0ede8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }}
+    .page-info {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+    }}
+    .page-controls {{
+      display: flex;
+      gap: 8px;
+    }}
+    .page-btn {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border: 1px solid #d0cec8;
+      border-radius: 4px;
+      padding: 5px 12px;
+      background: #f8f7f4;
+      transition: all 0.15s;
+    }}
+    .page-btn:hover {{ background: #eee; border-color: #999; }}
+    .page-btn-disabled {{
+      color: #ccc;
+      border-color: #e8e6e0;
+      background: #faf9f7;
+      cursor: default;
+    }}
+    .search-section {{
+      margin-bottom: 20px;
+    }}
+    .search-form {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }}
+    .search-input {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      padding: 7px 12px;
+      border: 1px solid #d0cec8;
+      border-radius: 4px;
+      background: #f8f7f4;
+      color: #1a1a1a;
+      width: 280px;
+      outline: none;
+      transition: border-color 0.15s;
+    }}
+    .search-input:focus {{ border-color: #1a1a1a; }}
+    .search-input::placeholder {{ color: #bbb; }}
+    .search-btn {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      padding: 7px 14px;
+      border: 1px solid #1a1a1a;
+      border-radius: 4px;
+      background: #1a1a1a;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s;
+    }}
+    .search-btn:hover {{ background: #333; }}
+    .search-clear {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 1px;
+    }}
+    .search-clear:hover {{ color: #1a1a1a; border-color: #999; }}
   </style>
 </head>
 <body>
@@ -617,6 +792,8 @@ async def records_index(trajectory: str = None, institution: str = None):
         <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
       </div>
     </header>
+
+    {search_form_html}
 
     <div class="filter-section">
       <p class="filter-label">Trajectory</p>
@@ -639,6 +816,8 @@ async def records_index(trajectory: str = None, institution: str = None):
       </thead>
       <tbody>{rows_html}</tbody>
     </table>
+
+    {pagination_html}
 
     <footer class="doc-footer">
       <div class="footer-tagline">The record does not argue.</div>
@@ -756,6 +935,14 @@ async def api_records_index(
             params.append(f"Strike-{institution.upper()}-%")
 
         where = " AND ".join(conditions_parts)
+
+        PER_PAGE = 25
+        offset = (page - 1) * PER_PAGE
+
+        # Total count for pagination
+        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
+        total_count = cur.fetchone()[0]
+        total_pages = max(1, -(-total_count // PER_PAGE))  # ceiling division
 
         # Total count
         cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
@@ -3297,6 +3484,202 @@ async def verify_record(reference: str):
                     "riaracháin nó gearáin fhoirmiúla."
                 ),
             },
+            "fr": {
+                "page_title": "Vérification du dossier public",
+                "engine": "Civic Decision Engine",
+                "record_label": "DOSSIER PUBLIC VÉRIFIÉ",
+                "section_finding": "Conclusion",
+                "section_record": "Détails du dossier",
+                "section_integrity": "Intégrité du dossier",
+                "section_history": "Historique des versions",
+                "field_reference": "Référence",
+                "field_date": "Date",
+                "field_trajectory": "Trajectoire",
+                "field_conditions": "Conditions",
+                "field_state": "État du système",
+                "field_generated": "Généré par",
+                "field_exported": "Exporté",
+                "field_hash": "Hachage d'intégrité SHA-256",
+                "field_version": "Version du dossier",
+                "integrity_note": (
+                    "Ce hachage a été calculé au moment de l'exportation à partir des "
+                    "champs canoniques de ce dossier. Il peut être utilisé pour vérifier "
+                    "que le contenu de ce dossier n'a pas été modifié depuis sa publication."
+                ),
+                "version_label": "Version",
+                "current_badge": "Actuelle",
+                "footer_tagline": "Le dossier ne plaide pas.",
+                "footer_note": (
+                    "Ce dossier a été généré par le Civic Decision Engine et conservé "
+                    "au moment de l'exportation. Il constitue un document probatoire "
+                    "structuré destiné aux procédures civiles, administratives ou "
+                    "de plainte formelle."
+                ),
+            },
+            "de": {
+                "page_title": "Öffentliche Akte — Verifizierung",
+                "engine": "Civic Decision Engine",
+                "record_label": "VERIFIZIERTE ÖFFENTLICHE AKTE",
+                "section_finding": "Befund",
+                "section_record": "Aktendetails",
+                "section_integrity": "Aktenintegrität",
+                "section_history": "Versionsgeschichte",
+                "field_reference": "Referenz",
+                "field_date": "Datum",
+                "field_trajectory": "Verlauf",
+                "field_conditions": "Bedingungen",
+                "field_state": "Systemzustand",
+                "field_generated": "Erstellt von",
+                "field_exported": "Exportiert",
+                "field_hash": "SHA-256-Integritäts-Hash",
+                "field_version": "Aktenversion",
+                "integrity_note": (
+                    "Dieser Hash wurde zum Zeitpunkt des Exports aus den kanonischen "
+                    "Feldern dieser Akte berechnet. Er kann verwendet werden, um zu "
+                    "überprüfen, dass der Inhalt dieser Akte seit der Veröffentlichung "
+                    "nicht verändert wurde."
+                ),
+                "version_label": "Version",
+                "current_badge": "Aktuell",
+                "footer_tagline": "Die Akte argumentiert nicht.",
+                "footer_note": (
+                    "Diese Akte wurde vom Civic Decision Engine erstellt und zum "
+                    "Zeitpunkt des Exports gespeichert. Sie stellt ein strukturiertes "
+                    "Beweisdokument für den Einsatz in zivilrechtlichen, "
+                    "verwaltungsrechtlichen oder formellen Beschwerdeverfahren dar."
+                ),
+            },
+            "es": {
+                "page_title": "Verificación del expediente público",
+                "engine": "Civic Decision Engine",
+                "record_label": "EXPEDIENTE PÚBLICO VERIFICADO",
+                "section_finding": "Conclusión",
+                "section_record": "Detalles del expediente",
+                "section_integrity": "Integridad del expediente",
+                "section_history": "Historial de versiones",
+                "field_reference": "Referencia",
+                "field_date": "Fecha",
+                "field_trajectory": "Trayectoria",
+                "field_conditions": "Condiciones",
+                "field_state": "Estado del sistema",
+                "field_generated": "Generado por",
+                "field_exported": "Exportado",
+                "field_hash": "Hash de integridad SHA-256",
+                "field_version": "Versión del expediente",
+                "integrity_note": (
+                    "Este hash fue calculado en el momento de la exportación a partir "
+                    "de los campos canónicos de este expediente. Puede utilizarse para "
+                    "verificar que el contenido de este expediente no ha sido alterado "
+                    "desde su publicación."
+                ),
+                "version_label": "Versión",
+                "current_badge": "Actual",
+                "footer_tagline": "El expediente no argumenta.",
+                "footer_note": (
+                    "Este expediente fue generado por el Civic Decision Engine y "
+                    "almacenado en el momento de la exportación. Constituye un documento "
+                    "probatorio estructurado para su uso en procedimientos cívicos, "
+                    "administrativos o de reclamación formal."
+                ),
+            },
+            "pl": {
+                "page_title": "Weryfikacja dokumentu publicznego",
+                "engine": "Civic Decision Engine",
+                "record_label": "ZWERYFIKOWANY DOKUMENT PUBLICZNY",
+                "section_finding": "Ustalenia",
+                "section_record": "Szczegóły dokumentu",
+                "section_integrity": "Integralność dokumentu",
+                "section_history": "Historia wersji",
+                "field_reference": "Numer referencyjny",
+                "field_date": "Data",
+                "field_trajectory": "Trajektoria",
+                "field_conditions": "Warunki",
+                "field_state": "Stan systemu",
+                "field_generated": "Wygenerowano przez",
+                "field_exported": "Wyeksportowano",
+                "field_hash": "Skrót integralności SHA-256",
+                "field_version": "Wersja dokumentu",
+                "integrity_note": (
+                    "Ten skrót został obliczony w momencie eksportu na podstawie "
+                    "kanonicznych pól tego dokumentu. Można go użyć do weryfikacji, "
+                    "że zawartość tego dokumentu nie została zmieniona od czasu "
+                    "jego publikacji."
+                ),
+                "version_label": "Wersja",
+                "current_badge": "Aktualna",
+                "footer_tagline": "Dokument nie argumentuje.",
+                "footer_note": (
+                    "Ten dokument został wygenerowany przez Civic Decision Engine "
+                    "i zapisany w momencie eksportu. Stanowi ustrukturyzowany dokument "
+                    "dowodowy przeznaczony do użytku w postępowaniach obywatelskich, "
+                    "administracyjnych lub formalnych skargach."
+                ),
+            },
+            "uk": {
+                "page_title": "Верифікація публічного запису",
+                "engine": "Civic Decision Engine",
+                "record_label": "ВЕРИФІКОВАНИЙ ПУБЛІЧНИЙ ЗАПИС",
+                "section_finding": "Висновок",
+                "section_record": "Деталі запису",
+                "section_integrity": "Цілісність запису",
+                "section_history": "Історія версій",
+                "field_reference": "Референс",
+                "field_date": "Дата",
+                "field_trajectory": "Траєкторія",
+                "field_conditions": "Умови",
+                "field_state": "Стан системи",
+                "field_generated": "Створено",
+                "field_exported": "Експортовано",
+                "field_hash": "Хеш цілісності SHA-256",
+                "field_version": "Версія запису",
+                "integrity_note": (
+                    "Цей хеш був обчислений під час експорту з канонічних полів "
+                    "цього запису. Його можна використати для перевірки того, що "
+                    "вміст цього запису не був змінений з моменту публікації."
+                ),
+                "version_label": "Версія",
+                "current_badge": "Поточна",
+                "footer_tagline": "Запис не сперечається.",
+                "footer_note": (
+                    "Цей запис був створений Civic Decision Engine та збережений "
+                    "під час експорту. Він є структурованим доказовим документом "
+                    "для використання в громадських, адміністративних або формальних "
+                    "скаргових провадженнях."
+                ),
+            },
+            "ro": {
+                "page_title": "Verificarea înregistrării publice",
+                "engine": "Civic Decision Engine",
+                "record_label": "ÎNREGISTRARE PUBLICĂ VERIFICATĂ",
+                "section_finding": "Constatare",
+                "section_record": "Detaliile înregistrării",
+                "section_integrity": "Integritatea înregistrării",
+                "section_history": "Istoricul versiunilor",
+                "field_reference": "Referință",
+                "field_date": "Dată",
+                "field_trajectory": "Traiectorie",
+                "field_conditions": "Condiții",
+                "field_state": "Starea sistemului",
+                "field_generated": "Generat de",
+                "field_exported": "Exportat",
+                "field_hash": "Hash de integritate SHA-256",
+                "field_version": "Versiunea înregistrării",
+                "integrity_note": (
+                    "Acest hash a fost calculat la momentul exportului din câmpurile "
+                    "canonice ale acestei înregistrări. Poate fi utilizat pentru a "
+                    "verifica că conținutul acestei înregistrări nu a fost modificat "
+                    "de la publicare."
+                ),
+                "version_label": "Versiune",
+                "current_badge": "Curentă",
+                "footer_tagline": "Înregistrarea nu argumentează.",
+                "footer_note": (
+                    "Această înregistrare a fost generată de Civic Decision Engine "
+                    "și stocată la momentul exportului. Constituie un document "
+                    "probatoriu structurat pentru utilizare în proceduri civice, "
+                    "administrative sau de reclamație formală."
+                ),
+            },
         }
 
         s = strings.get(lang, strings["en"])
@@ -3676,7 +4059,7 @@ async def verify_record(reference: str):
         <div class="doc-reference">{safe['reference']}</div>
       </div>
     </header>
-    
+
     <section class="section">
       <h2 class="section-title">{s["section_finding"]}</h2>
       <div class="finding">{safe['finding']}</div>
