@@ -9,6 +9,7 @@ audit_logs/
 outputs/*
 !outputs/.gitkeep
 *.log
+records.db
 # macOS system files
 .DS_Store
 
