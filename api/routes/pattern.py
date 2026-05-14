@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from api.models import PatternRunResponse, CasesRequest
 
-from civic_decision_engine_v10 import (
+from civic_decision_engine_v11 import (
     load_stored_timeline_runs,
     build_pattern_output_from_timelines,
     build_timeline_output_from_runs,

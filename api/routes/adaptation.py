@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from api.models import CasesRequest, AdaptationRunResponse
 
-from civic_decision_engine_v10 import (
+from civic_decision_engine_v11 import (
     extract_behaviour_summary,
     save_run_snapshot,
 )

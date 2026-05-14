@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Civic Decision Engine | Institutional Behaviour Analysis</title>
 
-  <!-- author: Nick Moloney — civic-decision-engine v10 -->
+  <!-- author: Nick Moloney — civic-decision-engine v11 -->
   <meta name="author" content="Nick Moloney" />
   <meta name="description" content="Civic Decision Engine — A diagnostic framework for analysing institutional behaviour, public records, and civic decision systems." />
   <meta
@@ -598,7 +598,7 @@
       .footer-note { color: #555; }
 
       .panel:last-child::before {
-        content: "Civic Decision Engine v10 — Nick Moloney — " attr(data-generated);
+        content: "Civic Decision Engine v11 — Nick Moloney — " attr(data-generated);
         display: block;
         font-size: 0.75rem;
         color: #888;
@@ -1106,7 +1106,7 @@ button.record-btn.copy-ok {
         &copy; <span id="copyrightYear"></span> Nick Moloney. All rights reserved.
       </span>
       <span style="color:var(--muted);font-size:0.82rem;font-family:ui-monospace,monospace;">
-        Civic Decision Engine v10 &mdash; <span data-i18n="hero_record">The record does not argue.</span>
+        Civic Decision Engine v11 &mdash; <span data-i18n="hero_record">The record does not argue.</span>
       </span>
     </footer>
   </div>
@@ -2154,7 +2154,7 @@ function renderConditionDistribution(caseHistory) {
         `---`, ``,
         `## ${rs.section_summary || "Pattern summary"}`, ``, p.pattern_summary || rs.no_summary || "No pattern summary returned.", ``,
         `---`, ``,
-        `*${rs.footer || "Civic Decision Engine v10 — Nick Moloney — The record does not argue."}*`
+        `*${rs.footer || "Civic Decision Engine v11 — Nick Moloney — The record does not argue."}*`
       ].join("\n");
 
       const safeRef = (r.strike_reference || "").replace(/[^a-zA-Z0-9-_]/g, "");

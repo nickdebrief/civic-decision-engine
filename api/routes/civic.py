@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from api.models import CivicCaseRequest, CivicRunResponse
 
-from civic_decision_engine_v10 import (
+from civic_decision_engine_v11 import (
     format_civic_result,
     build_civic_run_metadata,
     save_run_snapshot,
