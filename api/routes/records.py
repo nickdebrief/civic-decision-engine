@@ -426,38 +426,6 @@ async def records_index(
         if institution:
             filter_base += f'<input type="hidden" name="institution" value="{escape(institution)}">'
 
-        clear_search_url = (
-            page_url(1)
-            .replace(f"search={escape(search)}&", "")
-            .replace(f"&search={escape(search)}", "")
-            .replace(f"search={escape(search)}", "")
-            if search
-            else ""
-        )
-
-        clear_link = (
-            f'<a href="{clear_search_url or "/records"}" class="search-clear">Clear</a>'
-            if search
-            else ""
-        )
-
-        search_form_html = f"""
-        <div class="search-section">
-          <form method="get" action="/records" class="search-form">
-            {filter_base}
-            <input
-              class="search-input"
-              type="text"
-              name="search"
-              value="{escape(search) if search else ""}"
-              placeholder="Search by reference or condition..."
-              autocomplete="off"
-            >
-            <button class="search-btn" type="submit">Search</button>
-            {clear_link}
-          </form>
-        </div>"""
-
         def page_url(p: int) -> str:
             parts = []
             if trajectory:
@@ -493,6 +461,38 @@ async def records_index(
                 {next_btn}
               </div>
             </div>"""
+
+        clear_search_url = (
+            page_url(1)
+            .replace(f"search={escape(search or '')}&", "")
+            .replace(f"&search={escape(search or '')}", "")
+            .replace(f"search={escape(search or '')}", "")
+            if search
+            else ""
+        )
+
+        clear_link = (
+            f'<a href="{clear_search_url or "/records"}" class="search-clear">Clear</a>'
+            if search
+            else ""
+        )
+
+        search_form_html = f"""
+        <div class="search-section">
+          <form method="get" action="/records" class="search-form">
+            {filter_base}
+            <input
+              class="search-input"
+              type="text"
+              name="search"
+              value="{escape(search) if search else ""}"
+              placeholder="Search by reference or condition..."
+              autocomplete="off"
+            >
+            <button class="search-btn" type="submit">Search</button>
+            {clear_link}
+          </form>
+        </div>"""
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
