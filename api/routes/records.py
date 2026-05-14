@@ -279,47 +279,32 @@ async def records_index(
         if institution:
             conditions_parts.append("reference LIKE ?")
             params.append(f"Strike-{institution.upper()}-%")
+
         if search:
             conditions_parts.append(
                 "(LOWER(reference) LIKE LOWER(?) OR LOWER(conditions_json) LIKE LOWER(?))"
             )
-
-            where = " AND ".join(conditions_parts)
-
-        # Count query — needs search param twice if searching
-        count_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
-        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", count_params)
-        total_count = cur.fetchone()[0]
-
-        # Records query — also needs search param twice
-        records_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
-        cur.execute(
-            f"SELECT reference, trajectory, system_state, conditions_json, "
-            f"exported_at, language, version FROM records "
-            f"WHERE {where} ORDER BY exported_at DESC "
-            f"LIMIT ? OFFSET ?",
-            records_params + [PER_PAGE, offset],
-        )
-        records = cur.fetchall()
-
-        params.append(f"%{search}%")
 
         where = " AND ".join(conditions_parts)
 
         PER_PAGE = 25
         offset = (page - 1) * PER_PAGE
 
+        # Search needs its param twice (reference + conditions_json)
+        count_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
+        records_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
+
         # Total count for pagination
-        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
+        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", count_params)
         total_count = cur.fetchone()[0]
-        total_pages = max(1, -(-total_count // PER_PAGE))  # ceiling division
+        total_pages = max(1, -(-total_count // PER_PAGE))
 
         cur.execute(
             f"SELECT reference, trajectory, system_state, conditions_json, "
             f"exported_at, language, version FROM records "
             f"WHERE {where} ORDER BY exported_at DESC "
             f"LIMIT ? OFFSET ?",
-            params + [PER_PAGE, offset],
+            records_params + [PER_PAGE, offset],
         )
         records = cur.fetchall()
 
