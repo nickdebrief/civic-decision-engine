@@ -262,7 +262,7 @@ async def create_record(payload: RecordPayload):
 
 @router.get("/records", response_class=HTMLResponse)
 async def records_index(
-    trajectory: str = None, institution: str = None, page: int = 1, search: str = None
+    trajectory: str = None, institution: str = None, search: str = None, page: int = 1
 ):
     conn = get_db()
     try:
@@ -283,7 +283,26 @@ async def records_index(
             conditions_parts.append(
                 "(LOWER(reference) LIKE LOWER(?) OR LOWER(conditions_json) LIKE LOWER(?))"
             )
-            params.append(f"%{search}%")
+
+            where = " AND ".join(conditions_parts)
+
+        # Count query — needs search param twice if searching
+        count_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
+        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", count_params)
+        total_count = cur.fetchone()[0]
+
+        # Records query — also needs search param twice
+        records_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
+        cur.execute(
+            f"SELECT reference, trajectory, system_state, conditions_json, "
+            f"exported_at, language, version FROM records "
+            f"WHERE {where} ORDER BY exported_at DESC "
+            f"LIMIT ? OFFSET ?",
+            records_params + [PER_PAGE, offset],
+        )
+        records = cur.fetchall()
+
+        params.append(f"%{search}%")
 
         where = " AND ".join(conditions_parts)
 
