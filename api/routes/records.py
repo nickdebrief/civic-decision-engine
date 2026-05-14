@@ -264,6 +264,8 @@ async def create_record(payload: RecordPayload):
 async def records_index(
     trajectory: str = None, institution: str = None, search: str = None, page: int = 1
 ):
+    page = max(1, page)
+
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -298,6 +300,12 @@ async def records_index(
         cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", count_params)
         total_count = cur.fetchone()[0]
         total_pages = max(1, -(-total_count // PER_PAGE))
+
+        if total_count > 0 and offset >= total_count:
+            redirect_url = page_url(1)
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=redirect_url, status_code=302)
 
         cur.execute(
             f"SELECT reference, trajectory, system_state, conditions_json, "
