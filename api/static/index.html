@@ -1321,6 +1321,7 @@ button.record-btn.copy-ok {
     };
 
     let currentLang = "en";
+    const SUPPORTED_RECORD_LANGUAGES = ["en", "ga", "fr", "de", "es", "pl", "ro", "uk"];
     let currentMode = "describe";
     let latestReportData = null;
     let caseHistory = [];
@@ -2689,7 +2690,7 @@ const finding = explanation2.length
     signals:      Array.isArray(pD.signals) ? pD.signals : [],
     finding:      finding,
     report:       reportData.output || {},
-    language:     currentLang
+    language:     SUPPORTED_RECORD_LANGUAGES.includes(currentLang) ? currentLang : "en"
   };
 
   const res = await fetch("/records", {
