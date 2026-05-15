@@ -1,14 +1,40 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-  <!-- Lens circle -->
-  <circle cx="6" cy="6" r="4.5"
-          stroke="#C9A84C"
-          stroke-width="1.5"
-          fill="none" />
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .stroke {
+        stroke: #008fb3;
+        stroke-width: 10;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .fill {
+        fill: #008fb3;
+      }
+      .text {
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 64px;
+        font-weight: 500;
+        fill: #008fb3;
+      }
+    </style>
+  </defs>
 
-  <!-- Handle -->
-  <line x1="9.5" y1="9.5" x2="14" y2="14"
-        stroke="#C9A84C"
-        stroke-width="1.5"
-        stroke-linecap="round" />
+  <!-- Outer oval -->
+  <ellipse cx="256" cy="256" rx="170" ry="230" class="stroke"/>
+
+  <!-- Top bars -->
+  <rect x="180" y="110" width="152" height="14" rx="7" class="fill"/>
+  <rect x="190" y="145" width="132" height="14" rx="7" class="fill"/>
+  <rect x="205" y="182" width="102" height="14" rx="7" class="fill"/>
+
+  <!-- Columns -->
+  <rect x="210" y="190" width="14" height="130" rx="4" class="fill"/>
+  <rect x="244" y="190" width="14" height="130" rx="4" class="fill"/>
+  <rect x="278" y="190" width="14" height="130" rx="4" class="fill"/>
+  <rect x="312" y="190" width="14" height="130" rx="4" class="fill"/>
+
+  <!-- Version text -->
+  <text x="190" y="405" class="text">v11</text>
 </svg>
