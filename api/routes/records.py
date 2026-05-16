@@ -536,6 +536,36 @@ async def records_index(
       padding-bottom: 20px;
       margin-bottom: 36px;
     }}
+   :root {{
+  --teal: #2E8B9A;
+  --teal-light: #4AABB8;
+  --teal-faint: rgba(46,139,154,0.08);
+  --teal-mid: rgba(46,139,154,0.18);
+}}
+
+    .doc-mark {{
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  opacity: 0.92;
+}}
+
+.doc-mark svg {{
+  display: block;
+  width: 42px;
+  height: auto;
+}}
+
+@media (max-width: 720px) {{
+  .doc-mark {{
+    align-self: flex-start;
+  }}
+
+  .doc-mark svg {{
+    width: 34px;
+  }}
+}}
     .doc-engine {{
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -803,6 +833,21 @@ async def records_index(
         <div class="doc-title">Public Record Index</div>
         <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
       </div>
+      
+      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+        </svg>
+      </div>
     </header>
 
     {search_form_html}
@@ -1046,6 +1091,67 @@ async def api_docs():
       padding-bottom: 20px;
       margin-bottom: 40px;
     }
+    :root {
+      --teal: #2E8B9A;
+      --teal-light: #4AABB8;
+      --teal-faint: rgba(46,139,154,0.08);
+      --teal-mid: rgba(46,139,154,0.18);
+    }
+
+    .doc-mark {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      flex-shrink: 0;
+      opacity: 0.92;
+    }
+
+    .doc-mark svg {
+      display: block;
+      width: 42px;
+      height: auto;
+    }
+
+    @media (max-width: 720px) {
+      .doc-mark {
+        align-self: flex-start;
+      }
+
+      .doc-mark svg {
+        width: 34px;
+      }
+    }
+       :root {{
+        --teal: #2E8B9A;
+        --teal-light: #4AABB8;
+        --teal-faint: rgba(46,139,154,0.08);
+        --teal-mid: rgba(46,139,154,0.18);
+      }}
+
+          .doc-mark {{
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        opacity: 0.92;
+      }}
+
+      .doc-mark svg {{
+        display: block;
+        width: 42px;
+        height: auto;
+      }}
+
+      @media (max-width: 720px) {{
+        .doc-mark {{
+          align-self: flex-start;
+        }}
+
+        .doc-mark svg {{
+          width: 34px;
+        }}
+      }}
+
     .doc-engine {
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -1321,6 +1427,20 @@ async def api_docs():
       <div>
         <div class="doc-title">Public API Documentation</div>
         <div class="doc-subtitle">Machine-readable civic record access</div>
+      </div>
+       <div class="doc-mark" aria-label="Civic Decision Engine v11">
+        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+        </svg>
       </div>
     </header>
 
@@ -1707,6 +1827,36 @@ async def conditions_registry():
       padding-bottom: 20px;
       margin-bottom: 40px;
     }}
+      :root {{
+          --teal: #2E8B9A;
+          --teal-light: #4AABB8;
+          --teal-faint: rgba(46,139,154,0.08);
+          --teal-mid: rgba(46,139,154,0.18);
+      }}
+
+        .doc-mark {{
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        opacity: 0.92;
+      }}
+
+      .doc-mark svg {{
+        display: block;
+        width: 42px;
+        height: auto;
+      }}
+
+      @media (max-width: 720px) {{
+        .doc-mark {{
+          align-self: flex-start;
+        }}
+
+        .doc-mark svg {{
+          width: 34px;
+        }}
+    }}
     .doc-engine {{
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -1876,6 +2026,21 @@ async def conditions_registry():
         <div class="doc-title">Condition Registry</div>
         <div class="doc-subtitle">Civic observation taxonomy</div>       
       </div>
+      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+        <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+        <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+        <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+        <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+      </svg>
+      </div>
+
     </header>
 
     <p class="intro">
@@ -2067,6 +2232,36 @@ async def stats_page():
       padding-bottom: 20px;
       margin-bottom: 40px;
     }}
+       :root {{
+        --teal: #2E8B9A;
+        --teal-light: #4AABB8;
+        --teal-faint: rgba(46,139,154,0.08);
+        --teal-mid: rgba(46,139,154,0.18);
+      }}
+
+          .doc-mark {{
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        opacity: 0.92;
+      }}
+
+      .doc-mark svg {{
+        display: block;
+        width: 42px;
+        height: auto;
+      }}
+
+      @media (max-width: 720px) {{
+        .doc-mark {{
+          align-self: flex-start;
+        }}
+
+        .doc-mark svg {{
+          width: 34px;
+        }}
+      }}
     .doc-engine {{
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -2244,6 +2439,21 @@ async def stats_page():
         <div class="doc-title">Archive Statistics</div>
         <div class="doc-subtitle">Public record distribution</div>
       </div>
+      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+        </svg>
+      </div>
+
     </header>
 
     <div class="section-header">Summary</div>
@@ -2630,6 +2840,36 @@ async def patterns_page():
       padding-bottom: 20px;
       margin-bottom: 40px;
     }}
+       :root {{
+        --teal: #2E8B9A;
+        --teal-light: #4AABB8;
+        --teal-faint: rgba(46,139,154,0.08);
+        --teal-mid: rgba(46,139,154,0.18);
+      }}
+
+          .doc-mark {{
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        opacity: 0.92;
+      }}
+
+      .doc-mark svg {{
+        display: block;
+        width: 42px;
+        height: auto;
+      }}
+
+      @media (max-width: 720px) {{
+        .doc-mark {{
+          align-self: flex-start;
+        }}
+
+        .doc-mark svg {{
+          width: 34px;
+        }}
+      }}
     .doc-engine {{
       font-family: ui-monospace, monospace;
       font-size: 0.72rem;
@@ -2868,6 +3108,21 @@ async def patterns_page():
         <div class="doc-title">Condition Patterns</div>
         <div class="doc-subtitle">Structural pattern analysis</div>
       </div>
+      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+          <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+            <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+            <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+            <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+            <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+            <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+            <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+            <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+            <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+            <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+          </svg>
+        </div>
+
     </header>
 
     <p class="intro">
@@ -2935,20 +3190,49 @@ async def graph_page():
       height: 100vh;
     }
     .graph-header {
-      background: #ffffff;
-      border-bottom: 2px solid #1a1a1a;
-      padding: 14px 28px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-    .graph-header-left {
-      display: flex;
-      align-items: baseline;
-      gap: 16px;
-    }
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .graph-header-left {
+        flex-shrink: 0;
+      }
+
+      .graph-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+      }
+
+      .doc-mark {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--teal);
+        opacity: 0.92;
+        margin-left: 12px;
+      }
+
+      .doc-mark svg {
+        display: block;
+        width: 34px;
+        height: auto;
+      }
+
+        @media (max-width: 720px) {{
+          .doc-mark {{
+            align-self: flex-start;
+          }}
+
+          .doc-mark svg {{
+            width: 34px;
+          }}
+        }}
+
     .graph-engine {
       font-family: ui-monospace, monospace;
       font-size: 0.68rem;
@@ -3071,6 +3355,25 @@ async def graph_page():
       font-size: 0.68rem;
       color: #aaa;
     }
+    :root {
+      --teal: #2E8B9A;
+    }
+
+    .graph-seal {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      opacity: 0.18;
+      pointer-events: none;
+      color: var(--teal);
+      z-index: 9999;
+    }
+
+    .graph-seal svg {
+      display: block;
+      width: 56px;
+      height: auto;
+    }
   </style>
 </head>
 <body>
@@ -3102,7 +3405,7 @@ async def graph_page():
         </select>
         <a href="/patterns" class="back-link">← Pattern summary</a>
       </div>
-    </div>
+   </div>
 
     <div id="graph-container">
       <canvas id="canvas"></canvas>
@@ -3397,6 +3700,20 @@ async def graph_page():
     resize();
     loadGraph().then(() => { cancelAnimationFrame(animFrame); tick(); });
   </script>
+  <div class="graph-seal" aria-label="Civic Decision Engine v11">
+      <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+        <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal)" stroke-width="28" fill="none"/>
+        <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+        <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+        <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+        <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal)">v11</text>
+      </svg>
+    </div>
 </body>
 </html>"""
     return HTMLResponse(content=html, status_code=200)
