@@ -1,5 +1,9 @@
 # Civic Decision Engine (CDE)
 
+<img width="512" height="512" alt="android-chrome-512x512" src="https://github.com/user-attachments/assets/db217999-105c-4776-8c36-186ed2705f2f" />
+
+---
+
 A public civic record and verification system for structured institutional analysis.
 
 Observation sometimes becomes clearer when structure is applied.
