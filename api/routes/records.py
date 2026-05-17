@@ -1863,7 +1863,12 @@ async def conditions_registry():
         entries_html += f"""
         <section class="condition-entry" id="{escape(condition['id'])}">
           <div class="condition-header">
-            <h3 class="condition-name">{escape(condition['name'])}</h3>
+            <h3 class="condition-name">
+              <a href="/conditions/{escape(condition['id'])}"
+                 style="color:#1a1a1a;text-decoration:none;border-bottom:1px solid #ddd;">
+                {escape(condition['name'])}
+              </a>
+            </h3>
             <span class="condition-code">{escape(condition['code'])}</span>
           </div>
           <p class="condition-description">{escape(condition['description'])}</p>
@@ -2185,6 +2190,576 @@ async def conditions_registry():
 </body>
 </html>"""
     return HTMLResponse(content=html, status_code=200)
+
+
+@router.get("/conditions/{condition_id}", response_class=HTMLResponse)
+async def condition_page(condition_id: str):
+    # Find condition in registry
+    condition = next((c for c in CONDITION_REGISTRY if c["id"] == condition_id), None)
+    if not condition:
+        raise HTTPException(status_code=404, detail="Condition not found")
+
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        INSTITUTION_LABELS = {
+            "LA": "Local Authority",
+            "HS": "Health Service",
+            "ED": "Education",
+            "HO": "Housing",
+            "PL": "Planning",
+            "GV": "Government",
+            "FS": "Financial Services",
+            "LE": "Law Enforcement",
+            "LG": "Legal",
+            "OT": "Other",
+        }
+
+        # Records containing this condition
+        cur.execute(
+            "SELECT reference, trajectory, conditions_json, exported_at, version "
+            "FROM records WHERE is_latest = 1 AND "
+            "LOWER(conditions_json) LIKE LOWER(?) "
+            "ORDER BY exported_at DESC",
+            (f"%{condition['name']}%",),
+        )
+        matching_records = cur.fetchall()
+        occurrence_count = len(matching_records)
+
+        # Co-occurring conditions
+        cooccurrence: dict[str, int] = {}
+        for rec in matching_records:
+            conditions_list = json.loads(rec["conditions_json"] or "[]")
+            for c in conditions_list:
+                if c != condition["name"]:
+                    cooccurrence[c] = cooccurrence.get(c, 0) + 1
+
+        cooccurrence_sorted = sorted(
+            cooccurrence.items(), key=lambda x: x[1], reverse=True
+        )
+
+        # Institution breakdown
+        institution_counts: dict[str, int] = {}
+        for rec in matching_records:
+            code = extract_institution_type(rec["reference"])
+            institution_counts[code] = institution_counts.get(code, 0) + 1
+
+        institution_sorted = sorted(
+            institution_counts.items(), key=lambda x: x[1], reverse=True
+        )
+
+        # Build indicators HTML
+        indicators_html = "".join(
+            f"<li>{escape(ind)}</li>" for ind in condition["indicators"]
+        )
+
+        # Build linked records HTML
+        records_html = ""
+        for rec in matching_records:
+            inst_code = extract_institution_type(rec["reference"])
+            inst_label = INSTITUTION_LABELS.get(inst_code, inst_code)
+            exported = rec["exported_at"][:10] if rec["exported_at"] else "—"
+            version_badge = (
+                f' <span class="version-badge">v{rec["version"]}</span>'
+                if rec["version"] > 1
+                else ""
+            )
+            traj = escape(rec["trajectory"] or "—")
+            records_html += (
+                f"<tr>"
+                f'<td class="rec-ref">'
+                f'<a href="/verify/{escape(rec["reference"])}" class="rec-link">'
+                f'{escape(rec["reference"])}{version_badge}</a></td>'
+                f'<td class="rec-inst">{escape(inst_label)}</td>'
+                f'<td class="rec-traj">{traj}</td>'
+                f'<td class="rec-date">{escape(exported)}</td>'
+                f"</tr>"
+            )
+
+        if not records_html:
+            records_html = (
+                '<tr><td colspan="4" class="empty-state">'
+                "No records currently carry this condition.</td></tr>"
+            )
+
+        # Build co-occurrence HTML
+        cooccurrence_html = ""
+        for cond_name, count in cooccurrence_sorted:
+            # Find the id for linking
+            linked = next(
+                (c for c in CONDITION_REGISTRY if c["name"] == cond_name), None
+            )
+            if linked:
+                cooccurrence_html += (
+                    f'<div class="co-item">'
+                    f'<a href="/conditions/{escape(linked["id"])}" class="co-link">'
+                    f"{escape(cond_name)}</a>"
+                    f'<span class="co-count">{count} record{"s" if count != 1 else ""}</span>'
+                    f"</div>"
+                )
+            else:
+                cooccurrence_html += (
+                    f'<div class="co-item">'
+                    f'<span class="co-name">{escape(cond_name)}</span>'
+                    f'<span class="co-count">{count} record{"s" if count != 1 else ""}</span>'
+                    f"</div>"
+                )
+
+        if not cooccurrence_html:
+            cooccurrence_html = (
+                '<p class="empty-note">No co-occurring conditions recorded yet.</p>'
+            )
+
+        # Build institution breakdown HTML
+        inst_html = ""
+        for code, count in institution_sorted:
+            label = INSTITUTION_LABELS.get(code, code)
+            pct = round((count / occurrence_count) * 100) if occurrence_count else 0
+            inst_html += (
+                f"<tr>"
+                f'<td class="stat-label">{escape(code)}</td>'
+                f'<td class="stat-desc">{escape(label)}</td>'
+                f'<td class="stat-count">{count}</td>'
+                f'<td class="stat-bar-cell">'
+                f'<div class="stat-bar" style="width:{pct}%"></div></td>'
+                f"</tr>"
+            )
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{escape(condition['name'])} — Condition — Civic Decision Engine</title>
+  <meta name="description" content="{escape(condition['description'][:160])}">
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    .document {{
+      max-width: 820px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-mark {{
+      margin-bottom: 10px;
+     }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .condition-name {{
+      font-size: 1.4rem;
+      font-family: Georgia, serif;
+      font-weight: bold;
+      color: #1a1a1a;
+      margin: 0 0 6px;
+      line-height: 1.3;
+    }}
+    .condition-code {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #aaa;
+      letter-spacing: 0.04em;
+      margin-bottom: 20px;
+      display: block;
+    }}
+    .condition-description {{
+      font-size: 0.975rem;
+      color: #333;
+      line-height: 1.8;
+      margin-bottom: 8px;
+    }}
+    .indicators-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #aaa;
+      margin: 20px 0 10px;
+    }}
+    .indicators-list {{
+      margin: 0;
+      padding-left: 20px;
+      color: #444;
+      font-size: 0.9rem;
+      line-height: 1.8;
+    }}
+    .indicators-list li {{ margin-bottom: 6px; }}
+    .occurrence-card {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }}
+    .occurrence-number {{
+      font-family: ui-monospace, monospace;
+      font-size: 2rem;
+      font-weight: bold;
+      color: #1a1a1a;
+      line-height: 1;
+    }}
+    .occurrence-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+    }}
+    .records-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .records-table thead tr {{ border-bottom: 2px solid #1a1a1a; }}
+    .records-table th {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #888;
+      padding: 0 12px 10px 0;
+      text-align: left;
+      font-weight: normal;
+    }}
+    .records-table tbody tr {{ border-bottom: 1px solid #f0ede8; }}
+    .records-table tbody tr:hover {{ background: #faf9f7; }}
+    .records-table td {{
+      padding: 10px 12px 10px 0;
+      vertical-align: top;
+      color: #333;
+    }}
+    .rec-ref {{ width: 220px; }}
+    .rec-inst {{ width: 140px; }}
+    .rec-traj {{ width: 120px; }}
+    .rec-date {{ width: 90px; white-space: nowrap; }}
+    .rec-link {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 1px solid #ccc;
+    }}
+    .rec-link:hover {{ border-color: #1a1a1a; }}
+    .version-badge {{
+      display: inline-block;
+      font-size: 0.6rem;
+      background: #eee;
+      color: #666;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }}
+    .empty-state {{
+      text-align: center;
+      color: #aaa;
+      font-style: italic;
+      padding: 24px 0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+    }}
+    .empty-note {{
+      color: #aaa;
+      font-style: italic;
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      margin: 0;
+    }}
+    .co-item {{
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0ede8;
+    }}
+    .co-item:last-child {{ border-bottom: none; }}
+    .co-link {{
+      font-size: 0.9rem;
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      font-family: Georgia, serif;
+    }}
+    .co-link:hover {{ border-color: #1a1a1a; }}
+    .co-name {{ font-size: 0.9rem; color: #444; font-family: Georgia, serif; }}
+    .co-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+    }}
+    .stat-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .stat-table tr {{ border-bottom: 1px solid #f0ede8; }}
+    .stat-table tr:last-child {{ border-bottom: none; }}
+    .stat-table td {{ padding: 8px 8px 8px 0; vertical-align: middle; }}
+    .stat-label {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #1a1a1a;
+      width: 48px;
+    }}
+    .stat-desc {{ color: #444; width: 160px; }}
+    .stat-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      color: #1a1a1a;
+      text-align: right;
+      width: 40px;
+      padding-right: 16px;
+    }}
+    .stat-bar-cell {{ width: 100%; }}
+    .stat-bar {{
+      height: 5px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      min-width: 2px;
+    }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 40px;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .rec-inst, .rec-traj {{ display: none; }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; padding: 32px; }}
+    }}
+    @media print {{
+      .document::before {{
+        content: "";
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 300px;
+        height: 300px;
+        background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: contain;
+        opacity: 0.07;
+        pointer-events: none;
+        z-index: 0;
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/conditions">← Condition registry</a>
+          <a href="/records">Public record index</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div>
+        <div style="margin-left:auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;">
+        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="opacity:0.82;margin-bottom:6px;">
+          <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+            <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+            <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+            <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+            <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          </svg>
+        </div>
+        <div class="doc-title">Condition</div>
+        <div class="doc-subtitle">Civic diagnostic unit</div>
+      </div>
+    </header>
+
+    <h1 class="condition-name">{escape(condition['name'])}</h1>
+    <span class="condition-code">{escape(condition['code'])}</span>
+    <p class="condition-description">{escape(condition['description'])}</p>
+
+    <div class="indicators-label">Indicators</div>
+    <ul class="indicators-list">{indicators_html}</ul>
+
+    <div class="section-header">Occurrence in archive</div>
+    <div class="occurrence-card">
+      <span class="occurrence-number">{occurrence_count}</span>
+      <span class="occurrence-label">
+        verified record{"s" if occurrence_count != 1 else ""} carry this condition
+      </span>
+    </div>
+
+    <div class="section-header">By institution type</div>
+    {"<table class='stat-table'><tbody>" + inst_html + "</tbody></table>"
+      if inst_html else '<p class="empty-note">No institution data yet.</p>'}
+
+    <div class="section-header">
+      Associated records — {occurrence_count} total
+    </div>
+    <table class="records-table">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Institution</th>
+          <th>Trajectory</th>
+          <th>Exported</th>
+        </tr>
+      </thead>
+      <tbody>{records_html}</tbody>
+    </table>
+
+    <div class="section-header">Co-occurring conditions</div>
+    <div class="co-list">{cooccurrence_html}</div>
+
+    <div class="api-note">
+      Machine-readable access:
+      <a href="/api/conditions">/api/conditions</a>
+      &nbsp;·&nbsp;
+      Full condition registry as JSON, including this condition at
+      <code>id: {escape(condition['id'])}</code>.
+    </div>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        This condition is part of the Civic Decision Engine diagnostic taxonomy.
+        Occurrence counts reflect the current verified public archive only.
+      </div>
+      <div aria-hidden="true" style="opacity:0.42;flex-shrink:0;">
+        <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+        </svg>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
 
 
 @router.get("/api/conditions")
