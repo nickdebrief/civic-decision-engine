@@ -3142,6 +3142,7 @@ async def stats_page():
           <a href="/api/docs">API documentation</a>
           <a href="/patterns">Condition patterns</a>
           <a href="/graph">Interactive graph</a>
+          <a href="/stats/timeline">Archive timeline</a>
         </div>
       </div>
       <div>
@@ -3227,6 +3228,535 @@ async def stats_page():
       </div>
     </footer>
   </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
+
+
+@router.get("/stats/timeline", response_class=HTMLResponse)
+async def stats_timeline():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # All records with timestamps — latest versions only
+        cur.execute(
+            "SELECT reference, conditions_json, trajectory, exported_at "
+            "FROM records WHERE is_latest = 1 ORDER BY exported_at ASC"
+        )
+        rows = cur.fetchall()
+
+        # ── Monthly condition frequency ───────────────────────────
+        # month_conditions: { "2026-05": { "Transfer of Burden": 3, ... }, ... }
+        month_conditions: dict[str, dict[str, int]] = {}
+        month_record_counts: dict[str, int] = {}
+
+        for row in rows:
+            exported = row["exported_at"] or ""
+            month = exported[:7]  # "YYYY-MM"
+            if not month:
+                continue
+            conditions = json.loads(row["conditions_json"] or "[]")
+            month_record_counts[month] = month_record_counts.get(month, 0) + 1
+            if month not in month_conditions:
+                month_conditions[month] = {}
+            for c in conditions:
+                month_conditions[month][c] = month_conditions[month].get(c, 0) + 1
+
+        all_months = sorted(month_conditions.keys())
+
+        # All condition names seen across archive
+        all_condition_names: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            for c in json.loads(row["conditions_json"] or "[]"):
+                if c not in seen:
+                    all_condition_names.append(c)
+                    seen.add(c)
+
+        # ── Trajectory emergence ──────────────────────────────────
+        # First time each trajectory appeared
+        trajectory_first: dict[str, str] = {}
+        trajectory_counts: dict[str, int] = {}
+        for row in rows:
+            traj = row["trajectory"] or ""
+            if not traj:
+                continue
+            exported = row["exported_at"] or ""
+            if traj not in trajectory_first:
+                trajectory_first[traj] = exported[:10]
+            trajectory_counts[traj] = trajectory_counts.get(traj, 0) + 1
+
+        # ── Condition emergence ───────────────────────────────────
+        # First time each condition appeared
+        condition_first: dict[str, str] = {}
+        for row in rows:
+            exported = row["exported_at"] or ""
+            conditions = json.loads(row["conditions_json"] or "[]")
+            for c in conditions:
+                if c not in condition_first:
+                    condition_first[c] = exported[:10]
+
+        # ── Build monthly frequency table ─────────────────────────
+        if all_months and all_condition_names:
+            # Header row
+            month_headers = "".join(
+                f'<th class="tl-month">{escape(m)}</th>' for m in all_months
+            )
+            freq_header = f"""
+            <tr>
+              <th class="tl-label">Condition</th>
+              {month_headers}
+              <th class="tl-total">Total</th>
+            </tr>"""
+
+            # Data rows
+            freq_rows = ""
+            for cond in all_condition_names:
+                total = sum(
+                    month_conditions.get(m, {}).get(cond, 0) for m in all_months
+                )
+                cells = "".join(
+                    f'<td class="tl-cell">'
+                    f'{"" if month_conditions.get(m, {}).get(cond, 0) == 0 else month_conditions.get(m, {}).get(cond, 0)}'
+                    f"</td>"
+                    for m in all_months
+                )
+                freq_rows += f"""
+                <tr>
+                  <td class="tl-cond">{escape(cond)}</td>
+                  {cells}
+                  <td class="tl-total-cell">{total}</td>
+                </tr>"""
+
+            # Record count row
+            count_cells = "".join(
+                f'<td class="tl-cell tl-count">{month_record_counts.get(m, 0)}</td>'
+                for m in all_months
+            )
+            total_records = sum(month_record_counts.values())
+            freq_rows += f"""
+            <tr class="tl-records-row">
+              <td class="tl-cond">Records exported</td>
+              {count_cells}
+              <td class="tl-total-cell">{total_records}</td>
+            </tr>"""
+
+            frequency_table = f"""
+            <div class="tl-scroll">
+              <table class="tl-table">
+                <thead>{freq_header}</thead>
+                <tbody>{freq_rows}</tbody>
+              </table>
+            </div>"""
+        else:
+            frequency_table = (
+                '<p class="empty-note">No temporal data available yet.</p>'
+            )
+
+        # ── Build trajectory emergence table ──────────────────────
+        traj_rows = ""
+        for traj, first_date in sorted(trajectory_first.items(), key=lambda x: x[1]):
+            count = trajectory_counts.get(traj, 0)
+            traj_rows += (
+                f"<tr>"
+                f'<td class="emerge-traj">{escape(traj)}</td>'
+                f'<td class="emerge-date">{escape(first_date)}</td>'
+                f'<td class="emerge-count">{count} record{"s" if count != 1 else ""}</td>'
+                f"</tr>"
+            )
+
+        if not traj_rows:
+            traj_rows = '<tr><td colspan="3" class="empty-note">No trajectory data yet.</td></tr>'
+
+        # ── Build condition emergence table ───────────────────────
+        cond_emerge_rows = ""
+        for cond, first_date in sorted(condition_first.items(), key=lambda x: x[1]):
+            cond_emerge_rows += (
+                f"<tr>"
+                f'<td class="emerge-traj">{escape(cond)}</td>'
+                f'<td class="emerge-date">{escape(first_date)}</td>'
+                f"</tr>"
+            )
+
+        if not cond_emerge_rows:
+            cond_emerge_rows = '<tr><td colspan="2" class="empty-note">No condition data yet.</td></tr>'
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Archive Timeline — Civic Decision Engine</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    .document {{
+      max-width: 960px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .intro {{ color: #444; margin-bottom: 32px; font-size: 0.95rem; }}
+    .tl-scroll {{
+      overflow-x: auto;
+      margin-bottom: 8px;
+    }}
+    .tl-table {{
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      min-width: 100%;
+    }}
+    .tl-table thead tr {{
+      border-bottom: 2px solid #1a1a1a;
+    }}
+    .tl-table th {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      padding: 4px 12px 8px 0;
+      text-align: left;
+      font-weight: normal;
+      white-space: nowrap;
+    }}
+    .tl-month {{
+      text-align: center !important;
+      min-width: 64px;
+    }}
+    .tl-total {{
+      text-align: right !important;
+      padding-right: 0 !important;
+    }}
+    .tl-table tbody tr {{
+      border-bottom: 1px solid #f0ede8;
+    }}
+    .tl-table tbody tr:last-child {{ border-bottom: none; }}
+    .tl-table td {{
+      padding: 8px 12px 8px 0;
+      vertical-align: middle;
+    }}
+    .tl-label {{
+      width: 200px;
+      min-width: 180px;
+    }}
+    .tl-cond {{
+      font-size: 0.82rem;
+      color: #1a1a1a;
+      white-space: nowrap;
+      padding-right: 20px !important;
+    }}
+    .tl-cell {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-align: center;
+      color: #1a1a1a;
+      min-width: 64px;
+    }}
+    .tl-count {{ color: #888; }}
+    .tl-total-cell {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: bold;
+      text-align: right;
+      color: #1a1a1a;
+    }}
+    .tl-records-row td {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #aaa;
+      border-top: 1px solid #e8e6e0;
+      padding-top: 10px;
+    }}
+    .emerge-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .emerge-table tr {{ border-bottom: 1px solid #f0ede8; }}
+    .emerge-table tr:last-child {{ border-bottom: none; }}
+    .emerge-table td {{ padding: 10px 12px 10px 0; vertical-align: top; }}
+    .emerge-traj {{ color: #1a1a1a; }}
+    .emerge-date {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #888;
+      white-space: nowrap;
+      width: 120px;
+    }}
+    .emerge-count {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #aaa;
+      text-align: right;
+      width: 120px;
+    }}
+    .empty-note {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      color: #aaa;
+      font-style: italic;
+      margin: 0;
+    }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 40px;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+    }}
+   @media print {{
+  body {{ background: white; padding: 0; }}
+  .document {{ border: none; box-shadow: none; padding: 32px; }}
+
+  .document::before {{
+  content: "";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 260px;
+  height: 260px;
+  transform: translate(-50%, -50%);
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: 0;
+
+  background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}}
+
+.document {{
+  position: relative;
+  z-index: 1;
+}}
+  :root {{
+  --teal: #2E8B9A;
+}}
+
+.doc-footer-seal {{
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  opacity: 0.42;
+  color: var(--teal);
+}}
+
+.doc-footer-seal svg {{
+  display: block;
+}}
+.doc-mark {{
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  opacity: 0.92;
+  color: var(--teal);
+}}
+
+.doc-mark svg {{
+  display: block;
+  width: 42px;
+  height: auto;
+}}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/stats">← Archive statistics</a>
+          <a href="/records">Public record index</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:18px;">
+  <div>
+      <div class="doc-title">Archive Timeline</div>
+      <div class="doc-subtitle">Temporal pattern analysis</div>
+    </div>
+
+      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal, #2E8B9A)" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal, #2E8B9A)">v11</text>
+        </svg>
+      </div>
+  </div>
+    </header>
+
+    <p class="intro">
+      A month-by-month view of condition frequency and trajectory emergence
+      across the verified public record archive. Each row shows how often
+      a condition appeared in records exported during that period.
+    </p>
+
+    <div class="section-header">Condition frequency by month</div>
+    {frequency_table}
+
+    <div class="section-header">Trajectory emergence</div>
+    <table class="emerge-table">
+      <tbody>{traj_rows}</tbody>
+    </table>
+
+    <div class="section-header">Condition emergence</div>
+    <table class="emerge-table">
+      <tbody>{cond_emerge_rows}</tbody>
+    </table>
+
+    <div class="api-note">
+      Source data: <a href="/api/stats">GET /api/stats</a>
+      &nbsp;·&nbsp;
+      Raw records: <a href="/api/records?full=true">GET /api/records?full=true</a>
+    </div>
+
+    <footer class="doc-footer">
+  <div class="footer-tagline">The record does not argue.</div>
+
+  <div class="footer-note">
+    Timeline reflects exported records only. Dates are export timestamps,
+    not case origination dates. Only the latest version of each record
+    is counted.
+  </div>
+
+  <div class="doc-footer-seal" aria-hidden="true">
+    <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal, #2E8B9A)" stroke-width="28" fill="none"/>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal, #2E8B9A)"/>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal, #2E8B9A)"/>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal, #2E8B9A)"/>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal, #2E8B9A)"/>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal, #2E8B9A)"/>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal, #2E8B9A)"/>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal, #2E8B9A)"/>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal, #2E8B9A)"/>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal, #2E8B9A)">v11</text>
+    </svg>
+  </div>
+</footer>
+</div>
 </body>
 </html>"""
 
