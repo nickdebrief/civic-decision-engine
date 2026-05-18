@@ -4243,7 +4243,7 @@ async def patterns_page():
 
       .doc-mark svg {{
         display: block;
-        width: 458px;
+        width: 42px;
         height: auto;
       }}
 
