@@ -508,6 +508,8 @@ async def records_index(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Public Record Index — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/records">
+  <meta name="description" content="Public record index for the Civic Decision Engine. Verified civic records with structured references, conditions, and trajectories.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
@@ -1106,6 +1108,8 @@ async def api_docs():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Public API Documentation — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/api/docs">
+  <meta name="description" content="Public API documentation for the Civic Decision Engine. Machine-readable access to verified civic records, conditions, and archive statistics.">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -1882,6 +1886,8 @@ async def conditions_registry():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Registry — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions">
+  <meta name="description" content="Canonical condition registry for the Civic Decision Engine. Formal definitions of civic observation conditions used in verified public records.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
@@ -2332,6 +2338,7 @@ async def condition_page(condition_id: str):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{escape(condition['name'])} — Condition — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions/{escape(condition['id'])}">
   <meta name="description" content="{escape(condition['description'][:160])}">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -2891,6 +2898,8 @@ async def stats_page():
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/stats">
+  <meta name="description" content="Archive statistics for the Civic Decision Engine. Record counts, condition distributions, and institutional breakdowns across the verified public record archive.">
   <title>Archive Statistics — Civic Decision Engine</title>
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -3392,6 +3401,8 @@ async def stats_timeline():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Archive Timeline — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/stats/timeline">
+  <meta name="description" content="Temporal pattern analysis of the Civic Decision Engine archive. Monthly condition frequency, trajectory emergence, and archive growth over time.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
@@ -3606,14 +3617,45 @@ async def stats_timeline():
       line-height: 1.6;
       max-width: 400px;
       text-align: right;
-    }}
-    @media (max-width: 640px) {{
-      .document {{ padding: 28px 20px; }}
-      .doc-header {{ flex-direction: column; gap: 12px; }}
-      .doc-title, .doc-subtitle {{ text-align: left; }}
-      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
-      .footer-note {{ text-align: left; }}
-    }}
+    }}  
+@media (max-width: 640px) {{
+  .document {{ padding: 28px 20px; }}
+
+  .doc-header {{
+    flex-direction: column;
+    gap: 12px;
+  }}
+
+  .doc-title,
+  .doc-subtitle {{
+    text-align: left;
+  }}
+
+  .doc-footer {{
+    flex-direction: column;
+    align-items: flex-start;
+  }}
+
+  .footer-note {{
+    text-align: left;
+  }}
+
+  .doc-mark {{
+    justify-content: flex-start;
+    margin-top: 10px;
+  }}
+
+  .doc-mark svg {{
+    width: 54px;
+  }}
+
+  .doc-header > div:last-child {{
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }}
+}}
    @media print {{
   body {{ background: white; padding: 0; }}
   .document {{ border: none; box-shadow: none; padding: 32px; }}
@@ -3684,15 +3726,15 @@ async def stats_timeline():
           <a href="/api/docs">API documentation</a>
         </div>
       </div>
-      <div style="display:flex;align-items:flex-start;gap:18px;">
+      <div style="display:flex;align-items:flex-start;gap:12px;">
   <div>
       <div class="doc-title">Archive Timeline</div>
       <div class="doc-subtitle">Temporal pattern analysis</div>
     </div>
 
       <div class="doc-mark" aria-label="Civic Decision Engine v11">
-        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
-          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal, #2E8B9A)" stroke-width="28" fill="none"/>
+        <svg width="48" height="60" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal, #2E8B9A)" stroke-width="22" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
           <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
           <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
@@ -3828,6 +3870,94 @@ async def api_stats():
 
     finally:
         conn.close()
+
+
+@router.get("/sitemap.xml")
+async def sitemap():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT reference, exported_at FROM records "
+            "WHERE is_latest = 1 ORDER BY exported_at DESC"
+        )
+        records = cur.fetchall()
+
+        base = "https://civic-decision-engine-production.up.railway.app"
+
+        # Static routes
+        static_urls = [
+            {"loc": f"{base}/records", "priority": "0.9"},
+            {"loc": f"{base}/conditions", "priority": "0.8"},
+            {"loc": f"{base}/patterns", "priority": "0.8"},
+            {"loc": f"{base}/stats", "priority": "0.7"},
+            {"loc": f"{base}/stats/timeline", "priority": "0.6"},
+            {"loc": f"{base}/graph", "priority": "0.6"},
+            {"loc": f"{base}/api/docs", "priority": "0.5"},
+        ]
+
+        # Condition pages
+        for c in CONDITION_REGISTRY:
+            static_urls.append(
+                {
+                    "loc": f"{base}/conditions/{c['id']}",
+                    "priority": "0.8",
+                }
+            )
+
+        def url_entry(
+            loc: str, lastmod: str | None = None, priority: str = "0.6"
+        ) -> str:
+            lastmod_tag = (
+                f"<lastmod>{escape(lastmod[:10])}</lastmod>" if lastmod else ""
+            )
+            return (
+                f"  <url>\n"
+                f"    <loc>{escape(loc)}</loc>\n"
+                f"    {lastmod_tag}\n"
+                f"    <priority>{priority}</priority>\n"
+                f"    <changefreq>monthly</changefreq>\n"
+                f"  </url>"
+            )
+
+        entries = [url_entry(u["loc"], priority=u["priority"]) for u in static_urls]
+
+        for rec in records:
+            entries.append(
+                url_entry(
+                    f"{base}/verify/{rec['reference']}",
+                    lastmod=rec["exported_at"],
+                    priority="0.7",
+                )
+            )
+
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "\n".join(entries)
+            + "\n</urlset>"
+        )
+
+        from fastapi.responses import Response
+
+        return Response(content=xml, media_type="application/xml")
+
+    finally:
+        conn.close()
+
+
+@router.get("/robots.txt")
+async def robots():
+    from fastapi.responses import Response
+
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "\n"
+        "Sitemap: https://civic-decision-engine-production.up.railway.app/sitemap.xml\n"
+    )
+    return Response(content=content, media_type="text/plain")
 
 
 @router.get("/api/graph")
@@ -4064,6 +4194,7 @@ async def patterns_page():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Patterns — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/patterns">
   <meta name="description" content="Structural pattern analysis of civic conditions across verified public records. Shows condition co-occurrence, institutional clustering, and trajectory distribution.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -4105,12 +4236,12 @@ async def patterns_page():
         align-items: flex-start;
         justify-content: flex-end;
         flex-shrink: 0;
-        opacity: 0.92;
+        opacity: 0.82;
       }}
 
       .doc-mark svg {{
         display: block;
-        width: 42px;
+        width: 458px;
         height: auto;
       }}
 
@@ -5388,13 +5519,51 @@ async def verify_record(reference: str):
                 f"<tbody>{history_rows}</tbody>"
                 f"</table></section>"
             )
+        json_ld = json.dumps(
+            {
+                "@context": "https://schema.org",
+                "@type": "GovernmentDocument",
+                "name": record["reference"],
+                "identifier": record["reference"],
+                "description": (record["finding"] or "")[:200],
+                "datePublished": (record["exported_at"] or "")[:10],
+                "dateModified": (record["exported_at"] or "")[:10],
+                "version": str(record["version"]),
+                "url": verify_url,
+                "author": {
+                    "@type": "Organization",
+                    "name": "Civic Decision Engine",
+                    "url": "https://civic-decision-engine-production.up.railway.app",
+                },
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Civic Decision Engine",
+                    "url": "https://civic-decision-engine-production.up.railway.app",
+                },
+                "keywords": ", ".join(conditions),
+                "about": {
+                    "@type": "Thing",
+                    "name": record["trajectory"] or "",
+                    "description": record["system_state"] or "",
+                },
+            },
+            indent=2,
+        )
 
         html = f"""<!DOCTYPE html>
+
 <html lang="{safe['lang']}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{s["page_title"]} — {safe['reference']}</title>
+  <link rel="canonical" href="{verify_url}">
+  <meta name="description" content="{escape((record['finding'] or '')[:155])}">
+  <script type="application/ld+json">
+  {json_ld}
+
+  </script>
+
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
