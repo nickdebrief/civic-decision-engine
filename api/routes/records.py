@@ -3732,19 +3732,21 @@ async def stats_timeline():
       <div class="doc-subtitle">Temporal pattern analysis</div>
     </div>
 
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
-        <svg width="48" height="60" viewBox="0 0 512 512" fill="none">
-          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="var(--teal, #2E8B9A)" stroke-width="22" fill="none"/>
-          <rect x="148" y="138" width="216" height="18" rx="9" fill="var(--teal)"/>
-          <rect x="168" y="170" width="176" height="14" rx="7" fill="var(--teal)"/>
-          <rect x="196" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
-          <rect x="220" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
-          <rect x="244" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
-          <rect x="268" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
-          <rect x="292" y="200" width="8" height="120" rx="4" fill="var(--teal)"/>
-          <rect x="166" y="320" width="180" height="14" rx="7" fill="var(--teal)"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="var(--teal, #2E8B9A)">v11</text>
-        </svg>
+<div>
+        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="text-align:right;margin-bottom:6px;opacity:0.82;">
+          <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+            <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+            <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+            <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+            <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          </svg>
+        </div>
       </div>
   </div>
     </header>
