@@ -1002,7 +1002,11 @@ async def api_verify_record(
                     "exported_at": record["exported_at"] or "",
                     "language": record["language"] or "en",
                     "supersedes": record["supersedes"],
-                    "source_narrative": record["source_narrative"] or "",
+                    "source_narrative": (
+                        record["source_narrative"]
+                        if "source_narrative" in record.keys()
+                        else ""
+                    ),
                     "generated_by": record["generated_by"] or "",
                     "version_history": history,
                 }
@@ -1069,7 +1073,11 @@ async def api_records_index(
                 "trajectory": rec["trajectory"] or "",
                 "conditions": conditions,
                 "system_state": rec["system_state"] or "",
-                "source_narrative": record["source_narrative"] or "",
+                "source_narrative": (
+                    record["source_narrative"]
+                    if "source_narrative" in record.keys()
+                    else ""
+                ),
                 "institution_type": extract_institution_type(rec["reference"]),
                 "exported_at": rec["exported_at"] or "",
                 "version": rec["version"],
@@ -5526,10 +5534,13 @@ async def verify_record(reference: str):
                 f"</table></section>"
             )
         # ── Source narrative section ──────────────────────────────
-        source_narrative = record["source_narrative"] or ""
+        source_narrative = (
+            record["source_narrative"] if "source_narrative" in record.keys() else ""
+        ) or ""
+
         if source_narrative:
             narrative_section = f"""
-    <section class="section">
+<section class="section">
       <h2 class="section-title">Source Narrative</h2>
 
       <button class="narrative-toggle" onclick="toggleNarrative()">
@@ -6109,7 +6120,11 @@ async def record_manifest(reference: str):
             "trajectory": record["trajectory"] or "",
             "conditions": sorted(conditions),
             "system_state": record["system_state"] or "",
-            "source_narrative": record["source_narrative"] or "",
+            "source_narrative": (
+                record["source_narrative"]
+                if "source_narrative" in record.keys()
+                else ""
+            ),
             "generated_by": record["generated_by"] or "Civic Decision Engine",
         }
 
