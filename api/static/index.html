@@ -2713,7 +2713,8 @@ const finding = explanation2.length
     signals:      Array.isArray(pD.signals) ? pD.signals : [],
     finding:      finding,
     report:       reportData.output || {},
-    language:     SUPPORTED_RECORD_LANGUAGES.includes(currentLang) ? currentLang : "en"
+    language:     SUPPORTED_RECORD_LANGUAGES.includes(currentLang) ? currentLang : "en",
+    source_narrative: document.getElementById("simpleWhatHappened")?.value?.trim() || null,
   };
 
   const res = await fetch("/records", {

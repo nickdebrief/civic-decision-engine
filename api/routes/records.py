@@ -224,8 +224,9 @@ async def create_record(payload: RecordPayload):
                 reference, version, supersedes, generated_at,
                 trajectory, system_state, conditions_json,
                 signals_json, finding, report_json, language,
-                verification_hash, exported_at, is_latest
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                verification_hash, exported_at, is_latest,
+                source_narrative
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             """,
             (
                 payload.reference,
@@ -241,6 +242,7 @@ async def create_record(payload: RecordPayload):
                 payload.language,
                 verification_hash,
                 exported_at,
+                payload.source_narrative,
             ),
         )
 
@@ -1000,6 +1002,7 @@ async def api_verify_record(
                     "exported_at": record["exported_at"] or "",
                     "language": record["language"] or "en",
                     "supersedes": record["supersedes"],
+                    "source_narrative": record["source_narrative"] or "",
                     "generated_by": record["generated_by"] or "",
                     "version_history": history,
                 }
@@ -1066,6 +1069,7 @@ async def api_records_index(
                 "trajectory": rec["trajectory"] or "",
                 "conditions": conditions,
                 "system_state": rec["system_state"] or "",
+                "source_narrative": record["source_narrative"] or "",
                 "institution_type": extract_institution_type(rec["reference"]),
                 "exported_at": rec["exported_at"] or "",
                 "version": rec["version"],
@@ -5521,6 +5525,26 @@ async def verify_record(reference: str):
                 f"<tbody>{history_rows}</tbody>"
                 f"</table></section>"
             )
+        # ── Source narrative section ──────────────────────────────
+        source_narrative = record["source_narrative"] or ""
+        if source_narrative:
+            narrative_section = f"""
+    <section class="section">
+      <h2 class="section-title">Source Narrative</h2>
+
+      <button class="narrative-toggle" onclick="toggleNarrative()">
+        Expand source narrative &darr;
+      </button>
+
+      <div id="narrative-body" class="narrative-body">{escape(source_narrative)}</div>
+      <p class="narrative-note">
+        Source narrative is the submitted account as entered at the time of record generation.
+        It is preserved for evidentiary continuity and is not part of the canonical record hash.
+      </p>
+    </section>"""
+        else:
+            narrative_section = ""
+
         json_ld = json.dumps(
             {
                 "@context": "https://schema.org",
@@ -5856,7 +5880,39 @@ async def verify_record(reference: str):
       line-height: 1.6;
       font-style: italic;
     }}
-
+    .narrative-toggle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      background: none;
+      border: none;
+      border-bottom: 1px solid #ddd;
+      padding: 0;
+      cursor: pointer;
+      margin-bottom: 14px;
+      display: inline-block;
+    }}
+    .narrative-toggle:hover {{ color: #1a1a1a; border-color: #999; }}
+    .narrative-body {{
+      display: none;
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #d0cec8;
+      border-radius: 4px;
+      padding: 16px 18px;
+      font-size: 0.875rem;
+      line-height: 1.75;
+      color: #444;
+      white-space: pre-wrap;
+      font-family: Georgia, serif;
+    }}
+    .narrative-note {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #aaa;
+      margin-top: 10px;
+      font-style: italic;
+    }}
   </style>
 </head>
 <body>
@@ -5923,7 +5979,9 @@ async def verify_record(reference: str):
     
     </section>
     {history_section}
+    {narrative_section}
     <section class="section cite-section">
+
       <h2 class="section-title">Cite this record</h2>
       <div class="cite-tabs">
         <button class="cite-tab active" onclick="showCite('apa', this)">APA</button>
@@ -5976,24 +6034,44 @@ async def verify_record(reference: str):
     </footer>
   </div>
   <script>
-    function showCite(id, btn) {{
-      document.querySelectorAll(".cite-panel").forEach(p => p.classList.remove("active"));
-      document.querySelectorAll(".cite-tab").forEach(t => t.classList.remove("active"));
-      document.getElementById("cite-" + id).classList.add("active");
-      btn.classList.add("active");
-    }}
+function showCite(id, btn) {{
+  document.querySelectorAll(".cite-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".cite-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("cite-" + id).classList.add("active");
+  btn.classList.add("active");
+}}
 
-    function copyCite(panelId) {{
-      const block = document.querySelector("#" + panelId + " .cite-block");
-      const text = block.childNodes[0].textContent.trim();
-      navigator.clipboard.writeText(text).then(() => {{
-        const btn = block.querySelector(".cite-copy");
-        const orig = btn.textContent;
-        btn.textContent = "Copied";
-        setTimeout(() => {{ btn.textContent = orig; }}, 1500);
-      }});
-    }}
-  </script>
+function copyCite(panelId) {{
+  const block = document.querySelector("#" + panelId + " .cite-block");
+  const text = block.childNodes[0].textContent.trim();
+
+  navigator.clipboard.writeText(text).then(() => {{
+    const btn = block.querySelector(".cite-copy");
+    const orig = btn.textContent;
+
+    btn.textContent = "Copied";
+
+    setTimeout(() => {{
+      btn.textContent = orig;
+    }}, 1500);
+  }});
+}}
+
+function toggleNarrative() {{
+  const b = document.getElementById("narrative-body");
+  const btn = document.querySelector(".narrative-toggle");
+
+  if (!b || !btn) return;
+
+  const expanded = b.style.display === "block";
+
+  b.style.display = expanded ? "none" : "block";
+
+  btn.innerHTML = expanded
+    ? "Expand source narrative &darr;"
+    : "Collapse narrative &uarr;";
+}}
+</script>
 </body>
 </html>"""
         return HTMLResponse(content=html, status_code=200)
@@ -6031,6 +6109,7 @@ async def record_manifest(reference: str):
             "trajectory": record["trajectory"] or "",
             "conditions": sorted(conditions),
             "system_state": record["system_state"] or "",
+            "source_narrative": record["source_narrative"] or "",
             "generated_by": record["generated_by"] or "Civic Decision Engine",
         }
 

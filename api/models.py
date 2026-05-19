@@ -153,6 +153,8 @@ class RecordPayload(BaseModel):
 
     supersedes: str | None = None
 
+    source_narrative: str | None = None
+
 
 class RecordResponse(BaseModel):
     reference: str
