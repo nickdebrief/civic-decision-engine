@@ -40,6 +40,11 @@ def init_db():
             is_latest         INTEGER NOT NULL DEFAULT 1
         )
     """)
+    try:
+        conn.execute("ALTER TABLE records ADD COLUMN source_narrative TEXT")
+    except sqlite3.OperationalError:
+        pass
+
     conn.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_records_reference_version
         ON records(reference, version)
