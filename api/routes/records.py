@@ -2395,11 +2395,6 @@ async def api_conditions_map():
         conn.close()
 
 
-@router.get("/conditions/map", response_class=HTMLResponse)
-async def conditions_map_page():
-    return HTMLResponse("<h1>Condition Relationship Map</h1>")
-
-
 @router.get("/conditions/{condition_id}", response_class=HTMLResponse)
 async def condition_page(condition_id: str):
     # Find condition in registry
