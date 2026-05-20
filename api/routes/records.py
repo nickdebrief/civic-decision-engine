@@ -18,6 +18,95 @@ router = APIRouter()
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 
 
+def seed_condition_relationships(conn):
+    """Seed the canonical condition relationship definitions."""
+    relationships = [
+        (
+            "Institutional Delay",
+            "Escalation Without Response",
+            "precursor",
+            "Unaddressed delay creates conditions for escalation. "
+            "When delay is not resolved, urgency increases without institutional adjustment.",
+        ),
+        (
+            "Institutional Delay",
+            "Transfer of Burden",
+            "precursor",
+            "Delay without resolution shifts follow-up responsibility to the complainant. "
+            "The institution's inaction creates a burden on the person to maintain momentum.",
+        ),
+        (
+            "Procedural Deflection",
+            "Repeated Contact Without Resolution",
+            "precursor",
+            "Deflection to alternative processes without substantive engagement "
+            "generates repeated contact cycles as the person re-enters at earlier stages.",
+        ),
+        (
+            "Transfer of Burden",
+            "Repeated Contact Without Resolution",
+            "precursor",
+            "When responsibility for progression is displaced onto the complainant, "
+            "repeated contact becomes structurally necessary to maintain any movement.",
+        ),
+        (
+            "Institutional Delay",
+            "Escalation Without Response",
+            "escalation",
+            "Sustained delay without substantive engagement causes case severity to increase "
+            "while institutional response patterns remain unchanged.",
+        ),
+        (
+            "Procedural Deflection",
+            "Escalation Without Response",
+            "escalation",
+            "Sequential procedural redirection without resolution allows underlying urgency "
+            "to increase while the institution remains nominally engaged.",
+        ),
+        (
+            "Transfer of Burden",
+            "Escalation Without Response",
+            "escalation",
+            "Sustained burden on the complainant without institutional movement "
+            "allows the case to escalate beyond the original submission context.",
+        ),
+        (
+            "Transfer of Burden",
+            "Institutional Delay",
+            "co-occurrence",
+            "Delay and burden transfer are structurally linked — institutions that fail "
+            "to progress cases also tend to displace follow-up responsibility.",
+        ),
+        (
+            "Procedural Deflection",
+            "Institutional Delay",
+            "co-occurrence",
+            "Procedural redirection and delay frequently co-occur — deflection to "
+            "alternative processes introduces additional delay without substantive progress.",
+        ),
+        (
+            "Repeated Contact Without Resolution",
+            "Escalation Without Response",
+            "co-occurrence",
+            "Repeated contact without resolution and escalation without response "
+            "frequently appear together — each contact restarts without building toward resolution.",
+        ),
+    ]
+
+    for from_c, to_c, rel, desc in relationships:
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO condition_relationships
+                (from_condition, to_condition, relationship, description)
+                VALUES (?, ?, ?, ?)
+                """,
+                (from_c, to_c, rel, desc),
+            )
+        except Exception:
+            pass
+
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -46,6 +135,20 @@ def init_db():
         pass
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS condition_relationships (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_condition  TEXT NOT NULL,
+            to_condition    TEXT NOT NULL,
+            relationship    TEXT NOT NULL CHECK(relationship IN ('precursor','escalation','co-occurrence')),
+            description     TEXT,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_condition_relationships_pair
+        ON condition_relationships(from_condition, to_condition, relationship)
+    """)
+    conn.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_records_reference_version
         ON records(reference, version)
     """)
@@ -53,6 +156,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_records_reference_latest
         ON records(reference, is_latest)
     """)
+    seed_condition_relationships(conn)
     conn.commit()
     conn.close()
 
@@ -1050,14 +1154,6 @@ async def api_records_index(
 
         where = " AND ".join(conditions_parts)
 
-        PER_PAGE = 25
-        offset = (page - 1) * PER_PAGE
-
-        # Total count for pagination
-        cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
-        total_count = cur.fetchone()[0]
-        total_pages = max(1, -(-total_count // PER_PAGE))  # ceiling division
-
         # Total count
         cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -1078,11 +1174,6 @@ async def api_records_index(
                 "trajectory": rec["trajectory"] or "",
                 "conditions": conditions,
                 "system_state": rec["system_state"] or "",
-                "source_narrative": (
-                    record["source_narrative"]
-                    if "source_narrative" in record.keys()
-                    else ""
-                ),
                 "institution_type": extract_institution_type(rec["reference"]),
                 "exported_at": rec["exported_at"] or "",
                 "version": rec["version"],
@@ -2147,6 +2238,7 @@ async def conditions_registry():
           <a href="/api/docs">API documentation</a>
           <a href="/patterns">Condition patterns</a>
           <a href="/graph">Interactive graph</a>
+          <a href="/conditions/map">Condition map</a>
         </div>
       </div>
       <div>
@@ -2215,6 +2307,99 @@ async def conditions_registry():
     return HTMLResponse(content=html, status_code=200)
 
 
+@router.get("/api/conditions/map")
+async def api_conditions_map():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Explicit relationships
+        cur.execute(
+            "SELECT from_condition, to_condition, relationship, description "
+            "FROM condition_relationships ORDER BY relationship, from_condition"
+        )
+        explicit = [
+            {
+                "from": row["from_condition"],
+                "to": row["to_condition"],
+                "type": row["relationship"],
+                "description": row["description"] or "",
+            }
+            for row in cur.fetchall()
+        ]
+
+        # Inferred co-occurrence from archive
+        cur.execute(
+            "SELECT conditions_json, exported_at FROM records "
+            "WHERE is_latest = 1 ORDER BY exported_at ASC"
+        )
+        rows = cur.fetchall()
+
+        cooccurrence: dict[tuple[str, str], int] = {}
+        sequence: dict[tuple[str, str], int] = {}
+
+        # Track first appearance of each condition by month
+        condition_first_month: dict[str, str] = {}
+        for row in rows:
+            month = (row["exported_at"] or "")[:7]
+            conditions = json.loads(row["conditions_json"] or "[]")
+            for c in conditions:
+                if c not in condition_first_month:
+                    condition_first_month[c] = month
+
+            sorted_conds = sorted(set(conditions))
+            for i in range(len(sorted_conds)):
+                for j in range(i + 1, len(sorted_conds)):
+                    pair = (sorted_conds[i], sorted_conds[j])
+                    cooccurrence[pair] = cooccurrence.get(pair, 0) + 1
+
+        # Infer sequence from first appearance ordering
+        condition_names = list(condition_first_month.keys())
+        for i in range(len(condition_names)):
+            for j in range(len(condition_names)):
+                if i == j:
+                    continue
+                a = condition_names[i]
+                b = condition_names[j]
+                if condition_first_month[a] < condition_first_month[b]:
+                    pair = (a, b)
+                    sequence[pair] = sequence.get(pair, 0) + 1
+
+        inferred = [
+            {
+                "from": pair[0],
+                "to": pair[1],
+                "type": "co-occurrence",
+                "weight": weight,
+                "source": "inferred",
+            }
+            for pair, weight in sorted(
+                cooccurrence.items(), key=lambda x: x[1], reverse=True
+            )
+        ]
+
+        return JSONResponse(
+            content={
+                "explicit_relationships": explicit,
+                "inferred_cooccurrence": inferred,
+                "condition_emergence_order": [
+                    {"condition": c, "first_month": m}
+                    for c, m in sorted(
+                        condition_first_month.items(), key=lambda x: x[1]
+                    )
+                ],
+            }
+        )
+
+    finally:
+        conn.close()
+
+
+@router.get("/conditions/map", response_class=HTMLResponse)
+async def conditions_map_page():
+    return HTMLResponse("<h1>Condition Relationship Map</h1>")
+
+
 @router.get("/conditions/{condition_id}", response_class=HTMLResponse)
 async def condition_page(condition_id: str):
     # Find condition in registry
@@ -2261,6 +2446,52 @@ async def condition_page(condition_id: str):
         cooccurrence_sorted = sorted(
             cooccurrence.items(), key=lambda x: x[1], reverse=True
         )
+
+        # Relationships from explicit table
+        cur.execute(
+            "SELECT from_condition, to_condition, relationship, description "
+            "FROM condition_relationships "
+            "WHERE from_condition = ? OR to_condition = ? "
+            "ORDER BY relationship",
+            (condition["name"], condition["name"]),
+        )
+        rel_rows = cur.fetchall()
+
+        relationships_html = ""
+        for row in rel_rows:
+            is_from = row["from_condition"] == condition["name"]
+            other = row["to_condition"] if is_from else row["from_condition"]
+            linked = next((c for c in CONDITION_REGISTRY if c["name"] == other), None)
+            other_link = (
+                f'<a href="/conditions/{escape(linked["id"])}" '
+                f'class="co-link">{escape(other)}</a>'
+                if linked
+                else f"<span>{escape(other)}</span>"
+            )
+            rel_label = {
+                "precursor": "Precursor →" if is_from else "← Follows",
+                "escalation": "Escalates into →" if is_from else "← Escalated from",
+                "co-occurrence": "Co-occurs with ↔",
+            }.get(row["relationship"], row["relationship"])
+
+            relationships_html += f"""
+            <div class="co-item">
+              <div>
+                <span style="font-family:ui-monospace,monospace;font-size:0.65rem;
+                  text-transform:uppercase;letter-spacing:0.06em;color:#aaa;
+                  display:block;margin-bottom:4px;">{escape(rel_label)}</span>
+                {other_link}
+                <p style="font-size:0.78rem;color:#888;margin:4px 0 0;
+                  font-style:italic;line-height:1.5;">
+                  {escape(row['description'] or '')}
+                </p>
+              </div>
+            </div>"""
+
+        if not relationships_html:
+            relationships_html = (
+                '<p class="empty-note">No explicit relationships defined yet.</p>'
+            )
 
         # Institution breakdown
         institution_counts: dict[str, int] = {}
@@ -2687,6 +2918,7 @@ async def condition_page(condition_id: str):
           <a href="/records">Public record index</a>
           <a href="/patterns">Condition patterns</a>
           <a href="/api/docs">API documentation</a>
+          <a href="/conditions/map">Condition map</a>
         </div>
       </div>
       <div>
@@ -2746,7 +2978,12 @@ async def condition_page(condition_id: str):
 
     <div class="section-header">Co-occurring conditions</div>
     <div class="co-list">{cooccurrence_html}</div>
-
+    <div class="section-header">Condition relationships</div>
+    <div class="co-list">{relationships_html}</div>
+    <p style="font-family:ui-monospace,monospace;font-size:0.68rem;color:#aaa;margin-top:8px;">
+      Full relationship map: <a href="/conditions/map" style="color:#888;">
+      /conditions/map</a>
+    </p>
     <div class="api-note">
       Machine-readable access:
       <a href="/api/conditions">/api/conditions</a>
@@ -2804,6 +3041,425 @@ async def api_conditions():
             ],
         }
     )
+
+
+@router.get("/conditions/map", response_class=HTMLResponse)
+async def conditions_map():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+
+        # Explicit relationships
+        cur.execute(
+            "SELECT from_condition, to_condition, relationship, description "
+            "FROM condition_relationships ORDER BY relationship, from_condition"
+        )
+        explicit_rows = cur.fetchall()
+
+        # Inferred co-occurrence
+        cur.execute("SELECT conditions_json FROM records WHERE is_latest = 1")
+        records = cur.fetchall()
+        cooccurrence: dict[tuple[str, str], int] = {}
+        for rec in records:
+            conditions = json.loads(rec["conditions_json"] or "[]")
+            sorted_conds = sorted(set(conditions))
+            for i in range(len(sorted_conds)):
+                for j in range(i + 1, len(sorted_conds)):
+                    pair = (sorted_conds[i], sorted_conds[j])
+                    cooccurrence[pair] = cooccurrence.get(pair, 0) + 1
+
+        RELATIONSHIP_LABELS = {
+            "precursor": "Precursor",
+            "escalation": "Escalation",
+            "co-occurrence": "Co-occurrence",
+        }
+
+        RELATIONSHIP_DESCRIPTIONS = {
+            "precursor": "One condition tends to appear before another across the archive.",
+            "escalation": "One condition develops into another over time without resolution.",
+            "co-occurrence": "Two conditions frequently appear together in the same record.",
+        }
+
+        # Group by relationship type
+        by_type: dict[str, list] = {
+            "precursor": [],
+            "escalation": [],
+            "co-occurrence": [],
+        }
+        for row in explicit_rows:
+            by_type[row["relationship"]].append(row)
+
+        def condition_link(name: str) -> str:
+            linked = next((c for c in CONDITION_REGISTRY if c["name"] == name), None)
+            if linked:
+                return (
+                    f'<a href="/conditions/{escape(linked["id"])}" '
+                    f'class="cmap-cond-link">{escape(name)}</a>'
+                )
+            return f'<span class="cmap-cond-name">{escape(name)}</span>'
+
+        sections_html = ""
+        for rel_type in ["precursor", "escalation", "co-occurrence"]:
+            rows_in_type = by_type[rel_type]
+            if not rows_in_type:
+                continue
+
+            rows_html = ""
+            for row in rows_in_type:
+                rows_html += f"""
+                <div class="cmap-row">
+                  <div class="cmap-from">{condition_link(row['from_condition'])}</div>
+                  <div class="cmap-arrow">
+                    {"→" if rel_type != "co-occurrence" else "↔"}
+                  </div>
+                  <div class="cmap-to">{condition_link(row['to_condition'])}</div>
+                  <div class="cmap-desc">{escape(row['description'] or '')}</div>
+                </div>"""
+
+            sections_html += f"""
+            <div class="cmap-type-section">
+              <div class="section-header">
+                {escape(RELATIONSHIP_LABELS[rel_type])}
+              </div>
+              <p class="cmap-type-desc">
+                {escape(RELATIONSHIP_DESCRIPTIONS[rel_type])}
+              </p>
+              {rows_html}
+            </div>"""
+
+        # Inferred co-occurrence table
+        inferred_rows = ""
+        for (a, b), weight in sorted(
+            cooccurrence.items(), key=lambda x: x[1], reverse=True
+        ):
+            inferred_rows += (
+                f"<tr>"
+                f'<td class="co-cond">{condition_link(a)}</td>'
+                f'<td class="co-plus">↔</td>'
+                f'<td class="co-cond">{condition_link(b)}</td>'
+                f'<td class="co-weight">{weight} record{"s" if weight != 1 else ""}</td>'
+                f"</tr>"
+            )
+
+        if not inferred_rows:
+            inferred_rows = (
+                '<tr><td colspan="4" class="empty-note">'
+                "No co-occurrence data yet.</td></tr>"
+            )
+
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Condition Relationship Map — Civic Decision Engine</title>
+  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions/map">
+  <meta name="description" content="Structural relationship map of civic conditions. Shows precursor, escalation, and co-occurrence relationships across the condition taxonomy.">
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; }}
+    body {{
+      font-family: Georgia, 'Times New Roman', serif;
+      background: #f4f4f0;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 40px 20px 80px;
+      font-size: 16px;
+      line-height: 1.7;
+    }}
+    :root {{ --teal: #2E8B9A; }}
+    .document {{
+      max-width: 860px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0cec8;
+      border-top: 4px solid #1a1a1a;
+      padding: 56px 64px 56px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .doc-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #1a1a1a;
+      padding-bottom: 20px;
+      margin-bottom: 40px;
+    }}
+    .doc-engine {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #666;
+    }}
+    .doc-nav {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }}
+    .doc-nav a {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      display: inline-block;
+      width: fit-content;
+    }}
+    .doc-nav a:hover {{ color: #1a1a1a; border-color: #999; }}
+    .doc-title {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+      text-align: right;
+    }}
+    .doc-subtitle {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      margin-top: 4px;
+    }}
+    .doc-mark {{
+      opacity: 0.82;
+      flex-shrink: 0;
+    }}
+    .section-header {{
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #888;
+      margin: 40px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e8e6e0;
+    }}
+    .intro {{ color: #444; margin-bottom: 32px; font-size: 0.95rem; }}
+    .cmap-type-section {{ margin-bottom: 8px; }}
+    .cmap-type-desc {{
+      font-size: 0.82rem;
+      color: #888;
+      font-style: italic;
+      margin: 0 0 16px;
+      font-family: ui-monospace, monospace;
+    }}
+    .cmap-row {{
+      display: grid;
+      grid-template-columns: 1fr 32px 1fr;
+      grid-template-rows: auto auto;
+      gap: 0 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid #f0ede8;
+      align-items: start;
+    }}
+    .cmap-row:last-child {{ border-bottom: none; }}
+    .cmap-from {{ font-size: 0.9rem; }}
+    .cmap-arrow {{
+      font-family: ui-monospace, monospace;
+      font-size: 1rem;
+      color: #aaa;
+      text-align: center;
+      padding-top: 2px;
+    }}
+    .cmap-to {{ font-size: 0.9rem; }}
+    .cmap-desc {{
+      grid-column: 1 / 4;
+      font-size: 0.78rem;
+      color: #888;
+      line-height: 1.6;
+      margin-top: 6px;
+      padding-left: 2px;
+      font-style: italic;
+    }}
+    .cmap-cond-link {{
+      color: #1a1a1a;
+      text-decoration: none;
+      border-bottom: 1px solid #ddd;
+      font-family: Georgia, serif;
+    }}
+    .cmap-cond-link:hover {{ border-color: #1a1a1a; }}
+    .cmap-cond-name {{
+      color: #444;
+      font-family: Georgia, serif;
+    }}
+    .co-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }}
+    .co-table tr {{ border-bottom: 1px solid #f0ede8; }}
+    .co-table tr:last-child {{ border-bottom: none; }}
+    .co-table td {{ padding: 10px 8px 10px 0; vertical-align: middle; }}
+    .co-cond {{ color: #1a1a1a; }}
+    .co-plus {{
+      font-family: ui-monospace, monospace;
+      color: #ccc;
+      width: 28px;
+      text-align: center;
+    }}
+    .co-weight {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: #888;
+      text-align: right;
+      width: 100px;
+    }}
+    .empty-note {{
+      font-family: ui-monospace, monospace;
+      font-size: 0.82rem;
+      color: #aaa;
+      font-style: italic;
+    }}
+    .api-note {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-left: 3px solid #888;
+      border-radius: 4px;
+      padding: 14px 18px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 40px;
+      line-height: 1.6;
+    }}
+    .api-note a {{ color: #444; }}
+    .doc-footer {{
+      margin-top: 56px;
+      padding-top: 20px;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+    }}
+    .footer-tagline {{
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #1a1a1a;
+      font-family: ui-monospace, monospace;
+    }}
+    .footer-note {{
+      font-size: 0.72rem;
+      color: #999;
+      line-height: 1.6;
+      max-width: 400px;
+      text-align: right;
+    }}
+    .footer-seal {{ opacity: 0.42; flex-shrink: 0; }}
+    @media (max-width: 640px) {{
+      .document {{ padding: 28px 20px; }}
+      .doc-header {{ flex-direction: column; gap: 12px; }}
+      .doc-title, .doc-subtitle {{ text-align: left; }}
+      .cmap-row {{ grid-template-columns: 1fr 24px 1fr; }}
+      .doc-footer {{ flex-direction: column; align-items: flex-start; }}
+      .footer-note {{ text-align: left; }}
+    }}
+    @media print {{
+      body {{ background: white; padding: 0; }}
+      .document {{ border: none; box-shadow: none; padding: 32px; }}
+      .document::before {{
+        content: '';
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 220px; height: 280px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: contain;
+        opacity: 0.07;
+        pointer-events: none;
+        z-index: 0;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="document">
+    <header class="doc-header">
+      <div>
+        <div class="doc-engine">Civic Decision Engine</div>
+        <div class="doc-nav">
+          <a href="/conditions">← Condition registry</a>
+          <a href="/records">Public record index</a>
+          <a href="/patterns">Condition patterns</a>
+          <a href="/graph">Interactive graph</a>
+          <a href="/api/docs">API documentation</a>
+        </div>
+      </div>
+      <div>
+        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="text-align:right;margin-bottom:6px;">
+          <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+            <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+            <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+            <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+            <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+            <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          </svg>
+        </div>
+        <div class="doc-title">Condition Map</div>
+        <div class="doc-subtitle">Structural relationship layer</div>
+      </div>
+    </header>
+
+    <p class="intro">
+      Conditions do not exist in isolation. This map shows the structural
+      relationships between conditions — which tend to precede others, which
+      escalate into others, and which frequently co-occur. Explicit relationships
+      are defined by the engine taxonomy. Co-occurrence data is inferred from
+      the verified public archive.
+    </p>
+
+    {sections_html}
+
+    <div class="section-header">Co-occurrence — inferred from archive</div>
+    <table class="co-table">
+      <tbody>{inferred_rows}</tbody>
+    </table>
+
+    <div class="api-note">
+      Machine-readable access: <a href="/api/conditions/map">GET /api/conditions/map</a>
+      &nbsp;·&nbsp; Returns explicit relationships, inferred co-occurrence,
+      and condition emergence order as JSON.
+    </div>
+
+    <footer class="doc-footer">
+      <div class="footer-tagline">The record does not argue.</div>
+      <div class="footer-note">
+        Explicit relationships are part of the engine taxonomy.
+        Inferred relationships are derived from the verified public archive only.
+      </div>
+      <div class="footer-seal" aria-hidden="true">
+        <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
+          <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+          <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+          <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+          <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+          <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+        </svg>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>"""
+
+        return HTMLResponse(content=html, status_code=200)
+
+    finally:
+        conn.close()
 
 
 @router.get("/stats", response_class=HTMLResponse)
@@ -3913,6 +4569,7 @@ async def sitemap():
             {"loc": f"{base}/stats/timeline", "priority": "0.6"},
             {"loc": f"{base}/graph", "priority": "0.6"},
             {"loc": f"{base}/api/docs", "priority": "0.5"},
+            {"loc": f"{base}/conditions/map", "priority": "0.8"},
         ]
 
         # Condition pages
@@ -6125,11 +6782,6 @@ async def record_manifest(reference: str):
             "trajectory": record["trajectory"] or "",
             "conditions": sorted(conditions),
             "system_state": record["system_state"] or "",
-            "source_narrative": (
-                record["source_narrative"]
-                if "source_narrative" in record.keys()
-                else ""
-            ),
             "generated_by": record["generated_by"] or "Civic Decision Engine",
         }
 
