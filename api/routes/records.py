@@ -3043,6 +3043,23 @@ async def api_conditions():
     )
 
 
+@router.get("/admin/seed-relationships")
+async def admin_seed_relationships():
+    conn = get_db()
+    try:
+        seed_condition_relationships(conn)
+        conn.commit()
+
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM condition_relationships")
+        count = cur.fetchone()[0]
+
+        return JSONResponse(content={"seeded": True, "row_count": count})
+
+    finally:
+        conn.close()
+
+
 @router.get("/conditions/map", response_class=HTMLResponse)
 async def conditions_map():
     conn = get_db()
