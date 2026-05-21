@@ -849,44 +849,44 @@ async def records_index(
       body {{ background: white; padding: 0; }}
       .document {{ border: none; box-shadow: none; }}
       .document::before {{
-        content: '';
-        position: fixed;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-size: contain;
-        opacity: 0.07;
-        pointer-events: none;
-        z-index: 0;
-      }}
+      content: '';
+      position: fixed;
+      top: 48%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 260px;
+      height: 320px;
+      background-image: url("...");
+      background-repeat: no-repeat;
+      background-size: contain;
+      opacity: 0.07;
+      pointer-events: none;
+      z-index: 0;
     }}
- <style>
+    }}
+    .pagination {{
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #f0ede8;
+    }}
 
-.pagination {{
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid #f0ede8;
-}}
+    .footer-seal {{
+      margin-top: 18px;
+      display: flex;
+      justify-content: flex-end;
+      opacity: 0.42;
+      color: #2E8B9A;
+    }}
 
-.footer-seal {{
-  margin-top: 18px;
-  display: flex;
-  justify-content: flex-end;
-  opacity: 0.42;
-  color: #2E8B9A;
-}}
+    .footer-seal svg {{
+      width: 28px;
+      height: auto;
+      display: block;
+    }}
 
-.footer-seal svg {{
-  width: 28px;
-  height: auto;
-  display: block;
-}}
-
-.page-info {{
-  font-family: ui-monospace, monospace;
-}}
+    .page-info {{
+      font-family: ui-monospace, monospace;
+    }}
     .page-controls {{
       display: flex;
       gap: 8px;
@@ -1022,8 +1022,7 @@ async def records_index(
       </div>
 
       <div class="footer-seal" aria-label="Civic Decision Engine v11">
-        <div class="doc-mark" aria-label="Civic Decision Engine v11">
-        <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
+        <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
           <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
@@ -1035,8 +1034,6 @@ async def records_index(
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
           <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
         </svg>
-      </div>
-
       </div>
     </footer>
   </div>
