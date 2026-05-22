@@ -194,6 +194,182 @@ def semantic_search_records(
     }
 
 
+def semantic_retrieve_records(
+    conn: sqlite3.Connection,
+    query_embedding: Sequence[float],
+    *,
+    embedding_model: str,
+    limit: int = 10,
+    threshold: float = 0.0,
+    trajectory: str | None = None,
+    institution: str | None = None,
+) -> dict[str, Any]:
+    ensure_embedding_tables(conn)
+
+    limit = min(max(1, limit), MAX_SEARCH_LIMIT)
+    where_parts = ["r.is_latest = 1", "e.embedding_model = ?"]
+    params: list[Any] = [embedding_model]
+
+    if trajectory:
+        where_parts.append("LOWER(r.trajectory) = LOWER(?)")
+        params.append(trajectory)
+
+    if institution:
+        where_parts.append("r.reference LIKE ?")
+        params.append(f"Strike-{institution.upper()}-%")
+
+    where = " AND ".join(where_parts)
+    rows = conn.execute(
+        f"""
+        SELECT
+            r.reference,
+            r.version,
+            r.trajectory,
+            r.conditions_json,
+            r.system_state,
+            r.exported_at,
+            r.verification_hash,
+            r.finding,
+            r.generated_at,
+            r.generated_by,
+            e.embedding_json,
+            e.embedding_model
+        FROM record_embeddings e
+        JOIN records r ON r.id = e.record_id
+        WHERE {where}
+        """,
+        params,
+    ).fetchall()
+
+    results = []
+    for row in rows:
+        stored_embedding = parse_embedding(row["embedding_json"])
+        score = cosine_similarity(query_embedding, stored_embedding)
+        if score < threshold:
+            continue
+
+        results.append(
+            {
+                "reference": row["reference"],
+                "version": row["version"],
+                "trajectory": row["trajectory"] or "",
+                "conditions": _load_conditions(row["conditions_json"]),
+                "system_state": row["system_state"] or "",
+                "exported_at": row["exported_at"] or "",
+                "verification_hash": row["verification_hash"],
+                "score": score,
+                "semantic_score": score,
+                "match_type": "semantic",
+                "embedding_model": row["embedding_model"],
+            }
+        )
+
+    results.sort(key=lambda item: (item["semantic_score"], item["exported_at"]), reverse=True)
+
+    return {
+        "mode": "semantic",
+        "embedding_model": embedding_model,
+        "threshold": threshold,
+        "total": len(results),
+        "limit": limit,
+        "filters": {
+            "trajectory": trajectory,
+            "institution": institution,
+        },
+        "records": results[:limit],
+    }
+
+
+def hybrid_retrieve_records(
+    conn: sqlite3.Connection,
+    query: str,
+    query_embedding: Sequence[float],
+    *,
+    embedding_model: str,
+    limit: int = 10,
+    threshold: float = 0.0,
+    semantic_weight: float = 0.65,
+    keyword_weight: float = 0.35,
+    trajectory: str | None = None,
+    institution: str | None = None,
+) -> dict[str, Any]:
+    semantic = semantic_retrieve_records(
+        conn,
+        query_embedding,
+        embedding_model=embedding_model,
+        limit=MAX_SEARCH_LIMIT,
+        threshold=threshold,
+        trajectory=trajectory,
+        institution=institution,
+    )
+    keyword = keyword_search_records(
+        conn,
+        query,
+        trajectory=trajectory,
+        institution=institution,
+        limit=MAX_SEARCH_LIMIT,
+        offset=0,
+        mode="keyword",
+    )
+
+    semantic_by_ref = {item["reference"]: item for item in semantic["records"]}
+    keyword_by_ref = {item["reference"]: item for item in keyword["records"]}
+    max_keyword_score = max(
+        (item["score"] for item in keyword["records"]),
+        default=0.0,
+    )
+    references = set(semantic_by_ref)
+
+    results = []
+    for reference in references:
+        semantic_item = semantic_by_ref.get(reference)
+        keyword_item = keyword_by_ref.get(reference)
+        base = semantic_item or keyword_item
+        semantic_score = (
+            float(semantic_item["semantic_score"]) if semantic_item else 0.0
+        )
+        raw_keyword_score = float(keyword_item["score"]) if keyword_item else 0.0
+        keyword_score = (
+            raw_keyword_score / max_keyword_score if max_keyword_score > 0 else 0.0
+        )
+        combined = (semantic_weight * semantic_score) + (keyword_weight * keyword_score)
+
+        result = {
+            "reference": base["reference"],
+            "version": base["version"],
+            "trajectory": base["trajectory"],
+            "conditions": base["conditions"],
+            "system_state": base["system_state"],
+            "exported_at": base["exported_at"],
+            "verification_hash": base["verification_hash"],
+            "score": combined,
+            "semantic_score": semantic_score,
+            "keyword_score": keyword_score,
+            "match_type": "hybrid",
+            "embedding_model": embedding_model,
+        }
+        if keyword_item and keyword_item.get("snippet"):
+            result["snippet"] = keyword_item["snippet"]
+        results.append(result)
+
+    results.sort(key=lambda item: (item["score"], item["exported_at"]), reverse=True)
+
+    return {
+        "mode": "hybrid",
+        "embedding_model": embedding_model,
+        "threshold": threshold,
+        "semantic_weight": semantic_weight,
+        "keyword_weight": keyword_weight,
+        "total": len(results),
+        "limit": limit,
+        "filters": {
+            "trajectory": trajectory,
+            "institution": institution,
+        },
+        "records": results[: min(max(1, limit), MAX_SEARCH_LIMIT)],
+    }
+
+
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) != len(right) or not left:
         return 0.0
