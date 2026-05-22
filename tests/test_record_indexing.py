@@ -1,3 +1,4 @@
+import hashlib
 import json
 import unittest
 
@@ -73,6 +74,13 @@ class RecordIndexingTests(unittest.TestCase):
         record = self.sample_record()
 
         self.assertEqual(indexed_fields_hash(record), indexed_fields_hash(record))
+
+    def test_indexed_fields_hash_derives_from_indexed_fields_json(self):
+        record = self.sample_record()
+        payload = indexed_fields_json(record)
+        expected = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+        self.assertEqual(indexed_fields_hash(record), expected)
 
     def test_indexed_fields_hash_ignores_non_indexed_fields(self):
         record = self.sample_record()

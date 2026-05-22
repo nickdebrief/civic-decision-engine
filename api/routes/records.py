@@ -166,11 +166,28 @@ def init_db():
             embedding_model     TEXT NOT NULL,
             embedding_json      TEXT NOT NULL,
             indexed_fields_json TEXT NOT NULL,
+            index_policy_version TEXT,
+            embedding_dimensions INTEGER,
+            provider_kind       TEXT,
+            derived_from_hash   TEXT,
             created_at          TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(record_id) REFERENCES records(id),
             UNIQUE(record_id, embedding_model, content_hash)
         )
     """)
+    for column, definition in (
+        ("index_policy_version", "TEXT"),
+        ("embedding_dimensions", "INTEGER"),
+        ("provider_kind", "TEXT"),
+        ("derived_from_hash", "TEXT"),
+    ):
+        existing_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(record_embeddings)")
+        }
+        if column not in existing_columns:
+            conn.execute(
+                f"ALTER TABLE record_embeddings ADD COLUMN {column} {definition}"
+            )
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_record_embeddings_ref_version
         ON record_embeddings(reference, version)

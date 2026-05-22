@@ -13,6 +13,7 @@ from api.record_indexing import build_indexable_text, build_snippet
 SEMANTIC_SEARCH_ENV = "SEMANTIC_SEARCH_ENABLED"
 DEFAULT_SEARCH_LIMIT = 50
 MAX_SEARCH_LIMIT = 200
+INDEX_POLICY_VERSION = "canonical-public-v1"
 
 
 def semantic_search_enabled() -> bool:
@@ -31,11 +32,19 @@ def ensure_embedding_tables(conn: sqlite3.Connection) -> None:
             embedding_model     TEXT NOT NULL,
             embedding_json      TEXT NOT NULL,
             indexed_fields_json TEXT NOT NULL,
+            index_policy_version TEXT,
+            embedding_dimensions INTEGER,
+            provider_kind       TEXT,
+            derived_from_hash   TEXT,
             created_at          TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(record_id) REFERENCES records(id),
             UNIQUE(record_id, embedding_model, content_hash)
         )
     """)
+    _ensure_optional_column(conn, "record_embeddings", "index_policy_version", "TEXT")
+    _ensure_optional_column(conn, "record_embeddings", "embedding_dimensions", "INTEGER")
+    _ensure_optional_column(conn, "record_embeddings", "provider_kind", "TEXT")
+    _ensure_optional_column(conn, "record_embeddings", "derived_from_hash", "TEXT")
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_record_embeddings_ref_version
         ON record_embeddings(reference, version)
@@ -44,6 +53,16 @@ def ensure_embedding_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_record_embeddings_record_model
         ON record_embeddings(record_id, embedding_model)
     """)
+
+
+def _ensure_optional_column(
+    conn: sqlite3.Connection, table: str, column: str, definition: str
+) -> None:
+    existing = {
+        row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def search_records(

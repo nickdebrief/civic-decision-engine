@@ -14,7 +14,7 @@ from api.record_indexing import (
     indexed_fields_hash,
     indexed_fields_json,
 )
-from api.semantic_search import ensure_embedding_tables
+from api.semantic_search import INDEX_POLICY_VERSION, ensure_embedding_tables
 
 
 LOCAL_TEST_EMBEDDING_MODEL = "local-test-embedding-v0"
@@ -111,6 +111,10 @@ def provider_label(provider_name: str, model: str | None = None) -> str:
     raise ValueError(f"Unsupported embedding provider: {provider_name}")
 
 
+def provider_kind_from_label(label: str) -> str:
+    return label.split(":", 1)[0] if ":" in label else "unknown"
+
+
 def build_embedding_provider(
     provider_name: str = DEFAULT_PROVIDER,
     model: str | None = None,
@@ -182,13 +186,16 @@ def backfill_record_embeddings(
         if dry_run:
             continue
 
-        embedding_json = json.dumps(provider.embed(text), separators=(",", ":"))
+        embedding = provider.embed(text)
+        embedding_json = json.dumps(embedding, separators=(",", ":"))
         cur = conn.execute(
             """
             INSERT OR IGNORE INTO record_embeddings (
                 record_id, reference, version, content_hash,
-                embedding_model, embedding_json, indexed_fields_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                embedding_model, embedding_json, indexed_fields_json,
+                index_policy_version, embedding_dimensions, provider_kind,
+                derived_from_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record["id"],
@@ -198,6 +205,10 @@ def backfill_record_embeddings(
                 provider.label,
                 embedding_json,
                 fields_json,
+                INDEX_POLICY_VERSION,
+                len(embedding),
+                provider_kind_from_label(provider.label),
+                content_hash,
             ),
         )
         if cur.rowcount:

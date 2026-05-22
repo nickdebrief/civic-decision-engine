@@ -116,10 +116,18 @@ class SemanticSearchTests(unittest.TestCase):
                 "SELECT name FROM sqlite_master WHERE type = 'index'"
             ).fetchall()
         }
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(record_embeddings)").fetchall()
+        }
 
         self.assertIsNotNone(table)
         self.assertIn("idx_record_embeddings_ref_version", indexes)
         self.assertIn("idx_record_embeddings_record_model", indexes)
+        self.assertIn("index_policy_version", columns)
+        self.assertIn("embedding_dimensions", columns)
+        self.assertIn("provider_kind", columns)
+        self.assertIn("derived_from_hash", columns)
 
     def test_search_records_uses_keyword_fallback_by_default(self):
         conn = make_connection()

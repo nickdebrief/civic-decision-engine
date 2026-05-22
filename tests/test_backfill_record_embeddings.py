@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from api.record_indexing import indexed_fields_hash
+from api.semantic_search import INDEX_POLICY_VERSION
 from scripts.backfill_record_embeddings import (
     LOCAL_TEST_EMBEDDING_MODEL,
     backfill_record_embeddings,
@@ -188,6 +189,10 @@ class BackfillRecordEmbeddingsTests(unittest.TestCase):
             embedding["embedding_model"], f"local:{LOCAL_TEST_EMBEDDING_MODEL}"
         )
         self.assertEqual(embedding["content_hash"], indexed_fields_hash(record))
+        self.assertEqual(embedding["derived_from_hash"], indexed_fields_hash(record))
+        self.assertEqual(embedding["index_policy_version"], INDEX_POLICY_VERSION)
+        self.assertEqual(embedding["embedding_dimensions"], 16)
+        self.assertEqual(embedding["provider_kind"], "local")
 
     def test_backfill_excludes_source_narrative_report_json_and_raw_input(self):
         conn = make_connection()
@@ -210,6 +215,41 @@ class BackfillRecordEmbeddingsTests(unittest.TestCase):
         self.assertNotIn("raw_input", indexed_fields)
         self.assertNotIn("private narrative only", indexed_fields)
         self.assertNotIn("raw input only", indexed_fields)
+
+    def test_semantic_content_hash_ignores_excluded_field_changes(self):
+        conn = make_connection()
+        insert_record(
+            conn,
+            reference="Strike-LA-20260521-014",
+            finding="Canonical finding.",
+            conditions=["Institutional Delay"],
+            source_narrative="first private narrative",
+            report_json=json.dumps({"raw_input": "first raw input"}),
+        )
+        before = conn.execute("SELECT * FROM records WHERE is_latest = 1").fetchone()
+        before_hash = indexed_fields_hash(before)
+
+        conn.execute(
+            """
+            UPDATE records
+            SET source_narrative = ?, report_json = ?
+            WHERE reference = ?
+            """,
+            (
+                "second private narrative",
+                json.dumps({"raw_input": "second raw input"}),
+                "Strike-LA-20260521-014",
+            ),
+        )
+        after = conn.execute("SELECT * FROM records WHERE is_latest = 1").fetchone()
+        after_hash = indexed_fields_hash(after)
+
+        backfill_record_embeddings(conn)
+        embedding = conn.execute("SELECT * FROM record_embeddings").fetchone()
+
+        self.assertEqual(before_hash, after_hash)
+        self.assertEqual(embedding["content_hash"], before_hash)
+        self.assertEqual(embedding["derived_from_hash"], before_hash)
 
     def test_embedding_json_is_local_deterministic_vector(self):
         conn = make_connection()

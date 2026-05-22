@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS record_embeddings (
     embedding_model     TEXT NOT NULL,
     embedding_json      TEXT NOT NULL,
     indexed_fields_json TEXT NOT NULL,
+    index_policy_version TEXT,
+    embedding_dimensions INTEGER,
+    provider_kind       TEXT,
+    derived_from_hash   TEXT,
     created_at          TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY(record_id) REFERENCES records(id),
     UNIQUE(record_id, embedding_model, content_hash)
