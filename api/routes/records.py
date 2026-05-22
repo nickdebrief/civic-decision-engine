@@ -887,25 +887,32 @@ async def records_index(
       .doc-footer {{ flex-direction: column; }}
       .footer-note {{ text-align: left; }}
     }}
+    .print-watermark {{
+    display: none;
+  }}
+
     @media print {{
-      body {{ background: white; padding: 0; }}
-      .document {{ border: none; box-shadow: none; }}
-      .document::before {{
-      content: '';
-      position: fixed;
-      top: 48%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 260px;
-      height: 320px;
-      background-image: url("...");
-      background-repeat: no-repeat;
-      background-size: contain;
-      opacity: 0.07;
-      pointer-events: none;
-      z-index: 0;
+    .print-watermark {{
+        display: block !important;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 220px;
+        height: 280px;
+        opacity: 0.07;
+        z-index: 1;
+        pointer-events: none;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }}
+
+    .document > *:not(.print-watermark) {{
+        position: relative;
+        z-index: 2;
     }}
+}}
+    
     .pagination {{
       margin-top: 32px;
       padding-top: 20px;
@@ -998,6 +1005,18 @@ async def records_index(
 </head>
 <body>
   <div class="document">
+    <svg class="print-watermark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"/>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+    </svg>
     <header class="doc-header">
     <div>
       <div class="doc-engine">Civic Decision Engine</div>
