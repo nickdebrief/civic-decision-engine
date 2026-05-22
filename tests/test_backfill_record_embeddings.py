@@ -1,11 +1,14 @@
 import json
+import os
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from api.record_indexing import indexed_fields_hash
 from scripts.backfill_record_embeddings import (
     LOCAL_TEST_EMBEDDING_MODEL,
     backfill_record_embeddings,
+    build_embedding_provider,
     deterministic_local_embedding,
 )
 
@@ -181,7 +184,9 @@ class BackfillRecordEmbeddingsTests(unittest.TestCase):
         record = conn.execute("SELECT * FROM records WHERE is_latest = 1").fetchone()
         embedding = conn.execute("SELECT * FROM record_embeddings").fetchone()
 
-        self.assertEqual(embedding["embedding_model"], LOCAL_TEST_EMBEDDING_MODEL)
+        self.assertEqual(
+            embedding["embedding_model"], f"local:{LOCAL_TEST_EMBEDDING_MODEL}"
+        )
         self.assertEqual(embedding["content_hash"], indexed_fields_hash(record))
 
     def test_backfill_excludes_source_narrative_report_json_and_raw_input(self):
@@ -221,6 +226,113 @@ class BackfillRecordEmbeddingsTests(unittest.TestCase):
 
         self.assertEqual(len(vector), 16)
         self.assertTrue(all(isinstance(value, float) for value in vector))
+
+    def test_fake_provider_is_called_for_latest_records_only(self):
+        class FakeProvider:
+            label = "fake:test-model"
+
+            def __init__(self):
+                self.inputs = []
+
+            def embed(self, text):
+                self.inputs.append(text)
+                return [0.1, 0.2, 0.3]
+
+        conn = make_connection()
+        provider = FakeProvider()
+        insert_record(
+            conn,
+            reference="Strike-LA-20260521-010",
+            finding="Latest canonical finding.",
+            conditions=["Institutional Delay"],
+            is_latest=1,
+        )
+        insert_record(
+            conn,
+            reference="Strike-LA-20260521-011",
+            finding="Superseded canonical finding.",
+            conditions=["Transfer of Burden"],
+            is_latest=0,
+        )
+
+        result = backfill_record_embeddings(conn, provider=provider)
+        embedding = conn.execute("SELECT * FROM record_embeddings").fetchone()
+
+        self.assertEqual(result["inserted"], 1)
+        self.assertEqual(provider.inputs, [provider.inputs[0]])
+        self.assertEqual(len(provider.inputs), 1)
+        self.assertIn("Latest canonical finding.", provider.inputs[0])
+        self.assertNotIn("Superseded canonical finding.", provider.inputs[0])
+        self.assertEqual(embedding["embedding_model"], "fake:test-model")
+        self.assertEqual(json.loads(embedding["embedding_json"]), [0.1, 0.2, 0.3])
+
+    def test_fake_provider_never_receives_excluded_fields(self):
+        class FakeProvider:
+            label = "fake:test-model"
+
+            def __init__(self):
+                self.inputs = []
+
+            def embed(self, text):
+                self.inputs.append(text)
+                return [0.1, 0.2, 0.3]
+
+        conn = make_connection()
+        provider = FakeProvider()
+        insert_record(
+            conn,
+            reference="Strike-LA-20260521-012",
+            finding="Canonical finding.",
+            conditions=["Institutional Delay"],
+            source_narrative="private narrative only",
+            report_json=json.dumps({"raw_input": "raw input only"}),
+        )
+
+        backfill_record_embeddings(conn, provider=provider)
+
+        self.assertEqual(len(provider.inputs), 1)
+        self.assertIn("Canonical finding.", provider.inputs[0])
+        self.assertNotIn("private narrative only", provider.inputs[0])
+        self.assertNotIn("raw input only", provider.inputs[0])
+
+    def test_dry_run_does_not_call_provider(self):
+        class ExplodingProvider:
+            label = "fake:explode"
+
+            def embed(self, text):
+                raise AssertionError("provider should not be called during dry-run")
+
+        conn = make_connection()
+        insert_record(
+            conn,
+            reference="Strike-LA-20260521-013",
+            finding="Canonical finding.",
+            conditions=["Institutional Delay"],
+        )
+
+        result = backfill_record_embeddings(
+            conn, dry_run=True, provider=ExplodingProvider()
+        )
+        count = conn.execute("SELECT COUNT(*) FROM record_embeddings").fetchone()[0]
+
+        self.assertEqual(result["planned"], 1)
+        self.assertEqual(result["inserted"], 0)
+        self.assertEqual(count, 0)
+
+    def test_remote_provider_requires_api_key_only_when_not_dry_run(self):
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in {"REMOTE_EMBEDDING_API_KEY", "REMOTE_EMBEDDING_CLIENT"}
+        }
+        with patch.dict(os.environ, env, clear=True):
+            dry_run_provider = build_embedding_provider("remote", dry_run=True)
+            self.assertEqual(dry_run_provider.label, "remote:remote-embedding-model")
+
+            with self.assertRaises(RuntimeError) as ctx:
+                build_embedding_provider("remote", dry_run=False)
+
+        self.assertIn("REMOTE_EMBEDDING_API_KEY", str(ctx.exception))
 
 
 if __name__ == "__main__":
