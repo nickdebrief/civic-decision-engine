@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for Codex and other coding agents working on Civic Decision Engine.
+Repository guidance for coding agents working on Civic Decision Engine.
 
 ## Project Rules
 
