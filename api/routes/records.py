@@ -4682,7 +4682,6 @@ async def robots():
     content = (
         "User-agent: *\n"
         "Allow: /\n"
-        "Disallow: /api/\n"
         "\n"
         "Sitemap: https://civic-decision-engine-production.up.railway.app/sitemap.xml\n"
     )
@@ -6310,6 +6309,8 @@ async def verify_record(reference: str):
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{s["page_title"]} — {safe['reference']}</title>
   <link rel="canonical" href="{verify_url}">
+  <link rel="alternate" type="application/json" href="/verify/{safe['reference']}/manifest">
+  <link rel="alternate" type="application/json" href="/api/verify/{safe['reference']}">
   <meta name="description" content="{escape((record['finding'] or '')[:155])}">
   <script type="application/ld+json">
   {json_ld}
