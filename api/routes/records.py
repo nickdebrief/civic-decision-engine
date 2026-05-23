@@ -4600,6 +4600,83 @@ async def api_stats():
         conn.close()
 
 
+@router.get("/archive-manifest.json")
+async def archive_manifest():
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT reference, version, verification_hash, exported_at, trajectory "
+            "FROM records WHERE is_latest = 1 ORDER BY exported_at DESC"
+        )
+        rows = cur.fetchall()
+
+        base = "https://civic-decision-engine-production.up.railway.app"
+        records_out = []
+        latest_exported_at = rows[0]["exported_at"] if rows else None
+
+        for row in rows:
+            reference = row["reference"]
+            records_out.append(
+                {
+                    "reference": reference,
+                    "version": row["version"],
+                    "verification_hash": row["verification_hash"],
+                    "exported_at": row["exported_at"],
+                    "trajectory": row["trajectory"] or "",
+                    "institution_type": extract_institution_type(reference),
+                    "verify_url": f"{base}/verify/{reference}",
+                    "manifest_url": f"{base}/verify/{reference}/manifest",
+                }
+            )
+
+        checksum_payload = json.dumps(
+            records_out, separators=(",", ":"), sort_keys=True
+        )
+        checksum = hashlib.sha256(checksum_payload.encode("utf-8")).hexdigest()
+
+        return JSONResponse(
+            content={
+                "manifest_version": "1.0",
+                "manifest_type": "civic_decision_engine_archive_inventory",
+                "generated_at": datetime.now(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "archive": {
+                    "name": "Civic Decision Engine Public Records Archive",
+                    "canonical_base_url": base,
+                    "records_url": f"{base}/records",
+                    "sitemap_url": f"{base}/sitemap.xml",
+                },
+                "record_scope": {
+                    "latest_records_only": True,
+                    "canonical_records_authoritative": True,
+                    "private_or_raw_fields_included": False,
+                },
+                "canonical_index_policy_version": "canonical-public-v1",
+                "counts": {
+                    "total_latest_records": len(records_out),
+                },
+                "latest_exported_at": latest_exported_at,
+                "pagination": {
+                    "paginated": False,
+                    "limit": None,
+                    "offset": None,
+                    "next_url": None,
+                },
+                "records": records_out,
+                "checksum": {
+                    "algorithm": "SHA-256",
+                    "scope": "records array canonical JSON",
+                    "content_hash": checksum,
+                },
+            }
+        )
+
+    finally:
+        conn.close()
+
+
 @router.get("/sitemap.xml")
 async def sitemap():
     conn = get_db()
@@ -4615,6 +4692,7 @@ async def sitemap():
 
         # Static routes
         static_urls = [
+            {"loc": f"{base}/archive-manifest.json", "priority": "0.6"},
             {"loc": f"{base}/records", "priority": "0.9"},
             {"loc": f"{base}/conditions", "priority": "0.8"},
             {"loc": f"{base}/patterns", "priority": "0.8"},
