@@ -235,6 +235,23 @@ Replacing bytes should create a new version:
 POST /api/admin/attachments/{attachment_id}/versions
 ```
 
+## Admin Authentication Requirement
+
+Admin attachment routes must not be implemented until an explicit admin
+authentication mechanism exists.
+
+Preferred v12 direction:
+
+- store a static admin token in Railway/environment as `CDE_ADMIN_TOKEN`;
+- require admin requests to send `X-CDE-Admin-Token`;
+- keep admin attachment routes disabled when `CDE_ADMIN_TOKEN` is unset;
+- never log the token or include it in error responses;
+- require the token for upload, metadata update, and attachment version routes.
+
+This token protects admin attachment operations only. Public attachment serving
+remains governed separately by visibility and redaction rules. There must be no
+public upload route.
+
 ## Citation Implications
 
 The verification page citation remains a citation to the canonical record.
