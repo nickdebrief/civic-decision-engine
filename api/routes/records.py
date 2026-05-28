@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from api.attachments import ensure_attachment_tables
 from api.models import RecordPayload, RecordResponse
 
 router = APIRouter()
@@ -196,6 +197,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_record_embeddings_record_model
         ON record_embeddings(record_id, embedding_model)
     """)
+    ensure_attachment_tables(conn)
     seed_condition_relationships(conn)
     conn.commit()
     conn.close()
