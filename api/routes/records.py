@@ -9,14 +9,34 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+try:
+    from fastapi import File, Form, Header, UploadFile
+except ImportError:
+    def File(default=None, **_kwargs):
+        return default
+
+    def Form(default=None, **_kwargs):
+        return default
+
+    def Header(default=None, **_kwargs):
+        return default
+
+    class UploadFile:  # pragma: no cover - used only when FastAPI is stubbed.
+        pass
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from api.attachments import ensure_attachment_tables
+from api.attachments import (
+    ATTACHMENT_ROOT,
+    AttachmentRecordNotFound,
+    ensure_attachment_tables,
+    store_attachment_bytes,
+)
 from api.models import RecordPayload, RecordResponse
 
 router = APIRouter()
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
+ADMIN_TOKEN_ENV = "CDE_ADMIN_TOKEN"
 
 
 def seed_condition_relationships(conn):
@@ -242,6 +262,26 @@ def extract_institution_type(reference: str) -> str:
     return "OT"
 
 
+def require_admin_attachment_token(provided_token: str | None) -> None:
+    expected = os.getenv(ADMIN_TOKEN_ENV)
+    if not expected:
+        raise _http_error(503, "admin_attachment_routes_disabled")
+    if not provided_token:
+        raise _http_error(401, "admin_token_required")
+    if provided_token != expected:
+        raise _http_error(403, "admin_token_invalid")
+
+
+def _http_error(status_code: int, detail: str):
+    try:
+        return HTTPException(status_code=status_code, detail=detail)
+    except TypeError:
+        exc = HTTPException(detail)
+        setattr(exc, "status_code", status_code)
+        setattr(exc, "detail", detail)
+        return exc
+
+
 CONDITION_REGISTRY = [
     {
         "id": "transfer_of_burden",
@@ -409,6 +449,45 @@ async def create_record(payload: RecordPayload):
             is_superseding=is_superseding,
         )
 
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/records/{reference}/attachments")
+async def admin_upload_record_attachment(
+    reference: str,
+    file: UploadFile = File(...),
+    visibility: str = Form("private"),
+    redaction_status: str = Form("none"),
+    title: str | None = Form(None),
+    description: str | None = Form(None),
+    source_label: str | None = Form(None),
+    redaction_note: str | None = Form(None),
+    x_cde_admin_token: str | None = Header(None, alias="X-CDE-Admin-Token"),
+):
+    require_admin_attachment_token(x_cde_admin_token)
+    data = await file.read()
+    conn = get_db()
+    try:
+        attachment = store_attachment_bytes(
+            conn,
+            reference=reference,
+            data=data,
+            original_filename=file.filename or "attachment",
+            content_type=file.content_type or "application/octet-stream",
+            visibility=visibility,
+            redaction_status=redaction_status,
+            title=title,
+            description=description,
+            source_label=source_label,
+            redaction_note=redaction_note,
+            root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
+        )
+        return JSONResponse(status_code=201, content={"attachment": attachment})
+    except AttachmentRecordNotFound as exc:
+        raise _http_error(404, str(exc))
+    except ValueError as exc:
+        raise _http_error(400, str(exc))
     finally:
         conn.close()
 

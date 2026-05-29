@@ -3,12 +3,20 @@ from __future__ import annotations
 import hashlib
 import re
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path, PurePath
+from typing import Any
 
 
 ATTACHMENT_ROOT = Path("/data/attachments")
+VALID_VISIBILITY = {"private", "public"}
+VALID_REDACTION_STATUS = {"none", "redacted", "withheld"}
 _SAFE_REFERENCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SAFE_EXTENSION_RE = re.compile(r"^\.[A-Za-z0-9]{1,12}$")
+
+
+class AttachmentRecordNotFound(ValueError):
+    pass
 
 
 def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
@@ -68,6 +76,118 @@ def attachment_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def store_attachment_bytes(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+    data: bytes,
+    original_filename: str,
+    content_type: str | None,
+    visibility: str = "private",
+    redaction_status: str = "none",
+    title: str | None = None,
+    description: str | None = None,
+    source_label: str | None = None,
+    redaction_note: str | None = None,
+    uploaded_by: str | None = None,
+    root: Path = ATTACHMENT_ROOT,
+) -> dict[str, Any]:
+    ensure_attachment_tables(conn)
+    _validate_reference(reference)
+    _validate_visibility(visibility)
+    _validate_redaction_status(redaction_status)
+
+    cur = conn.cursor()
+    record = cur.execute(
+        "SELECT reference, version FROM records "
+        "WHERE reference = ? AND is_latest = 1 "
+        "ORDER BY version DESC LIMIT 1",
+        (reference,),
+    ).fetchone()
+    if not record:
+        raise AttachmentRecordNotFound(f"No latest record found for {reference}")
+
+    record_version = int(record["version"])
+    sha256_hash = attachment_sha256(data)
+    uploaded_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    filename = PurePath(original_filename or "attachment").name or "attachment"
+    detected_content_type = content_type or "application/octet-stream"
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO record_attachments (
+                reference, record_version, attachment_version,
+                filename, stored_filename, storage_path,
+                content_type, file_size_bytes, sha256_hash,
+                visibility, redaction_status, redaction_note,
+                title, description, source_label, uploaded_at, uploaded_by
+            )
+            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                reference,
+                record_version,
+                filename,
+                detected_content_type,
+                len(data),
+                sha256_hash,
+                visibility,
+                redaction_status,
+                redaction_note,
+                title,
+                description,
+                source_label,
+                uploaded_at,
+                uploaded_by,
+            ),
+        )
+        attachment_id = int(cur.lastrowid)
+        storage_path = build_attachment_storage_path(
+            reference=reference,
+            record_version=record_version,
+            attachment_id=attachment_id,
+            attachment_version=1,
+            sha256_hash=sha256_hash,
+            original_filename=filename,
+            root=root,
+        )
+        storage_path.parent.mkdir(parents=True, exist_ok=True)
+        with storage_path.open("xb") as handle:
+            handle.write(data)
+
+        cur.execute(
+            """
+            UPDATE record_attachments
+            SET stored_filename = ?, storage_path = ?
+            WHERE id = ?
+            """,
+            (storage_path.name, str(storage_path), attachment_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        if "storage_path" in locals() and storage_path.exists():
+            storage_path.unlink()
+        raise
+
+    return {
+        "attachment_id": attachment_id,
+        "reference": reference,
+        "record_version": record_version,
+        "attachment_version": 1,
+        "filename": filename,
+        "stored_filename": storage_path.name,
+        "storage_path": str(storage_path),
+        "content_type": detected_content_type,
+        "file_size_bytes": len(data),
+        "sha256_hash": sha256_hash,
+        "visibility": visibility,
+        "redaction_status": redaction_status,
+        "uploaded_at": uploaded_at,
+    }
+
+
 def build_attachment_storage_path(
     *,
     reference: str,
@@ -113,6 +233,16 @@ def _validate_sha256(value: str) -> str:
     if not re.fullmatch(r"[0-9a-f]{64}", normalized):
         raise ValueError("Invalid attachment SHA-256 hash")
     return normalized
+
+
+def _validate_visibility(value: str) -> None:
+    if value not in VALID_VISIBILITY:
+        raise ValueError("Invalid attachment visibility")
+
+
+def _validate_redaction_status(value: str) -> None:
+    if value not in VALID_REDACTION_STATUS:
+        raise ValueError("Invalid attachment redaction status")
 
 
 def _positive_int(value: int, name: str) -> int:
