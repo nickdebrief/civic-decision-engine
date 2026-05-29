@@ -22,3 +22,4 @@ uvicorn==0.44.0
 python-multipart
 python-multipart
 python-multipart
+python-multipart
