@@ -8,7 +8,7 @@ from api.routes import health, civic, adaptation, timeline, pattern
 app = FastAPI(
     title="Civic Decision Engine API",
     description="Structured API for civic case analysis, timeline detection, and pattern classification.",
-    version="v11",
+    version="v12",
 )
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")

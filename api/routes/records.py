@@ -1097,7 +1097,7 @@ async def records_index(
       <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
       <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
     <header class="doc-header">
     <div>
@@ -1114,7 +1114,7 @@ async def records_index(
         <div class="doc-count">{total} record{"s" if total != 1 else ""}</div>
       </div>
       
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <div class="doc-mark" aria-label="Civic Decision Engine v12">
         <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -1125,7 +1125,7 @@ async def records_index(
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </header>
@@ -1164,7 +1164,7 @@ async def records_index(
         at the time of export. Each record is independently verifiable via its reference URL.
       </div>
 
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -1175,7 +1175,7 @@ async def records_index(
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -1721,7 +1721,7 @@ async def api_docs():
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -1744,7 +1744,7 @@ async def api_docs():
         <div class="doc-title">Public API Documentation</div>
         <div class="doc-subtitle">Machine-readable civic record access</div>
       </div>
-       <div class="doc-mark" aria-label="Civic Decision Engine v11">
+       <div class="doc-mark" aria-label="Civic Decision Engine v12">
         <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -1755,7 +1755,7 @@ async def api_docs():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </header>
@@ -2083,7 +2083,7 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
         For the human-readable record index, see
         <a href="/records" style="color:#888;">civic-decision-engine-production.up.railway.app/records</a>
       </div>
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -2094,7 +2094,7 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -2358,7 +2358,7 @@ async def conditions_registry():
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -2385,7 +2385,7 @@ async def conditions_registry():
         <div class="doc-title">Condition Registry</div>
         <div class="doc-subtitle">Civic observation taxonomy</div>       
       </div>
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <div class="doc-mark" aria-label="Civic Decision Engine v12">
       <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
         <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
         <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -2396,7 +2396,7 @@ async def conditions_registry():
         <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
         <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
         <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
       </svg>
       </div>
 
@@ -2426,7 +2426,7 @@ async def conditions_registry():
         the current active taxonomy. Earlier records may reference condition
         codes from prior versions.
       </div>
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -2437,7 +2437,7 @@ async def conditions_registry():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -2859,7 +2859,7 @@ async def conditions_map():
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -2883,7 +2883,7 @@ async def conditions_map():
         </div>
       </div>
       <div>
-        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="text-align:right;margin-bottom:6px;">
+        <div class="doc-mark" aria-label="Civic Decision Engine v12" style="text-align:right;margin-bottom:6px;">
           <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
             <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
             <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -2894,7 +2894,7 @@ async def conditions_map():
             <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
           </svg>
         </div>
         <div class="doc-title">Condition Map</div>
@@ -2940,7 +2940,7 @@ async def conditions_map():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -3453,7 +3453,7 @@ async def condition_page(condition_id: str):
         transform: translate(-50%, -50%);
         width: 300px;
         height: 300px;
-        background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -3477,7 +3477,7 @@ async def condition_page(condition_id: str):
       </div>
       <div>
         <div style="margin-left:auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;">
-        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="opacity:0.82;margin-bottom:6px;">
+        <div class="doc-mark" aria-label="Civic Decision Engine v12" style="opacity:0.82;margin-bottom:6px;">
           <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
             <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
             <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -3488,7 +3488,7 @@ async def condition_page(condition_id: str):
             <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
           </svg>
         </div>
         <div class="doc-title">Condition</div>
@@ -3563,7 +3563,7 @@ async def condition_page(condition_id: str):
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -3938,7 +3938,7 @@ async def stats_page():
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -3966,7 +3966,7 @@ async def stats_page():
         <div class="doc-title">Archive Statistics</div>
         <div class="doc-subtitle">Public record distribution</div>
       </div>
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <div class="doc-mark" aria-label="Civic Decision Engine v12">
         <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -3977,7 +3977,7 @@ async def stats_page():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
 
@@ -4029,7 +4029,7 @@ async def stats_page():
         Statistics reflect the current state of the public archive.
         Only the latest version of each record is counted.
       </div>
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -4040,7 +4040,7 @@ async def stats_page():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -4480,7 +4480,7 @@ async def stats_timeline():
   pointer-events: none;
   z-index: 0;
 
-  background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='512' height='512' viewBox='0 0 512 512' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
 
   background-repeat: no-repeat;
   background-position: center;
@@ -4541,7 +4541,7 @@ async def stats_timeline():
     </div>
 
 <div>
-        <div class="doc-mark" aria-label="Civic Decision Engine v11" style="text-align:right;margin-bottom:6px;opacity:0.82;">
+        <div class="doc-mark" aria-label="Civic Decision Engine v12" style="text-align:right;margin-bottom:6px;opacity:0.82;">
           <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
             <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
             <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -4552,7 +4552,7 @@ async def stats_timeline():
             <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
           </svg>
         </div>
       </div>
@@ -4604,7 +4604,7 @@ async def stats_timeline():
       <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
       <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
   </div>
 </footer>
@@ -5375,7 +5375,7 @@ async def patterns_page():
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -5401,7 +5401,7 @@ async def patterns_page():
         <div class="doc-title">Condition Patterns</div>
         <div class="doc-subtitle">Structural pattern analysis</div>
       </div>
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <div class="doc-mark" aria-label="Civic Decision Engine v12">
           <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
             <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
             <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -5412,7 +5412,7 @@ async def patterns_page():
             <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
             <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+            <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
           </svg>
         </div>
 
@@ -5449,7 +5449,7 @@ async def patterns_page():
         Patterns are derived from verified public records only.
         Each record is independently verifiable via its reference URL.
       </div>
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -5460,7 +5460,7 @@ async def patterns_page():
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
@@ -6007,7 +6007,7 @@ async def graph_page():
     resize();
     loadGraph().then(() => { cancelAnimationFrame(animFrame); tick(); });
   </script>
-  <div class="graph-seal" aria-label="Civic Decision Engine v11">
+  <div class="graph-seal" aria-label="Civic Decision Engine v12">
       <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
         <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
         <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -6018,7 +6018,7 @@ async def graph_page():
         <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
         <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
         <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+        <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
       </svg>
     </div>
 </body>
@@ -6657,7 +6657,7 @@ async def verify_record(reference: str):
         top: 50%; left: 50%;
         transform: translate(-50%, -50%);
         width: 220px; height: 280px;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev11%3C/text%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512' fill='none'%3E%3Cellipse cx='256' cy='256' rx='230' ry='290' stroke='%232E8B9A' stroke-width='28' fill='none'/%3E%3Crect x='148' y='138' width='216' height='18' rx='9' fill='%232E8B9A'/%3E%3Crect x='168' y='170' width='176' height='14' rx='7' fill='%232E8B9A'/%3E%3Crect x='196' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='220' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='244' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='268' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='292' y='200' width='8' height='120' rx='4' fill='%232E8B9A'/%3E%3Crect x='166' y='320' width='180' height='14' rx='7' fill='%232E8B9A'/%3E%3Ctext x='256' y='388' text-anchor='middle' font-family='sans-serif' font-size='72' font-weight='600' fill='%232E8B9A'%3Ev12%3C/text%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         opacity: 0.07;
@@ -6817,7 +6817,7 @@ async def verify_record(reference: str):
         <div class="doc-record-label">{s["record_label"]}</div>
         <div class="doc-reference">{safe['reference']}</div>
       </div>
-      <div class="doc-mark" aria-label="Civic Decision Engine v11">
+      <div class="doc-mark" aria-label="Civic Decision Engine v12">
         <svg width="42" height="52" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -6828,7 +6828,7 @@ async def verify_record(reference: str):
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </header>
@@ -6904,7 +6904,7 @@ async def verify_record(reference: str):
     <footer class="doc-footer">
       <div class="footer-tagline">{s["footer_tagline"]}</div>
       <div class="footer-note">{s["footer_note"]}</div>
-      <div class="footer-seal" aria-label="Civic Decision Engine v11">
+      <div class="footer-seal" aria-label="Civic Decision Engine v12">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
           <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"/>
           <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"/>
@@ -6915,7 +6915,7 @@ async def verify_record(reference: str):
           <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"/>
           <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"/>
-          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v11</text>
+          <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
         </svg>
       </div>
     </footer>
