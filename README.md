@@ -348,7 +348,7 @@ Core components include:
 
 ## Status
 
-Active development (v11)
+Active development (v12)
 
 Current operational layers:
 
