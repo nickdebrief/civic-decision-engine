@@ -29,6 +29,7 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
     ensure_attachment_tables,
+    public_manifest_attachments,
     store_attachment_bytes,
 )
 from api.models import RecordPayload, RecordResponse
@@ -7026,6 +7027,15 @@ async def record_manifest(reference: str):
                     canonical_fields, separators=(",", ":"), sort_keys=True
                 ),
                 "verify_url": f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}",
+            },
+            "attachments": public_manifest_attachments(
+                conn,
+                reference=record["reference"],
+                record_version=record["version"],
+            ),
+            "attachment_integrity_note": {
+                "canonical_record_hash_unchanged": True,
+                "attachment_hashes_independent": True,
             },
         }
 

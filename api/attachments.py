@@ -188,6 +188,47 @@ def store_attachment_bytes(
     }
 
 
+def public_manifest_attachments(
+    conn: sqlite3.Connection, *, reference: str, record_version: int
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT id, attachment_version, filename, content_type, file_size_bytes,
+               sha256_hash, visibility, redaction_status, title, description,
+               source_label, uploaded_at
+        FROM record_attachments
+        WHERE reference = ?
+          AND record_version = ?
+          AND visibility = 'public'
+          AND redaction_status != 'withheld'
+          AND is_latest = 1
+          AND is_deleted = 0
+        ORDER BY id ASC
+        """,
+        (reference, record_version),
+    ).fetchall()
+
+    return [
+        {
+            "attachment_id": row["id"],
+            "attachment_version": row["attachment_version"],
+            "filename": row["filename"],
+            "content_type": row["content_type"],
+            "file_size_bytes": row["file_size_bytes"],
+            "sha256_hash": row["sha256_hash"],
+            "visibility": row["visibility"],
+            "redaction_status": row["redaction_status"],
+            "title": row["title"],
+            "description": row["description"],
+            "source_label": row["source_label"],
+            "uploaded_at": row["uploaded_at"],
+            "download_url": None,
+        }
+        for row in rows
+    ]
+
+
 def build_attachment_storage_path(
     *,
     reference: str,
