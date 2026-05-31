@@ -147,7 +147,15 @@ class AttachmentUploadTests(unittest.TestCase):
 
         return verification_hash
 
-    def upload(self, *, token="secret-token", filename="evidence.pdf", data=b"evidence"):
+    def upload(
+        self,
+        *,
+        token="secret-token",
+        filename="evidence.pdf",
+        data=b"evidence",
+        document_date=None,
+        document_date_precision="unknown",
+    ):
         with patch.dict(
             os.environ,
             {
@@ -166,6 +174,8 @@ class AttachmentUploadTests(unittest.TestCase):
                     description="Admin uploaded evidence.",
                     source_label="Test source",
                     redaction_note=None,
+                    document_date=document_date,
+                    document_date_precision=document_date_precision,
                     x_cde_admin_token=token,
                 )
             )
@@ -193,6 +203,8 @@ class AttachmentUploadTests(unittest.TestCase):
         self.assertEqual(row["content_type"], "application/pdf")
         self.assertEqual(row["visibility"], "private")
         self.assertEqual(row["redaction_status"], "none")
+        self.assertIsNone(row["document_date"])
+        self.assertEqual(row["document_date_precision"], "unknown")
         self.assertEqual(stored_path.read_bytes(), data)
         self.assertTrue(stored_path.is_file())
 
@@ -272,16 +284,25 @@ class AttachmentUploadTests(unittest.TestCase):
         self.assertEqual(row["file_size_bytes"], len(data))
 
     def test_metadata_persistence(self):
-        self.upload()
+        self.upload(document_date="2026-05-29", document_date_precision="day")
 
         row = self.fetch_attachment_row()
 
         self.assertEqual(row["title"], "Evidence")
         self.assertEqual(row["description"], "Admin uploaded evidence.")
         self.assertEqual(row["source_label"], "Test source")
+        self.assertEqual(row["document_date"], "2026-05-29")
+        self.assertEqual(row["document_date_precision"], "day")
         self.assertEqual(row["attachment_version"], 1)
         self.assertEqual(row["is_latest"], 1)
         self.assertEqual(row["is_deleted"], 0)
+
+    def test_invalid_document_date_is_rejected(self):
+        with self.assertRaises(Exception) as ctx:
+            self.upload(document_date="29/05/2026", document_date_precision="day")
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 400)
+        self.assertEqual(self.fetch_attachment_row(), None)
 
     def test_canonical_verification_hash_unchanged_after_upload(self):
         self.upload(data=b"attachment bytes")

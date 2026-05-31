@@ -464,6 +464,8 @@ async def admin_upload_record_attachment(
     description: str | None = Form(None),
     source_label: str | None = Form(None),
     redaction_note: str | None = Form(None),
+    document_date: str | None = Form(None),
+    document_date_precision: str | None = Form("unknown"),
     x_cde_admin_token: str | None = Header(None, alias="X-CDE-Admin-Token"),
 ):
     require_admin_attachment_token(x_cde_admin_token)
@@ -482,6 +484,8 @@ async def admin_upload_record_attachment(
             description=description,
             source_label=source_label,
             redaction_note=redaction_note,
+            document_date=document_date,
+            document_date_precision=document_date_precision,
             root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
         )
         return JSONResponse(status_code=201, content={"attachment": attachment})

@@ -140,6 +140,8 @@ class AttachmentManifestTests(unittest.TestCase):
         is_latest=1,
         is_deleted=0,
         filename="example.pdf",
+        document_date="2026-05-30",
+        document_date_precision="day",
     ):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -150,11 +152,12 @@ class AttachmentManifestTests(unittest.TestCase):
                     filename, stored_filename, storage_path,
                     content_type, file_size_bytes, sha256_hash,
                     visibility, redaction_status, title, description,
-                    source_label, uploaded_at, is_latest, is_deleted
+                    source_label, document_date, document_date_precision,
+                    uploaded_at, is_latest, is_deleted
                 )
                 VALUES (?, 1, 1, ?, 'stored.pdf', '/private/path/stored.pdf',
                         'application/pdf', 12345, ?, ?, ?, ?, ?, ?,
-                        '2026-05-30T10:00:00Z', ?, ?)
+                        ?, ?, '2026-05-30T10:00:00Z', ?, ?)
                 """,
                 (
                     self.reference,
@@ -165,6 +168,8 @@ class AttachmentManifestTests(unittest.TestCase):
                     "Attachment title",
                     "Attachment description",
                     "Attachment source",
+                    document_date,
+                    document_date_precision,
                     is_latest,
                     is_deleted,
                 ),
@@ -208,6 +213,8 @@ class AttachmentManifestTests(unittest.TestCase):
                 "title",
                 "description",
                 "source_label",
+                "document_date",
+                "document_date_precision",
                 "uploaded_at",
                 "download_url",
             },
@@ -221,12 +228,22 @@ class AttachmentManifestTests(unittest.TestCase):
         self.assertEqual(attachment["title"], "Attachment title")
         self.assertEqual(attachment["description"], "Attachment description")
         self.assertEqual(attachment["source_label"], "Attachment source")
+        self.assertEqual(attachment["document_date"], "2026-05-30")
+        self.assertEqual(attachment["document_date_precision"], "day")
         self.assertEqual(attachment["uploaded_at"], "2026-05-30T10:00:00Z")
         self.assertIsNone(attachment["download_url"])
         encoded = json.dumps(self.manifest(), sort_keys=True)
         self.assertNotIn("storage_path", encoded)
         self.assertNotIn("stored_filename", encoded)
         self.assertNotIn("/private/path", encoded)
+
+    def test_unknown_document_date_appears_as_null_and_unknown(self):
+        self.insert_attachment(document_date=None, document_date_precision="unknown")
+
+        attachment = self.manifest()["attachments"][0]
+
+        self.assertIsNone(attachment["document_date"])
+        self.assertEqual(attachment["document_date_precision"], "unknown")
 
     def test_private_deleted_and_withheld_attachments_are_excluded(self):
         self.insert_attachment(visibility="private", filename="private.pdf")

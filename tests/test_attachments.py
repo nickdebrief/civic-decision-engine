@@ -12,6 +12,7 @@ from api.attachments import (
     attachment_sha256,
     build_attachment_storage_path,
     ensure_attachment_tables,
+    validate_document_date,
 )
 
 
@@ -118,6 +119,8 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         self.assertIn("sha256_hash", columns)
         self.assertIn("visibility", columns)
         self.assertIn("redaction_status", columns)
+        self.assertIn("document_date", columns)
+        self.assertIn("document_date_precision", columns)
 
     def test_invalid_visibility_and_redaction_values_are_rejected(self):
         conn = make_connection()
@@ -155,6 +158,27 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         data = b"CDE attachment bytes\x00with binary content"
 
         self.assertEqual(attachment_sha256(data), hashlib.sha256(data).hexdigest())
+
+    def test_validate_document_date_accepts_allowed_precision(self):
+        self.assertEqual(validate_document_date("2026-05-31", "day"), ("2026-05-31", "day"))
+        self.assertEqual(validate_document_date("2026-05", "month"), ("2026-05", "month"))
+        self.assertEqual(validate_document_date("2026", "year"), ("2026", "year"))
+        self.assertEqual(validate_document_date(None, "unknown"), (None, "unknown"))
+
+    def test_validate_document_date_rejects_invalid_values(self):
+        invalid_values = (
+            ("31/05/2026", "day"),
+            ("2026-02-31", "day"),
+            ("2026-05", "day"),
+            ("2026-05-31", "month"),
+            ("May 2026", "month"),
+            ("2026", "unknown"),
+        )
+
+        for document_date, precision in invalid_values:
+            with self.subTest(document_date=document_date, precision=precision):
+                with self.assertRaises(ValueError):
+                    validate_document_date(document_date, precision)
 
     def test_storage_path_generates_safe_filename_under_root(self):
         root = Path(tempfile.mkdtemp())
