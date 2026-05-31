@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS record_attachments (
     title TEXT,
     description TEXT,
     source_label TEXT,
+    document_date TEXT,
+    document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 
     uploaded_at TEXT NOT NULL,
     uploaded_by TEXT,

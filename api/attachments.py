@@ -11,6 +11,7 @@ from typing import Any
 ATTACHMENT_ROOT = Path("/data/attachments")
 VALID_VISIBILITY = {"private", "public"}
 VALID_REDACTION_STATUS = {"none", "redacted", "withheld"}
+VALID_DOCUMENT_DATE_PRECISION = {"day", "month", "year", "unknown"}
 _SAFE_REFERENCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SAFE_EXTENSION_RE = re.compile(r"^\.[A-Za-z0-9]{1,12}$")
 
@@ -44,6 +45,8 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
             title TEXT,
             description TEXT,
             source_label TEXT,
+            document_date TEXT,
+            document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 
             uploaded_at TEXT NOT NULL,
             uploaded_by TEXT,
@@ -58,6 +61,13 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
                 REFERENCES record_attachments(id)
         )
     """)
+    _ensure_optional_column(conn, "record_attachments", "document_date", "TEXT")
+    _ensure_optional_column(
+        conn,
+        "record_attachments",
+        "document_date_precision",
+        "TEXT NOT NULL DEFAULT 'unknown'",
+    )
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_record_attachments_reference
         ON record_attachments(reference, record_version)
@@ -76,6 +86,48 @@ def attachment_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def validate_document_date(
+    document_date: str | None, document_date_precision: str | None
+) -> tuple[str | None, str]:
+    precision = document_date_precision or "unknown"
+    if precision not in VALID_DOCUMENT_DATE_PRECISION:
+        raise ValueError("Invalid document date precision")
+
+    value = document_date.strip() if isinstance(document_date, str) else None
+    if value == "":
+        value = None
+
+    if precision == "unknown":
+        if value is not None:
+            raise ValueError("Unknown document date precision requires no document date")
+        return None, "unknown"
+
+    if value is None:
+        raise ValueError("Document date is required for known precision")
+
+    if precision == "year":
+        if not re.fullmatch(r"\d{4}", value):
+            raise ValueError("Year precision requires YYYY document date")
+        return value, precision
+
+    if precision == "month":
+        if not re.fullmatch(r"\d{4}-\d{2}", value):
+            raise ValueError("Month precision requires YYYY-MM document date")
+        try:
+            datetime.strptime(value, "%Y-%m")
+        except ValueError as exc:
+            raise ValueError("Invalid document date") from exc
+        return value, precision
+
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise ValueError("Day precision requires YYYY-MM-DD document date")
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("Invalid document date") from exc
+    return value, precision
+
+
 def store_attachment_bytes(
     conn: sqlite3.Connection,
     *,
@@ -89,6 +141,8 @@ def store_attachment_bytes(
     description: str | None = None,
     source_label: str | None = None,
     redaction_note: str | None = None,
+    document_date: str | None = None,
+    document_date_precision: str | None = "unknown",
     uploaded_by: str | None = None,
     root: Path = ATTACHMENT_ROOT,
 ) -> dict[str, Any]:
@@ -96,6 +150,9 @@ def store_attachment_bytes(
     _validate_reference(reference)
     _validate_visibility(visibility)
     _validate_redaction_status(redaction_status)
+    normalized_document_date, normalized_document_date_precision = validate_document_date(
+        document_date, document_date_precision
+    )
 
     cur = conn.cursor()
     record = cur.execute(
@@ -121,9 +178,11 @@ def store_attachment_bytes(
                 filename, stored_filename, storage_path,
                 content_type, file_size_bytes, sha256_hash,
                 visibility, redaction_status, redaction_note,
-                title, description, source_label, uploaded_at, uploaded_by
+                title, description, source_label,
+                document_date, document_date_precision,
+                uploaded_at, uploaded_by
             )
-            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 reference,
@@ -138,6 +197,8 @@ def store_attachment_bytes(
                 title,
                 description,
                 source_label,
+                normalized_document_date,
+                normalized_document_date_precision,
                 uploaded_at,
                 uploaded_by,
             ),
@@ -184,6 +245,8 @@ def store_attachment_bytes(
         "sha256_hash": sha256_hash,
         "visibility": visibility,
         "redaction_status": redaction_status,
+        "document_date": normalized_document_date,
+        "document_date_precision": normalized_document_date_precision,
         "uploaded_at": uploaded_at,
     }
 
@@ -196,7 +259,7 @@ def public_manifest_attachments(
         """
         SELECT id, attachment_version, filename, content_type, file_size_bytes,
                sha256_hash, visibility, redaction_status, title, description,
-               source_label, uploaded_at
+               source_label, document_date, document_date_precision, uploaded_at
         FROM record_attachments
         WHERE reference = ?
           AND record_version = ?
@@ -222,6 +285,8 @@ def public_manifest_attachments(
             "title": row["title"],
             "description": row["description"],
             "source_label": row["source_label"],
+            "document_date": row["document_date"],
+            "document_date_precision": row["document_date_precision"] or "unknown",
             "uploaded_at": row["uploaded_at"],
             "download_url": None,
         }
@@ -284,6 +349,14 @@ def _validate_visibility(value: str) -> None:
 def _validate_redaction_status(value: str) -> None:
     if value not in VALID_REDACTION_STATUS:
         raise ValueError("Invalid attachment redaction status")
+
+
+def _ensure_optional_column(
+    conn: sqlite3.Connection, table: str, column: str, definition: str
+) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def _positive_int(value: int, name: str) -> int:

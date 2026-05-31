@@ -37,6 +37,8 @@ CREATE TABLE record_attachments (
     title TEXT,
     description TEXT,
     source_label TEXT,
+    document_date TEXT,
+    document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 
     uploaded_at TEXT NOT NULL,
     uploaded_by TEXT,
@@ -131,6 +133,30 @@ Example:
 Changing an attachment version must not change the record version or record
 verification hash.
 
+## Document Date Metadata
+
+Attachments may include optional source-artifact date metadata:
+
+- `document_date`
+- `document_date_precision`
+
+This records the date of the artifact itself, separate from `uploaded_at`, record
+`generated_at`, and record `exported_at`. It is evidentiary metadata only and
+must not affect canonical record hashes, canonical serialization, attachment
+SHA-256 hashes, or record versioning.
+
+Allowed values:
+
+```text
+document_date = "YYYY-MM-DD", document_date_precision = "day"
+document_date = "YYYY-MM",    document_date_precision = "month"
+document_date = "YYYY",       document_date_precision = "year"
+document_date = NULL,         document_date_precision = "unknown"
+```
+
+Ambiguous dates, invalid calendar dates, mismatched date/precision pairs, and
+free-text dates should be rejected.
+
 ## Manifest Expansion
 
 Record manifests should be expanded additively:
@@ -164,6 +190,8 @@ When public attachments exist:
       "title": "Council response letter",
       "description": "Redacted public copy of correspondence.",
       "source_label": "Uploaded supporting evidence",
+      "document_date": "2026-05-17",
+      "document_date_precision": "day",
       "uploaded_at": "2026-05-27T10:00:00Z",
       "download_url": "https://civic-decision-engine-production.up.railway.app/records/Strike-LA-20260510-001/attachments/42"
     }
@@ -222,6 +250,8 @@ Inputs:
 - `description`
 - `source_label`
 - `redaction_note`
+- optional `document_date`
+- optional `document_date_precision`, defaulting to `unknown`
 
 Metadata-only updates may be handled separately:
 
