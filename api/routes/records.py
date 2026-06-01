@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import hashlib
+import hmac
 import os
 from html import escape
 from datetime import datetime, timezone
@@ -38,6 +39,14 @@ router = APIRouter()
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 ADMIN_TOKEN_ENV = "CDE_ADMIN_TOKEN"
+ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
+DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
+ALLOWED_ATTACHMENT_CONTENT_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "text/plain",
+}
 
 
 def seed_condition_relationships(conn):
@@ -269,8 +278,41 @@ def require_admin_attachment_token(provided_token: str | None) -> None:
         raise _http_error(503, "admin_attachment_routes_disabled")
     if not provided_token:
         raise _http_error(401, "admin_token_required")
-    if provided_token != expected:
+    if not hmac.compare_digest(provided_token, expected):
         raise _http_error(403, "admin_token_invalid")
+
+
+def attachment_max_upload_bytes() -> int:
+    raw_value = os.getenv(ATTACHMENT_MAX_BYTES_ENV)
+    if raw_value is None:
+        return DEFAULT_ATTACHMENT_MAX_BYTES
+    try:
+        parsed = int(raw_value)
+    except ValueError as exc:
+        raise _http_error(500, "admin_attachment_size_limit_invalid") from exc
+    if parsed < 1:
+        raise _http_error(500, "admin_attachment_size_limit_invalid")
+    return parsed
+
+
+def validate_admin_attachment_upload(content_type: str | None, data: bytes) -> str:
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized_content_type not in ALLOWED_ATTACHMENT_CONTENT_TYPES:
+        raise _http_error(415, "attachment_content_type_not_allowed")
+
+    max_bytes = attachment_max_upload_bytes()
+    if len(data) > max_bytes:
+        raise _http_error(413, "attachment_too_large")
+
+    return normalized_content_type
+
+
+def admin_attachment_response(attachment: dict) -> dict:
+    return {
+        key: value
+        for key, value in attachment.items()
+        if key not in {"storage_path", "stored_filename"}
+    }
 
 
 def _http_error(status_code: int, detail: str):
@@ -470,6 +512,7 @@ async def admin_upload_record_attachment(
 ):
     require_admin_attachment_token(x_cde_admin_token)
     data = await file.read()
+    content_type = validate_admin_attachment_upload(file.content_type, data)
     conn = get_db()
     try:
         attachment = store_attachment_bytes(
@@ -477,7 +520,7 @@ async def admin_upload_record_attachment(
             reference=reference,
             data=data,
             original_filename=file.filename or "attachment",
-            content_type=file.content_type or "application/octet-stream",
+            content_type=content_type,
             visibility=visibility,
             redaction_status=redaction_status,
             title=title,
@@ -488,7 +531,10 @@ async def admin_upload_record_attachment(
             document_date_precision=document_date_precision,
             root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
         )
-        return JSONResponse(status_code=201, content={"attachment": attachment})
+        return JSONResponse(
+            status_code=201,
+            content={"attachment": admin_attachment_response(attachment)},
+        )
     except AttachmentRecordNotFound as exc:
         raise _http_error(404, str(exc))
     except ValueError as exc:

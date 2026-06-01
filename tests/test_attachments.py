@@ -159,6 +159,19 @@ class AttachmentInfrastructureTests(unittest.TestCase):
 
         self.assertEqual(attachment_sha256(data), hashlib.sha256(data).hexdigest())
 
+    def test_attachment_sha256_changes_only_when_bytes_change(self):
+        original = b"same source artifact bytes"
+        metadata_only_change = {
+            "title": "Different title",
+            "document_date": "2026-05-31",
+            "visibility": "public",
+        }
+        changed_bytes = b"same source artifact bytes."
+
+        self.assertEqual(attachment_sha256(original), attachment_sha256(original))
+        self.assertNotEqual(attachment_sha256(original), attachment_sha256(changed_bytes))
+        self.assertEqual(metadata_only_change["document_date"], "2026-05-31")
+
     def test_validate_document_date_accepts_allowed_precision(self):
         self.assertEqual(validate_document_date("2026-05-31", "day"), ("2026-05-31", "day"))
         self.assertEqual(validate_document_date("2026-05", "month"), ("2026-05", "month"))
