@@ -152,22 +152,27 @@ class AttachmentUploadTests(unittest.TestCase):
         *,
         token="secret-token",
         filename="evidence.pdf",
+        content_type="application/pdf",
         data=b"evidence",
         document_date=None,
         document_date_precision="unknown",
+        extra_env=None,
     ):
+        env = {
+            "CDE_ADMIN_TOKEN": "secret-token",
+            "CDE_ATTACHMENT_ROOT": str(self.attachment_root),
+        }
+        if extra_env:
+            env.update(extra_env)
         with patch.dict(
             os.environ,
-            {
-                "CDE_ADMIN_TOKEN": "secret-token",
-                "CDE_ATTACHMENT_ROOT": str(self.attachment_root),
-            },
+            env,
             clear=False,
         ):
             return asyncio.run(
                 self.records.admin_upload_record_attachment(
                     self.reference,
-                    file=FakeUploadFile(filename, "application/pdf", data),
+                    file=FakeUploadFile(filename, content_type, data),
                     visibility="private",
                     redaction_status="none",
                     title="Evidence",
@@ -188,6 +193,21 @@ class AttachmentUploadTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def fetch_attachment_rows(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            return conn.execute(
+                "SELECT * FROM record_attachments ORDER BY id"
+            ).fetchall()
+        finally:
+            conn.close()
+
+    def attachment_file_count(self):
+        if not self.attachment_root.exists():
+            return 0
+        return len([path for path in self.attachment_root.rglob("*") if path.is_file()])
+
     def test_valid_upload_stores_file_and_metadata(self):
         data = b"attachment bytes"
 
@@ -197,6 +217,8 @@ class AttachmentUploadTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.content["attachment"]["reference"], self.reference)
+        self.assertNotIn("storage_path", response.content["attachment"])
+        self.assertNotIn("stored_filename", response.content["attachment"])
         self.assertEqual(row["reference"], self.reference)
         self.assertEqual(row["record_version"], 1)
         self.assertEqual(row["filename"], "evidence.pdf")
@@ -213,6 +235,8 @@ class AttachmentUploadTests(unittest.TestCase):
             self.upload(token="wrong-token")
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 403)
+        self.assertNotIn("secret-token", getattr(ctx.exception, "detail", ""))
+        self.assertNotIn("wrong-token", getattr(ctx.exception, "detail", ""))
         self.assertEqual(self.fetch_attachment_row(), None)
 
     def test_missing_token_is_rejected(self):
@@ -220,7 +244,39 @@ class AttachmentUploadTests(unittest.TestCase):
             self.upload(token=None)
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+        self.assertNotIn("secret-token", getattr(ctx.exception, "detail", ""))
         self.assertEqual(self.fetch_attachment_row(), None)
+
+    def test_oversized_upload_is_rejected_before_persistence(self):
+        with self.assertRaises(Exception) as ctx:
+            self.upload(
+                data=b"0123456789",
+                extra_env={"CDE_ATTACHMENT_MAX_BYTES": "4"},
+            )
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 413)
+        self.assertEqual(getattr(ctx.exception, "detail", None), "attachment_too_large")
+        self.assertEqual(self.fetch_attachment_row(), None)
+        self.assertEqual(self.attachment_file_count(), 0)
+
+    def test_disallowed_mime_type_is_rejected_before_persistence(self):
+        with self.assertRaises(Exception) as ctx:
+            self.upload(content_type="text/html", data=b"<script>alert(1)</script>")
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 415)
+        self.assertEqual(
+            getattr(ctx.exception, "detail", None),
+            "attachment_content_type_not_allowed",
+        )
+        self.assertEqual(self.fetch_attachment_row(), None)
+        self.assertEqual(self.attachment_file_count(), 0)
+
+    def test_allowed_mime_type_with_parameters_is_normalized(self):
+        self.upload(content_type="Text/Plain; charset=utf-8", data=b"plain text")
+
+        row = self.fetch_attachment_row()
+
+        self.assertEqual(row["content_type"], "text/plain")
 
     def test_admin_route_disabled_when_env_token_unset(self):
         with patch.dict(
@@ -239,6 +295,7 @@ class AttachmentUploadTests(unittest.TestCase):
                 )
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 503)
+        self.assertNotIn("secret-token", getattr(ctx.exception, "detail", ""))
 
     def test_missing_record_is_rejected(self):
         with patch.dict(
@@ -304,8 +361,79 @@ class AttachmentUploadTests(unittest.TestCase):
         self.assertEqual(getattr(ctx.exception, "status_code", None), 400)
         self.assertEqual(self.fetch_attachment_row(), None)
 
+    def test_invalid_visibility_and_redaction_are_rejected_before_file_persistence(self):
+        with self.assertRaises(Exception) as visibility_ctx:
+            with patch.dict(
+                os.environ,
+                {
+                    "CDE_ADMIN_TOKEN": "secret-token",
+                    "CDE_ATTACHMENT_ROOT": str(self.attachment_root),
+                },
+                clear=False,
+            ):
+                asyncio.run(
+                    self.records.admin_upload_record_attachment(
+                        self.reference,
+                        file=FakeUploadFile("evidence.pdf", "application/pdf", b"x"),
+                        visibility="shared",
+                        x_cde_admin_token="secret-token",
+                    )
+                )
+
+        self.assertEqual(getattr(visibility_ctx.exception, "status_code", None), 400)
+        self.assertEqual(self.fetch_attachment_row(), None)
+        self.assertEqual(self.attachment_file_count(), 0)
+
+        with self.assertRaises(Exception) as redaction_ctx:
+            with patch.dict(
+                os.environ,
+                {
+                    "CDE_ADMIN_TOKEN": "secret-token",
+                    "CDE_ATTACHMENT_ROOT": str(self.attachment_root),
+                },
+                clear=False,
+            ):
+                asyncio.run(
+                    self.records.admin_upload_record_attachment(
+                        self.reference,
+                        file=FakeUploadFile("evidence.pdf", "application/pdf", b"x"),
+                        redaction_status="hidden",
+                        x_cde_admin_token="secret-token",
+                    )
+                )
+
+        self.assertEqual(getattr(redaction_ctx.exception, "status_code", None), 400)
+        self.assertEqual(self.fetch_attachment_row(), None)
+        self.assertEqual(self.attachment_file_count(), 0)
+
+    def test_attachment_hash_depends_on_bytes_not_metadata(self):
+        data = b"same evidence bytes"
+
+        self.upload(
+            filename="first.pdf",
+            data=data,
+            document_date="2026-05-29",
+            document_date_precision="day",
+        )
+        self.upload(
+            filename="second.pdf",
+            data=data,
+            document_date="2026-05",
+            document_date_precision="month",
+        )
+
+        rows = self.fetch_attachment_rows()
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["sha256_hash"], rows[1]["sha256_hash"])
+        self.assertEqual(rows[0]["sha256_hash"], hashlib.sha256(data).hexdigest())
+
     def test_canonical_verification_hash_unchanged_after_upload(self):
-        self.upload(data=b"attachment bytes")
+        self.upload(
+            data=b"attachment bytes",
+            document_date="2026",
+            document_date_precision="year",
+        )
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
