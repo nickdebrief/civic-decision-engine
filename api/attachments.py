@@ -294,6 +294,60 @@ def public_manifest_attachments(
     ]
 
 
+def list_record_attachments(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+    verify_files: bool = False,
+    attachment_root: Path = ATTACHMENT_ROOT,
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT id, reference, record_version, attachment_version, filename,
+               stored_filename, storage_path, content_type, file_size_bytes,
+               sha256_hash, visibility, redaction_status, title, description,
+               source_label, document_date, document_date_precision, uploaded_at,
+               is_latest, is_deleted
+        FROM record_attachments
+        WHERE reference = ?
+        ORDER BY record_version DESC, id ASC
+        """,
+        (reference,),
+    ).fetchall()
+
+    attachments = []
+    for row in rows:
+        attachment = {
+            "attachment_id": row["id"],
+            "reference": row["reference"],
+            "record_version": row["record_version"],
+            "attachment_version": row["attachment_version"],
+            "filename": row["filename"],
+            "content_type": row["content_type"],
+            "file_size_bytes": row["file_size_bytes"],
+            "sha256_hash": row["sha256_hash"],
+            "visibility": row["visibility"],
+            "redaction_status": row["redaction_status"],
+            "title": row["title"],
+            "description": row["description"],
+            "source_label": row["source_label"],
+            "document_date": row["document_date"],
+            "document_date_precision": row["document_date_precision"] or "unknown",
+            "uploaded_at": row["uploaded_at"],
+            "is_latest": row["is_latest"],
+            "is_deleted": row["is_deleted"],
+            "appears_in_public_manifest": _appears_in_public_manifest(row),
+        }
+        if verify_files:
+            attachment.update(
+                _verify_attachment_file(row, attachment_root=attachment_root)
+            )
+        attachments.append(attachment)
+
+    return attachments
+
+
 def build_attachment_storage_path(
     *,
     reference: str,
@@ -349,6 +403,46 @@ def _validate_visibility(value: str) -> None:
 def _validate_redaction_status(value: str) -> None:
     if value not in VALID_REDACTION_STATUS:
         raise ValueError("Invalid attachment redaction status")
+
+
+def _appears_in_public_manifest(row: sqlite3.Row) -> bool:
+    return (
+        row["visibility"] == "public"
+        and row["redaction_status"] != "withheld"
+        and row["is_latest"] == 1
+        and row["is_deleted"] == 0
+    )
+
+
+def _verify_attachment_file(
+    row: sqlite3.Row, *, attachment_root: Path
+) -> dict[str, bool | None]:
+    path = _safe_existing_attachment_path(
+        row["storage_path"], attachment_root=attachment_root
+    )
+    if path is None or not path.is_file():
+        return {"file_exists": False, "file_sha256_matches": None}
+
+    return {
+        "file_exists": True,
+        "file_sha256_matches": attachment_sha256(path.read_bytes())
+        == row["sha256_hash"],
+    }
+
+
+def _safe_existing_attachment_path(
+    storage_path: str, *, attachment_root: Path
+) -> Path | None:
+    if not storage_path:
+        return None
+
+    root_path = attachment_root.resolve(strict=False)
+    candidate = Path(storage_path).resolve(strict=False)
+    try:
+        candidate.relative_to(root_path)
+    except ValueError:
+        return None
+    return candidate
 
 
 def _ensure_optional_column(
