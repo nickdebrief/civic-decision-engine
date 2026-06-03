@@ -63,7 +63,7 @@ Before uploading an attachment, capture the record verification hash:
 ```bash
 curl -s \
   "https://civic-decision-engine-production.up.railway.app/api/verify/Strike-OT-20260602-ATTACH-TEST" \
-  | jq '.verification_hash'
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["verification_hash"])'
 ```
 
 ## Synthetic Attachment Examples
@@ -262,7 +262,7 @@ Fetch the record manifest:
 ```bash
 curl -s \
   "https://civic-decision-engine-production.up.railway.app/verify/Strike-OT-20260602-ATTACH-TEST/manifest" \
-  | jq .
+  | python3 -m json.tool
 ```
 
 Expected:
@@ -295,7 +295,7 @@ Capture the hash before upload:
 ```bash
 BEFORE_HASH=$(curl -s \
   "https://civic-decision-engine-production.up.railway.app/api/verify/Strike-OT-20260602-ATTACH-TEST" \
-  | jq -r '.verification_hash')
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["verification_hash"])')
 ```
 
 Capture the hash after upload:
@@ -303,7 +303,7 @@ Capture the hash after upload:
 ```bash
 AFTER_HASH=$(curl -s \
   "https://civic-decision-engine-production.up.railway.app/api/verify/Strike-OT-20260602-ATTACH-TEST" \
-  | jq -r '.verification_hash')
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["verification_hash"])')
 ```
 
 Compare:
