@@ -12,22 +12,26 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+
 try:
     from fastapi import Form, Request
 except ImportError:
+
     def Form(default=None, **_kwargs):
         return default
 
     class Request:  # pragma: no cover - used only when FastAPI is stubbed.
         pass
+
+
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.attachments import ATTACHMENT_ROOT, list_record_attachments
 
-
 router = APIRouter()
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
+
 ADMIN_PASSWORD_ENV = "CDE_ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
 SESSION_COOKIE_NAME = "cde_admin_session"
@@ -105,6 +109,7 @@ def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]
     expires_at = payload.get("expires_at")
     if not isinstance(expires_at, int):
         raise _http_error(401, "admin_session_unauthorized")
+
     current_time = int(now if now is not None else time.time())
     if expires_at <= current_time:
         raise _http_error(401, "admin_session_unauthorized")
@@ -137,6 +142,7 @@ def _set_session_cookie(response, session: str) -> None:
             samesite="strict",
         )
         return
+
     response.headers["Set-Cookie"] = (
         f"{SESSION_COOKIE_NAME}={session}; Max-Age={SESSION_MAX_AGE_SECONDS}; "
         "HttpOnly; Secure; SameSite=Strict"
@@ -152,6 +158,7 @@ def _clear_session_cookie(response) -> None:
             samesite="strict",
         )
         return
+
     response.headers["Set-Cookie"] = (
         f"{SESSION_COOKIE_NAME}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"
     )
@@ -195,14 +202,13 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             "</tr>"
             for label, value in rows
         )
-        cards.append(
-            f"""
+        cards.append(f"""
       <section class="attachment-card">
         <table>
           <tbody>{table_rows}</tbody>
         </table>
-      </section>"""
-        )
+      </section>""")
+
     return "".join(cards)
 
 
@@ -346,7 +352,9 @@ def admin_record_attachments_page(reference: str, request: Request):
             conn,
             reference=reference,
             verify_files=False,
-            attachment_root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
+            attachment_root=Path(
+                os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))
+            ),
         )
         return HTMLResponse(
             content=render_admin_attachments_page(
