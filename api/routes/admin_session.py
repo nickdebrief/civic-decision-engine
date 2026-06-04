@@ -20,6 +20,9 @@ except ImportError:
     def File(default=None, **_kwargs):
         return default
 
+    from fastapi import Form, Request
+except ImportError:
+
     def Form(default=None, **_kwargs):
         return default
 
@@ -38,6 +41,9 @@ from api.attachments import (
     list_record_attachments,
     store_attachment_bytes,
 )
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from api.attachments import ATTACHMENT_ROOT, list_record_attachments
 
 router = APIRouter()
 

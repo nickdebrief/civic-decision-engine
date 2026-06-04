@@ -451,6 +451,19 @@ Implemented / pending review
 Scope:
 
 - Admin session scaffold only.
+
+## Implementation Status
+
+### Stage 5B Step 1 - Attachment Audit Events Schema
+
+Status:
+
+Implemented
+
+Scope:
+
+- Attachment audit events schema only.
+- No admin session requirement.
 - No upload UI.
 - No upload route.
 - No attachment mutation.
@@ -469,3 +482,16 @@ Scope:
 - Read-only attachment listing.
 - No upload capability.
 - No mutation capability.
+### Stage 5B Step 2 - Admin Session Scaffold
+
+Status:
+
+Implemented
+
+Scope:
+
+- Admin session scaffold only.
+- No upload UI.
+- No upload route.
+- No attachment mutation.
+
