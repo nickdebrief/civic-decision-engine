@@ -1,4 +1,4 @@
-# Civic Decision Engine v12 Draft README
+# Civic Decision Engine v12
 
 <p align="center">
   <img src="./assets/v12-seal.png"
@@ -6,8 +6,9 @@
        width="320">
 </p>
 
-This is a draft release README for Civic Decision Engine v12. It is preparation
-material only and does not replace the repository root `README.md`.
+Civic Decision Engine v12 introduces additive attachment infrastructure while
+preserving canonical record verification, public record integrity, and archival
+continuity.
 
 ## Overview
 
@@ -25,7 +26,7 @@ verification.
 v12 introduces attachment infrastructure for referenced evidence artifacts. The
 attachment layer is additive and independent from canonical record hashing.
 
-The current v12 work establishes:
+v12 establishes:
 
 - A `record_attachments` schema.
 - Immutable local storage helpers under `/data/attachments/{reference}/...`.
@@ -33,7 +34,7 @@ The current v12 work establishes:
 - Admin-only upload infrastructure protected by `CDE_ADMIN_TOKEN`.
 - Public manifest expansion with safe attachment metadata.
 - Optional source-document date metadata.
-- Upload privacy hardening before operational enablement.
+- Upload privacy hardening.
 
 ## Attachment Architecture
 
@@ -95,7 +96,7 @@ Manifest attachment entries expose safe metadata only:
 - Upload timestamp
 - `download_url: null`
 
-Public attachment downloads are not implemented in the current v12 draft.
+Public attachment downloads are not implemented in v12.
 
 ## Verification Integrity
 
@@ -154,6 +155,35 @@ By preserving document dates independently from upload dates and record
 generation dates, v12 provides a foundation for maintaining evidentiary
 continuity across long-running civic records.
 
+## Operational Verification Status
+
+v12 attachment infrastructure has completed controlled production verification
+using synthetic, non-sensitive test records and attachments.
+
+Verification confirmed:
+
+- Independent SHA-256 hashing of attachment content.
+- Public attachment metadata projection through record manifests.
+- Privacy filtering for private attachments.
+- Privacy filtering for withheld attachments.
+- Preservation of canonical record verification hashes.
+- Preservation of canonical serialization behavior.
+- Document date metadata support for day, month, year, and unknown precision.
+- Multi-attachment record support.
+- Attachment persistence across service restart.
+- Attachment integrity verification through local inspection tooling.
+- Emergency administrative disablement through removal of `CDE_ADMIN_TOKEN`.
+
+During verification, attachment uploads, manifest generation, attachment
+inspection, restart persistence checks, and administrative disable testing were
+completed without altering canonical record verification outputs.
+
+Operational verification confirmed that attachments remain additive to the
+record model and do not modify the integrity of existing civic records.
+
+Real evidence uploads remain out of scope until future operational approval.
+Synthetic verification artifacts were used throughout testing.
+
 ## Implemented v12 Stages
 
 ### Stage 1 - Attachment Schema and Storage
@@ -181,9 +211,32 @@ artifact dates.
 Added upload size limits, MIME allowlist validation, constant-time token
 comparison, token-safe error responses, and privacy regression tests.
 
+### Stage 4 - Synthetic Attachment Activation
+
+Completed controlled synthetic attachment uploads using non-sensitive test
+artifacts. Verified attachment storage, hashing, manifest behavior, and
+canonical hash preservation.
+
+### Stage 4C - Production Operational Verification
+
+Completed production verification of attachment behavior using synthetic
+attachments.
+
+Verified:
+
+- Public attachment manifest projection.
+- Withheld attachment filtering.
+- Date precision preservation.
+- Multi-attachment record support.
+- Attachment persistence after restart.
+- Local attachment inspection tooling.
+- Emergency disable behavior when `CDE_ADMIN_TOKEN` is removed.
+
+Canonical verification hashes remained unchanged throughout testing.
+
 ## Not Yet Implemented
 
-The current v12 draft does not implement:
+v12 does not implement:
 
 - Public attachment downloads
 - Public attachment serving
@@ -208,11 +261,13 @@ Future v12 work may include:
 Any future serving or discovery layer should remain additive and must not alter
 canonical record verification.
 
-## Active Development Status
+## Release Status
 
-This document describes the current v12 release preparation state. It should be
-reviewed before replacing or updating the repository root README.
+This document describes the Civic Decision Engine v12 release state.
 
-Operational admin uploads should remain disabled until deployment verification is
-complete and `CDE_ADMIN_TOKEN` is intentionally configured in the deployment
-environment.
+The attachment architecture, privacy model, document date support, manifest
+expansion, operational verification process, and attachment inspection tooling
+have been completed and verified using synthetic test artifacts.
+
+Public attachment serving, search, OCR, extraction, and semantic indexing remain
+out of scope for v12.
