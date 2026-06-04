@@ -1,4 +1,4 @@
-# Civic Decision Engine v12 Draft README
+# Civic Decision Engine v12
 
 <p align="center">
   <img src="./assets/v12-seal.png"
@@ -6,8 +6,9 @@
        width="320">
 </p>
 
-This is a draft release README for Civic Decision Engine v12. It is preparation
-material only and does not replace the repository root `README.md`.
+Civic Decision Engine v12 introduces additive attachment infrastructure while
+preserving canonical record verification, public record integrity, and archival
+continuity.
 
 ## Overview
 
@@ -25,7 +26,7 @@ verification.
 v12 introduces attachment infrastructure for referenced evidence artifacts. The
 attachment layer is additive and independent from canonical record hashing.
 
-The current v12 work establishes:
+v12 establishes:
 
 - A `record_attachments` schema.
 - Immutable local storage helpers under `/data/attachments/{reference}/...`.
@@ -33,7 +34,7 @@ The current v12 work establishes:
 - Admin-only upload infrastructure protected by `CDE_ADMIN_TOKEN`.
 - Public manifest expansion with safe attachment metadata.
 - Optional source-document date metadata.
-- Upload privacy hardening before operational enablement.
+- Upload privacy hardening.
 
 ## Attachment Architecture
 
@@ -95,7 +96,7 @@ Manifest attachment entries expose safe metadata only:
 - Upload timestamp
 - `download_url: null`
 
-Public attachment downloads are not implemented in the current v12 draft.
+Public attachment downloads are not implemented in v12.
 
 ## Verification Integrity
 
@@ -235,7 +236,7 @@ Canonical verification hashes remained unchanged throughout testing.
 
 ## Not Yet Implemented
 
-The current v12 draft does not implement:
+v12 does not implement:
 
 - Public attachment downloads
 - Public attachment serving
@@ -260,15 +261,13 @@ Future v12 work may include:
 Any future serving or discovery layer should remain additive and must not alter
 canonical record verification.
 
-## Release Preparation Status
+## Release Status
 
-This document describes the current v12 release candidate state.
+This document describes the Civic Decision Engine v12 release state.
 
 The attachment architecture, privacy model, document date support, manifest
 expansion, operational verification process, and attachment inspection tooling
 have been completed and verified using synthetic test artifacts.
 
 Public attachment serving, search, OCR, extraction, and semantic indexing remain
-out of scope for the current v12 release candidate.
-
-The repository root README should not be updated until v12 is formally released.
+out of scope for v12.
