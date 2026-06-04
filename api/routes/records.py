@@ -315,6 +315,66 @@ def admin_attachment_response(attachment: dict) -> dict:
     }
 
 
+def render_public_attachments_section(attachments: list[dict]) -> str:
+    intro = (
+        "Attachments are referenced evidence artifacts. Attachment hashes are "
+        "independent of canonical record hashes. Attachments do not alter the "
+        "canonical record verification hash."
+    )
+    if not attachments:
+        return f"""
+    <section class="section attachment-section">
+      <h2 class="section-title">Attachments</h2>
+      <p class="attachment-note">{intro}</p>
+      <p class="attachment-empty">No public attachments are listed for this record.</p>
+    </section>"""
+
+    attachment_cards = []
+    for attachment in attachments:
+        download_status = (
+            "Download not available in v12.1"
+            if attachment.get("download_url") is None
+            else "Download metadata available in manifest"
+        )
+        rows = (
+            ("Title", attachment.get("title")),
+            ("Description", attachment.get("description")),
+            ("Source label", attachment.get("source_label")),
+            ("Filename", attachment.get("filename")),
+            ("Content type", attachment.get("content_type")),
+            ("File size", attachment.get("file_size_bytes")),
+            ("SHA-256 hash", attachment.get("sha256_hash")),
+            ("Visibility", attachment.get("visibility")),
+            ("Redaction status", attachment.get("redaction_status")),
+            ("Document date", attachment.get("document_date")),
+            ("Document date precision", attachment.get("document_date_precision")),
+            ("Uploaded at", attachment.get("uploaded_at")),
+            ("Download status", download_status),
+        )
+        metadata_rows = "".join(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        attachment_cards.append(
+            f"""
+      <div class="attachment-card">
+        <table class="attachment-table">
+          <tbody>{metadata_rows}</tbody>
+        </table>
+      </div>"""
+        )
+
+    return f"""
+    <section class="section attachment-section">
+      <h2 class="section-title">Attachments</h2>
+      <p class="attachment-note">{intro}</p>
+      {''.join(attachment_cards)}
+    </section>"""
+
+
 def _http_error(status_code: int, detail: str):
     try:
         return HTTPException(status_code=status_code, detail=detail)
@@ -6480,6 +6540,13 @@ async def verify_record(reference: str):
         else:
             narrative_section = ""
 
+        public_attachments = public_manifest_attachments(
+            conn,
+            reference=record["reference"],
+            record_version=record["version"],
+        )
+        attachments_section = render_public_attachments_section(public_attachments)
+
         json_ld = json.dumps(
             {
                 "@context": "https://schema.org",
@@ -6850,6 +6917,55 @@ async def verify_record(reference: str):
       margin-top: 10px;
       font-style: italic;
     }}
+    .attachment-note {{
+      font-size: 0.8rem;
+      color: #777;
+      line-height: 1.6;
+      font-style: italic;
+      margin: 0 0 14px;
+    }}
+    .attachment-empty {{
+      background: #f8f7f4;
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      padding: 12px 14px;
+      color: #777;
+      font-size: 0.82rem;
+      margin: 0;
+    }}
+    .attachment-card {{
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      background: #fff;
+      margin-top: 14px;
+      overflow: hidden;
+    }}
+    .attachment-table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }}
+    .attachment-table tr {{ border-bottom: 1px solid #f4f2ee; }}
+    .attachment-table tr:last-child {{ border-bottom: none; }}
+    .attachment-table td {{
+      padding: 8px 10px;
+      vertical-align: top;
+      word-break: break-word;
+    }}
+    .attachment-table td:first-child {{
+      width: 170px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #f8f7f4;
+    }}
+    .attachment-table td:last-child {{
+      color: #333;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+    }}
   </style>
 </head>
 <body>
@@ -6917,6 +7033,7 @@ async def verify_record(reference: str):
     </section>
     {history_section}
     {narrative_section}
+    {attachments_section}
     <section class="section cite-section">
 
       <h2 class="section-title">Cite this record</h2>
