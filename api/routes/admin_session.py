@@ -5,19 +5,31 @@ import hashlib
 import hmac
 import json
 import os
+import sqlite3
 import time
+from html import escape
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+
 try:
-    from fastapi import Form
+    from fastapi import Form, Request
 except ImportError:
+
     def Form(default=None, **_kwargs):
         return default
+
+    class Request:  # pragma: no cover - used only when FastAPI is stubbed.
+        pass
+
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from api.attachments import ATTACHMENT_ROOT, list_record_attachments
 
 router = APIRouter()
+
+DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 
 ADMIN_PASSWORD_ENV = "CDE_ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
@@ -96,6 +108,7 @@ def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]
     expires_at = payload.get("expires_at")
     if not isinstance(expires_at, int):
         raise _http_error(401, "admin_session_unauthorized")
+
     current_time = int(now if now is not None else time.time())
     if expires_at <= current_time:
         raise _http_error(401, "admin_session_unauthorized")
@@ -111,6 +124,12 @@ def require_admin_session(request) -> dict[str, Any]:
     return verify_admin_session(session)
 
 
+def get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _set_session_cookie(response, session: str) -> None:
     if hasattr(response, "set_cookie"):
         response.set_cookie(
@@ -122,6 +141,7 @@ def _set_session_cookie(response, session: str) -> None:
             samesite="strict",
         )
         return
+
     response.headers["Set-Cookie"] = (
         f"{SESSION_COOKIE_NAME}={session}; Max-Age={SESSION_MAX_AGE_SECONDS}; "
         "HttpOnly; Secure; SameSite=Strict"
@@ -137,9 +157,134 @@ def _clear_session_cookie(response) -> None:
             samesite="strict",
         )
         return
+
     response.headers["Set-Cookie"] = (
         f"{SESSION_COOKIE_NAME}=; Max-Age=0; HttpOnly; Secure; SameSite=Strict"
     )
+
+
+def _attachment_state(attachment: dict[str, Any]) -> str:
+    if attachment.get("is_deleted") == 1:
+        return "deleted"
+    if attachment.get("redaction_status") == "withheld":
+        return "withheld"
+    return "active"
+
+
+def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
+    if not attachments:
+        return """
+      <p>No attachments are currently associated with this record.</p>"""
+
+    cards = []
+    for attachment in attachments:
+        rows = (
+            ("Record version", attachment.get("record_version")),
+            ("Title", attachment.get("title")),
+            ("Description", attachment.get("description")),
+            ("Source label", attachment.get("source_label")),
+            ("Filename", attachment.get("filename")),
+            ("Content type", attachment.get("content_type")),
+            ("File size", attachment.get("file_size_bytes")),
+            ("SHA-256 hash", attachment.get("sha256_hash")),
+            ("Visibility", attachment.get("visibility")),
+            ("Redaction status", attachment.get("redaction_status")),
+            ("Lifecycle state", _attachment_state(attachment)),
+            ("Document date", attachment.get("document_date")),
+            ("Document date precision", attachment.get("document_date_precision")),
+            ("Uploaded at", attachment.get("uploaded_at")),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(f"""
+      <section class="attachment-card">
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>""")
+
+    return "".join(cards)
+
+
+def render_admin_attachments_page(
+    *, reference: str, record_version: int, attachments: list[dict[str, Any]]
+) -> str:
+    attachment_rows = _render_admin_attachment_rows(attachments)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Attachments - {escape(reference)}</title>
+  <style>
+    body {{
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #f7f7f4;
+      color: #1a1a1a;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 28px;
+    }}
+    .notice {{
+      border: 1px solid #d8d4ca;
+      background: #faf9f5;
+      padding: 12px 14px;
+      margin: 18px 0 24px;
+      color: #555;
+    }}
+    .attachment-card {{
+      border: 1px solid #e5e1d8;
+      margin-top: 16px;
+      overflow: hidden;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }}
+    tr {{ border-bottom: 1px solid #eee; }}
+    tr:last-child {{ border-bottom: none; }}
+    td {{
+      padding: 8px 10px;
+      vertical-align: top;
+      word-break: break-word;
+    }}
+    td:first-child {{
+      width: 190px;
+      background: #faf9f5;
+      color: #666;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    td:last-child {{ font-family: ui-monospace, monospace; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Admin Attachment Listing</h1>
+    <p><strong>Record reference:</strong> {escape(reference)}</p>
+    <p><strong>Record version:</strong> {record_version}</p>
+    <p class="notice">
+      Administrative attachment visibility only.
+      No upload, edit, delete, restore, or correction actions are available in Stage 5B Step 3.
+    </p>
+    {attachment_rows}
+  </main>
+</body>
+</html>"""
 
 
 @router.get("/admin/login", response_class=HTMLResponse)
@@ -186,3 +331,36 @@ def admin_session_logout():
     response = JSONResponse(content={"ok": True})
     _clear_session_cookie(response)
     return response
+
+
+@router.get("/admin/records/{reference}/attachments", response_class=HTMLResponse)
+def admin_record_attachments_page(reference: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version FROM records "
+            "WHERE reference = ? AND is_latest = 1 "
+            "ORDER BY version DESC LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            raise _http_error(404, "record_not_found")
+
+        attachments = list_record_attachments(
+            conn,
+            reference=reference,
+            verify_files=False,
+            attachment_root=Path(
+                os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))
+            ),
+        )
+        return HTMLResponse(
+            content=render_admin_attachments_page(
+                reference=record["reference"],
+                record_version=record["version"],
+                attachments=attachments,
+            )
+        )
+    finally:
+        conn.close()

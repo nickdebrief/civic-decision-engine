@@ -438,6 +438,19 @@ established. This preserves the current v12 posture: attachment capabilities can
 grow while canonical records, verification hashes, and public privacy boundaries
 remain protected.
 
+## Implementation Status
+
+### Stage 5B Step 2 - Admin Session Scaffold
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Admin session scaffold only.
 
 ## Implementation Status
 
@@ -455,6 +468,20 @@ Scope:
 - No upload route.
 - No attachment mutation.
 
+### Stage 5B Step 3 - Admin Attachment Listing Page
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Authenticated admin visibility only.
+- Read-only attachment listing.
+- No upload capability.
+- No mutation capability.
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:
