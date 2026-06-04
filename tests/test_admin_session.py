@@ -1,11 +1,17 @@
 import base64
+import hashlib
 import importlib
 import json
 import os
+import sqlite3
 import sys
+import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
+from api.attachments import ensure_attachment_tables
 
 
 class FakeAPIRouter:
@@ -225,6 +231,227 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Secure", cookie)
         self.assertIn("SameSite=Strict", cookie)
         self.assert_no_admin_token_exposed(response)
+
+    def make_admin_listing_db(self, db_path):
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("""
+            CREATE TABLE records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                verification_hash TEXT NOT NULL,
+                is_latest INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(reference, version)
+            )
+        """)
+        conn.execute(
+            """
+            INSERT INTO records (reference, version, verification_hash, is_latest)
+            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, 1)
+            """,
+            ("c" * 64,),
+        )
+        ensure_attachment_tables(conn)
+        conn.commit()
+        return conn
+
+    def insert_admin_attachment(self, conn, **overrides):
+        values = {
+            "reference": "Strike-OT-20260604-ADMIN",
+            "record_version": 1,
+            "attachment_version": 1,
+            "filename": "public.pdf",
+            "stored_filename": "internal-public.pdf",
+            "storage_path": "/private/path/internal-public.pdf",
+            "content_type": "application/pdf",
+            "file_size_bytes": 12345,
+            "sha256_hash": "d" * 64,
+            "visibility": "public",
+            "redaction_status": "none",
+            "title": "Public attachment",
+            "description": "Attachment description",
+            "source_label": "Attachment source",
+            "document_date": "2026-06-04",
+            "document_date_precision": "day",
+            "uploaded_at": "2026-06-04T12:00:00Z",
+            "is_latest": 1,
+            "is_deleted": 0,
+        }
+        values.update(overrides)
+        columns = ", ".join(values.keys())
+        placeholders = ", ".join("?" for _ in values)
+        conn.execute(
+            f"INSERT INTO record_attachments ({columns}) VALUES ({placeholders})",
+            list(values.values()),
+        )
+        conn.commit()
+
+    def valid_request(self):
+        with self.env():
+            session = self.admin_session.create_admin_session()
+        return FakeRequest({self.admin_session.SESSION_COOKIE_NAME: session})
+
+    def test_admin_attachment_listing_requires_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.admin_record_attachments_page(
+                            "Strike-OT-20260604-ADMIN",
+                            FakeRequest(),
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_admin_attachment_listing_displays_all_attachment_states(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            self.insert_admin_attachment(
+                conn,
+                filename="private.pdf",
+                stored_filename="internal-private.pdf",
+                storage_path="/private/path/internal-private.pdf",
+                visibility="private",
+                title="Private attachment",
+            )
+            self.insert_admin_attachment(
+                conn,
+                filename="withheld.pdf",
+                stored_filename="internal-withheld.pdf",
+                storage_path="/private/path/internal-withheld.pdf",
+                redaction_status="withheld",
+                title="Withheld attachment",
+            )
+            self.insert_admin_attachment(
+                conn,
+                filename="deleted.pdf",
+                stored_filename="internal-deleted.pdf",
+                storage_path="/private/path/internal-deleted.pdf",
+                is_deleted=1,
+                title="Deleted attachment",
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with patch.object(self.admin_session.time, "time", return_value=200):
+                        response = self.admin_session.admin_record_attachments_page(
+                            "Strike-OT-20260604-ADMIN",
+                            self.valid_request(),
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Admin Attachment Listing", content)
+        self.assertIn("Strike-OT-20260604-ADMIN", content)
+        self.assertIn("Record version", content)
+        self.assertIn("Public attachment", content)
+        self.assertIn("Private attachment", content)
+        self.assertIn("Withheld attachment", content)
+        self.assertIn("Deleted attachment", content)
+        self.assertIn("public.pdf", content)
+        self.assertIn("private.pdf", content)
+        self.assertIn("withheld.pdf", content)
+        self.assertIn("deleted.pdf", content)
+        self.assertIn("application/pdf", content)
+        self.assertIn("12345", content)
+        self.assertIn("d" * 64, content)
+        self.assertIn("public", content)
+        self.assertIn("private", content)
+        self.assertIn("withheld", content)
+        self.assertIn("deleted", content)
+        self.assertIn("Attachment description", content)
+        self.assertIn("Attachment source", content)
+        self.assertIn("2026-06-04", content)
+        self.assertIn("day", content)
+        self.assertIn("2026-06-04T12:00:00Z", content)
+        self.assertIn(
+            "Administrative attachment visibility only.",
+            content,
+        )
+
+    def test_admin_attachment_listing_exposes_no_paths_tokens_or_controls(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertNotIn("storage_path", content)
+        self.assertNotIn("stored_filename", content)
+        self.assertNotIn("internal-public.pdf", content)
+        self.assertNotIn("/private/path", content)
+        self.assertNotIn("server-only-token", content)
+        self.assertNotIn("CDE_ADMIN_TOKEN", content)
+        self.assertNotIn("<button", content)
+        self.assertNotIn("<form", content)
+        self.assertNotIn("Download attachment", content)
+        self.assertNotIn("Upload attachment", content)
+        self.assertNotIn("Edit attachment", content)
+        self.assertNotIn("Delete attachment", content)
+        self.assertNotIn("Restore attachment", content)
+        self.assertNotIn("Withhold attachment", content)
+        self.assertNotIn("Publish attachment", content)
+
+    def test_admin_attachment_listing_empty_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertIn(
+            "No attachments are currently associated with this record.",
+            response.content,
+        )
+
+    def test_admin_attachment_listing_does_not_change_canonical_hashing(self):
+        canonical = {
+            "reference": "Strike-OT-20260604-ADMIN",
+            "generated_at": "2026-06-04T12:00:00Z",
+            "finding": "Admin listing must not change canonical hashing.",
+            "trajectory": "Stable",
+            "conditions": sorted(["Transfer of Burden", "Institutional Delay"]),
+            "system_state": "Canonical record unchanged",
+            "generated_by": "Civic Decision Engine",
+        }
+        payload = json.dumps(canonical, separators=(",", ":"), sort_keys=True)
+        actual = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+        self.assertEqual(
+            actual,
+            "4c3ef9bbe432d5c72a5e2853dbe32a17cd97fa7ac415d3a1ab5c79479c7fac59",
+        )
 
 
 if __name__ == "__main__":

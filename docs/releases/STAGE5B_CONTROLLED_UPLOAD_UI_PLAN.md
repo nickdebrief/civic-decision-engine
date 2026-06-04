@@ -454,3 +454,18 @@ Scope:
 - No upload UI.
 - No upload route.
 - No attachment mutation.
+
+### Stage 5B Step 3 - Admin Attachment Listing Page
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Authenticated admin visibility only.
+- Read-only attachment listing.
+- No upload capability.
+- No mutation capability.
