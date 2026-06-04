@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import importlib
@@ -98,6 +99,16 @@ def install_fastapi_stubs():
 class FakeRequest:
     def __init__(self, cookies=None):
         self.cookies = cookies or {}
+
+
+class FakeUploadFile:
+    def __init__(self, filename, content_type, data):
+        self.filename = filename
+        self.content_type = content_type
+        self._data = data
+
+    async def read(self):
+        return self._data
 
 
 class AdminSessionTests(unittest.TestCase):
@@ -255,6 +266,12 @@ class AdminSessionTests(unittest.TestCase):
         ensure_attachment_tables(conn)
         conn.commit()
         return conn
+
+    def attachment_file_count(self, attachment_root):
+        root = Path(attachment_root)
+        if not root.exists():
+            return 0
+        return len([path for path in root.rglob("*") if path.is_file()])
 
     def insert_admin_attachment(self, conn, **overrides):
         values = {
@@ -452,6 +469,220 @@ class AdminSessionTests(unittest.TestCase):
             actual,
             "4c3ef9bbe432d5c72a5e2853dbe32a17cd97fa7ac415d3a1ab5c79479c7fac59",
         )
+
+    def test_json_attachment_listing_requires_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.list_record_attachments_route(
+                            "Strike-OT-20260604-ADMIN",
+                            FakeRequest(),
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_json_attachment_listing_returns_metadata_without_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.list_record_attachments_route(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized = json.dumps(response.content, sort_keys=True)
+
+        self.assertEqual(response.content["attachment_count"], 1)
+        self.assertIn("Public attachment", serialized)
+        self.assertIn("public.pdf", serialized)
+        self.assertNotIn("storage_path", serialized)
+        self.assertNotIn("stored_filename", serialized)
+        self.assertNotIn("/private/path", serialized)
+        self.assertNotIn("internal-public.pdf", serialized)
+        self.assertNotIn("server-only-token", serialized)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
+
+    def test_pdf_upload_route_requires_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        asyncio.run(
+                            self.admin_session.upload_record_attachment_route(
+                                "Strike-OT-20260604-ADMIN",
+                                FakeRequest(),
+                                file=FakeUploadFile(
+                                    "evidence.pdf",
+                                    "application/pdf",
+                                    b"%PDF-1.4 synthetic",
+                                ),
+                            )
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_pdf_upload_route_stores_metadata_and_file_without_exposing_paths(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            attachment_root = Path(temp_dir) / "attachments"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            data = b"%PDF-1.4 synthetic evidence bytes"
+            try:
+                with self.env():
+                    with patch.dict(
+                        os.environ,
+                        {"CDE_ATTACHMENT_ROOT": str(attachment_root)},
+                        clear=False,
+                    ):
+                        response = asyncio.run(
+                            self.admin_session.upload_record_attachment_route(
+                                "Strike-OT-20260604-ADMIN",
+                                self.valid_request(),
+                                file=FakeUploadFile(
+                                    "../../evidence.pdf",
+                                    "application/pdf",
+                                    data,
+                                ),
+                                visibility="private",
+                                redaction_status="none",
+                                title="Uploaded PDF",
+                                description="Controlled PDF upload.",
+                                source_label="Admin test",
+                                document_date="2026-06-04",
+                                document_date_precision="day",
+                            )
+                        )
+
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    row = conn.execute("SELECT * FROM record_attachments").fetchone()
+                finally:
+                    conn.close()
+                stored_path = Path(row["storage_path"])
+                stored_file_exists = stored_path.is_file()
+                stored_file_bytes = stored_path.read_bytes() if stored_file_exists else b""
+                stored_file_count = self.attachment_file_count(attachment_root)
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized = json.dumps(response.content, sort_keys=True)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.content["attachment"]["filename"], "evidence.pdf")
+        self.assertEqual(response.content["attachment"]["content_type"], "application/pdf")
+        self.assertEqual(response.content["attachment"]["sha256_hash"], hashlib.sha256(data).hexdigest())
+        self.assertEqual(row["sha256_hash"], hashlib.sha256(data).hexdigest())
+        self.assertEqual(row["file_size_bytes"], len(data))
+        self.assertTrue(stored_file_exists)
+        self.assertEqual(stored_file_bytes, data)
+        self.assertEqual(stored_file_count, 1)
+        self.assertNotIn("storage_path", serialized)
+        self.assertNotIn("stored_filename", serialized)
+        self.assertNotIn(str(attachment_root), serialized)
+        self.assertNotIn("server-only-token", serialized)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
+
+    def test_pdf_upload_route_rejects_unsupported_content_type_before_persistence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            attachment_root = Path(temp_dir) / "attachments"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with patch.dict(
+                        os.environ,
+                        {"CDE_ATTACHMENT_ROOT": str(attachment_root)},
+                        clear=False,
+                    ):
+                        with self.assertRaises(Exception) as ctx:
+                            asyncio.run(
+                                self.admin_session.upload_record_attachment_route(
+                                    "Strike-OT-20260604-ADMIN",
+                                    self.valid_request(),
+                                    file=FakeUploadFile(
+                                        "evidence.txt",
+                                        "text/plain",
+                                        b"not a pdf",
+                                    ),
+                                )
+                            )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    row = conn.execute("SELECT * FROM record_attachments").fetchone()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 415)
+        self.assertIsNone(row)
+        self.assertEqual(self.attachment_file_count(attachment_root), 0)
+
+    def test_pdf_upload_route_enforces_size_limit_before_persistence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            attachment_root = Path(temp_dir) / "attachments"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with patch.dict(
+                        os.environ,
+                        {
+                            "CDE_ATTACHMENT_ROOT": str(attachment_root),
+                            "CDE_ATTACHMENT_MAX_BYTES": "4",
+                        },
+                        clear=False,
+                    ):
+                        with self.assertRaises(Exception) as ctx:
+                            asyncio.run(
+                                self.admin_session.upload_record_attachment_route(
+                                    "Strike-OT-20260604-ADMIN",
+                                    self.valid_request(),
+                                    file=FakeUploadFile(
+                                        "evidence.pdf",
+                                        "application/pdf",
+                                        b"%PDF-1.4 synthetic",
+                                    ),
+                                )
+                            )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    row = conn.execute("SELECT * FROM record_attachments").fetchone()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 413)
+        self.assertIsNone(row)
+        self.assertEqual(self.attachment_file_count(attachment_root), 0)
 
 
 if __name__ == "__main__":
