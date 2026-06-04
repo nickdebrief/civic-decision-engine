@@ -1,6 +1,6 @@
 # Civic Decision Engine (CDE)
 
-<img width="512" height="512" alt="android-chrome-512x512" src="https://github.com/user-attachments/assets/db217999-105c-4776-8c36-186ed2705f2f" />
+<img width="512" alt="Civic Decision Engine v12" src="docs/releases/assets/v12-seal.png" />
 
 ---
 
@@ -10,6 +10,13 @@ Observation sometimes becomes clearer when structure is applied.
 
 Not designed for attention.  
 Designed for understanding.
+
+---
+
+Current release: v12
+
+Release documentation:
+- [`docs/releases/README_v12.md`](docs/releases/README_v12.md)
 
 ---
 
@@ -34,22 +41,30 @@ The system is designed to make institutional progression visible through:
 
 ---
 
-## What v11 introduces
+## What v12 introduces
 
-Version 11 completes the public verification and archive layer.
+Version 12 introduces additive attachment infrastructure for referenced evidence
+artifacts while preserving canonical record verification hashes and canonical
+serialization.
 
 New capabilities include:
 
-- Canonical citation exports (APA, MLA, BibTeX, CSL JSON)
-- Public verification pages with SHA-256 integrity validation
-- Searchable public record archive
-- Scalable archive pagination
-- Multilingual verification support
-- Version lineage and verification continuity
-- Public record indexing and filtering
-- Structured archive navigation
+- Additive attachment infrastructure for referenced evidence artifacts
+- Independent SHA-256 hashing for attachment content
+- Attachment metadata projection through public record manifests
+- Optional source-document date metadata
+- Privacy filtering for private, withheld, and deleted attachments
+- Admin-only upload infrastructure protected by `CDE_ADMIN_TOKEN`
+- Local read-only attachment inspection tooling
+- Controlled production verification using synthetic test artifacts
+- Preservation of canonical record verification hashes and canonical serialization
 
-This version marks the transition from a diagnostic engine to a publicly navigable civic record infrastructure.
+Attachments are additive and non-canonical. They do not replace canonical
+records, alter verification hashes, or change public record creation behavior.
+
+v12 does not include public attachment downloads, public attachment serving,
+attachment search, OCR, PDF text extraction, semantic indexing of attachment
+content, or a public upload UI.
 
 ---
 
