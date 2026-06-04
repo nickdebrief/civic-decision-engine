@@ -23,7 +23,6 @@ except ImportError:
     class Request:  # pragma: no cover - used only when FastAPI is stubbed.
         pass
 
-
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.attachments import ATTACHMENT_ROOT, list_record_attachments
