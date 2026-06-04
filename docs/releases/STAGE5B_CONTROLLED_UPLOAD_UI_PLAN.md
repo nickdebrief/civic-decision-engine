@@ -437,3 +437,20 @@ Defer upload UI implementation until correction and audit policies are
 established. This preserves the current v12 posture: attachment capabilities can
 grow while canonical records, verification hashes, and public privacy boundaries
 remain protected.
+
+## Implementation Status
+
+### Stage 5B Step 2 - Admin Session Scaffold
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Admin session scaffold only.
+- No upload UI.
+- No upload route.
+- No attachment mutation.
