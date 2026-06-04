@@ -187,6 +187,35 @@ def attachment_metadata_response(attachment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "attachment_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_version": row["attachment_version"],
+        "filename": row["filename"],
+        "content_type": row["content_type"],
+        "file_size_bytes": row["file_size_bytes"],
+        "sha256_hash": row["sha256_hash"],
+        "visibility": row["visibility"],
+        "redaction_status": row["redaction_status"],
+        "title": row["title"],
+        "description": row["description"],
+        "source_label": row["source_label"],
+        "document_date": row["document_date"],
+        "document_date_precision": row["document_date_precision"] or "unknown",
+        "uploaded_at": row["uploaded_at"],
+        "is_latest": row["is_latest"],
+        "is_deleted": row["is_deleted"],
+        "appears_in_public_manifest": (
+            row["visibility"] == "public"
+            and row["redaction_status"] != "withheld"
+            and row["is_latest"] == 1
+            and row["is_deleted"] == 0
+        ),
+    }
+
+
 def _set_session_cookie(response, session: str) -> None:
     if hasattr(response, "set_cookie"):
         response.set_cookie(
@@ -428,7 +457,11 @@ def list_record_attachments_route(reference: str, request: Request):
     require_admin_session(request)
     conn = get_db()
     try:
-        attachments = list_record_attachments(conn, reference=reference)
+        attachments = [
+            attachment
+            for attachment in list_record_attachments(conn, reference=reference)
+            if attachment.get("is_deleted") != 1
+        ]
         return JSONResponse(
             content={
                 "reference": reference,
@@ -438,6 +471,41 @@ def list_record_attachments_route(reference: str, request: Request):
                     for attachment in attachments
                 ],
             }
+        )
+    finally:
+        conn.close()
+
+
+@router.post("/records/{reference}/attachments/{attachment_id}/delete")
+def delete_record_attachment_route(reference: str, attachment_id: int, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            """
+            SELECT * FROM record_attachments
+            WHERE id = ? AND reference = ?
+            """,
+            (attachment_id, reference),
+        ).fetchone()
+        if not row:
+            raise _http_error(404, "attachment_not_found")
+
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET is_deleted = 1
+            WHERE id = ? AND reference = ?
+            """,
+            (attachment_id, reference),
+        )
+        conn.commit()
+        deleted = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        return JSONResponse(
+            content={"attachment": _attachment_row_to_metadata(deleted)}
         )
     finally:
         conn.close()

@@ -516,6 +516,37 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("server-only-token", serialized)
         self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
 
+    def test_json_attachment_listing_excludes_deleted_attachments(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn, title="Visible attachment")
+            self.insert_admin_attachment(
+                conn,
+                filename="deleted.pdf",
+                stored_filename="internal-deleted.pdf",
+                storage_path="/private/path/internal-deleted.pdf",
+                title="Deleted attachment",
+                is_deleted=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.list_record_attachments_route(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized = json.dumps(response.content, sort_keys=True)
+
+        self.assertEqual(response.content["attachment_count"], 1)
+        self.assertIn("Visible attachment", serialized)
+        self.assertNotIn("Deleted attachment", serialized)
+        self.assertNotIn("deleted.pdf", serialized)
+
     def test_pdf_upload_route_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             original_db_path = self.admin_session.DB_PATH
@@ -683,6 +714,140 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(getattr(ctx.exception, "status_code", None), 413)
         self.assertIsNone(row)
         self.assertEqual(self.attachment_file_count(attachment_root), 0)
+
+    def test_delete_attachment_requires_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.delete_record_attachment_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_delete_attachment_marks_deleted_and_preserves_stored_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            attachment_root = Path(temp_dir) / "attachments"
+            stored_path = attachment_root / "record" / "evidence.pdf"
+            stored_path.parent.mkdir(parents=True)
+            stored_path.write_bytes(b"%PDF-1.4 still stored")
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.delete_record_attachment_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    row = conn.execute(
+                        "SELECT * FROM record_attachments WHERE id = ?",
+                        (attachment_id,),
+                    ).fetchone()
+                finally:
+                    conn.close()
+                file_still_exists = stored_path.is_file()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized = json.dumps(response.content, sort_keys=True)
+
+        self.assertEqual(row["is_deleted"], 1)
+        self.assertEqual(response.content["attachment"]["is_deleted"], 1)
+        self.assertTrue(file_still_exists)
+        self.assertNotIn("storage_path", serialized)
+        self.assertNotIn("stored_filename", serialized)
+        self.assertNotIn(str(stored_path), serialized)
+        self.assertNotIn("server-only-token", serialized)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
+
+    def test_deleted_attachment_no_longer_appears_in_json_listing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn, title="To delete")
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    self.admin_session.delete_record_attachment_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                    )
+                    response = self.admin_session.list_record_attachments_route(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized = json.dumps(response.content, sort_keys=True)
+
+        self.assertEqual(response.content["attachment_count"], 0)
+        self.assertNotIn("To delete", serialized)
+
+    def test_wrong_reference_cannot_delete_attachment(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.delete_record_attachment_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                        )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    row = conn.execute(
+                        "SELECT is_deleted FROM record_attachments WHERE id = ?",
+                        (attachment_id,),
+                    ).fetchone()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 404)
+        self.assertEqual(row["is_deleted"], 0)
 
 
 if __name__ == "__main__":
