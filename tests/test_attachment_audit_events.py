@@ -409,11 +409,11 @@ class AttachmentAuditEventsSchemaTests(unittest.TestCase):
 
         self.assertEqual(after, before)
 
-    def test_audit_helper_does_not_add_mutation_route_names(self):
+    def test_audit_helper_does_not_add_upload_or_delete_route_names(self):
         route_source = Path("api/routes/admin_session.py").read_text()
 
-        self.assertNotIn("record_attachment_audit_event(", route_source)
-        self.assertNotIn("sanitize_audit_metadata(", route_source)
+        self.assertNotIn("upload_record_attachment_route", route_source)
+        self.assertNotIn("delete_record_attachment_route", route_source)
 
     def test_canonical_record_verification_hash_is_unchanged(self):
         install_fastapi_stubs()
