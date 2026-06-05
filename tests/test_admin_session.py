@@ -542,37 +542,6 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("server-only-token", serialized)
         self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
 
-    def test_json_attachment_listing_excludes_deleted_attachments(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            original_db_path = self.admin_session.DB_PATH
-            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
-            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
-            self.insert_admin_attachment(conn, title="Visible attachment")
-            self.insert_admin_attachment(
-                conn,
-                filename="deleted.pdf",
-                stored_filename="internal-deleted.pdf",
-                storage_path="/private/path/internal-deleted.pdf",
-                title="Deleted attachment",
-                is_deleted=1,
-            )
-            conn.close()
-            try:
-                with self.env():
-                    response = self.admin_session.list_record_attachments_route(
-                        "Strike-OT-20260604-ADMIN",
-                        self.valid_request(),
-                    )
-            finally:
-                self.admin_session.DB_PATH = original_db_path
-
-        serialized = json.dumps(response.content, sort_keys=True)
-
-        self.assertEqual(response.content["attachment_count"], 1)
-        self.assertIn("Visible attachment", serialized)
-        self.assertNotIn("Deleted attachment", serialized)
-        self.assertNotIn("deleted.pdf", serialized)
-
     def test_pdf_upload_route_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             original_db_path = self.admin_session.DB_PATH

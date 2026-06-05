@@ -500,11 +500,7 @@ def list_record_attachments_route(reference: str, request: Request):
     require_admin_session(request)
     conn = get_db()
     try:
-        attachments = [
-            attachment
-            for attachment in list_record_attachments(conn, reference=reference)
-            if attachment.get("is_deleted") != 1
-        ]
+        attachments = list_record_attachments(conn, reference=reference)
         return JSONResponse(
             content={
                 "reference": reference,
@@ -514,41 +510,6 @@ def list_record_attachments_route(reference: str, request: Request):
                     for attachment in attachments
                 ],
             }
-        )
-    finally:
-        conn.close()
-
-
-@router.post("/records/{reference}/attachments/{attachment_id}/delete")
-def delete_record_attachment_route(reference: str, attachment_id: int, request: Request):
-    require_admin_session(request)
-    conn = get_db()
-    try:
-        row = conn.execute(
-            """
-            SELECT * FROM record_attachments
-            WHERE id = ? AND reference = ?
-            """,
-            (attachment_id, reference),
-        ).fetchone()
-        if not row:
-            raise _http_error(404, "attachment_not_found")
-
-        conn.execute(
-            """
-            UPDATE record_attachments
-            SET is_deleted = 1
-            WHERE id = ? AND reference = ?
-            """,
-            (attachment_id, reference),
-        )
-        conn.commit()
-        deleted = conn.execute(
-            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
-            (attachment_id, reference),
-        ).fetchone()
-        return JSONResponse(
-            content={"attachment": _attachment_row_to_metadata(deleted)}
         )
     finally:
         conn.close()
