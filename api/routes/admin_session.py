@@ -346,18 +346,11 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     for index, attachment in enumerate(attachments):
         state = _attachment_state(attachment)
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
-<<<<<<< HEAD
-        summary = (
-            f"{summary_title} | {state} | {attachment.get('visibility')} | "
-            f"{attachment.get('redaction_status')} | {attachment.get('uploaded_at')}"
-        )
-=======
         summary_meta = (
             f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
             f"{attachment.get('redaction_status') or 'unknown redaction'}"
         )
         summary_time = _format_admin_timestamp(attachment.get("uploaded_at"))
->>>>>>> 33d0352 (Refine admin attachment management page)
         rows = (
             ("Record version", attachment.get("record_version")),
             ("Title", attachment.get("title")),
@@ -384,15 +377,11 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
-<<<<<<< HEAD
-        <summary>{escape(summary)}</summary>
-=======
         <summary>
           <span class="summary-title">{escape(str(summary_title))}</span>
           <span class="summary-meta">{escape(summary_meta)}</span>
           <span class="summary-time">{escape(summary_time)}</span>
         </summary>
->>>>>>> 33d0352 (Refine admin attachment management page)
         <table>
           <tbody>{table_rows}</tbody>
         </table>
@@ -474,16 +463,6 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
 
     cards = []
     for index, event in enumerate(audit_events):
-<<<<<<< HEAD
-        attachment_id = event.get("attachment_id")
-        attachment_fragment = (
-            f" | attachment {attachment_id}" if attachment_id not in (None, "") else ""
-        )
-        summary = (
-            f"{event.get('occurred_at')} | {event.get('event_type')} | "
-            f"{event.get('actor')}{attachment_fragment}"
-        )
-=======
         event_type = event.get("event_type") or "audit event"
         actor = event.get("actor") or "unknown actor"
         attachment_id = event.get("attachment_id")
@@ -495,7 +474,6 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
             f"{_format_admin_timestamp(event.get('occurred_at'))}"
         )
         badge_label = _audit_event_badge_label(event_type)
->>>>>>> 33d0352 (Refine admin attachment management page)
         rows = (
             ("Occurred at", event.get("occurred_at")),
             ("Event type", event.get("event_type")),
@@ -515,15 +493,11 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="audit-event"{open_attr}>
-<<<<<<< HEAD
-        <summary>{escape(summary)}</summary>
-=======
         <summary>
           <span class="event-badge">[{escape(badge_label)}]</span>
           <span class="summary-title">{escape(str(event_type))}</span>
           <span class="summary-meta">{escape(summary_meta)}</span>
         </summary>
->>>>>>> 33d0352 (Refine admin attachment management page)
         <table>
           <tbody>{table_rows}</tbody>
         </table>
@@ -639,14 +613,7 @@ def render_admin_attachments_page(
       .admin-watermark {{
         opacity: 0.06;
       }}
-<<<<<<< HEAD
-      details {{
-        display: block;
-        break-inside: avoid;
-      }}
-=======
       details,
->>>>>>> 33d0352 (Refine admin attachment management page)
       details > * {{
         display: block;
       }}
@@ -674,8 +641,6 @@ def render_admin_attachments_page(
     .administrative-capabilities li {{
       margin: 4px 0;
     }}
-<<<<<<< HEAD
-=======
     .capability-group {{
       margin-top: 12px;
     }}
@@ -687,16 +652,12 @@ def render_admin_attachments_page(
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }}
->>>>>>> 33d0352 (Refine admin attachment management page)
     details {{
       break-inside: avoid;
     }}
     summary {{
-<<<<<<< HEAD
-=======
       display: grid;
       gap: 3px;
->>>>>>> 33d0352 (Refine admin attachment management page)
       cursor: pointer;
       padding: 10px;
       background: #faf9f5;
@@ -704,8 +665,6 @@ def render_admin_attachments_page(
       font-weight: 600;
       word-break: break-word;
     }}
-<<<<<<< HEAD
-=======
     .summary-title,
     .summary-meta,
     .summary-time {{
@@ -732,7 +691,6 @@ def render_admin_attachments_page(
       font-weight: 700;
       text-transform: lowercase;
     }}
->>>>>>> 33d0352 (Refine admin attachment management page)
     .attachment-card {{
       border: 1px solid #e5e1d8;
       margin-top: 16px;
