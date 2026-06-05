@@ -73,16 +73,17 @@ class FakeJSONResponse(FakeResponse):
 
 
 def install_fastapi_stubs():
-    fastapi = types.ModuleType("fastapi")
+    fastapi = sys.modules.get("fastapi") or types.ModuleType("fastapi")
     fastapi.APIRouter = FakeAPIRouter
     fastapi.File = lambda default=None, **kwargs: default
     fastapi.Form = lambda default=None, **kwargs: default
     fastapi.Header = lambda default=None, **kwargs: default
     fastapi.HTTPException = FakeHTTPException
     fastapi.Query = lambda default=None, **kwargs: default
+    fastapi.Request = FakeRequest
     fastapi.UploadFile = object
 
-    responses = types.ModuleType("fastapi.responses")
+    responses = sys.modules.get("fastapi.responses") or types.ModuleType("fastapi.responses")
     responses.HTMLResponse = FakeResponse
     responses.JSONResponse = FakeJSONResponse
     responses.Response = FakeResponse
@@ -91,8 +92,8 @@ def install_fastapi_stubs():
     models.RecordPayload = type("RecordPayload", (), {})
     models.RecordResponse = type("RecordResponse", (), {})
 
-    sys.modules.setdefault("fastapi", fastapi)
-    sys.modules.setdefault("fastapi.responses", responses)
+    sys.modules["fastapi"] = fastapi
+    sys.modules["fastapi.responses"] = responses
     sys.modules.setdefault("api.models", models)
 
 
@@ -370,8 +371,23 @@ class AdminSessionTests(unittest.TestCase):
 
         content = response.content
 
-        self.assertIn("Admin Attachment Listing", content)
+        self.assertIn("Admin Attachment Management", content)
         self.assertIn("Strike-OT-20260604-ADMIN", content)
+        self.assertIn("Record summary", content)
+        self.assertIn("Current attachments", content)
+        self.assertIn("Future management actions", content)
+        self.assertIn("Future controls planned:", content)
+        self.assertIn("metadata correction", content)
+        self.assertIn("withhold / restore", content)
+        self.assertIn("soft-delete", content)
+        self.assertIn("audit trail review", content)
+        self.assertIn("Audit trail placeholder", content)
+        self.assertIn(
+            "Audit trail display is planned for a later Stage 5B step.",
+            content,
+        )
+        self.assertIn("No audit events are displayed in Step 4A.", content)
+        self.assertIn("Governance notice", content)
         self.assertIn("Record version", content)
         self.assertIn("Public attachment", content)
         self.assertIn("Private attachment", content)
@@ -394,7 +410,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("day", content)
         self.assertIn("2026-06-04T12:00:00Z", content)
         self.assertIn(
-            "Administrative attachment visibility only.",
+            "Administrative attachment management is read-only in this stage.",
+            content,
+        )
+        self.assertIn(
+            "No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.",
             content,
         )
 
@@ -424,6 +444,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("CDE_ADMIN_TOKEN", content)
         self.assertNotIn("<button", content)
         self.assertNotIn("<form", content)
+        self.assertNotIn("action=", content)
+        self.assertNotIn("href=", content)
+        self.assertNotIn("type=\"submit\"", content)
+        self.assertNotIn("<input", content)
+        self.assertNotIn("<textarea", content)
+        self.assertNotIn("<select", content)
         self.assertNotIn("Download attachment", content)
         self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)

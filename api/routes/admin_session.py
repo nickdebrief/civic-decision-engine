@@ -329,6 +329,22 @@ def render_admin_attachments_page(
       margin: 18px 0 24px;
       color: #555;
     }}
+    .management-section {{
+      border-top: 1px solid #e5e1d8;
+      padding-top: 18px;
+      margin-top: 22px;
+    }}
+    .management-section h2 {{
+      font-size: 1.05rem;
+      margin: 0 0 10px;
+    }}
+    .future-actions ul {{
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }}
+    .future-actions li {{
+      margin: 4px 0;
+    }}
     .attachment-card {{
       border: 1px solid #e5e1d8;
       margin-top: 16px;
@@ -360,14 +376,41 @@ def render_admin_attachments_page(
 </head>
 <body>
   <main>
-    <h1>Admin Attachment Listing</h1>
-    <p><strong>Record reference:</strong> {escape(reference)}</p>
-    <p><strong>Record version:</strong> {record_version}</p>
+    <h1>Admin Attachment Management</h1>
     <p class="notice">
-      Administrative attachment visibility only.
-      No upload, edit, delete, restore, or correction actions are available in Stage 5B Step 3.
+      Administrative attachment management is read-only in this stage.
+      No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
-    {attachment_rows}
+    <section class="management-section record-summary">
+      <h2>Record summary</h2>
+      <p><strong>Record reference:</strong> {escape(reference)}</p>
+      <p><strong>Record version:</strong> {record_version}</p>
+    </section>
+    <section class="management-section current-attachments">
+      <h2>Current attachments</h2>
+      {attachment_rows}
+    </section>
+    <section class="management-section future-actions">
+      <h2>Future management actions</h2>
+      <p>Future controls planned:</p>
+      <ul>
+        <li>metadata correction</li>
+        <li>withhold / restore</li>
+        <li>soft-delete</li>
+        <li>upload</li>
+        <li>audit trail review</li>
+      </ul>
+    </section>
+    <section class="management-section audit-placeholder">
+      <h2>Audit trail placeholder</h2>
+      <p>Audit trail display is planned for a later Stage 5B step.</p>
+      <p>No audit events are displayed in Step 4A.</p>
+    </section>
+    <section class="management-section governance-notice">
+      <h2>Governance notice</h2>
+      <p>Administrative attachment management is read-only in this stage.</p>
+      <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
+    </section>
   </main>
 </body>
 </html>"""
