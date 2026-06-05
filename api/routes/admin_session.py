@@ -14,12 +14,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 try:
-    from fastapi import File, Form, Request, UploadFile
-except ImportError:
-
-    def File(default=None, **_kwargs):
-        return default
-
     from fastapi import Form, Request
 except ImportError:
 
@@ -29,18 +23,7 @@ except ImportError:
     class Request:  # pragma: no cover - used only when FastAPI is stubbed.
         pass
 
-    class UploadFile:  # pragma: no cover - used only when FastAPI is stubbed.
-        pass
 
-
-from fastapi.responses import HTMLResponse, JSONResponse
-
-from api.attachments import (
-    ATTACHMENT_ROOT,
-    AttachmentRecordNotFound,
-    list_record_attachments,
-    store_attachment_bytes,
-)
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from api.attachments import ATTACHMENT_ROOT, list_record_attachments
@@ -53,10 +36,6 @@ ADMIN_PASSWORD_ENV = "CDE_ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
 SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
-ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
-DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
-PDF_CONTENT_TYPE = "application/pdf"
-
 
 def _http_error(status_code: int, detail: str):
     try:
@@ -149,28 +128,6 @@ def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
-
-
-def attachment_max_upload_bytes() -> int:
-    raw_value = os.getenv(ATTACHMENT_MAX_BYTES_ENV)
-    if raw_value is None:
-        return DEFAULT_ATTACHMENT_MAX_BYTES
-    try:
-        parsed = int(raw_value)
-    except ValueError as exc:
-        raise _http_error(500, "admin_attachment_size_limit_invalid") from exc
-    if parsed < 1:
-        raise _http_error(500, "admin_attachment_size_limit_invalid")
-    return parsed
-
-
-def validate_pdf_attachment_upload(content_type: str | None, data: bytes) -> str:
-    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if normalized_content_type != PDF_CONTENT_TYPE:
-        raise _http_error(415, "attachment_content_type_not_allowed")
-    if len(data) > attachment_max_upload_bytes():
-        raise _http_error(413, "attachment_too_large")
-    return normalized_content_type
 
 
 def attachment_metadata_response(attachment: dict[str, Any]) -> dict[str, Any]:
@@ -513,6 +470,4 @@ def list_record_attachments_route(reference: str, request: Request):
         )
     finally:
         conn.close()
-
-
 
