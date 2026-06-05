@@ -854,3 +854,110 @@ def correct_attachment_metadata_route(
         raise
     finally:
         conn.close()
+
+
+def _apply_attachment_lifecycle_action(
+    *,
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    action: str,
+    event_type: str,
+    redaction_status: str | None = None,
+    is_deleted: int | None = None,
+):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_redaction_status = current["redaction_status"]
+        previous_is_deleted = current["is_deleted"]
+        new_redaction_status = (
+            previous_redaction_status if redaction_status is None else redaction_status
+        )
+        new_is_deleted = previous_is_deleted if is_deleted is None else is_deleted
+
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET redaction_status = ?, is_deleted = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (new_redaction_status, new_is_deleted, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type=event_type,
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "action": action,
+                "previous_redaction_status": previous_redaction_status,
+                "new_redaction_status": updated["redaction_status"],
+                "previous_is_deleted": previous_is_deleted,
+                "new_is_deleted": updated["is_deleted"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "action": action,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold")
+def withhold_attachment_route(reference: str, attachment_id: int, request: Request):
+    return _apply_attachment_lifecycle_action(
+        reference=reference,
+        attachment_id=attachment_id,
+        request=request,
+        action="withhold",
+        event_type="attachment_withheld",
+        redaction_status="withheld",
+    )
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/restore")
+def restore_attachment_route(reference: str, attachment_id: int, request: Request):
+    return _apply_attachment_lifecycle_action(
+        reference=reference,
+        attachment_id=attachment_id,
+        request=request,
+        action="restore",
+        event_type="attachment_restored",
+        redaction_status="none",
+        is_deleted=0,
+    )
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete")
+def soft_delete_attachment_route(reference: str, attachment_id: int, request: Request):
+    return _apply_attachment_lifecycle_action(
+        reference=reference,
+        attachment_id=attachment_id,
+        request=request,
+        action="soft-delete",
+        event_type="attachment_soft_deleted",
+        is_deleted=1,
+    )

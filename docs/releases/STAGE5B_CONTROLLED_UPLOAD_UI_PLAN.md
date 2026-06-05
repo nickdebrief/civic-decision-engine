@@ -565,6 +565,24 @@ Scope:
 - No upload/delete/restore/withhold/publish/download capability.
 - No canonical verification changes.
 
+### Stage 5B Step 5D - Withhold / Soft-delete / Restore Foundation
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Admin-session protected lifecycle backend routes.
+- Withhold, restore, and soft-delete state changes.
+- Audit event written for each lifecycle action.
+- File bytes remain immutable.
+- No browser controls yet.
+- No upload/download capability.
+- No canonical verification changes.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:
