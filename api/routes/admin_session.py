@@ -515,48 +515,4 @@ def list_record_attachments_route(reference: str, request: Request):
         conn.close()
 
 
-@router.post("/records/{reference}/attachments")
-async def upload_record_attachment_route(
-    reference: str,
-    request: Request,
-    file: UploadFile = File(...),
-    visibility: str = Form("private"),
-    redaction_status: str = Form("none"),
-    title: str | None = Form(None),
-    description: str | None = Form(None),
-    source_label: str | None = Form(None),
-    redaction_note: str | None = Form(None),
-    document_date: str | None = Form(None),
-    document_date_precision: str | None = Form("unknown"),
-):
-    require_admin_session(request)
-    data = await file.read()
-    content_type = validate_pdf_attachment_upload(file.content_type, data)
-    conn = get_db()
-    try:
-        attachment = store_attachment_bytes(
-            conn,
-            reference=reference,
-            data=data,
-            original_filename=file.filename or "attachment.pdf",
-            content_type=content_type,
-            visibility=visibility,
-            redaction_status=redaction_status,
-            title=title,
-            description=description,
-            source_label=source_label,
-            redaction_note=redaction_note,
-            document_date=document_date,
-            document_date_precision=document_date_precision,
-            root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
-        )
-        return JSONResponse(
-            status_code=201,
-            content={"attachment": attachment_metadata_response(attachment)},
-        )
-    except AttachmentRecordNotFound as exc:
-        raise _http_error(404, str(exc))
-    except ValueError as exc:
-        raise _http_error(400, str(exc))
-    finally:
-        conn.close()
+
