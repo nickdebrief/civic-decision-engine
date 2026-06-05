@@ -893,6 +893,254 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(getattr(missing.exception, "status_code", None), 404)
         self.assertEqual(after["title"], "Public attachment")
 
+    def test_lifecycle_routes_require_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    for route in (
+                        self.admin_session.withhold_attachment_route,
+                        self.admin_session.restore_attachment_route,
+                        self.admin_session.soft_delete_attachment_route,
+                    ):
+                        with self.subTest(route=route.__name__):
+                            with self.assertRaises(Exception) as ctx:
+                                route(
+                                    "Strike-OT-20260604-ADMIN",
+                                    attachment_id,
+                                    FakeRequest(),
+                                )
+                            self.assertEqual(
+                                getattr(ctx.exception, "status_code", None),
+                                401,
+                            )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+    def test_withhold_sets_withheld_hides_manifest_and_writes_audit_event(self):
+        result = self.run_lifecycle_action(
+            self.admin_session.withhold_attachment_route,
+            initial_redaction_status="none",
+            initial_is_deleted=0,
+        )
+
+        self.assertEqual(result["response"].content["action"], "withhold")
+        self.assertEqual(result["after"]["redaction_status"], "withheld")
+        self.assertEqual(result["after"]["is_deleted"], 0)
+        self.assertEqual(result["after_manifest"], [])
+        self.assertEqual(result["audit"]["event_type"], "attachment_withheld")
+        self.assertEqual(result["audit_metadata"]["action"], "withhold")
+        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "none")
+        self.assertEqual(result["audit_metadata"]["new_redaction_status"], "withheld")
+        self.assertEqual(result["audit_metadata"]["previous_is_deleted"], 0)
+        self.assertEqual(result["audit_metadata"]["new_is_deleted"], 0)
+
+    def test_soft_delete_sets_deleted_hides_manifest_and_writes_audit_event(self):
+        result = self.run_lifecycle_action(
+            self.admin_session.soft_delete_attachment_route,
+            initial_redaction_status="none",
+            initial_is_deleted=0,
+        )
+
+        self.assertEqual(result["response"].content["action"], "soft-delete")
+        self.assertEqual(result["after"]["redaction_status"], "none")
+        self.assertEqual(result["after"]["is_deleted"], 1)
+        self.assertEqual(result["after_manifest"], [])
+        self.assertEqual(result["audit"]["event_type"], "attachment_soft_deleted")
+        self.assertEqual(result["audit_metadata"]["action"], "soft-delete")
+        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "none")
+        self.assertEqual(result["audit_metadata"]["new_redaction_status"], "none")
+        self.assertEqual(result["audit_metadata"]["previous_is_deleted"], 0)
+        self.assertEqual(result["audit_metadata"]["new_is_deleted"], 1)
+
+    def test_restore_clears_deleted_and_withheld_state_and_writes_audit_event(self):
+        result = self.run_lifecycle_action(
+            self.admin_session.restore_attachment_route,
+            initial_redaction_status="withheld",
+            initial_is_deleted=1,
+        )
+
+        self.assertEqual(result["response"].content["action"], "restore")
+        self.assertEqual(result["after"]["redaction_status"], "none")
+        self.assertEqual(result["after"]["is_deleted"], 0)
+        self.assertEqual(len(result["after_manifest"]), 1)
+        self.assertEqual(result["audit"]["event_type"], "attachment_restored")
+        self.assertEqual(result["audit_metadata"]["action"], "restore")
+        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "withheld")
+        self.assertEqual(result["audit_metadata"]["new_redaction_status"], "none")
+        self.assertEqual(result["audit_metadata"]["previous_is_deleted"], 1)
+        self.assertEqual(result["audit_metadata"]["new_is_deleted"], 0)
+
+    def test_lifecycle_routes_wrong_reference_and_missing_attachment_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.withhold_attachment_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.soft_delete_attachment_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                        )
+                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def test_lifecycle_idempotent_action_records_explicit_audit_event(self):
+        result = self.run_lifecycle_action(
+            self.admin_session.withhold_attachment_route,
+            initial_redaction_status="withheld",
+            initial_is_deleted=0,
+        )
+
+        self.assertEqual(result["after"]["redaction_status"], "withheld")
+        self.assertEqual(result["after"]["is_deleted"], 0)
+        self.assertEqual(result["audit"]["event_type"], "attachment_withheld")
+        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "withheld")
+        self.assertEqual(result["audit_metadata"]["new_redaction_status"], "withheld")
+
+    def run_lifecycle_action(
+        self,
+        route,
+        *,
+        initial_redaction_status,
+        initial_is_deleted,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 lifecycle unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                redaction_status=initial_redaction_status,
+                is_deleted=initial_is_deleted,
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_exists_after = stored_path.exists()
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(response.content["attachment"]["attachment_id"], attachment_id)
+        self.assertEqual(after["sha256_hash"], before["sha256_hash"])
+        self.assertEqual(after["storage_path"], before["storage_path"])
+        self.assertEqual(after["stored_filename"], before["stored_filename"])
+        self.assertEqual(after["filename"], before["filename"])
+        self.assertEqual(after["content_type"], before["content_type"])
+        self.assertEqual(after["file_size_bytes"], before["file_size_bytes"])
+        self.assertEqual(after["record_version"], before["record_version"])
+        self.assertEqual(after["attachment_version"], before["attachment_version"])
+        self.assertEqual(after["uploaded_at"], before["uploaded_at"])
+        self.assertTrue(stored_file_exists_after)
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        self.assertEqual(audit["reference"], "Strike-OT-20260604-ADMIN")
+        self.assertEqual(audit["attachment_id"], attachment_id)
+        self.assertEqual(audit["record_version"], 1)
+        self.assertIn("previous_redaction_status", audit_metadata)
+        self.assertIn("new_redaction_status", audit_metadata)
+        self.assertIn("previous_is_deleted", audit_metadata)
+        self.assertIn("new_is_deleted", audit_metadata)
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn(str(stored_path), audit["metadata_json"])
+        self.assertNotIn("server-only-token", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn(str(stored_path), serialized_response)
+
+        return {
+            "response": response,
+            "before": before,
+            "after": after,
+            "audit": audit,
+            "audit_metadata": audit_metadata,
+            "after_manifest": after_manifest,
+        }
+
     def assert_metadata_correction_rejected(self, payload, status_code, detail):
         with tempfile.TemporaryDirectory() as temp_dir:
             original_db_path = self.admin_session.DB_PATH
