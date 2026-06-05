@@ -288,6 +288,35 @@ class AdminSessionTests(unittest.TestCase):
         )
         conn.commit()
 
+    def insert_attachment_audit_event(self, conn, **overrides):
+        values = {
+            "attachment_id": 7,
+            "reference": "Strike-OT-20260604-ADMIN",
+            "record_version": 1,
+            "event_type": "attachment_metadata_viewed",
+            "actor": "admin",
+            "occurred_at": "2026-06-04T13:00:00Z",
+            "metadata_json": json.dumps(
+                {
+                    "note": "Audit <script>alert('x')</script>",
+                    "storage_path": "/private/path/internal-public.pdf",
+                    "source_narrative": "private raw narrative",
+                },
+                sort_keys=True,
+            ),
+            "request_id": "req-admin-001",
+            "ip_hash": "ip-hash-hidden",
+            "user_agent_hash": "ua-hash-hidden",
+        }
+        values.update(overrides)
+        columns = ", ".join(values.keys())
+        placeholders = ", ".join("?" for _ in values)
+        conn.execute(
+            f"INSERT INTO attachment_audit_events ({columns}) VALUES ({placeholders})",
+            list(values.values()),
+        )
+        conn.commit()
+
     def valid_request(self):
         with self.env():
             session = self.admin_session.create_admin_session()
@@ -341,6 +370,39 @@ class AdminSessionTests(unittest.TestCase):
                 is_deleted=1,
                 title="Deleted attachment",
             )
+            self.insert_attachment_audit_event(
+                conn,
+                attachment_id=8,
+                event_type="attachment_created",
+                actor="admin",
+                occurred_at="2026-06-04T12:30:00Z",
+                request_id="req-admin-older",
+            )
+            self.insert_attachment_audit_event(
+                conn,
+                attachment_id=9,
+                event_type="attachment_visibility_reviewed",
+                actor="reviewer",
+                occurred_at="2026-06-04T14:00:00Z",
+                metadata_json=json.dumps(
+                    {
+                        "note": "Reviewed <script>alert('x')</script>",
+                        "storage_path": "/private/path/internal-audit.pdf",
+                        "source_narrative": "private raw narrative",
+                    },
+                    sort_keys=True,
+                ),
+                request_id="req-admin-newer",
+            )
+            self.insert_attachment_audit_event(
+                conn,
+                reference="Strike-OT-20260604-OTHER",
+                attachment_id=10,
+                event_type="other_record_event",
+                occurred_at="2026-06-04T15:00:00Z",
+                metadata_json=json.dumps({"note": "Other record audit event"}),
+                request_id="req-other",
+            )
             conn.close()
             try:
                 with self.env():
@@ -368,12 +430,13 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("withhold / restore", content)
         self.assertIn("soft-delete", content)
         self.assertIn("audit trail review", content)
-        self.assertIn("Audit trail placeholder", content)
-        self.assertIn(
+        self.assertIn("Audit trail", content)
+        self.assertNotIn("Audit trail placeholder", content)
+        self.assertNotIn(
             "Audit trail display is planned for a later Stage 5B step.",
             content,
         )
-        self.assertIn("No audit events are displayed in Step 4A.", content)
+        self.assertNotIn("No audit events are displayed in Step 4A.", content)
         self.assertIn("Governance notice", content)
         self.assertIn("Record version", content)
         self.assertIn("Public attachment", content)
@@ -396,6 +459,25 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("2026-06-04", content)
         self.assertIn("day", content)
         self.assertIn("2026-06-04T12:00:00Z", content)
+        self.assertIn("2026-06-04T14:00:00Z", content)
+        self.assertIn("2026-06-04T12:30:00Z", content)
+        self.assertLess(
+            content.index("2026-06-04T14:00:00Z"),
+            content.index("2026-06-04T12:30:00Z"),
+        )
+        self.assertIn("attachment_visibility_reviewed", content)
+        self.assertIn("attachment_created", content)
+        self.assertIn("reviewer", content)
+        self.assertIn("Attachment ID", content)
+        self.assertIn(">9<", content)
+        self.assertIn("Request ID", content)
+        self.assertIn("req-admin-newer", content)
+        self.assertIn("metadata_json", content)
+        self.assertIn("Reviewed &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", content)
+        self.assertNotIn("<script>", content)
+        self.assertNotIn("other_record_event", content)
+        self.assertNotIn("req-other", content)
+        self.assertNotIn("private raw narrative", content)
         self.assertIn(
             "Administrative attachment management is read-only in this stage.",
             content,
@@ -463,6 +545,10 @@ class AdminSessionTests(unittest.TestCase):
 
         self.assertIn(
             "No attachments are currently associated with this record.",
+            response.content,
+        )
+        self.assertIn(
+            "No audit events are currently recorded for this record.",
             response.content,
         )
 

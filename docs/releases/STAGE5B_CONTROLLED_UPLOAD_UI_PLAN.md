@@ -498,6 +498,22 @@ Scope:
 - Future action areas shown as informational placeholders only.
 - No upload or mutation capability.
 
+### Stage 5B Step 4B - Audit Trail Display
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Read-only audit trail display.
+- Record-scoped audit events only.
+- No upload capability.
+- No mutation capability.
+- No public page or manifest changes.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:

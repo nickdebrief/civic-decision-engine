@@ -297,10 +297,115 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     return "".join(cards)
 
 
+def list_attachment_audit_events(
+    conn: sqlite3.Connection, *, reference: str
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            attachment_id,
+            reference,
+            record_version,
+            event_type,
+            actor,
+            occurred_at,
+            metadata_json,
+            request_id
+        FROM attachment_audit_events
+        WHERE reference = ?
+        ORDER BY occurred_at DESC, id DESC
+        """,
+        (reference,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+SENSITIVE_AUDIT_METADATA_KEYS = {
+    "storage_path",
+    "stored_filename",
+    "source_narrative",
+    "report_json",
+    "raw_input",
+    "raw_file_content",
+}
+
+
+def _redact_audit_metadata(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _redact_audit_metadata(item)
+            for key, item in value.items()
+            if key not in SENSITIVE_AUDIT_METADATA_KEYS
+        }
+    if isinstance(value, list):
+        return [_redact_audit_metadata(item) for item in value]
+    return value
+
+
+def _render_audit_metadata_json(metadata_json: Any) -> str:
+    if metadata_json in (None, ""):
+        return ""
+    try:
+        parsed = json.loads(str(metadata_json))
+    except json.JSONDecodeError:
+        rendered = str(metadata_json)
+    else:
+        rendered = json.dumps(
+            _redact_audit_metadata(parsed),
+            indent=2,
+            sort_keys=True,
+        )
+    return (
+        '<div class="audit-metadata">'
+        "<h3>metadata_json</h3>"
+        f"<pre>{escape(rendered)}</pre>"
+        "</div>"
+    )
+
+
+def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
+    if not audit_events:
+        return """
+      <p>No audit events are currently recorded for this record.</p>"""
+
+    cards = []
+    for event in audit_events:
+        rows = (
+            ("Occurred at", event.get("occurred_at")),
+            ("Event type", event.get("event_type")),
+            ("Actor", event.get("actor")),
+            ("Attachment ID", event.get("attachment_id")),
+            ("Record version", event.get("record_version")),
+            ("Request ID", event.get("request_id")),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        metadata_block = _render_audit_metadata_json(event.get("metadata_json"))
+        cards.append(f"""
+      <section class="audit-event">
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+        {metadata_block}
+      </section>""")
+
+    return "".join(cards)
+
+
 def render_admin_attachments_page(
-    *, reference: str, record_version: int, attachments: list[dict[str, Any]]
+    *,
+    reference: str,
+    record_version: int,
+    attachments: list[dict[str, Any]],
+    audit_events: list[dict[str, Any]],
 ) -> str:
     attachment_rows = _render_admin_attachment_rows(attachments)
+    audit_rows = _render_admin_audit_events(audit_events)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -380,6 +485,31 @@ def render_admin_attachments_page(
       margin-top: 16px;
       overflow: hidden;
     }}
+    .audit-event {{
+      border: 1px solid #e5e1d8;
+      margin-top: 16px;
+      overflow: hidden;
+    }}
+    .audit-metadata {{
+      border-top: 1px solid #eee;
+      padding: 10px;
+      background: #fbfaf7;
+    }}
+    .audit-metadata h3 {{
+      margin: 0 0 8px;
+      font-size: 0.78rem;
+      color: #666;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .audit-metadata pre {{
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: ui-monospace, monospace;
+      font-size: 0.86rem;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -443,10 +573,9 @@ def render_admin_attachments_page(
         <li>audit trail review</li>
       </ul>
     </section>
-    <section class="management-section audit-placeholder">
-      <h2>Audit trail placeholder</h2>
-      <p>Audit trail display is planned for a later Stage 5B step.</p>
-      <p>No audit events are displayed in Step 4A.</p>
+    <section class="management-section audit-trail">
+      <h2>Audit trail</h2>
+      {audit_rows}
     </section>
     <section class="management-section governance-notice">
       <h2>Governance notice</h2>
@@ -531,6 +660,9 @@ def admin_record_attachments_page(reference: str, request: Request):
                 reference=record["reference"],
                 record_version=record["version"],
                 attachments=attachments,
+                audit_events=list_attachment_audit_events(
+                    conn, reference=record["reference"]
+                ),
             )
         )
     finally:
@@ -555,5 +687,3 @@ def list_record_attachments_route(reference: str, request: Request):
         )
     finally:
         conn.close()
-
-
