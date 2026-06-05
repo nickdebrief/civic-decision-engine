@@ -355,6 +355,10 @@ class AdminSessionTests(unittest.TestCase):
         content = response.content
 
         self.assertIn("Admin Attachment Management", content)
+        self.assertIn('class="admin-watermark print-watermark"', content)
+        self.assertIn('aria-hidden="true"', content)
+        self.assertIn("print-color-adjust: exact", content)
+        self.assertIn(">v12</text>", content)
         self.assertIn("Strike-OT-20260604-ADMIN", content)
         self.assertIn("Record summary", content)
         self.assertIn("Current attachments", content)
@@ -429,6 +433,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("<form", content)
         self.assertNotIn("action=", content)
         self.assertNotIn("href=", content)
+        self.assertNotIn("<a ", content)
         self.assertNotIn("type=\"submit\"", content)
         self.assertNotIn("<input", content)
         self.assertNotIn("<textarea", content)

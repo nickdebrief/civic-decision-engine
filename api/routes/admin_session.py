@@ -321,6 +321,36 @@ def render_admin_attachments_page(
       background: #fff;
       border: 1px solid #ddd;
       padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }}
+    .admin-watermark {{
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(60vw, 520px);
+      max-width: 82%;
+      transform: translate(-50%, -50%);
+      opacity: 0.045;
+      pointer-events: none;
+      z-index: 0;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    main > *:not(.admin-watermark) {{
+      position: relative;
+      z-index: 1;
+    }}
+    @media print {{
+      body {{
+        background: #fff;
+      }}
+      main {{
+        border: none;
+      }}
+      .admin-watermark {{
+        opacity: 0.06;
+      }}
     }}
     .notice {{
       border: 1px solid #d8d4ca;
@@ -376,6 +406,18 @@ def render_admin_attachments_page(
 </head>
 <body>
   <main>
+    <svg class="admin-watermark print-watermark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"></ellipse>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"></rect>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"></rect>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+    </svg>
     <h1>Admin Attachment Management</h1>
     <p class="notice">
       Administrative attachment management is read-only in this stage.
@@ -513,6 +555,5 @@ def list_record_attachments_route(reference: str, request: Request):
         )
     finally:
         conn.close()
-
 
 
