@@ -13,6 +13,7 @@ download, or public mutation controls were added during this verification work.
 
 1. Withhold
    - Event: attachment_withheld
+<<<<<<< HEAD
    - Transition: redaction_status: none -> withheld
 
 2. Restore from withheld
@@ -26,6 +27,21 @@ download, or public mutation controls were added during this verification work.
 4. Restore from soft-delete
    - Event: attachment_restored
    - Transition: is_deleted: 1 -> 0
+=======
+   - Transition: redaction_status: none → withheld
+
+2. Restore from withheld
+   - Event: attachment_restored
+   - Transition: redaction_status: withheld → none
+
+3. Soft-delete
+   - Event: attachment_soft_deleted
+   - Transition: is_deleted: 0 → 1
+
+4. Restore from soft-delete
+   - Event: attachment_restored
+   - Transition: is_deleted: 1 → 0
+>>>>>>> 4b9ca60 (Add Stage 5B lifecycle verification note)
 
 ## Supporting Capabilities Verified
 
