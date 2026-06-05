@@ -463,6 +463,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Planned", content)
         self.assertNotIn("Future management actions", content)
         self.assertNotIn("Future controls planned:", content)
+        main
         self.assertIn("metadata correction", content)
         self.assertIn("withhold / restore", content)
         self.assertIn("soft-delete", content)
