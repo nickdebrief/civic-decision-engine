@@ -514,6 +514,39 @@ Scope:
 - No mutation capability.
 - No public page or manifest changes.
 
+### Stage 5B Step 4C - Audit Event Writing Helpers
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Backend helper functions for writing audit events.
+- Metadata sanitization before audit storage.
+- No upload capability.
+- No mutation routes.
+- No public page or manifest changes.
+
+### Stage 5B Step 4D - Synthetic Audit Event Verification
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Local verification script only.
+- Writes synthetic audit events for testing/admin verification.
+- No upload capability.
+- No attachment mutation.
+- No web route.
+- No public page or manifest changes.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:
