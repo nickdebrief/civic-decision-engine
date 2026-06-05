@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -12,6 +13,17 @@ ATTACHMENT_ROOT = Path("/data/attachments")
 VALID_VISIBILITY = {"private", "public"}
 VALID_REDACTION_STATUS = {"none", "redacted", "withheld"}
 VALID_DOCUMENT_DATE_PRECISION = {"day", "month", "year", "unknown"}
+SENSITIVE_AUDIT_METADATA_KEYS = {
+    "CDE_ADMIN_TOKEN",
+    "session_secret",
+    "password",
+    "storage_path",
+    "stored_filename",
+    "raw_file_bytes",
+    "source_narrative",
+    "report_json",
+    "raw_input",
+}
 _SAFE_REFERENCE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _SAFE_EXTENSION_RE = re.compile(r"^\.[A-Za-z0-9]{1,12}$")
 
@@ -101,6 +113,64 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
 
 def attachment_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def sanitize_audit_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
+    if metadata is None:
+        return None
+    return {
+        key: _sanitize_audit_metadata_value(value)
+        for key, value in metadata.items()
+        if key not in SENSITIVE_AUDIT_METADATA_KEYS
+    }
+
+
+def record_attachment_audit_event(
+    conn: sqlite3.Connection,
+    *,
+    event_type: str,
+    reference: str,
+    actor: str = "admin",
+    attachment_id: int | None = None,
+    record_version: int | None = None,
+    metadata: dict[str, Any] | None = None,
+    request_id: str | None = None,
+    ip_hash: str | None = None,
+    user_agent_hash: str | None = None,
+    occurred_at: str | None = None,
+) -> int:
+    ensure_attachment_tables(conn)
+    occurred_at_value = occurred_at or datetime.now(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+    sanitized_metadata = sanitize_audit_metadata(metadata)
+    metadata_json = (
+        None
+        if sanitized_metadata is None
+        else json.dumps(sanitized_metadata, separators=(",", ":"), sort_keys=True)
+    )
+    cursor = conn.execute(
+        """
+        INSERT INTO attachment_audit_events (
+            attachment_id, reference, record_version, event_type, actor,
+            occurred_at, metadata_json, request_id, ip_hash, user_agent_hash
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            attachment_id,
+            reference,
+            record_version,
+            event_type,
+            actor,
+            occurred_at_value,
+            metadata_json,
+            request_id,
+            ip_hash,
+            user_agent_hash,
+        ),
+    )
+    return int(cursor.lastrowid)
 
 
 def validate_document_date(
@@ -420,6 +490,18 @@ def _validate_visibility(value: str) -> None:
 def _validate_redaction_status(value: str) -> None:
     if value not in VALID_REDACTION_STATUS:
         raise ValueError("Invalid attachment redaction status")
+
+
+def _sanitize_audit_metadata_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_audit_metadata_value(item)
+            for key, item in value.items()
+            if key not in SENSITIVE_AUDIT_METADATA_KEYS
+        }
+    if isinstance(value, list):
+        return [_sanitize_audit_metadata_value(item) for item in value]
+    return value
 
 
 def _appears_in_public_manifest(row: sqlite3.Row) -> bool:
