@@ -547,6 +547,24 @@ Scope:
 - No web route.
 - No public page or manifest changes.
 
+### Stage 5B Step 5C - Metadata Correction Foundation
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Admin-session protected metadata correction backend.
+- Allowed metadata fields only.
+- Immutable attachment fields protected.
+- Audit event written for corrections.
+- No browser form yet.
+- No upload/delete/restore/withhold/publish/download capability.
+- No canonical verification changes.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:

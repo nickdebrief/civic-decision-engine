@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api.attachments import ensure_attachment_tables
+from api.attachments import ensure_attachment_tables, public_manifest_attachments
 
 
 class FakeAPIRouter:
@@ -19,6 +19,9 @@ class FakeAPIRouter:
         return lambda func: func
 
     def post(self, *args, **kwargs):
+        return lambda func: func
+
+    def patch(self, *args, **kwargs):
         return lambda func: func
 
 
@@ -287,6 +290,19 @@ class AdminSessionTests(unittest.TestCase):
             list(values.values()),
         )
         conn.commit()
+
+    def fetch_attachment_row(self, db_path, attachment_id=1):
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            return dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+        finally:
+            conn.close()
 
     def insert_attachment_audit_event(self, conn, **overrides):
         values = {
@@ -615,6 +631,308 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("internal-public.pdf", serialized)
         self.assertNotIn("server-only-token", serialized)
         self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
+
+    def test_metadata_correction_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.correct_attachment_metadata_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                            {"title": "Corrected title"},
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_metadata_correction_updates_allowed_fields_and_writes_audit_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                title="Original title",
+                description="Original description",
+                source_label="Original source",
+                document_date="2026-06-04",
+                document_date_precision="day",
+                redaction_note="Original redaction note",
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            before_manifest = public_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.correct_attachment_metadata_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                        {
+                            "title": "Corrected title",
+                            "description": "Corrected description",
+                            "source_label": "Corrected source",
+                            "document_date": "2026-06",
+                            "document_date_precision": "month",
+                            "redaction_note": "Corrected redaction note",
+                        },
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(response.content["attachment"]["title"], "Corrected title")
+        self.assertEqual(response.content["attachment"]["description"], "Corrected description")
+        self.assertEqual(response.content["attachment"]["source_label"], "Corrected source")
+        self.assertEqual(response.content["attachment"]["document_date"], "2026-06")
+        self.assertEqual(response.content["attachment"]["document_date_precision"], "month")
+        self.assertEqual(response.content["changed_fields"], [
+            "title",
+            "description",
+            "source_label",
+            "document_date",
+            "document_date_precision",
+            "redaction_note",
+        ])
+        self.assertEqual(after["title"], "Corrected title")
+        self.assertEqual(after["description"], "Corrected description")
+        self.assertEqual(after["source_label"], "Corrected source")
+        self.assertEqual(after["document_date"], "2026-06")
+        self.assertEqual(after["document_date_precision"], "month")
+        self.assertEqual(after["redaction_note"], "Corrected redaction note")
+        self.assertEqual(after["sha256_hash"], before["sha256_hash"])
+        self.assertEqual(after["storage_path"], before["storage_path"])
+        self.assertEqual(after["stored_filename"], before["stored_filename"])
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        for immutable in (
+            "reference",
+            "record_version",
+            "attachment_version",
+            "filename",
+            "stored_filename",
+            "storage_path",
+            "content_type",
+            "file_size_bytes",
+            "sha256_hash",
+            "visibility",
+            "redaction_status",
+            "is_latest",
+            "is_deleted",
+            "uploaded_at",
+        ):
+            self.assertEqual(after[immutable], before[immutable])
+        self.assertEqual(audit["event_type"], "attachment_metadata_corrected")
+        self.assertEqual(audit["reference"], "Strike-OT-20260604-ADMIN")
+        self.assertEqual(audit["attachment_id"], attachment_id)
+        self.assertEqual(audit["record_version"], 1)
+        self.assertEqual(
+            audit_metadata["changed_fields"],
+            [
+                "title",
+                "description",
+                "source_label",
+                "document_date",
+                "document_date_precision",
+                "redaction_note",
+            ],
+        )
+        self.assertEqual(audit_metadata["previous_values"]["title"], "Original title")
+        self.assertEqual(audit_metadata["new_values"]["title"], "Corrected title")
+        self.assertEqual(before_manifest[0]["title"], "Original title")
+        self.assertEqual(after_manifest[0]["title"], "Corrected title")
+        self.assertEqual(after_manifest[0]["filename"], before_manifest[0]["filename"])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn(str(stored_path), serialized_response)
+        self.assertNotIn("server-only-token", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+
+    def test_metadata_correction_allows_empty_optional_values_as_null(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.correct_attachment_metadata_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                        {
+                            "title": "",
+                            "description": None,
+                            "source_label": "",
+                            "document_date": None,
+                            "document_date_precision": "unknown",
+                            "redaction_note": "",
+                        },
+                    )
+                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertIsNone(after["title"])
+        self.assertIsNone(after["description"])
+        self.assertIsNone(after["source_label"])
+        self.assertIsNone(after["document_date"])
+        self.assertEqual(after["document_date_precision"], "unknown")
+        self.assertIsNone(after["redaction_note"])
+        self.assertEqual(response.content["attachment"]["document_date_precision"], "unknown")
+
+    def test_metadata_correction_rejects_unknown_field(self):
+        self.assert_metadata_correction_rejected(
+            {"unexpected": "value"},
+            400,
+            "metadata_field_unknown",
+        )
+
+    def test_metadata_correction_rejects_immutable_field(self):
+        self.assert_metadata_correction_rejected(
+            {"sha256_hash": "e" * 64},
+            400,
+            "metadata_field_immutable",
+        )
+
+    def test_metadata_correction_rejects_invalid_document_date(self):
+        self.assert_metadata_correction_rejected(
+            {"document_date": "2026-02-31", "document_date_precision": "day"},
+            400,
+            "document_date_invalid",
+        )
+
+    def test_metadata_correction_wrong_reference_and_missing_attachment_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.correct_attachment_metadata_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                            {"title": "Corrected title"},
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.correct_attachment_metadata_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                            {"title": "Corrected title"},
+                        )
+                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after["title"], "Public attachment")
+
+    def assert_metadata_correction_rejected(self, payload, status_code, detail):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.correct_attachment_metadata_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            payload,
+                        )
+                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), status_code)
+        self.assertEqual(getattr(ctx.exception, "detail", None), detail)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
 
 if __name__ == "__main__":
     unittest.main()

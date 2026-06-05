@@ -43,7 +43,12 @@ from api.attachments import (
 )
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from api.attachments import ATTACHMENT_ROOT, list_record_attachments
+from api.attachments import (
+    ATTACHMENT_ROOT,
+    list_record_attachments,
+    record_attachment_audit_event,
+    validate_document_date,
+)
 
 router = APIRouter()
 
@@ -56,6 +61,30 @@ SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
 DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 PDF_CONTENT_TYPE = "application/pdf"
+EDITABLE_ATTACHMENT_METADATA_FIELDS = {
+    "title",
+    "description",
+    "source_label",
+    "document_date",
+    "document_date_precision",
+    "redaction_note",
+}
+IMMUTABLE_ATTACHMENT_FIELDS = {
+    "reference",
+    "record_version",
+    "attachment_version",
+    "filename",
+    "stored_filename",
+    "storage_path",
+    "content_type",
+    "file_size_bytes",
+    "sha256_hash",
+    "visibility",
+    "redaction_status",
+    "is_latest",
+    "is_deleted",
+    "uploaded_at",
+}
 
 
 def _http_error(status_code: int, detail: str):
@@ -184,6 +213,30 @@ def attachment_metadata_response(attachment: dict[str, Any]) -> dict[str, Any]:
             "file_exists",
             "file_sha256_matches",
         }
+    }
+
+
+def _safe_attachment_response(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "attachment_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_version": row["attachment_version"],
+        "filename": row["filename"],
+        "content_type": row["content_type"],
+        "file_size_bytes": row["file_size_bytes"],
+        "sha256_hash": row["sha256_hash"],
+        "visibility": row["visibility"],
+        "redaction_status": row["redaction_status"],
+        "title": row["title"],
+        "description": row["description"],
+        "source_label": row["source_label"],
+        "document_date": row["document_date"],
+        "document_date_precision": row["document_date_precision"] or "unknown",
+        "redaction_note": row["redaction_note"],
+        "uploaded_at": row["uploaded_at"],
+        "is_latest": row["is_latest"],
+        "is_deleted": row["is_deleted"],
     }
 
 
@@ -395,6 +448,53 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
       </section>""")
 
     return "".join(cards)
+
+
+def _normalize_optional_metadata_value(value: Any) -> Any:
+    if value == "":
+        return None
+    return value
+
+
+def _validate_metadata_correction_payload(
+    payload: dict[str, Any], current: sqlite3.Row
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "metadata_payload_invalid")
+
+    unknown_fields = set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    if unknown_fields:
+        raise _http_error(400, "metadata_field_unknown")
+
+    immutable_fields = set(payload) & IMMUTABLE_ATTACHMENT_FIELDS
+    if immutable_fields:
+        raise _http_error(400, "metadata_field_immutable")
+
+    updates = {
+        key: _normalize_optional_metadata_value(value)
+        for key, value in payload.items()
+        if key in EDITABLE_ATTACHMENT_METADATA_FIELDS
+    }
+    if not updates:
+        raise _http_error(400, "metadata_no_editable_fields")
+
+    if "document_date" in updates or "document_date_precision" in updates:
+        document_date = updates.get("document_date", current["document_date"])
+        document_date_precision = updates.get(
+            "document_date_precision",
+            current["document_date_precision"] or "unknown",
+        )
+        try:
+            normalized_date, normalized_precision = validate_document_date(
+                document_date,
+                document_date_precision,
+            )
+        except ValueError as exc:
+            raise _http_error(400, "document_date_invalid") from exc
+        updates["document_date"] = normalized_date
+        updates["document_date_precision"] = normalized_precision
+
+    return updates
 
 
 def render_admin_attachments_page(
@@ -685,5 +785,72 @@ def list_record_attachments_route(reference: str, request: Request):
                 ],
             }
         )
+    finally:
+        conn.close()
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata")
+def correct_attachment_metadata_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        updates = _validate_metadata_correction_payload(payload, current)
+        previous_values = {field: current[field] for field in updates}
+        changed_fields = [
+            field for field, value in updates.items() if previous_values[field] != value
+        ]
+
+        if changed_fields:
+            set_clause = ", ".join(f"{field} = ?" for field in changed_fields)
+            values = [updates[field] for field in changed_fields]
+            values.extend([attachment_id, reference])
+            conn.execute(
+                f"UPDATE record_attachments SET {set_clause} WHERE id = ? AND reference = ?",
+                values,
+            )
+
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_metadata_corrected",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "changed_fields": changed_fields,
+                "previous_values": {
+                    field: previous_values[field] for field in changed_fields
+                },
+                "new_values": {field: updated[field] for field in changed_fields},
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "changed_fields": changed_fields,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
