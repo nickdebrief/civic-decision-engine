@@ -7,6 +7,7 @@ import json
 import os
 import sqlite3
 import time
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -310,6 +311,32 @@ def _attachment_state(attachment: dict[str, Any]) -> str:
     return "active"
 
 
+def _format_admin_timestamp(value: Any) -> str:
+    if value in (None, ""):
+        return "unknown time"
+    raw_value = str(value)
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        return raw_value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _audit_event_badge_label(event_type: Any) -> str:
+    labels = {
+        "attachment_metadata_corrected": "metadata corrected",
+        "synthetic_audit_verification": "synthetic verification",
+        "attachment_withheld": "withheld",
+        "attachment_restored": "restored",
+        "attachment_soft_deleted": "soft deleted",
+    }
+    event_text = str(event_type or "audit event")
+    return labels.get(event_text, event_text.replace("_", " "))
+
+
 def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     if not attachments:
         return """
@@ -319,10 +346,18 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     for index, attachment in enumerate(attachments):
         state = _attachment_state(attachment)
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
+<<<<<<< HEAD
         summary = (
             f"{summary_title} | {state} | {attachment.get('visibility')} | "
             f"{attachment.get('redaction_status')} | {attachment.get('uploaded_at')}"
         )
+=======
+        summary_meta = (
+            f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
+            f"{attachment.get('redaction_status') or 'unknown redaction'}"
+        )
+        summary_time = _format_admin_timestamp(attachment.get("uploaded_at"))
+>>>>>>> 33d0352 (Refine admin attachment management page)
         rows = (
             ("Record version", attachment.get("record_version")),
             ("Title", attachment.get("title")),
@@ -349,7 +384,15 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
+<<<<<<< HEAD
         <summary>{escape(summary)}</summary>
+=======
+        <summary>
+          <span class="summary-title">{escape(str(summary_title))}</span>
+          <span class="summary-meta">{escape(summary_meta)}</span>
+          <span class="summary-time">{escape(summary_time)}</span>
+        </summary>
+>>>>>>> 33d0352 (Refine admin attachment management page)
         <table>
           <tbody>{table_rows}</tbody>
         </table>
@@ -431,6 +474,7 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
 
     cards = []
     for index, event in enumerate(audit_events):
+<<<<<<< HEAD
         attachment_id = event.get("attachment_id")
         attachment_fragment = (
             f" | attachment {attachment_id}" if attachment_id not in (None, "") else ""
@@ -439,6 +483,19 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
             f"{event.get('occurred_at')} | {event.get('event_type')} | "
             f"{event.get('actor')}{attachment_fragment}"
         )
+=======
+        event_type = event.get("event_type") or "audit event"
+        actor = event.get("actor") or "unknown actor"
+        attachment_id = event.get("attachment_id")
+        attachment_fragment = (
+            f"Attachment {attachment_id} • " if attachment_id not in (None, "") else ""
+        )
+        summary_meta = (
+            f"{attachment_fragment}{actor} • "
+            f"{_format_admin_timestamp(event.get('occurred_at'))}"
+        )
+        badge_label = _audit_event_badge_label(event_type)
+>>>>>>> 33d0352 (Refine admin attachment management page)
         rows = (
             ("Occurred at", event.get("occurred_at")),
             ("Event type", event.get("event_type")),
@@ -458,7 +515,15 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="audit-event"{open_attr}>
+<<<<<<< HEAD
         <summary>{escape(summary)}</summary>
+=======
+        <summary>
+          <span class="event-badge">[{escape(badge_label)}]</span>
+          <span class="summary-title">{escape(str(event_type))}</span>
+          <span class="summary-meta">{escape(summary_meta)}</span>
+        </summary>
+>>>>>>> 33d0352 (Refine admin attachment management page)
         <table>
           <tbody>{table_rows}</tbody>
         </table>
@@ -574,10 +639,14 @@ def render_admin_attachments_page(
       .admin-watermark {{
         opacity: 0.06;
       }}
+<<<<<<< HEAD
       details {{
         display: block;
         break-inside: avoid;
       }}
+=======
+      details,
+>>>>>>> 33d0352 (Refine admin attachment management page)
       details > * {{
         display: block;
       }}
@@ -598,17 +667,36 @@ def render_admin_attachments_page(
       font-size: 1.05rem;
       margin: 0 0 10px;
     }}
-    .future-actions ul {{
+    .administrative-capabilities ul {{
       margin: 8px 0 0 20px;
       padding: 0;
     }}
-    .future-actions li {{
+    .administrative-capabilities li {{
       margin: 4px 0;
     }}
+<<<<<<< HEAD
+=======
+    .capability-group {{
+      margin-top: 12px;
+    }}
+    .capability-group h3 {{
+      margin: 0 0 6px;
+      color: #555;
+      font-size: 0.9rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+>>>>>>> 33d0352 (Refine admin attachment management page)
     details {{
       break-inside: avoid;
     }}
     summary {{
+<<<<<<< HEAD
+=======
+      display: grid;
+      gap: 3px;
+>>>>>>> 33d0352 (Refine admin attachment management page)
       cursor: pointer;
       padding: 10px;
       background: #faf9f5;
@@ -616,6 +704,35 @@ def render_admin_attachments_page(
       font-weight: 600;
       word-break: break-word;
     }}
+<<<<<<< HEAD
+=======
+    .summary-title,
+    .summary-meta,
+    .summary-time {{
+      display: block;
+    }}
+    .summary-title {{
+      font-weight: 700;
+    }}
+    .summary-meta,
+    .summary-time {{
+      color: #555;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }}
+    .event-badge {{
+      display: inline-block;
+      width: max-content;
+      border: 1px solid #c9ddd8;
+      background: #eef8f6;
+      color: #245d61;
+      padding: 2px 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: lowercase;
+    }}
+>>>>>>> 33d0352 (Refine admin attachment management page)
     .attachment-card {{
       border: 1px solid #e5e1d8;
       margin-top: 16px;
@@ -698,16 +815,24 @@ def render_admin_attachments_page(
       <h2>Current attachments</h2>
       {attachment_rows}
     </section>
-    <section class="management-section future-actions">
-      <h2>Future management actions</h2>
-      <p>Future controls planned:</p>
-      <ul>
-        <li>metadata correction</li>
-        <li>withhold / restore</li>
-        <li>soft-delete</li>
-        <li>upload</li>
-        <li>audit trail review</li>
-      </ul>
+    <section class="management-section administrative-capabilities">
+      <h2>Administrative capabilities</h2>
+      <div class="capability-group">
+        <h3>Implemented</h3>
+        <ul>
+          <li>metadata correction</li>
+          <li>withhold / restore</li>
+          <li>soft-delete</li>
+          <li>audit trail review</li>
+        </ul>
+      </div>
+      <div class="capability-group">
+        <h3>Planned</h3>
+        <ul>
+          <li>upload</li>
+          <li>publication workflow</li>
+        </ul>
+      </div>
     </section>
     <section class="management-section audit-trail">
       <h2>Audit trail</h2>

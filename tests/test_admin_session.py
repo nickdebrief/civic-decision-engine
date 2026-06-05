@@ -412,6 +412,24 @@ class AdminSessionTests(unittest.TestCase):
             )
             self.insert_attachment_audit_event(
                 conn,
+                attachment_id=11,
+                event_type="attachment_metadata_corrected",
+                actor="admin",
+                occurred_at="2026-06-04T16:00:00Z",
+                metadata_json=json.dumps({"changed_fields": ["title"]}),
+                request_id="req-admin-corrected",
+            )
+            self.insert_attachment_audit_event(
+                conn,
+                attachment_id=None,
+                event_type="synthetic_audit_verification",
+                actor="admin",
+                occurred_at="2026-06-04T11:32:00Z",
+                metadata_json=json.dumps({"purpose": "local verification"}),
+                request_id="req-synthetic",
+            )
+            self.insert_attachment_audit_event(
+                conn,
                 reference="Strike-OT-20260604-OTHER",
                 attachment_id=10,
                 event_type="other_record_event",
@@ -440,6 +458,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Strike-OT-20260604-ADMIN", content)
         self.assertIn("Record summary", content)
         self.assertIn("Current attachments", content)
+<<<<<<< HEAD
         self.assertIn("<details", content)
         self.assertIn("<summary>", content)
         self.assertIn('class="attachment-card" open', content)
@@ -450,10 +469,18 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("details > *", content)
         self.assertIn("Future management actions", content)
         self.assertIn("Future controls planned:", content)
+=======
+        self.assertIn("Administrative capabilities", content)
+        self.assertIn("Implemented", content)
+        self.assertIn("Planned", content)
+        self.assertNotIn("Future management actions", content)
+        self.assertNotIn("Future controls planned:", content)
+>>>>>>> 33d0352 (Refine admin attachment management page)
         self.assertIn("metadata correction", content)
         self.assertIn("withhold / restore", content)
         self.assertIn("soft-delete", content)
         self.assertIn("audit trail review", content)
+        self.assertIn("publication workflow", content)
         self.assertIn("Audit trail", content)
         self.assertNotIn("Audit trail placeholder", content)
         self.assertNotIn(
@@ -499,11 +526,66 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("2026-06-04", content)
         self.assertIn("day", content)
         self.assertIn("2026-06-04T12:00:00Z", content)
+        self.assertIn('<details class="attachment-card" open>', content)
+        self.assertIn('<details class="audit-event" open>', content)
+        self.assertIn('<span class="summary-title">Public attachment</span>', content)
+        self.assertIn(
+            '<span class="summary-meta">active • public • none</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="summary-time">2026-06-04 12:00 UTC</span>',
+            content,
+        )
+        self.assertIn('<span class="summary-title">Private attachment</span>', content)
+        self.assertIn(
+            '<span class="summary-meta">active • private • none</span>',
+            content,
+        )
+        self.assertIn('<span class="summary-title">Withheld attachment</span>', content)
+        self.assertIn(
+            '<span class="summary-meta">withheld • public • withheld</span>',
+            content,
+        )
+        self.assertIn('<span class="summary-title">Deleted attachment</span>', content)
+        self.assertIn(
+            '<span class="summary-meta">deleted • public • none</span>',
+            content,
+        )
         self.assertIn("2026-06-04T14:00:00Z", content)
         self.assertIn("2026-06-04T12:30:00Z", content)
         self.assertLess(
+            content.index("2026-06-04T16:00:00Z"),
+            content.index("2026-06-04T14:00:00Z"),
+        )
+        self.assertLess(
             content.index("2026-06-04T14:00:00Z"),
             content.index("2026-06-04T12:30:00Z"),
+        )
+        self.assertIn('<span class="event-badge">[metadata corrected]</span>', content)
+        self.assertIn(
+            '<span class="event-badge">[synthetic verification]</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="event-badge">[attachment visibility reviewed]</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="summary-title">attachment_metadata_corrected</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="summary-meta">Attachment 11 • admin • 2026-06-04 16:00 UTC</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="summary-title">synthetic_audit_verification</span>',
+            content,
+        )
+        self.assertIn(
+            '<span class="summary-meta">admin • 2026-06-04 11:32 UTC</span>',
+            content,
         )
         self.assertIn("attachment_visibility_reviewed", content)
         self.assertIn("attachment_created", content)
