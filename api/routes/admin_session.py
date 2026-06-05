@@ -187,6 +187,35 @@ def attachment_metadata_response(attachment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "attachment_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_version": row["attachment_version"],
+        "filename": row["filename"],
+        "content_type": row["content_type"],
+        "file_size_bytes": row["file_size_bytes"],
+        "sha256_hash": row["sha256_hash"],
+        "visibility": row["visibility"],
+        "redaction_status": row["redaction_status"],
+        "title": row["title"],
+        "description": row["description"],
+        "source_label": row["source_label"],
+        "document_date": row["document_date"],
+        "document_date_precision": row["document_date_precision"] or "unknown",
+        "uploaded_at": row["uploaded_at"],
+        "is_latest": row["is_latest"],
+        "is_deleted": row["is_deleted"],
+        "appears_in_public_manifest": (
+            row["visibility"] == "public"
+            and row["redaction_status"] != "withheld"
+            and row["is_latest"] == 1
+            and row["is_deleted"] == 0
+        ),
+    }
+
+
 def _set_session_cookie(response, session: str) -> None:
     if hasattr(response, "set_cookie"):
         response.set_cookie(
@@ -300,6 +329,22 @@ def render_admin_attachments_page(
       margin: 18px 0 24px;
       color: #555;
     }}
+    .management-section {{
+      border-top: 1px solid #e5e1d8;
+      padding-top: 18px;
+      margin-top: 22px;
+    }}
+    .management-section h2 {{
+      font-size: 1.05rem;
+      margin: 0 0 10px;
+    }}
+    .future-actions ul {{
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }}
+    .future-actions li {{
+      margin: 4px 0;
+    }}
     .attachment-card {{
       border: 1px solid #e5e1d8;
       margin-top: 16px;
@@ -331,14 +376,41 @@ def render_admin_attachments_page(
 </head>
 <body>
   <main>
-    <h1>Admin Attachment Listing</h1>
-    <p><strong>Record reference:</strong> {escape(reference)}</p>
-    <p><strong>Record version:</strong> {record_version}</p>
+    <h1>Admin Attachment Management</h1>
     <p class="notice">
-      Administrative attachment visibility only.
-      No upload, edit, delete, restore, or correction actions are available in Stage 5B Step 3.
+      Administrative attachment management is read-only in this stage.
+      No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
-    {attachment_rows}
+    <section class="management-section record-summary">
+      <h2>Record summary</h2>
+      <p><strong>Record reference:</strong> {escape(reference)}</p>
+      <p><strong>Record version:</strong> {record_version}</p>
+    </section>
+    <section class="management-section current-attachments">
+      <h2>Current attachments</h2>
+      {attachment_rows}
+    </section>
+    <section class="management-section future-actions">
+      <h2>Future management actions</h2>
+      <p>Future controls planned:</p>
+      <ul>
+        <li>metadata correction</li>
+        <li>withhold / restore</li>
+        <li>soft-delete</li>
+        <li>upload</li>
+        <li>audit trail review</li>
+      </ul>
+    </section>
+    <section class="management-section audit-placeholder">
+      <h2>Audit trail placeholder</h2>
+      <p>Audit trail display is planned for a later Stage 5B step.</p>
+      <p>No audit events are displayed in Step 4A.</p>
+    </section>
+    <section class="management-section governance-notice">
+      <h2>Governance notice</h2>
+      <p>Administrative attachment management is read-only in this stage.</p>
+      <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
+    </section>
   </main>
 </body>
 </html>"""
@@ -443,48 +515,4 @@ def list_record_attachments_route(reference: str, request: Request):
         conn.close()
 
 
-@router.post("/records/{reference}/attachments")
-async def upload_record_attachment_route(
-    reference: str,
-    request: Request,
-    file: UploadFile = File(...),
-    visibility: str = Form("private"),
-    redaction_status: str = Form("none"),
-    title: str | None = Form(None),
-    description: str | None = Form(None),
-    source_label: str | None = Form(None),
-    redaction_note: str | None = Form(None),
-    document_date: str | None = Form(None),
-    document_date_precision: str | None = Form("unknown"),
-):
-    require_admin_session(request)
-    data = await file.read()
-    content_type = validate_pdf_attachment_upload(file.content_type, data)
-    conn = get_db()
-    try:
-        attachment = store_attachment_bytes(
-            conn,
-            reference=reference,
-            data=data,
-            original_filename=file.filename or "attachment.pdf",
-            content_type=content_type,
-            visibility=visibility,
-            redaction_status=redaction_status,
-            title=title,
-            description=description,
-            source_label=source_label,
-            redaction_note=redaction_note,
-            document_date=document_date,
-            document_date_precision=document_date_precision,
-            root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
-        )
-        return JSONResponse(
-            status_code=201,
-            content={"attachment": attachment_metadata_response(attachment)},
-        )
-    except AttachmentRecordNotFound as exc:
-        raise _http_error(404, str(exc))
-    except ValueError as exc:
-        raise _http_error(400, str(exc))
-    finally:
-        conn.close()
+

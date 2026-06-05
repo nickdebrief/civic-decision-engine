@@ -482,6 +482,22 @@ Scope:
 - Read-only attachment listing.
 - No upload capability.
 - No mutation capability.
+
+### Stage 5B Step 4A - Admin Attachment Management Page Layout
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Read-only admin management layout.
+- Current attachment visibility preserved.
+- Future action areas shown as informational placeholders only.
+- No upload or mutation capability.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:
@@ -494,4 +510,3 @@ Scope:
 - No upload UI.
 - No upload route.
 - No attachment mutation.
-
