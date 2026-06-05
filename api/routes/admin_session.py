@@ -334,7 +334,7 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_soft_deleted": "soft deleted",
     }
     event_text = str(event_type or "audit event")
-    return labels.get(event_text, event_text.replace("_", " "))
+    return labels.get(event_text, "audit event")
 
 
 def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
@@ -613,7 +613,6 @@ def render_admin_attachments_page(
       .admin-watermark {{
         opacity: 0.06;
       }}
-      details,
       details {{
         display: block;
         break-inside: avoid;
