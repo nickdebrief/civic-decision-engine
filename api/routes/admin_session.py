@@ -316,7 +316,13 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
       <p>No attachments are currently associated with this record.</p>"""
 
     cards = []
-    for attachment in attachments:
+    for index, attachment in enumerate(attachments):
+        state = _attachment_state(attachment)
+        summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
+        summary = (
+            f"{summary_title} | {state} | {attachment.get('visibility')} | "
+            f"{attachment.get('redaction_status')} | {attachment.get('uploaded_at')}"
+        )
         rows = (
             ("Record version", attachment.get("record_version")),
             ("Title", attachment.get("title")),
@@ -340,12 +346,14 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             "</tr>"
             for label, value in rows
         )
+        open_attr = " open" if index == 0 else ""
         cards.append(f"""
-      <section class="attachment-card">
+      <details class="attachment-card"{open_attr}>
+        <summary>{escape(summary)}</summary>
         <table>
           <tbody>{table_rows}</tbody>
         </table>
-      </section>""")
+      </details>""")
 
     return "".join(cards)
 
@@ -422,7 +430,15 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
       <p>No audit events are currently recorded for this record.</p>"""
 
     cards = []
-    for event in audit_events:
+    for index, event in enumerate(audit_events):
+        attachment_id = event.get("attachment_id")
+        attachment_fragment = (
+            f" | attachment {attachment_id}" if attachment_id not in (None, "") else ""
+        )
+        summary = (
+            f"{event.get('occurred_at')} | {event.get('event_type')} | "
+            f"{event.get('actor')}{attachment_fragment}"
+        )
         rows = (
             ("Occurred at", event.get("occurred_at")),
             ("Event type", event.get("event_type")),
@@ -439,13 +455,15 @@ def _render_admin_audit_events(audit_events: list[dict[str, Any]]) -> str:
             for label, value in rows
         )
         metadata_block = _render_audit_metadata_json(event.get("metadata_json"))
+        open_attr = " open" if index == 0 else ""
         cards.append(f"""
-      <section class="audit-event">
+      <details class="audit-event"{open_attr}>
+        <summary>{escape(summary)}</summary>
         <table>
           <tbody>{table_rows}</tbody>
         </table>
         {metadata_block}
-      </section>""")
+      </details>""")
 
     return "".join(cards)
 
@@ -556,6 +574,13 @@ def render_admin_attachments_page(
       .admin-watermark {{
         opacity: 0.06;
       }}
+      details {{
+        display: block;
+        break-inside: avoid;
+      }}
+      details > * {{
+        display: block;
+      }}
     }}
     .notice {{
       border: 1px solid #d8d4ca;
@@ -579,6 +604,17 @@ def render_admin_attachments_page(
     }}
     .future-actions li {{
       margin: 4px 0;
+    }}
+    details {{
+      break-inside: avoid;
+    }}
+    summary {{
+      cursor: pointer;
+      padding: 10px;
+      background: #faf9f5;
+      color: #333;
+      font-weight: 600;
+      word-break: break-word;
     }}
     .attachment-card {{
       border: 1px solid #e5e1d8;
