@@ -530,6 +530,23 @@ Scope:
 - No mutation routes.
 - No public page or manifest changes.
 
+### Stage 5B Step 4D - Synthetic Audit Event Verification
+
+Status:
+
+```text
+Implemented / pending review
+```
+
+Scope:
+
+- Local verification script only.
+- Writes synthetic audit events for testing/admin verification.
+- No upload capability.
+- No attachment mutation.
+- No web route.
+- No public page or manifest changes.
+
 ### Stage 5B Step 2 - Admin Session Scaffold
 
 Status:
