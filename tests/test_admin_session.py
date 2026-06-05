@@ -458,11 +458,24 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Strike-OT-20260604-ADMIN", content)
         self.assertIn("Record summary", content)
         self.assertIn("Current attachments", content)
+<<<<<<< docs/stage5b-admin-page-refinement
         self.assertIn("Administrative capabilities", content)
         self.assertIn("Implemented", content)
         self.assertIn("Planned", content)
         self.assertNotIn("Future management actions", content)
         self.assertNotIn("Future controls planned:", content)
+=======
+        self.assertIn("<details", content)
+        self.assertIn("<summary>", content)
+        self.assertIn('class="attachment-card" open', content)
+        self.assertIn('class="audit-event" open', content)
+        self.assertIn("details {", content)
+        self.assertIn("break-inside: avoid", content)
+        self.assertIn("@media print", content)
+        self.assertIn("details > *", content)
+        self.assertIn("Future management actions", content)
+        self.assertIn("Future controls planned:", content)
+>>>>>>> main
         self.assertIn("metadata correction", content)
         self.assertIn("withhold / restore", content)
         self.assertIn("soft-delete", content)
@@ -481,6 +494,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Private attachment", content)
         self.assertIn("Withheld attachment", content)
         self.assertIn("Deleted attachment", content)
+        self.assertIn(
+            "<summary>Public attachment | active | public | none | 2026-06-04T12:00:00Z</summary>",
+            content,
+        )
+        self.assertIn(
+            "<summary>Private attachment | active | private | none | 2026-06-04T12:00:00Z</summary>",
+            content,
+        )
+        self.assertIn(
+            "<summary>Withheld attachment | withheld | public | withheld | 2026-06-04T12:00:00Z</summary>",
+            content,
+        )
+        self.assertIn(
+            "<summary>Deleted attachment | deleted | public | none | 2026-06-04T12:00:00Z</summary>",
+            content,
+        )
         self.assertIn("public.pdf", content)
         self.assertIn("private.pdf", content)
         self.assertIn("withheld.pdf", content)
@@ -560,6 +589,14 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("attachment_visibility_reviewed", content)
         self.assertIn("attachment_created", content)
+        self.assertIn(
+            "<summary>2026-06-04T14:00:00Z | attachment_visibility_reviewed | reviewer | attachment 9</summary>",
+            content,
+        )
+        self.assertIn(
+            "<summary>2026-06-04T12:30:00Z | attachment_created | admin | attachment 8</summary>",
+            content,
+        )
         self.assertIn("reviewer", content)
         self.assertIn("Attachment ID", content)
         self.assertIn(">9<", content)

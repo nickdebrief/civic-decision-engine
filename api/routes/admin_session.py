@@ -614,6 +614,10 @@ def render_admin_attachments_page(
         opacity: 0.06;
       }}
       details,
+      details {{
+        display: block;
+        break-inside: avoid;
+      }}
       details > * {{
         display: block;
       }}
