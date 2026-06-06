@@ -50,6 +50,7 @@ from api.attachments import (
     record_attachment_audit_event,
     validate_attachment_relationship,
     validate_attachment_classification,
+    validate_attachment_visibility,
     validate_document_date,
     validate_publication_status,
 )
@@ -77,6 +78,7 @@ ATTACHMENT_CLASSIFICATION_OPTIONS = (
     "other",
 )
 ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
+ATTACHMENT_VISIBILITY_OPTIONS = ("private", "public")
 ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS = ("supports", "contradicts", "context_for")
 ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = ("condition", "signal", "finding", "record")
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
@@ -355,6 +357,7 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_soft_deleted": "soft deleted",
         "attachment_classification_updated": "classification updated",
         "attachment_publication_updated": "publication updated",
+        "attachment_visibility_updated": "visibility updated",
         "attachment_relationship_added": "relationship added",
         "attachment_relationship_removed": "relationship removed",
     }
@@ -374,10 +377,11 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         reference = attachment.get("reference")
         current_classification = attachment.get("classification") or "other"
         current_publication_status = attachment.get("publication_status") or "internal"
+        current_visibility = attachment.get("visibility") or "private"
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
         summary_meta = (
             f"{current_classification} • "
-            f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
+            f"{state} • {current_visibility} • "
             f"{attachment.get('redaction_status') or 'unknown redaction'} • "
             f"{current_publication_status}"
         )
@@ -428,6 +432,17 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         publication_action = (
             f"/api/admin/session/records/{escape(str(reference))}/attachments/"
             f"{escape(str(attachment_id))}/publication"
+        )
+        visibility_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_visibility else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_VISIBILITY_OPTIONS
+        )
+        visibility_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/visibility"
         )
         relationship_action = (
             f"/api/admin/session/records/{escape(str(reference))}/attachments/"
@@ -491,6 +506,23 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             </select>
           </label>
           <button type="submit">Update publication</button>
+        </form>
+        <form class="attachment-metadata-update-form visibility-update-form"
+              data-visibility-update-form
+              data-json-field="visibility"
+              action="{visibility_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="visibility-update-note">
+            Controlled administrative visibility workflow action only. No upload or download is available here.
+          </p>
+          <label>
+            Visibility
+            <select name="visibility" required>
+              {visibility_options}
+            </select>
+          </label>
+          <button type="submit">Update visibility</button>
         </form>
         <section class="evidence-relationships">
           <h3>Evidence relationships</h3>
@@ -744,6 +776,17 @@ def _validate_publication_payload(payload: dict[str, Any]) -> str:
         raise _http_error(400, "publication_status_invalid") from exc
 
 
+def _validate_visibility_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "visibility_payload_invalid")
+    if set(payload.keys()) != {"visibility"}:
+        raise _http_error(400, "visibility_payload_invalid")
+    try:
+        return validate_attachment_visibility(payload.get("visibility"))
+    except ValueError as exc:
+        raise _http_error(400, "visibility_invalid") from exc
+
+
 def _validate_relationship_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
     if not isinstance(payload, dict):
         raise _http_error(400, "relationship_payload_invalid")
@@ -965,6 +1008,7 @@ def render_admin_attachments_page(
     }}
     .classification-update-note,
     .publication-update-note,
+    .visibility-update-note,
     .relationship-update-note {{
       flex-basis: 100%;
       margin: 0;
@@ -1092,7 +1136,7 @@ def render_admin_attachments_page(
     <h1>Admin Attachment Management</h1>
     <p class="notice">
       Administrative attachment management is controlled in this stage.
-      Only classification and publication status metadata updates are available from this page.
+      Classification, publication status, and visibility metadata updates are available from this page.
       No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
     <section class="management-section record-summary">
@@ -1113,13 +1157,15 @@ def render_admin_attachments_page(
           <li>withhold / restore</li>
           <li>soft-delete</li>
           <li>audit trail review</li>
+          <li>visibility workflow</li>
+          <li>publication workflow</li>
         </ul>
       </div>
       <div class="capability-group">
         <h3>Planned</h3>
         <ul>
           <li>upload</li>
-          <li>publication workflow</li>
+          <li>public file serving</li>
         </ul>
       </div>
     </section>
@@ -1130,7 +1176,7 @@ def render_admin_attachments_page(
     <section class="management-section governance-notice">
       <h2>Governance notice</h2>
       <p>Administrative attachment management is controlled in this stage.</p>
-      <p>Only classification and publication status metadata updates are available from this page.</p>
+      <p>Classification, publication status, and visibility metadata updates are available from this page.</p>
       <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
     </section>
   </main>
@@ -1470,6 +1516,64 @@ def update_attachment_publication_route(
             metadata={
                 "previous_publication_status": previous_publication_status,
                 "new_publication_status": updated["publication_status"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility")
+def update_attachment_visibility_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    visibility = _validate_visibility_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_visibility = current["visibility"] or "private"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET visibility = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (visibility, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_visibility_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_visibility": previous_visibility,
+                "new_visibility": updated["visibility"],
             },
         )
         conn.commit()
