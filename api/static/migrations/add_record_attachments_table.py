@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS record_attachments (
             'evidence', 'correspondence', 'decision', 'medical_record',
             'legal_filing', 'photograph', 'media', 'research', 'other'
         )),
+    publication_status TEXT NOT NULL DEFAULT 'internal'
+        CHECK (publication_status IN ('internal', 'published', 'withdrawn')),
     document_date TEXT,
     document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 

@@ -141,6 +141,7 @@ class AttachmentReadOnlyUITests(unittest.TestCase):
         is_deleted=0,
         filename="example.pdf",
         title="Attachment title",
+        publication_status="published",
     ):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -152,11 +153,12 @@ class AttachmentReadOnlyUITests(unittest.TestCase):
                     content_type, file_size_bytes, sha256_hash,
                     visibility, redaction_status, title, description,
                     source_label, document_date, document_date_precision,
+                    publication_status,
                     uploaded_at, is_latest, is_deleted
                 )
                 VALUES (?, 1, 1, ?, 'stored.pdf', '/private/path/stored.pdf',
                         'application/pdf', 12345, ?, ?, ?, ?, ?, ?,
-                        '2026-06-04', 'day', '2026-06-04T10:00:00Z', ?, ?)
+                        '2026-06-04', 'day', ?, '2026-06-04T10:00:00Z', ?, ?)
                 """,
                 (
                     self.reference,
@@ -167,6 +169,7 @@ class AttachmentReadOnlyUITests(unittest.TestCase):
                     title,
                     "Attachment description",
                     "Attachment source",
+                    publication_status,
                     is_latest,
                     is_deleted,
                 ),
@@ -208,22 +211,38 @@ class AttachmentReadOnlyUITests(unittest.TestCase):
 
     def test_private_withheld_deleted_and_non_latest_attachments_do_not_appear(self):
         self.insert_attachment(
-            visibility="private", filename="private.pdf", title="Private attachment"
+            visibility="private",
+            filename="private.pdf",
+            title="Private attachment",
+            publication_status="published",
         )
         self.insert_attachment(
             redaction_status="withheld",
             filename="withheld.pdf",
             title="Withheld attachment",
+            publication_status="published",
         )
         self.insert_attachment(
             is_deleted=1,
             filename="deleted.pdf",
             title="Deleted attachment",
+            publication_status="published",
         )
         self.insert_attachment(
             is_latest=0,
             filename="old.pdf",
             title="Old attachment",
+            publication_status="published",
+        )
+        self.insert_attachment(
+            filename="internal.pdf",
+            title="Internal attachment",
+            publication_status="internal",
+        )
+        self.insert_attachment(
+            filename="withdrawn.pdf",
+            title="Withdrawn attachment",
+            publication_status="withdrawn",
         )
 
         content = self.verify_html()
@@ -233,6 +252,8 @@ class AttachmentReadOnlyUITests(unittest.TestCase):
         self.assertNotIn("Withheld attachment", content)
         self.assertNotIn("Deleted attachment", content)
         self.assertNotIn("Old attachment", content)
+        self.assertNotIn("Internal attachment", content)
+        self.assertNotIn("Withdrawn attachment", content)
         self.assertNotIn("private.pdf", content)
         self.assertNotIn("withheld.pdf", content)
         self.assertNotIn("deleted.pdf", content)

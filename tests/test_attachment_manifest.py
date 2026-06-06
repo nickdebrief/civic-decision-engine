@@ -142,6 +142,7 @@ class AttachmentManifestTests(unittest.TestCase):
         filename="example.pdf",
         document_date="2026-05-30",
         document_date_precision="day",
+        publication_status="published",
     ):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -153,11 +154,12 @@ class AttachmentManifestTests(unittest.TestCase):
                     content_type, file_size_bytes, sha256_hash,
                     visibility, redaction_status, title, description,
                     source_label, document_date, document_date_precision,
+                    publication_status,
                     uploaded_at, is_latest, is_deleted
                 )
                 VALUES (?, 1, 1, ?, 'stored.pdf', '/private/path/stored.pdf',
                         'application/pdf', 12345, ?, ?, ?, ?, ?, ?,
-                        ?, ?, '2026-05-30T10:00:00Z', ?, ?)
+                        ?, ?, ?, '2026-05-30T10:00:00Z', ?, ?)
                 """,
                 (
                     self.reference,
@@ -170,6 +172,7 @@ class AttachmentManifestTests(unittest.TestCase):
                     "Attachment source",
                     document_date,
                     document_date_precision,
+                    publication_status,
                     is_latest,
                     is_deleted,
                 ),
@@ -251,6 +254,26 @@ class AttachmentManifestTests(unittest.TestCase):
         self.insert_attachment(redaction_status="withheld", filename="withheld.pdf")
 
         self.assertEqual(self.manifest()["attachments"], [])
+
+    def test_publication_status_filters_public_manifest_attachments(self):
+        self.insert_attachment(filename="internal.pdf", publication_status="internal")
+        self.insert_attachment(filename="withdrawn.pdf", publication_status="withdrawn")
+        self.insert_attachment(filename="published.pdf", publication_status="published")
+        self.insert_attachment(
+            filename="published-withheld.pdf",
+            publication_status="published",
+            redaction_status="withheld",
+        )
+        self.insert_attachment(
+            filename="published-deleted.pdf",
+            publication_status="published",
+            is_deleted=1,
+        )
+
+        attachments = self.manifest()["attachments"]
+
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["filename"], "published.pdf")
 
     def test_canonical_hash_and_serialization_remain_identical_after_attachment(self):
         before = self.manifest()
