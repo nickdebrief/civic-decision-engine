@@ -12,6 +12,7 @@ from api.attachments import (
     attachment_sha256,
     build_attachment_storage_path,
     ensure_attachment_tables,
+    validate_attachment_classification,
     validate_document_date,
 )
 
@@ -119,6 +120,7 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         self.assertIn("sha256_hash", columns)
         self.assertIn("visibility", columns)
         self.assertIn("redaction_status", columns)
+        self.assertIn("classification", columns)
         self.assertIn("document_date", columns)
         self.assertIn("document_date_precision", columns)
 
@@ -131,6 +133,46 @@ class AttachmentInfrastructureTests(unittest.TestCase):
 
         with self.assertRaises(sqlite3.IntegrityError):
             insert_attachment(conn, redaction_status="partially_hidden")
+
+    def test_existing_attachments_default_classification_to_other(self):
+        conn = make_connection()
+        ensure_attachment_tables(conn)
+
+        insert_attachment(conn)
+        row = conn.execute(
+            "SELECT classification FROM record_attachments"
+        ).fetchone()
+
+        self.assertEqual(row["classification"], "other")
+
+    def test_invalid_classification_values_are_rejected(self):
+        conn = make_connection()
+        ensure_attachment_tables(conn)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_attachment(conn, classification="secret_internal")
+
+    def test_validate_attachment_classification_accepts_allowed_values(self):
+        for classification in (
+            "evidence",
+            "correspondence",
+            "decision",
+            "medical_record",
+            "legal_filing",
+            "photograph",
+            "media",
+            "research",
+            "other",
+        ):
+            self.assertEqual(
+                validate_attachment_classification(classification),
+                classification,
+            )
+
+    def test_validate_attachment_classification_rejects_unknown_values(self):
+        for classification in ("", None, "medical record", "secret_internal"):
+            with self.assertRaises(ValueError):
+                validate_attachment_classification(classification)
 
     def test_init_db_creates_record_attachments_table(self):
         install_fastapi_stubs()

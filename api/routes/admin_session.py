@@ -48,6 +48,7 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     list_record_attachments,
     record_attachment_audit_event,
+    validate_attachment_classification,
     validate_document_date,
 )
 
@@ -235,6 +236,7 @@ def _safe_attachment_response(row: sqlite3.Row) -> dict[str, Any]:
         "document_date": row["document_date"],
         "document_date_precision": row["document_date_precision"] or "unknown",
         "redaction_note": row["redaction_note"],
+        "classification": row["classification"] or "other",
         "uploaded_at": row["uploaded_at"],
         "is_latest": row["is_latest"],
         "is_deleted": row["is_deleted"],
@@ -256,6 +258,7 @@ def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
         "title": row["title"],
         "description": row["description"],
         "source_label": row["source_label"],
+        "classification": row["classification"] or "other",
         "document_date": row["document_date"],
         "document_date_precision": row["document_date_precision"] or "unknown",
         "uploaded_at": row["uploaded_at"],
@@ -332,6 +335,7 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_withheld": "withheld",
         "attachment_restored": "restored",
         "attachment_soft_deleted": "soft deleted",
+        "attachment_classification_updated": "classification updated",
     }
     event_text = str(event_type or "audit event")
     return labels.get(event_text, "audit event")
@@ -347,6 +351,7 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         state = _attachment_state(attachment)
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
         summary_meta = (
+            f"{attachment.get('classification') or 'other'} • "
             f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
             f"{attachment.get('redaction_status') or 'unknown redaction'}"
         )
@@ -356,6 +361,7 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             ("Title", attachment.get("title")),
             ("Description", attachment.get("description")),
             ("Source label", attachment.get("source_label")),
+            ("Classification", attachment.get("classification") or "other"),
             ("Filename", attachment.get("filename")),
             ("Content type", attachment.get("content_type")),
             ("File size", attachment.get("file_size_bytes")),
@@ -552,6 +558,17 @@ def _validate_metadata_correction_payload(
         updates["document_date_precision"] = normalized_precision
 
     return updates
+
+
+def _validate_classification_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "classification_payload_invalid")
+    if set(payload.keys()) != {"classification"}:
+        raise _http_error(400, "classification_payload_invalid")
+    try:
+        return validate_attachment_classification(payload.get("classification"))
+    except ValueError as exc:
+        raise _http_error(400, "classification_invalid") from exc
 
 
 def render_admin_attachments_page(
@@ -968,6 +985,64 @@ def correct_attachment_metadata_route(
                 "ok": True,
                 "audit_event_id": audit_event_id,
                 "changed_fields": changed_fields,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/classification")
+def update_attachment_classification_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    classification = _validate_classification_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_classification = current["classification"] or "other"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET classification = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (classification, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_classification_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_classification": previous_classification,
+                "new_classification": updated["classification"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
                 "attachment": _safe_attachment_response(updated),
             }
         )
