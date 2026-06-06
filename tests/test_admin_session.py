@@ -501,6 +501,36 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("2026-06-04T12:00:00Z", content)
         self.assertIn('<details class="attachment-card" open>', content)
         self.assertIn('<details class="audit-event" open>', content)
+        self.assertIn('class="classification-update-form"', content)
+        self.assertIn("data-classification-update-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/classification"',
+            content,
+        )
+        self.assertIn('data-method="PATCH"', content)
+        self.assertIn('method="post"', content)
+        self.assertIn('name="classification"', content)
+        self.assertIn('<option value="evidence">evidence</option>', content)
+        self.assertIn(
+            '<option value="correspondence">correspondence</option>',
+            content,
+        )
+        self.assertIn('<option value="decision">decision</option>', content)
+        self.assertIn(
+            '<option value="medical_record">medical_record</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="legal_filing">legal_filing</option>',
+            content,
+        )
+        self.assertIn('<option value="photograph">photograph</option>', content)
+        self.assertIn('<option value="media">media</option>', content)
+        self.assertIn('<option value="research">research</option>', content)
+        self.assertIn('<option value="other" selected>other</option>', content)
+        self.assertIn("Update classification", content)
+        self.assertIn("Controlled administrative metadata action only.", content)
+        self.assertIn('method: "PATCH"', content)
         self.assertIn('<span class="summary-title">Public attachment</span>', content)
         self.assertIn(
             '<span class="summary-meta">other • active • public • none</span>',
@@ -583,12 +613,17 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("req-admin-newer", content)
         self.assertIn("metadata_json", content)
         self.assertIn("Reviewed &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", content)
-        self.assertNotIn("<script>", content)
+        self.assertIn("<script>", content)
+        self.assertNotIn("Reviewed <script>alert", content)
         self.assertNotIn("other_record_event", content)
         self.assertNotIn("req-other", content)
         self.assertNotIn("private raw narrative", content)
         self.assertIn(
-            "Administrative attachment management is read-only in this stage.",
+            "Administrative attachment management is controlled in this stage.",
+            content,
+        )
+        self.assertIn(
+            "Only classification metadata updates are available from this page.",
             content,
         )
         self.assertIn(
@@ -620,15 +655,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("/private/path", content)
         self.assertNotIn("server-only-token", content)
         self.assertNotIn("CDE_ADMIN_TOKEN", content)
-        self.assertNotIn("<button", content)
-        self.assertNotIn("<form", content)
-        self.assertNotIn("action=", content)
         self.assertNotIn("href=", content)
         self.assertNotIn("<a ", content)
-        self.assertNotIn("type=\"submit\"", content)
-        self.assertNotIn("<input", content)
         self.assertNotIn("<textarea", content)
-        self.assertNotIn("<select", content)
         self.assertNotIn("Download attachment", content)
         self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)
@@ -1067,11 +1096,17 @@ class AdminSessionTests(unittest.TestCase):
                     stored_file_bytes_after = stored_path.read_bytes()
                 finally:
                     conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
             finally:
                 self.admin_session.DB_PATH = original_db_path
 
         serialized_response = json.dumps(response.content, sort_keys=True)
         audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
 
         self.assertTrue(response.content["ok"])
         self.assertEqual(response.content["attachment"]["classification"], "medical_record")
@@ -1102,6 +1137,15 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(audit["record_version"], 1)
         self.assertEqual(audit_metadata["previous_classification"], "other")
         self.assertEqual(audit_metadata["new_classification"], "medical_record")
+        self.assertIn(
+            '<span class="summary-meta">medical_record • active • public • none</span>',
+            page_content,
+        )
+        self.assertIn("<td>Classification</td><td>medical_record</td>", page_content)
+        self.assertIn(
+            '<span class="event-badge">[classification updated]</span>',
+            page_content,
+        )
         self.assertNotIn("storage_path", audit["metadata_json"])
         self.assertNotIn("stored_filename", audit["metadata_json"])
         self.assertNotIn(str(stored_path), audit["metadata_json"])

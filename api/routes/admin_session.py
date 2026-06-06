@@ -63,6 +63,17 @@ SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
 DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 PDF_CONTENT_TYPE = "application/pdf"
+ATTACHMENT_CLASSIFICATION_OPTIONS = (
+    "evidence",
+    "correspondence",
+    "decision",
+    "medical_record",
+    "legal_filing",
+    "photograph",
+    "media",
+    "research",
+    "other",
+)
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -349,9 +360,12 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     cards = []
     for index, attachment in enumerate(attachments):
         state = _attachment_state(attachment)
+        attachment_id = attachment.get("attachment_id")
+        reference = attachment.get("reference")
+        current_classification = attachment.get("classification") or "other"
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
         summary_meta = (
-            f"{attachment.get('classification') or 'other'} • "
+            f"{current_classification} • "
             f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
             f"{attachment.get('redaction_status') or 'unknown redaction'}"
         )
@@ -380,6 +394,17 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             "</tr>"
             for label, value in rows
         )
+        classification_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_classification else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_CLASSIFICATION_OPTIONS
+        )
+        classification_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/classification"
+        )
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
@@ -391,6 +416,22 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         <table>
           <tbody>{table_rows}</tbody>
         </table>
+        <form class="classification-update-form"
+              data-classification-update-form
+              action="{classification_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="classification-update-note">
+            Controlled administrative metadata action only. No upload, download, or public mutation is available here.
+          </p>
+          <label>
+            Classification
+            <select name="classification" required>
+              {classification_options}
+            </select>
+          </label>
+          <button type="submit">Update classification</button>
+        </form>
       </details>""")
 
     return "".join(cards)
@@ -721,6 +762,48 @@ def render_admin_attachments_page(
       margin-top: 16px;
       overflow: hidden;
     }}
+    .classification-update-form {{
+      border-top: 1px solid #eee;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px;
+      padding: 10px;
+      background: #fffdf8;
+    }}
+    .classification-update-form label {{
+      display: grid;
+      gap: 4px;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .classification-update-form select {{
+      min-width: 180px;
+      padding: 7px 8px;
+      border: 1px solid #d8d4ca;
+      background: #fff;
+      color: #222;
+      font: 0.9rem system-ui, sans-serif;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .classification-update-form button {{
+      border: 1px solid #245d61;
+      background: #245d61;
+      color: #fff;
+      padding: 8px 10px;
+      font: 0.86rem system-ui, sans-serif;
+      cursor: pointer;
+    }}
+    .classification-update-note {{
+      flex-basis: 100%;
+      margin: 0;
+      color: #666;
+      font-size: 0.84rem;
+    }}
     .audit-metadata {{
       border-top: 1px solid #eee;
       padding: 10px;
@@ -781,7 +864,8 @@ def render_admin_attachments_page(
     </svg>
     <h1>Admin Attachment Management</h1>
     <p class="notice">
-      Administrative attachment management is read-only in this stage.
+      Administrative attachment management is controlled in this stage.
+      Only classification metadata updates are available from this page.
       No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
     <section class="management-section record-summary">
@@ -818,10 +902,35 @@ def render_admin_attachments_page(
     </section>
     <section class="management-section governance-notice">
       <h2>Governance notice</h2>
-      <p>Administrative attachment management is read-only in this stage.</p>
+      <p>Administrative attachment management is controlled in this stage.</p>
+      <p>Only classification metadata updates are available from this page.</p>
       <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
     </section>
   </main>
+  <script>
+    document.querySelectorAll("[data-classification-update-form]").forEach((form) => {{
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const formData = new FormData(form);
+        const response = await fetch(form.action, {{
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }},
+          body: JSON.stringify({{
+            classification: formData.get("classification")
+          }})
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        window.alert("Classification update failed.");
+      }});
+    }});
+  </script>
 </body>
 </html>"""
 
