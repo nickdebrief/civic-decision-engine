@@ -249,16 +249,31 @@ class AdminSessionTests(unittest.TestCase):
                 reference TEXT NOT NULL,
                 version INTEGER NOT NULL DEFAULT 1,
                 verification_hash TEXT NOT NULL,
+                conditions_json TEXT,
+                signals_json TEXT,
+                finding TEXT,
+                source_narrative TEXT,
+                report_json TEXT,
                 is_latest INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(reference, version)
             )
         """)
         conn.execute(
             """
-            INSERT INTO records (reference, version, verification_hash, is_latest)
-            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, 1)
+            INSERT INTO records (
+                reference, version, verification_hash, conditions_json,
+                signals_json, finding, source_narrative, report_json, is_latest
+            )
+            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, ?, ?, ?, ?, ?, 1)
             """,
-            ("c" * 64,),
+            (
+                "c" * 64,
+                json.dumps(["Transfer of Burden", "Escalation Without Response"]),
+                json.dumps(["Missing Response", {"name": "Procedural Loop"}]),
+                "Finding <requires> review",
+                "private source narrative must stay hidden",
+                json.dumps({"private": "report json must stay hidden"}),
+            ),
         )
         ensure_attachment_tables(conn)
         conn.commit()
@@ -620,6 +635,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn('<option value="finding">finding</option>', content)
         self.assertIn('<option value="record">record</option>', content)
         self.assertIn('name="target_key"', content)
+        self.assertIn("data-target-key-select", content)
+        self.assertNotIn('input name="target_key"', content)
+        self.assertIn(
+            '<option value="Transfer of Burden">Transfer of Burden</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="Escalation Without Response">Escalation Without Response</option>',
+            content,
+        )
+        self.assertIn('"signal": ["Missing Response", "Procedural Loop"]', content)
+        self.assertIn('"finding": ["Finding \\u003crequires\\u003e review"]', content)
+        self.assertIn('"record": ["Strike-OT-20260604-ADMIN"]', content)
+        self.assertIn("No available targets", content)
+        self.assertIn("RELATIONSHIP_TARGET_OPTIONS", content)
+        self.assertIn("updateTargetKeyOptions", content)
         self.assertIn("Add relationship", content)
         self.assertIn("data-relationship-remove-form", content)
         self.assertIn("Remove relationship", content)
@@ -745,6 +776,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("other_record_event", content)
         self.assertNotIn("req-other", content)
         self.assertNotIn("private raw narrative", content)
+        self.assertNotIn("private source narrative must stay hidden", content)
+        self.assertNotIn("report json must stay hidden", content)
         self.assertIn(
             "Administrative attachment management is controlled in this stage.",
             content,
@@ -793,6 +826,37 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("Withhold attachment", content)
         self.assertNotIn("Publish attachment", content)
         self.assertNotIn("Download attachment", content)
+
+    def test_admin_relationship_form_renders_no_available_targets_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET conditions_json = '[]', signals_json = '[]', finding = ''
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """
+            )
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn(
+            '<option value="" disabled selected>No available targets</option>',
+            content,
+        )
+        self.assertIn("data-relationship-submit disabled", content)
 
     def test_admin_attachment_listing_empty_state(self):
         with tempfile.TemporaryDirectory() as temp_dir:

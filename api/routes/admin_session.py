@@ -365,7 +365,91 @@ def _audit_event_badge_label(event_type: Any) -> str:
     return labels.get(event_text, "audit event")
 
 
-def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
+def _safe_json_for_script(value: Any) -> str:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+
+
+def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[str]]:
+    keys = set(record.keys())
+    reference = str(record["reference"]) if "reference" in keys else ""
+    finding = str(record["finding"]).strip() if "finding" in keys and record["finding"] else ""
+    return {
+        "condition": _json_list_targets(record["conditions_json"] if "conditions_json" in keys else None),
+        "signal": _signal_targets(record["signals_json"] if "signals_json" in keys else None),
+        "finding": [finding] if finding else [],
+        "record": [reference] if reference else [],
+    }
+
+
+def _json_list_targets(raw_json: Any) -> list[str]:
+    if not raw_json:
+        return []
+    try:
+        parsed = json.loads(str(raw_json))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return _dedupe_nonblank_strings(parsed)
+
+
+def _signal_targets(raw_json: Any) -> list[str]:
+    if not raw_json:
+        return []
+    try:
+        parsed = json.loads(str(raw_json))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+
+    targets = []
+    for item in parsed:
+        if isinstance(item, str):
+            targets.append(item)
+        elif isinstance(item, dict):
+            for key in ("name", "title", "label", "signal", "key", "id"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    targets.append(value)
+                    break
+    return _dedupe_nonblank_strings(targets)
+
+
+def _dedupe_nonblank_strings(values: list[Any]) -> list[str]:
+    seen = set()
+    targets = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        targets.append(normalized)
+    return targets
+
+
+def _render_target_key_options(target_options: dict[str, list[str]], target_type: str) -> str:
+    values = target_options.get(target_type) or []
+    if not values:
+        return '<option value="" disabled selected>No available targets</option>'
+    return "".join(
+        f'<option value="{escape(value)}">{escape(value)}</option>'
+        for value in values
+    )
+
+
+def _render_admin_attachment_rows(
+    attachments: list[dict[str, Any]],
+    *,
+    relationship_target_options: dict[str, list[str]],
+) -> str:
     if not attachments:
         return """
       <p>No attachments are currently associated with this record.</p>"""
@@ -462,6 +546,13 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             f'<option value="{escape(option)}">{escape(option)}</option>'
             for option in ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS
         )
+        target_key_options = _render_target_key_options(
+            relationship_target_options,
+            "condition",
+        )
+        relationship_submit_disabled = (
+            " disabled" if not relationship_target_options.get("condition") else ""
+        )
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
@@ -548,9 +639,11 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             </label>
             <label>
               Target key
-              <input name="target_key" type="text" maxlength="200" required>
+              <select name="target_key" required data-target-key-select>
+                {target_key_options}
+              </select>
             </label>
-            <button type="submit">Add relationship</button>
+            <button type="submit" data-relationship-submit{relationship_submit_disabled}>Add relationship</button>
           </form>
         </section>
       </details>""")
@@ -826,9 +919,16 @@ def render_admin_attachments_page(
     record_version: int,
     attachments: list[dict[str, Any]],
     audit_events: list[dict[str, Any]],
+    relationship_target_options: dict[str, list[str]],
 ) -> str:
-    attachment_rows = _render_admin_attachment_rows(attachments)
+    attachment_rows = _render_admin_attachment_rows(
+        attachments,
+        relationship_target_options=relationship_target_options,
+    )
     audit_rows = _render_admin_audit_events(audit_events)
+    relationship_target_options_json = _safe_json_for_script(
+        relationship_target_options
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1181,6 +1281,7 @@ def render_admin_attachments_page(
     </section>
   </main>
   <script>
+    const RELATIONSHIP_TARGET_OPTIONS = {relationship_target_options_json};
     document.querySelectorAll("[data-json-field]").forEach((form) => {{
       form.addEventListener("submit", async (event) => {{
         event.preventDefault();
@@ -1203,6 +1304,34 @@ def render_admin_attachments_page(
       }});
     }});
     document.querySelectorAll("[data-relationship-add-form]").forEach((form) => {{
+      const targetTypeSelect = form.querySelector('select[name="target_type"]');
+      const targetKeySelect = form.querySelector("[data-target-key-select]");
+      const submitButton = form.querySelector("[data-relationship-submit]");
+      const updateTargetKeyOptions = () => {{
+        const values = RELATIONSHIP_TARGET_OPTIONS[targetTypeSelect.value] || [];
+        targetKeySelect.innerHTML = "";
+        if (!values.length) {{
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No available targets";
+          option.disabled = true;
+          option.selected = true;
+          targetKeySelect.appendChild(option);
+          submitButton.disabled = true;
+          return;
+        }}
+        values.forEach((value) => {{
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          targetKeySelect.appendChild(option);
+        }});
+        submitButton.disabled = false;
+      }};
+      if (targetTypeSelect && targetKeySelect && submitButton) {{
+        targetTypeSelect.addEventListener("change", updateTargetKeyOptions);
+        updateTargetKeyOptions();
+      }}
       form.addEventListener("submit", async (event) => {{
         event.preventDefault();
         const formData = new FormData(form);
@@ -1301,7 +1430,7 @@ def admin_record_attachments_page(reference: str, request: Request):
     conn = get_db()
     try:
         record = conn.execute(
-            "SELECT reference, version FROM records "
+            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
             "WHERE reference = ? AND is_latest = 1 "
             "ORDER BY version DESC LIMIT 1",
             (reference,),
@@ -1325,6 +1454,7 @@ def admin_record_attachments_page(reference: str, request: Request):
                 audit_events=list_attachment_audit_events(
                     conn, reference=record["reference"]
                 ),
+                relationship_target_options=_record_relationship_target_options(record),
             )
         )
     finally:
