@@ -493,6 +493,65 @@ def public_manifest_attachments(
     ]
 
 
+def public_evidence_manifest_attachments(
+    conn: sqlite3.Connection, *, reference: str, record_version: int
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT id, record_version, filename, content_type, file_size_bytes,
+               sha256_hash, title, description, source_label, classification,
+               publication_status, document_date, document_date_precision, uploaded_at
+        FROM record_attachments
+        WHERE reference = ?
+          AND record_version = ?
+          AND visibility = 'public'
+          AND redaction_status != 'withheld'
+          AND is_deleted = 0
+          AND publication_status = 'published'
+        ORDER BY id ASC
+        """,
+        (reference, record_version),
+    ).fetchall()
+
+    attachments = []
+    for row in rows:
+        relationships = [
+            {
+                "relationship_type": relationship["relationship_type"],
+                "target_type": relationship["target_type"],
+                "target_key": relationship["target_key"],
+            }
+            for relationship in list_attachment_relationships(
+                conn,
+                reference=reference,
+                attachment_id=row["id"],
+                active_only=True,
+            )
+        ]
+        attachments.append(
+            {
+                "attachment_id": row["id"],
+                "record_version": row["record_version"],
+                "title": row["title"],
+                "description": row["description"],
+                "source_label": row["source_label"],
+                "classification": row["classification"] or "other",
+                "publication_status": row["publication_status"] or "internal",
+                "filename": row["filename"],
+                "content_type": row["content_type"],
+                "file_size": row["file_size_bytes"],
+                "sha256_hash": row["sha256_hash"],
+                "document_date": row["document_date"],
+                "document_date_precision": row["document_date_precision"] or "unknown",
+                "uploaded_at": row["uploaded_at"],
+                "relationships": relationships,
+            }
+        )
+
+    return attachments
+
+
 def list_record_attachments(
     conn: sqlite3.Connection,
     *,

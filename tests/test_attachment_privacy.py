@@ -11,17 +11,30 @@ def read_repo_file(path):
 
 
 class AttachmentPrivacyRegressionTests(unittest.TestCase):
-    def test_no_public_attachment_serving_routes_exist(self):
+    def test_no_public_attachment_serving_or_mutation_routes_exist(self):
         source = read_repo_file("api/routes/records.py")
         route_patterns = re.findall(r"@router\.(get|post|put|patch|delete)\(([^)]*)\)", source)
+        allowed_public_metadata_routes = {
+            "/records/{reference}/attachments",
+            "/records/{reference}/attachments/manifest",
+        }
         public_attachment_routes = [
-            route
+            (method, route.split(",", 1)[0].strip().strip('"\''))
             for method, route in route_patterns
             if "attachment" in route
             and "/api/admin/records/{reference}/attachments" not in route
         ]
+        unexpected_routes = [
+            (method, route)
+            for method, route in public_attachment_routes
+            if method != "get" or route not in allowed_public_metadata_routes
+        ]
 
-        self.assertEqual(public_attachment_routes, [])
+        self.assertEqual(unexpected_routes, [])
+        self.assertEqual(
+            {route for _, route in public_attachment_routes},
+            allowed_public_metadata_routes,
+        )
 
     def test_no_public_records_search_route_exists(self):
         source = read_repo_file("api/routes/records.py")
