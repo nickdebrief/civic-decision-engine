@@ -106,6 +106,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
                 "is_latest",
                 "is_deleted",
                 "appears_in_public_manifest",
+                "active_relationships",
             },
         )
         self.assertEqual(attachment["filename"], "evidence.pdf")
@@ -114,6 +115,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
         self.assertEqual(attachment["classification"], "other")
         self.assertEqual(attachment["publication_status"], "internal")
         self.assertEqual(attachment["document_date"], "2026-06-02")
+        self.assertEqual(attachment["active_relationships"], [])
         self.assertNotIn("storage_path", attachment)
         self.assertNotIn("stored_filename", attachment)
 

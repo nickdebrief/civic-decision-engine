@@ -12,6 +12,7 @@ from api.attachments import (
     attachment_sha256,
     build_attachment_storage_path,
     ensure_attachment_tables,
+    validate_attachment_relationship,
     validate_attachment_classification,
     validate_document_date,
     validate_publication_status,
@@ -113,8 +114,13 @@ class AttachmentInfrastructureTests(unittest.TestCase):
             row["name"]
             for row in conn.execute("PRAGMA table_info(record_attachments)").fetchall()
         }
+        relationship_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'record_attachment_relationships'"
+        ).fetchone()
 
         self.assertIsNotNone(table)
+        self.assertIsNotNone(relationship_table)
         self.assertIn("idx_record_attachments_reference", indexes)
         self.assertIn("idx_record_attachments_public", indexes)
         self.assertIn("idx_record_attachments_version", indexes)
@@ -205,6 +211,36 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         for publication_status in ("", None, "public", "draft"):
             with self.assertRaises(ValueError):
                 validate_publication_status(publication_status)
+
+    def test_validate_attachment_relationship_accepts_and_trims_values(self):
+        self.assertEqual(
+            validate_attachment_relationship(
+                "supports",
+                "condition",
+                "  Transfer of Burden  ",
+            ),
+            ("supports", "condition", "Transfer of Burden"),
+        )
+
+    def test_validate_attachment_relationship_rejects_invalid_values(self):
+        invalid_cases = (
+            ("maybe", "condition", "Transfer of Burden"),
+            ("supports", "unknown", "Transfer of Burden"),
+            ("supports", "condition", "   "),
+            ("supports", "condition", "x" * 201),
+        )
+        for relationship_type, target_type, target_key in invalid_cases:
+            with self.subTest(
+                relationship_type=relationship_type,
+                target_type=target_type,
+                target_key=target_key,
+            ):
+                with self.assertRaises(ValueError):
+                    validate_attachment_relationship(
+                        relationship_type,
+                        target_type,
+                        target_key,
+                    )
 
     def test_init_db_creates_record_attachments_table(self):
         install_fastapi_stubs()

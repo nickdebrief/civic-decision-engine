@@ -48,6 +48,7 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     list_record_attachments,
     record_attachment_audit_event,
+    validate_attachment_relationship,
     validate_attachment_classification,
     validate_document_date,
     validate_publication_status,
@@ -76,6 +77,8 @@ ATTACHMENT_CLASSIFICATION_OPTIONS = (
     "other",
 )
 ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
+ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS = ("supports", "contradicts", "context_for")
+ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = ("condition", "signal", "finding", "record")
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -352,6 +355,8 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_soft_deleted": "soft deleted",
         "attachment_classification_updated": "classification updated",
         "attachment_publication_updated": "publication updated",
+        "attachment_relationship_added": "relationship added",
+        "attachment_relationship_removed": "relationship removed",
     }
     event_text = str(event_type or "audit event")
     return labels.get(event_text, "audit event")
@@ -424,6 +429,24 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             f"/api/admin/session/records/{escape(str(reference))}/attachments/"
             f"{escape(str(attachment_id))}/publication"
         )
+        relationship_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/relationships"
+        )
+        relationships = attachment.get("active_relationships") or []
+        relationship_rows = _render_attachment_relationships(
+            relationships,
+            reference=str(reference),
+            attachment_id=str(attachment_id),
+        )
+        relationship_type_options = "".join(
+            f'<option value="{escape(option)}">{escape(option)}</option>'
+            for option in ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS
+        )
+        relationship_target_type_options = "".join(
+            f'<option value="{escape(option)}">{escape(option)}</option>'
+            for option in ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS
+        )
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
@@ -469,9 +492,70 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
           </label>
           <button type="submit">Update publication</button>
         </form>
+        <section class="evidence-relationships">
+          <h3>Evidence relationships</h3>
+          {relationship_rows}
+          <form class="attachment-relationship-form"
+                data-relationship-add-form
+                action="{relationship_action}"
+                method="post">
+            <p class="relationship-update-note">
+              Controlled administrative evidence-linking action only. No upload or download is available here.
+            </p>
+            <label>
+              Relationship type
+              <select name="relationship_type" required>
+                {relationship_type_options}
+              </select>
+            </label>
+            <label>
+              Target type
+              <select name="target_type" required>
+                {relationship_target_type_options}
+              </select>
+            </label>
+            <label>
+              Target key
+              <input name="target_key" type="text" maxlength="200" required>
+            </label>
+            <button type="submit">Add relationship</button>
+          </form>
+        </section>
       </details>""")
 
     return "".join(cards)
+
+
+def _render_attachment_relationships(
+    relationships: list[dict[str, Any]], *, reference: str, attachment_id: str
+) -> str:
+    if not relationships:
+        return '<p class="relationship-empty-state">No active evidence relationships.</p>'
+
+    items = []
+    for relationship in relationships:
+        relationship_id = relationship.get("relationship_id")
+        remove_action = (
+            f"/api/admin/session/records/{escape(reference)}/attachments/"
+            f"{escape(attachment_id)}/relationships/{escape(str(relationship_id))}/remove"
+        )
+        label = (
+            f"{relationship.get('relationship_type')} • "
+            f"{relationship.get('target_type')} • "
+            f"{relationship.get('target_key')}"
+        )
+        items.append(f"""
+          <li>
+            <span>{escape(label)}</span>
+            <form class="relationship-remove-form"
+                  data-relationship-remove-form
+                  action="{remove_action}"
+                  method="post"
+                  data-method="PATCH">
+              <button type="submit">Remove relationship</button>
+            </form>
+          </li>""")
+    return f'<ul class="relationship-list">{"".join(items)}</ul>'
 
 
 def list_attachment_audit_events(
@@ -658,6 +742,39 @@ def _validate_publication_payload(payload: dict[str, Any]) -> str:
         return validate_publication_status(payload.get("publication_status"))
     except ValueError as exc:
         raise _http_error(400, "publication_status_invalid") from exc
+
+
+def _validate_relationship_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "relationship_payload_invalid")
+    allowed_fields = {"relationship_type", "target_type", "target_key"}
+    if set(payload.keys()) != allowed_fields:
+        raise _http_error(400, "relationship_payload_invalid")
+    try:
+        return validate_attachment_relationship(
+            payload.get("relationship_type"),
+            payload.get("target_type"),
+            payload.get("target_key"),
+        )
+    except ValueError as exc:
+        raise _http_error(400, "relationship_payload_invalid") from exc
+
+
+def _relationship_response(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "relationship_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_id": row["attachment_id"],
+        "relationship_type": row["relationship_type"],
+        "target_type": row["target_type"],
+        "target_key": row["target_key"],
+        "is_active": row["is_active"],
+        "created_at": row["created_at"],
+        "created_by": row["created_by"],
+        "removed_at": row["removed_at"],
+        "removed_by": row["removed_by"],
+    }
 
 
 def render_admin_attachments_page(
@@ -847,11 +964,72 @@ def render_admin_attachments_page(
       cursor: pointer;
     }}
     .classification-update-note,
-    .publication-update-note {{
+    .publication-update-note,
+    .relationship-update-note {{
       flex-basis: 100%;
       margin: 0;
       color: #666;
       font-size: 0.84rem;
+    }}
+    .evidence-relationships {{
+      border-top: 1px solid #eee;
+      padding: 10px;
+      background: #fbfaf7;
+    }}
+    .evidence-relationships h3 {{
+      margin: 0 0 8px;
+      color: #555;
+      font-size: 0.88rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-list {{
+      margin: 0 0 12px 20px;
+      padding: 0;
+    }}
+    .relationship-list li {{
+      margin: 8px 0;
+    }}
+    .relationship-remove-form {{
+      display: inline-block;
+      margin-left: 8px;
+    }}
+    .attachment-relationship-form {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px;
+      margin-top: 10px;
+    }}
+    .attachment-relationship-form label {{
+      display: grid;
+      gap: 4px;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .attachment-relationship-form select,
+    .attachment-relationship-form input {{
+      min-width: 180px;
+      padding: 7px 8px;
+      border: 1px solid #d8d4ca;
+      background: #fff;
+      color: #222;
+      font: 0.9rem system-ui, sans-serif;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .attachment-relationship-form button,
+    .relationship-remove-form button {{
+      border: 1px solid #245d61;
+      background: #245d61;
+      color: #fff;
+      padding: 8px 10px;
+      font: 0.86rem system-ui, sans-serif;
+      cursor: pointer;
     }}
     .audit-metadata {{
       border-top: 1px solid #eee;
@@ -976,6 +1154,48 @@ def render_admin_attachments_page(
           return;
         }}
         window.alert("Classification update failed.");
+      }});
+    }});
+    document.querySelectorAll("[data-relationship-add-form]").forEach((form) => {{
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const formData = new FormData(form);
+        const response = await fetch(form.action, {{
+          method: "POST",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }},
+          body: JSON.stringify({{
+            relationship_type: formData.get("relationship_type"),
+            target_type: formData.get("target_type"),
+            target_key: formData.get("target_key")
+          }})
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        window.alert("Relationship update failed.");
+      }});
+    }});
+    document.querySelectorAll("[data-relationship-remove-form]").forEach((form) => {{
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const response = await fetch(form.action, {{
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }}
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        window.alert("Relationship removal failed.");
       }});
     }});
   </script>
@@ -1259,6 +1479,139 @@ def update_attachment_publication_route(
                 "ok": True,
                 "audit_event_id": audit_event_id,
                 "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships")
+def add_attachment_relationship_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    relationship_type, target_type, target_key = _validate_relationship_payload(payload)
+    conn = get_db()
+    try:
+        attachment = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not attachment:
+            raise _http_error(404, "attachment_not_found")
+
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        cursor = conn.execute(
+            """
+            INSERT INTO record_attachment_relationships (
+                reference, record_version, attachment_id, relationship_type,
+                target_type, target_key, is_active, created_at, created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'admin')
+            """,
+            (
+                reference,
+                attachment["record_version"],
+                attachment_id,
+                relationship_type,
+                target_type,
+                target_key,
+                created_at,
+            ),
+        )
+        relationship_id = int(cursor.lastrowid)
+        relationship = conn.execute(
+            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+            (relationship_id,),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_relationship_added",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=attachment["record_version"],
+            metadata={
+                "relationship_id": relationship_id,
+                "relationship_type": relationship_type,
+                "target_type": target_type,
+                "target_key": target_key,
+            },
+        )
+        conn.commit()
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "relationship": _relationship_response(relationship),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships/{relationship_id}/remove"
+)
+def remove_attachment_relationship_route(
+    reference: str,
+    attachment_id: int,
+    relationship_id: int,
+    request: Request,
+):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        relationship = conn.execute(
+            """
+            SELECT * FROM record_attachment_relationships
+            WHERE id = ? AND reference = ? AND attachment_id = ?
+            """,
+            (relationship_id, reference, attachment_id),
+        ).fetchone()
+        if not relationship:
+            raise _http_error(404, "relationship_not_found")
+
+        removed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        conn.execute(
+            """
+            UPDATE record_attachment_relationships
+            SET is_active = 0, removed_at = ?, removed_by = 'admin'
+            WHERE id = ? AND reference = ? AND attachment_id = ?
+            """,
+            (removed_at, relationship_id, reference, attachment_id),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+            (relationship_id,),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_relationship_removed",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "relationship_id": updated["id"],
+                "relationship_type": updated["relationship_type"],
+                "target_type": updated["target_type"],
+                "target_key": updated["target_key"],
+            },
+        )
+        conn.commit()
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "relationship": _relationship_response(updated),
             }
         )
     except Exception:

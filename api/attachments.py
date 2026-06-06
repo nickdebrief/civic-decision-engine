@@ -25,6 +25,8 @@ VALID_ATTACHMENT_CLASSIFICATION = {
     "other",
 }
 VALID_PUBLICATION_STATUS = {"internal", "published", "withdrawn"}
+VALID_RELATIONSHIP_TYPE = {"supports", "contradicts", "context_for"}
+VALID_RELATIONSHIP_TARGET_TYPE = {"condition", "signal", "finding", "record"}
 SENSITIVE_AUDIT_METADATA_KEYS = {
     "CDE_ADMIN_TOKEN",
     "session_secret",
@@ -142,6 +144,34 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (attachment_id)
                 REFERENCES record_attachments(id)
         )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS record_attachment_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference TEXT NOT NULL,
+            record_version INTEGER NOT NULL,
+            attachment_id INTEGER NOT NULL,
+            relationship_type TEXT NOT NULL
+                CHECK (relationship_type IN ('supports', 'contradicts', 'context_for')),
+            target_type TEXT NOT NULL
+                CHECK (target_type IN ('condition', 'signal', 'finding', 'record')),
+            target_key TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            created_by TEXT NOT NULL DEFAULT 'admin',
+            removed_at TEXT,
+            removed_by TEXT,
+            FOREIGN KEY (attachment_id)
+                REFERENCES record_attachments(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_attachment_relationships_attachment
+        ON record_attachment_relationships(reference, attachment_id, is_active)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_attachment_relationships_target
+        ON record_attachment_relationships(reference, target_type, target_key, is_active)
     """)
 
 
@@ -261,6 +291,30 @@ def validate_publication_status(publication_status: str | None) -> str:
     if value not in VALID_PUBLICATION_STATUS:
         raise ValueError("Invalid attachment publication status")
     return value
+
+
+def validate_attachment_relationship(
+    relationship_type: str | None,
+    target_type: str | None,
+    target_key: str | None,
+) -> tuple[str, str, str]:
+    normalized_relationship_type = (
+        relationship_type.strip() if isinstance(relationship_type, str) else None
+    )
+    if normalized_relationship_type not in VALID_RELATIONSHIP_TYPE:
+        raise ValueError("Invalid attachment relationship type")
+
+    normalized_target_type = target_type.strip() if isinstance(target_type, str) else None
+    if normalized_target_type not in VALID_RELATIONSHIP_TARGET_TYPE:
+        raise ValueError("Invalid attachment relationship target type")
+
+    normalized_target_key = target_key.strip() if isinstance(target_key, str) else ""
+    if not normalized_target_key:
+        raise ValueError("Attachment relationship target key is required")
+    if len(normalized_target_key) > 200:
+        raise ValueError("Attachment relationship target key is too long")
+
+    return normalized_relationship_type, normalized_target_type, normalized_target_key
 
 
 def store_attachment_bytes(
@@ -491,9 +545,57 @@ def list_record_attachments(
             attachment.update(
                 _verify_attachment_file(row, attachment_root=attachment_root)
             )
+        attachment["active_relationships"] = list_attachment_relationships(
+            conn,
+            reference=reference,
+            attachment_id=row["id"],
+            active_only=True,
+        )
         attachments.append(attachment)
 
     return attachments
+
+
+def list_attachment_relationships(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+    attachment_id: int,
+    active_only: bool = True,
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    active_clause = "AND is_active = 1" if active_only else ""
+    rows = conn.execute(
+        f"""
+        SELECT id, reference, record_version, attachment_id, relationship_type,
+               target_type, target_key, is_active, created_at, created_by,
+               removed_at, removed_by
+        FROM record_attachment_relationships
+        WHERE reference = ?
+          AND attachment_id = ?
+          {active_clause}
+        ORDER BY id ASC
+        """,
+        (reference, attachment_id),
+    ).fetchall()
+    return [_relationship_row_to_metadata(row) for row in rows]
+
+
+def _relationship_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "relationship_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_id": row["attachment_id"],
+        "relationship_type": row["relationship_type"],
+        "target_type": row["target_type"],
+        "target_key": row["target_key"],
+        "is_active": row["is_active"],
+        "created_at": row["created_at"],
+        "created_by": row["created_by"],
+        "removed_at": row["removed_at"],
+        "removed_by": row["removed_by"],
+    }
 
 
 def build_attachment_storage_path(
