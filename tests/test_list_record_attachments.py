@@ -98,6 +98,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
                 "title",
                 "description",
                 "source_label",
+                "classification",
                 "document_date",
                 "document_date_precision",
                 "uploaded_at",
@@ -109,6 +110,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
         self.assertEqual(attachment["filename"], "evidence.pdf")
         self.assertEqual(attachment["content_type"], "application/pdf")
         self.assertEqual(attachment["title"], "Attachment title")
+        self.assertEqual(attachment["classification"], "other")
         self.assertEqual(attachment["document_date"], "2026-06-02")
         self.assertNotIn("storage_path", attachment)
         self.assertNotIn("stored_filename", attachment)
