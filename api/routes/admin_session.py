@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -435,12 +436,19 @@ def _dedupe_nonblank_strings(values: list[Any]) -> list[str]:
     return targets
 
 
+def _guided_target_display_label(value: str) -> str:
+    if re.fullmatch(r"[A-Z0-9]+(?:_[A-Z0-9]+)+", value):
+        return value.replace("_", " ").title()
+    return value
+
+
 def _render_target_key_options(target_options: dict[str, list[str]], target_type: str) -> str:
     values = target_options.get(target_type) or []
     if not values:
         return '<option value="" disabled selected>No available targets</option>'
     return "".join(
-        f'<option value="{escape(value)}">{escape(value)}</option>'
+        f'<option value="{escape(value)}">'
+        f"{escape(_guided_target_display_label(value))}</option>"
         for value in values
     )
 
@@ -1282,6 +1290,15 @@ def render_admin_attachments_page(
   </main>
   <script>
     const RELATIONSHIP_TARGET_OPTIONS = {relationship_target_options_json};
+    const guidedTargetDisplayLabel = (value) => {{
+      return /^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(value)
+        ? value
+            .split("_")
+            .join(" ")
+            .toLowerCase()
+            .replace(/\\b\\w/g, (char) => char.toUpperCase())
+        : value;
+    }};
     document.querySelectorAll("[data-json-field]").forEach((form) => {{
       form.addEventListener("submit", async (event) => {{
         event.preventDefault();
@@ -1323,7 +1340,7 @@ def render_admin_attachments_page(
         values.forEach((value) => {{
           const option = document.createElement("option");
           option.value = value;
-          option.textContent = value;
+          option.textContent = guidedTargetDisplayLabel(value);
           targetKeySelect.appendChild(option);
         }});
         submitButton.disabled = false;
