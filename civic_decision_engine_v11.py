@@ -18,6 +18,7 @@ from typing import Any
 from jsonschema import Draft7Validator
 
 SCHEMA_PATH = Path("schema/civic_case.schema.json")
+ENGINE_LINEAGE_VERSION = "v11"
 
 
 def load_civic_schema() -> dict[str, Any]:
@@ -248,7 +249,7 @@ def build_timeline_output(case: dict[str, Any]) -> dict[str, Any]:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "timeline_analysis",
             "case_count": 1,
-            "lineage": {"version": "v10"},
+            "lineage": {"version": ENGINE_LINEAGE_VERSION},
         },
         "results": [
             {
@@ -413,7 +414,7 @@ def build_timeline_output_from_runs(
             "source": "outputs/civic/",
             "case_count": len(case_sequence),
             "lineage": {
-                "version": "v10",
+                "version": ENGINE_LINEAGE_VERSION,
             },
         },
         "results": [
@@ -710,7 +711,7 @@ def build_pattern_output_from_timelines(
             "mode": "pattern_analysis",
             "source": "outputs/timeline/",
             "case_count": len(timeline_runs),
-            "lineage": {"version": "v10"},
+            "lineage": {"version": ENGINE_LINEAGE_VERSION},
             "pattern_summary": pattern_summary,
         },
         "results": [
@@ -924,7 +925,7 @@ def build_civic_run_metadata(
         "lineage": {
             "previous_run_id": previous_run_id,
             "depth": depth,
-            "version": "v10",
+            "version": ENGINE_LINEAGE_VERSION,
         },
     }
 
@@ -1049,7 +1050,7 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "mode": "compare_analysis",
             "case_count": len(cases),
             "lineage": {
-                "version": "v10",
+                "version": ENGINE_LINEAGE_VERSION,
             },
         },
         "results": [

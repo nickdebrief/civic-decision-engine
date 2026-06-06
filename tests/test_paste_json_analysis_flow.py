@@ -129,6 +129,13 @@ VALID_CASE_TEXT = (
 )
 
 
+def lineage_version(response):
+    lineage = response.run_metadata.lineage
+    if isinstance(lineage, dict):
+        return lineage["version"]
+    return lineage.version
+
+
 class PasteJsonAnalysisFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -186,6 +193,8 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertEqual(len(pattern_result.results), 1)
         self.assertIsNotNone(timeline_result.results[0].trajectory)
         self.assertIsNotNone(pattern_result.results[0].system_state)
+        self.assertEqual(lineage_version(timeline_result), "v11")
+        self.assertEqual(lineage_version(pattern_result), "v11")
 
     def test_valid_source_narrative_payload_returns_timeline_and_pattern_analysis(self):
         payload = {"source_narrative": VALID_CASE_TEXT, "institution_type": "LA"}
@@ -198,6 +207,8 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
 
         self.assertEqual(len(timeline_result.results), 1)
         self.assertEqual(len(pattern_result.results), 1)
+        self.assertEqual(lineage_version(timeline_result), "v11")
+        self.assertEqual(lineage_version(pattern_result), "v11")
 
     def test_invalid_empty_payload_returns_validation_error(self):
         with self.assertRaises(Exception) as timeline_ctx:
