@@ -30,6 +30,7 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
     ensure_attachment_tables,
+    public_evidence_manifest_attachments,
     public_manifest_attachments,
     store_attachment_bytes,
 )
@@ -373,6 +374,170 @@ def render_public_attachments_section(attachments: list[dict]) -> str:
       <p class="attachment-note">{intro}</p>
       {''.join(attachment_cards)}
     </section>"""
+
+
+def public_evidence_manifest_payload(record: sqlite3.Row, attachments: list[dict]) -> dict:
+    return {
+        "manifest_version": "1.0",
+        "manifest_type": "civic_decision_engine_public_evidence",
+        "reference": record["reference"],
+        "record_version": record["version"],
+        "evidence_scope": {
+            "publication_status": "published",
+            "visibility": "public",
+            "redaction_status_excluded": "withheld",
+            "deleted_excluded": True,
+        },
+        "governance_notice": (
+            "This public evidence manifest is read-only. It verifies published "
+            "attachment metadata only. No file download or file access is provided."
+        ),
+        "attachments": attachments,
+    }
+
+
+def render_public_evidence_manifest_page(reference: str, attachments: list[dict]) -> str:
+    notice = (
+        "This public evidence manifest is read-only. It verifies published "
+        "attachment metadata only. No file download or file access is provided."
+    )
+    if not attachments:
+        attachments_html = (
+            '<p class="empty-state">No published public evidence is currently '
+            "available for this record.</p>"
+        )
+    else:
+        cards = []
+        for attachment in attachments:
+            relationships = attachment.get("relationships") or []
+            if relationships:
+                relationship_html = "<ul>" + "".join(
+                    "<li>"
+                    f"{escape(str(rel.get('relationship_type')))} • "
+                    f"{escape(str(rel.get('target_type')))} • "
+                    f"{escape(str(rel.get('target_key')))}"
+                    "</li>"
+                    for rel in relationships
+                ) + "</ul>"
+            else:
+                relationship_html = "<p>No active evidence relationships listed.</p>"
+
+            rows = (
+                ("Title", attachment.get("title")),
+                ("Description", attachment.get("description")),
+                ("Source label", attachment.get("source_label")),
+                ("Classification", attachment.get("classification")),
+                ("Publication status", attachment.get("publication_status")),
+                ("Filename", attachment.get("filename")),
+                ("Content type", attachment.get("content_type")),
+                ("File size", attachment.get("file_size")),
+                ("SHA-256 hash", attachment.get("sha256_hash")),
+                ("Document date", attachment.get("document_date")),
+                ("Document date precision", attachment.get("document_date_precision")),
+                ("Uploaded at", attachment.get("uploaded_at")),
+            )
+            metadata_rows = "".join(
+                "<tr>"
+                f"<td>{escape(label)}</td>"
+                f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+                "</tr>"
+                for label, value in rows
+            )
+            title = attachment.get("title") or attachment.get("filename") or "Evidence attachment"
+            cards.append(
+                f"""
+      <article class="evidence-card">
+        <h2>{escape(str(title))}</h2>
+        <table>
+          <tbody>{metadata_rows}</tbody>
+        </table>
+        <section class="relationships">
+          <h3>Active evidence relationships</h3>
+          {relationship_html}
+        </section>
+      </article>"""
+            )
+        attachments_html = "".join(cards)
+
+    safe_reference = escape(reference)
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Public Evidence Manifest - {safe_reference}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {{
+      margin: 0;
+      background: #f7f5f0;
+      color: #1f1f1d;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 32px 18px 48px;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+      letter-spacing: 0;
+    }}
+    .notice {{
+      margin: 16px 0 24px;
+      padding: 14px 16px;
+      border-left: 4px solid #245d61;
+      background: #fff;
+    }}
+    .evidence-card {{
+      margin: 18px 0;
+      padding: 18px;
+      border: 1px solid #ddd8ce;
+      background: #fff;
+    }}
+    .evidence-card h2 {{
+      margin: 0 0 12px;
+      font-size: 1.15rem;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+    }}
+    td {{
+      padding: 8px 6px;
+      border-top: 1px solid #eee9df;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }}
+    td:first-child {{
+      width: 190px;
+      color: #595650;
+      font-weight: 700;
+    }}
+    .relationships {{
+      margin-top: 14px;
+    }}
+    .relationships h3 {{
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+    }}
+    .empty-state {{
+      padding: 18px;
+      background: #fff;
+      border: 1px solid #ddd8ce;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Public Evidence Manifest</h1>
+    <p>Record reference: <strong>{safe_reference}</strong></p>
+    <p class="notice">{escape(notice)}</p>
+    {attachments_html}
+  </main>
+</body>
+</html>"""
 
 
 def _http_error(status_code: int, detail: str):
@@ -7216,5 +7381,65 @@ async def record_manifest(reference: str):
             },
         )
 
+    finally:
+        conn.close()
+
+
+@router.get("/records/{reference}/attachments/manifest")
+async def public_evidence_manifest(reference: str):
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version FROM records WHERE reference = ? AND is_latest = 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "error": "not_found",
+                    "message": f"No public record found for reference: {reference}",
+                },
+            )
+
+        attachments = public_evidence_manifest_attachments(
+            conn,
+            reference=record["reference"],
+            record_version=record["version"],
+        )
+        return JSONResponse(content=public_evidence_manifest_payload(record, attachments))
+    finally:
+        conn.close()
+
+
+@router.get("/records/{reference}/attachments", response_class=HTMLResponse)
+async def public_evidence_manifest_page(reference: str):
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version FROM records WHERE reference = ? AND is_latest = 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            return HTMLResponse(
+                content=(
+                    "<!doctype html><html><body>"
+                    f"<h1>No public record found for reference: {escape(reference)}</h1>"
+                    "</body></html>"
+                ),
+                status_code=404,
+            )
+
+        attachments = public_evidence_manifest_attachments(
+            conn,
+            reference=record["reference"],
+            record_version=record["version"],
+        )
+        return HTMLResponse(
+            content=render_public_evidence_manifest_page(
+                record["reference"], attachments
+            ),
+            status_code=200,
+        )
     finally:
         conn.close()

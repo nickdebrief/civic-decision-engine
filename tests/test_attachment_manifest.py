@@ -143,23 +143,24 @@ class AttachmentManifestTests(unittest.TestCase):
         document_date="2026-05-30",
         document_date_precision="day",
         publication_status="published",
+        classification="evidence",
     ):
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO record_attachments (
                     reference, record_version, attachment_version,
                     filename, stored_filename, storage_path,
                     content_type, file_size_bytes, sha256_hash,
                     visibility, redaction_status, title, description,
-                    source_label, document_date, document_date_precision,
-                    publication_status,
+                    source_label, classification, document_date,
+                    document_date_precision, publication_status,
                     uploaded_at, is_latest, is_deleted
                 )
                 VALUES (?, 1, 1, ?, 'stored.pdf', '/private/path/stored.pdf',
                         'application/pdf', 12345, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, '2026-05-30T10:00:00Z', ?, ?)
+                        ?, ?, ?, ?, '2026-05-30T10:00:00Z', ?, ?)
                 """,
                 (
                     self.reference,
@@ -170,11 +171,46 @@ class AttachmentManifestTests(unittest.TestCase):
                     "Attachment title",
                     "Attachment description",
                     "Attachment source",
+                    classification,
                     document_date,
                     document_date_precision,
                     publication_status,
                     is_latest,
                     is_deleted,
+                ),
+            )
+            attachment_id = int(cursor.lastrowid)
+            conn.commit()
+        finally:
+            conn.close()
+        return attachment_id
+
+    def insert_relationship(
+        self,
+        attachment_id,
+        *,
+        relationship_type="supports",
+        target_type="condition",
+        target_key="Transfer of Burden",
+        is_active=1,
+    ):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                """
+                INSERT INTO record_attachment_relationships (
+                    reference, record_version, attachment_id, relationship_type,
+                    target_type, target_key, is_active, created_at, created_by
+                )
+                VALUES (?, 1, ?, ?, ?, ?, ?, '2026-05-30T10:30:00Z', 'admin')
+                """,
+                (
+                    self.reference,
+                    attachment_id,
+                    relationship_type,
+                    target_type,
+                    target_key,
+                    is_active,
                 ),
             )
             conn.commit()
@@ -312,6 +348,161 @@ class AttachmentManifestTests(unittest.TestCase):
         )
         self.assertNotIn("attachments", response)
         self.assertEqual(response["verification_hash"], self.verification_hash)
+
+    def public_evidence_manifest(self):
+        return asyncio.run(
+            self.records.public_evidence_manifest(self.reference)
+        ).content
+
+    def public_evidence_page(self):
+        return asyncio.run(
+            self.records.public_evidence_manifest_page(self.reference)
+        ).content
+
+    def test_public_evidence_manifest_includes_only_eligible_published_attachments(self):
+        published_id = self.insert_attachment(filename="published.pdf")
+        self.insert_attachment(filename="internal.pdf", publication_status="internal")
+        self.insert_attachment(filename="withdrawn.pdf", publication_status="withdrawn")
+        self.insert_attachment(
+            filename="private.pdf",
+            visibility="private",
+            publication_status="published",
+        )
+        self.insert_attachment(
+            filename="withheld.pdf",
+            redaction_status="withheld",
+            publication_status="published",
+        )
+        self.insert_attachment(
+            filename="deleted.pdf",
+            is_deleted=1,
+            publication_status="published",
+        )
+        self.insert_relationship(published_id)
+        self.insert_relationship(
+            published_id,
+            target_key="Inactive relationship",
+            is_active=0,
+        )
+
+        payload = self.public_evidence_manifest()
+        encoded = json.dumps(payload, sort_keys=True)
+
+        self.assertEqual(payload["manifest_type"], "civic_decision_engine_public_evidence")
+        self.assertEqual(payload["reference"], self.reference)
+        self.assertEqual(payload["record_version"], 1)
+        self.assertEqual(len(payload["attachments"]), 1)
+        attachment = payload["attachments"][0]
+        self.assertEqual(
+            set(attachment.keys()),
+            {
+                "attachment_id",
+                "record_version",
+                "title",
+                "description",
+                "source_label",
+                "classification",
+                "publication_status",
+                "filename",
+                "content_type",
+                "file_size",
+                "sha256_hash",
+                "document_date",
+                "document_date_precision",
+                "uploaded_at",
+                "relationships",
+            },
+        )
+        self.assertEqual(attachment["attachment_id"], published_id)
+        self.assertEqual(attachment["filename"], "published.pdf")
+        self.assertEqual(attachment["classification"], "evidence")
+        self.assertEqual(attachment["publication_status"], "published")
+        self.assertEqual(attachment["file_size"], 12345)
+        self.assertEqual(
+            attachment["relationships"],
+            [
+                {
+                    "relationship_type": "supports",
+                    "target_type": "condition",
+                    "target_key": "Transfer of Burden",
+                }
+            ],
+        )
+        self.assertNotIn("internal.pdf", encoded)
+        self.assertNotIn("withdrawn.pdf", encoded)
+        self.assertNotIn("private.pdf", encoded)
+        self.assertNotIn("withheld.pdf", encoded)
+        self.assertNotIn("deleted.pdf", encoded)
+        self.assertNotIn("Inactive relationship", encoded)
+        self.assertNotIn("storage_path", encoded)
+        self.assertNotIn("stored_filename", encoded)
+        self.assertNotIn("/private/path", encoded)
+        self.assertNotIn("download_url", encoded)
+        self.assertNotIn("file bytes", encoded.lower())
+
+    def test_public_evidence_html_renders_attachment_relationship_and_empty_state(self):
+        attachment_id = self.insert_attachment(filename="public-evidence.pdf")
+        self.insert_relationship(attachment_id)
+
+        html = self.public_evidence_page()
+
+        self.assertIn("Public Evidence Manifest", html)
+        self.assertIn(self.reference, html)
+        self.assertIn("public-evidence.pdf", html)
+        self.assertIn("evidence", html)
+        self.assertIn("published", html)
+        self.assertIn("2026-05-30", html)
+        self.assertIn("application/pdf", html)
+        self.assertIn("12345", html)
+        self.assertIn("a" * 64, html)
+        self.assertIn("Attachment source", html)
+        self.assertIn("supports • condition • Transfer of Burden", html)
+        self.assertIn(
+            "This public evidence manifest is read-only. It verifies published "
+            "attachment metadata only. No file download or file access is provided.",
+            html,
+        )
+        self.assertNotIn("storage_path", html)
+        self.assertNotIn("stored_filename", html)
+        self.assertNotIn("/private/path", html)
+        self.assertNotIn("CDE_ADMIN_TOKEN", html)
+        self.assertNotIn("<form", html)
+        self.assertNotIn("<button", html)
+        self.assertNotIn("Update classification", html)
+        self.assertNotIn("Add relationship", html)
+        self.assertNotIn("Remove relationship", html)
+
+        empty_reference = "Strike-LA-20260530-EMPTY"
+        self.insert_record(empty_reference)
+        original_reference = self.reference
+        self.reference = empty_reference
+        try:
+            empty_html = self.public_evidence_page()
+        finally:
+            self.reference = original_reference
+        self.assertIn(
+            "No published public evidence is currently available for this record.",
+            empty_html,
+        )
+
+    def test_public_evidence_manifest_does_not_change_record_verification_behavior(self):
+        before_manifest = self.manifest()
+        before_verify = asyncio.run(self.records.api_verify_record(self.reference)).content
+        attachment_id = self.insert_attachment()
+        self.insert_relationship(attachment_id)
+
+        evidence_manifest = self.public_evidence_manifest()
+        after_manifest = self.manifest()
+        after_verify = asyncio.run(self.records.api_verify_record(self.reference)).content
+
+        self.assertEqual(after_manifest["verification_hash"], before_manifest["verification_hash"])
+        self.assertEqual(after_manifest["canonical_fields"], before_manifest["canonical_fields"])
+        self.assertEqual(
+            after_manifest["recomputation_instruction"]["canonical_serialization"],
+            before_manifest["recomputation_instruction"]["canonical_serialization"],
+        )
+        self.assertEqual(after_verify, before_verify)
+        self.assertEqual(evidence_manifest["attachments"][0]["relationships"][0]["target_key"], "Transfer of Burden")
 
 
 if __name__ == "__main__":
