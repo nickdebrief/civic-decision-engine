@@ -128,12 +128,34 @@ VALID_CASE_TEXT = (
     "escalation without response."
 )
 
+EXPECTED_CONDITIONS = {
+    "INSTITUTIONAL_DELAY",
+    "PROCEDURAL_DEFLECTION",
+    "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+    "TRANSFER_OF_BURDEN",
+    "ESCALATION_WITHOUT_RESPONSE",
+}
+
 
 def lineage_version(response):
     lineage = response.run_metadata.lineage
     if isinstance(lineage, dict):
         return lineage["version"]
     return lineage.version
+
+
+def result_conditions(response):
+    return set(response.results[0].conditions)
+
+
+def dominant_condition_ids(response):
+    ids = set()
+    for item in response.results[0].dominant_conditions:
+        if isinstance(item, dict):
+            ids.add(item["condition"])
+        else:
+            ids.add(item.condition)
+    return ids
 
 
 class PasteJsonAnalysisFlowTests(unittest.TestCase):
@@ -195,6 +217,10 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertIsNotNone(pattern_result.results[0].system_state)
         self.assertEqual(lineage_version(timeline_result), "v11")
         self.assertEqual(lineage_version(pattern_result), "v11")
+        self.assertTrue(EXPECTED_CONDITIONS.issubset(result_conditions(timeline_result)))
+        self.assertTrue(
+            EXPECTED_CONDITIONS.issubset(dominant_condition_ids(pattern_result))
+        )
 
     def test_valid_source_narrative_payload_returns_timeline_and_pattern_analysis(self):
         payload = {"source_narrative": VALID_CASE_TEXT, "institution_type": "LA"}
@@ -209,6 +235,47 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertEqual(len(pattern_result.results), 1)
         self.assertEqual(lineage_version(timeline_result), "v11")
         self.assertEqual(lineage_version(pattern_result), "v11")
+        self.assertTrue(EXPECTED_CONDITIONS.issubset(result_conditions(timeline_result)))
+        self.assertTrue(
+            EXPECTED_CONDITIONS.issubset(dominant_condition_ids(pattern_result))
+        )
+
+    def test_canonical_condition_identifiers_are_detected(self):
+        payload = {
+            "case_text": " ".join(sorted(EXPECTED_CONDITIONS)),
+            "institution_type": "LA",
+        }
+
+        with patch.object(self.timeline, "save_run_snapshot"), patch.object(
+            self.pattern, "save_run_snapshot"
+        ):
+            timeline_result = self.timeline.timeline_live(payload)
+            pattern_result = self.pattern.pattern_live(payload)
+
+        self.assertTrue(EXPECTED_CONDITIONS.issubset(result_conditions(timeline_result)))
+        self.assertTrue(
+            EXPECTED_CONDITIONS.issubset(dominant_condition_ids(pattern_result))
+        )
+        self.assertEqual(lineage_version(timeline_result), "v11")
+        self.assertEqual(lineage_version(pattern_result), "v11")
+
+    def test_escalation_without_response_detection_remains_available(self):
+        payload = {
+            "case_text": (
+                "The matter escalated without substantive response, resulting in "
+                "escalation without response."
+            ),
+            "institution_type": "LA",
+        }
+
+        with patch.object(self.timeline, "save_run_snapshot"):
+            timeline_result = self.timeline.timeline_live(payload)
+
+        self.assertIn(
+            "ESCALATION_WITHOUT_RESPONSE",
+            result_conditions(timeline_result),
+        )
+        self.assertEqual(lineage_version(timeline_result), "v11")
 
     def test_invalid_empty_payload_returns_validation_error(self):
         with self.assertRaises(Exception) as timeline_ctx:
