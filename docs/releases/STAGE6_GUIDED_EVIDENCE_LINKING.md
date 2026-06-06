@@ -15,3 +15,8 @@ Scope:
 - no upload/download capability
 - no public file exposure
 - no canonical verification changes
+
+## Label Refinement
+
+Guided evidence target options now display human-readable labels while
+preserving canonical target values internally.

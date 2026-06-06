@@ -268,7 +268,15 @@ class AdminSessionTests(unittest.TestCase):
             """,
             (
                 "c" * 64,
-                json.dumps(["Transfer of Burden", "Escalation Without Response"]),
+                json.dumps(
+                    [
+                        "INSTITUTIONAL_DELAY",
+                        "PROCEDURAL_DEFLECTION",
+                        "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+                        "Transfer of Burden",
+                        "Escalation Without Response",
+                    ]
+                ),
                 json.dumps(["Missing Response", {"name": "Procedural Loop"}]),
                 "Finding <requires> review",
                 "private source narrative must stay hidden",
@@ -638,6 +646,18 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("data-target-key-select", content)
         self.assertNotIn('input name="target_key"', content)
         self.assertIn(
+            '<option value="INSTITUTIONAL_DELAY">Institutional Delay</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="PROCEDURAL_DEFLECTION">Procedural Deflection</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="REPEATED_CONTACT_WITHOUT_RESOLUTION">Repeated Contact Without Resolution</option>',
+            content,
+        )
+        self.assertIn(
             '<option value="Transfer of Burden">Transfer of Burden</option>',
             content,
         )
@@ -645,6 +665,12 @@ class AdminSessionTests(unittest.TestCase):
             '<option value="Escalation Without Response">Escalation Without Response</option>',
             content,
         )
+        self.assertIn('"condition": [', content)
+        self.assertIn('"INSTITUTIONAL_DELAY"', content)
+        self.assertIn('"PROCEDURAL_DEFLECTION"', content)
+        self.assertIn('"REPEATED_CONTACT_WITHOUT_RESOLUTION"', content)
+        self.assertIn("guidedTargetDisplayLabel", content)
+        self.assertIn('option.value = value', content)
         self.assertIn('"signal": ["Missing Response", "Procedural Loop"]', content)
         self.assertIn('"finding": ["Finding \\u003crequires\\u003e review"]', content)
         self.assertIn('"record": ["Strike-OT-20260604-ADMIN"]', content)
