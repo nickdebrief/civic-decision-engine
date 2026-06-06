@@ -286,6 +286,13 @@ def validate_attachment_classification(classification: str | None) -> str:
     return value
 
 
+def validate_attachment_visibility(visibility: str | None) -> str:
+    value = visibility.strip() if isinstance(visibility, str) else None
+    if value not in VALID_VISIBILITY:
+        raise ValueError("Invalid attachment visibility")
+    return value
+
+
 def validate_publication_status(publication_status: str | None) -> str:
     value = publication_status.strip() if isinstance(publication_status, str) else None
     if value not in VALID_PUBLICATION_STATUS:

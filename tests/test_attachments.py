@@ -14,6 +14,7 @@ from api.attachments import (
     ensure_attachment_tables,
     validate_attachment_relationship,
     validate_attachment_classification,
+    validate_attachment_visibility,
     validate_document_date,
     validate_publication_status,
 )
@@ -199,6 +200,15 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         for classification in ("", None, "medical record", "secret_internal"):
             with self.assertRaises(ValueError):
                 validate_attachment_classification(classification)
+
+    def test_validate_attachment_visibility_accepts_allowed_values(self):
+        for visibility in ("private", "public"):
+            self.assertEqual(validate_attachment_visibility(visibility), visibility)
+
+    def test_validate_attachment_visibility_rejects_unknown_values(self):
+        for visibility in ("", None, "restricted", "shared"):
+            with self.assertRaises(ValueError):
+                validate_attachment_visibility(visibility)
 
     def test_validate_publication_status_accepts_allowed_values(self):
         for publication_status in ("internal", "published", "withdrawn"):
