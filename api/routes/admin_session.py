@@ -50,6 +50,7 @@ from api.attachments import (
     record_attachment_audit_event,
     validate_attachment_classification,
     validate_document_date,
+    validate_publication_status,
 )
 
 router = APIRouter()
@@ -74,6 +75,7 @@ ATTACHMENT_CLASSIFICATION_OPTIONS = (
     "research",
     "other",
 )
+ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -248,6 +250,7 @@ def _safe_attachment_response(row: sqlite3.Row) -> dict[str, Any]:
         "document_date_precision": row["document_date_precision"] or "unknown",
         "redaction_note": row["redaction_note"],
         "classification": row["classification"] or "other",
+        "publication_status": row["publication_status"] or "internal",
         "uploaded_at": row["uploaded_at"],
         "is_latest": row["is_latest"],
         "is_deleted": row["is_deleted"],
@@ -270,6 +273,7 @@ def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
         "description": row["description"],
         "source_label": row["source_label"],
         "classification": row["classification"] or "other",
+        "publication_status": row["publication_status"] or "internal",
         "document_date": row["document_date"],
         "document_date_precision": row["document_date_precision"] or "unknown",
         "uploaded_at": row["uploaded_at"],
@@ -347,6 +351,7 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_restored": "restored",
         "attachment_soft_deleted": "soft deleted",
         "attachment_classification_updated": "classification updated",
+        "attachment_publication_updated": "publication updated",
     }
     event_text = str(event_type or "audit event")
     return labels.get(event_text, "audit event")
@@ -363,11 +368,13 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         attachment_id = attachment.get("attachment_id")
         reference = attachment.get("reference")
         current_classification = attachment.get("classification") or "other"
+        current_publication_status = attachment.get("publication_status") or "internal"
         summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
         summary_meta = (
             f"{current_classification} • "
             f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
-            f"{attachment.get('redaction_status') or 'unknown redaction'}"
+            f"{attachment.get('redaction_status') or 'unknown redaction'} • "
+            f"{current_publication_status}"
         )
         summary_time = _format_admin_timestamp(attachment.get("uploaded_at"))
         rows = (
@@ -376,6 +383,7 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             ("Description", attachment.get("description")),
             ("Source label", attachment.get("source_label")),
             ("Classification", attachment.get("classification") or "other"),
+            ("Publication status", current_publication_status),
             ("Filename", attachment.get("filename")),
             ("Content type", attachment.get("content_type")),
             ("File size", attachment.get("file_size_bytes")),
@@ -405,6 +413,17 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             f"/api/admin/session/records/{escape(str(reference))}/attachments/"
             f"{escape(str(attachment_id))}/classification"
         )
+        publication_status_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_publication_status else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_PUBLICATION_STATUS_OPTIONS
+        )
+        publication_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/publication"
+        )
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
@@ -416,8 +435,9 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         <table>
           <tbody>{table_rows}</tbody>
         </table>
-        <form class="classification-update-form"
+        <form class="attachment-metadata-update-form classification-update-form"
               data-classification-update-form
+              data-json-field="classification"
               action="{classification_action}"
               method="post"
               data-method="PATCH">
@@ -431,6 +451,23 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             </select>
           </label>
           <button type="submit">Update classification</button>
+        </form>
+        <form class="attachment-metadata-update-form publication-update-form"
+              data-publication-update-form
+              data-json-field="publication_status"
+              action="{publication_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="publication-update-note">
+            Controlled administrative metadata/publication workflow action only. No upload or download is available here.
+          </p>
+          <label>
+            Publication status
+            <select name="publication_status" required>
+              {publication_status_options}
+            </select>
+          </label>
+          <button type="submit">Update publication</button>
         </form>
       </details>""")
 
@@ -612,6 +649,17 @@ def _validate_classification_payload(payload: dict[str, Any]) -> str:
         raise _http_error(400, "classification_invalid") from exc
 
 
+def _validate_publication_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "publication_payload_invalid")
+    if set(payload.keys()) != {"publication_status"}:
+        raise _http_error(400, "publication_payload_invalid")
+    try:
+        return validate_publication_status(payload.get("publication_status"))
+    except ValueError as exc:
+        raise _http_error(400, "publication_status_invalid") from exc
+
+
 def render_admin_attachments_page(
     *,
     reference: str,
@@ -762,7 +810,7 @@ def render_admin_attachments_page(
       margin-top: 16px;
       overflow: hidden;
     }}
-    .classification-update-form {{
+    .attachment-metadata-update-form {{
       border-top: 1px solid #eee;
       display: flex;
       flex-wrap: wrap;
@@ -771,7 +819,7 @@ def render_admin_attachments_page(
       padding: 10px;
       background: #fffdf8;
     }}
-    .classification-update-form label {{
+    .attachment-metadata-update-form label {{
       display: grid;
       gap: 4px;
       color: #555;
@@ -780,7 +828,7 @@ def render_admin_attachments_page(
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }}
-    .classification-update-form select {{
+    .attachment-metadata-update-form select {{
       min-width: 180px;
       padding: 7px 8px;
       border: 1px solid #d8d4ca;
@@ -790,7 +838,7 @@ def render_admin_attachments_page(
       text-transform: none;
       letter-spacing: 0;
     }}
-    .classification-update-form button {{
+    .attachment-metadata-update-form button {{
       border: 1px solid #245d61;
       background: #245d61;
       color: #fff;
@@ -798,7 +846,8 @@ def render_admin_attachments_page(
       font: 0.86rem system-ui, sans-serif;
       cursor: pointer;
     }}
-    .classification-update-note {{
+    .classification-update-note,
+    .publication-update-note {{
       flex-basis: 100%;
       margin: 0;
       color: #666;
@@ -865,7 +914,7 @@ def render_admin_attachments_page(
     <h1>Admin Attachment Management</h1>
     <p class="notice">
       Administrative attachment management is controlled in this stage.
-      Only classification metadata updates are available from this page.
+      Only classification and publication status metadata updates are available from this page.
       No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
     <section class="management-section record-summary">
@@ -903,15 +952,16 @@ def render_admin_attachments_page(
     <section class="management-section governance-notice">
       <h2>Governance notice</h2>
       <p>Administrative attachment management is controlled in this stage.</p>
-      <p>Only classification metadata updates are available from this page.</p>
+      <p>Only classification and publication status metadata updates are available from this page.</p>
       <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
     </section>
   </main>
   <script>
-    document.querySelectorAll("[data-classification-update-form]").forEach((form) => {{
+    document.querySelectorAll("[data-json-field]").forEach((form) => {{
       form.addEventListener("submit", async (event) => {{
         event.preventDefault();
         const formData = new FormData(form);
+        const field = form.getAttribute("data-json-field");
         const response = await fetch(form.action, {{
           method: "PATCH",
           credentials: "same-origin",
@@ -919,9 +969,7 @@ def render_admin_attachments_page(
             "Accept": "application/json",
             "Content-Type": "application/json"
           }},
-          body: JSON.stringify({{
-            classification: formData.get("classification")
-          }})
+          body: JSON.stringify({{ [field]: formData.get(field) }})
         }});
         if (response.ok) {{
           window.location.reload();
@@ -1144,6 +1192,64 @@ def update_attachment_classification_route(
             metadata={
                 "previous_classification": previous_classification,
                 "new_classification": updated["classification"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/publication")
+def update_attachment_publication_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    publication_status = _validate_publication_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_publication_status = current["publication_status"] or "internal"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET publication_status = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (publication_status, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_publication_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_publication_status": previous_publication_status,
+                "new_publication_status": updated["publication_status"],
             },
         )
         conn.commit()

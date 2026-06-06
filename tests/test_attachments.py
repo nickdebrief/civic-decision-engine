@@ -14,6 +14,7 @@ from api.attachments import (
     ensure_attachment_tables,
     validate_attachment_classification,
     validate_document_date,
+    validate_publication_status,
 )
 
 
@@ -121,6 +122,7 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         self.assertIn("visibility", columns)
         self.assertIn("redaction_status", columns)
         self.assertIn("classification", columns)
+        self.assertIn("publication_status", columns)
         self.assertIn("document_date", columns)
         self.assertIn("document_date_precision", columns)
 
@@ -152,6 +154,24 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             insert_attachment(conn, classification="secret_internal")
 
+    def test_existing_attachments_default_publication_status_to_internal(self):
+        conn = make_connection()
+        ensure_attachment_tables(conn)
+
+        insert_attachment(conn)
+        row = conn.execute(
+            "SELECT publication_status FROM record_attachments"
+        ).fetchone()
+
+        self.assertEqual(row["publication_status"], "internal")
+
+    def test_invalid_publication_status_values_are_rejected(self):
+        conn = make_connection()
+        ensure_attachment_tables(conn)
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            insert_attachment(conn, publication_status="public_now")
+
     def test_validate_attachment_classification_accepts_allowed_values(self):
         for classification in (
             "evidence",
@@ -173,6 +193,18 @@ class AttachmentInfrastructureTests(unittest.TestCase):
         for classification in ("", None, "medical record", "secret_internal"):
             with self.assertRaises(ValueError):
                 validate_attachment_classification(classification)
+
+    def test_validate_publication_status_accepts_allowed_values(self):
+        for publication_status in ("internal", "published", "withdrawn"):
+            self.assertEqual(
+                validate_publication_status(publication_status),
+                publication_status,
+            )
+
+    def test_validate_publication_status_rejects_unknown_values(self):
+        for publication_status in ("", None, "public", "draft"):
+            with self.assertRaises(ValueError):
+                validate_publication_status(publication_status)
 
     def test_init_db_creates_record_attachments_table(self):
         install_fastapi_stubs()

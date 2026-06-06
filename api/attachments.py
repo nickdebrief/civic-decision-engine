@@ -24,6 +24,7 @@ VALID_ATTACHMENT_CLASSIFICATION = {
     "research",
     "other",
 }
+VALID_PUBLICATION_STATUS = {"internal", "published", "withdrawn"}
 SENSITIVE_AUDIT_METADATA_KEYS = {
     "CDE_ADMIN_TOKEN",
     "session_secret",
@@ -73,6 +74,8 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
                     'evidence', 'correspondence', 'decision', 'medical_record',
                     'legal_filing', 'photograph', 'media', 'research', 'other'
                 )),
+            publication_status TEXT NOT NULL DEFAULT 'internal'
+                CHECK (publication_status IN ('internal', 'published', 'withdrawn')),
             document_date TEXT,
             document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 
@@ -103,6 +106,13 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
         "TEXT NOT NULL DEFAULT 'other' CHECK (classification IN "
         "('evidence', 'correspondence', 'decision', 'medical_record', "
         "'legal_filing', 'photograph', 'media', 'research', 'other'))",
+    )
+    _ensure_optional_column(
+        conn,
+        "record_attachments",
+        "publication_status",
+        "TEXT NOT NULL DEFAULT 'internal' CHECK "
+        "(publication_status IN ('internal', 'published', 'withdrawn'))",
     )
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_record_attachments_reference
@@ -246,6 +256,13 @@ def validate_attachment_classification(classification: str | None) -> str:
     return value
 
 
+def validate_publication_status(publication_status: str | None) -> str:
+    value = publication_status.strip() if isinstance(publication_status, str) else None
+    if value not in VALID_PUBLICATION_STATUS:
+        raise ValueError("Invalid attachment publication status")
+    return value
+
+
 def store_attachment_bytes(
     conn: sqlite3.Connection,
     *,
@@ -259,6 +276,7 @@ def store_attachment_bytes(
     description: str | None = None,
     source_label: str | None = None,
     classification: str | None = "other",
+    publication_status: str | None = "internal",
     redaction_note: str | None = None,
     document_date: str | None = None,
     document_date_precision: str | None = "unknown",
@@ -270,6 +288,7 @@ def store_attachment_bytes(
     _validate_visibility(visibility)
     _validate_redaction_status(redaction_status)
     normalized_classification = validate_attachment_classification(classification)
+    normalized_publication_status = validate_publication_status(publication_status)
     normalized_document_date, normalized_document_date_precision = validate_document_date(
         document_date, document_date_precision
     )
@@ -299,10 +318,11 @@ def store_attachment_bytes(
                 content_type, file_size_bytes, sha256_hash,
                 visibility, redaction_status, redaction_note,
                 title, description, source_label, classification,
+                publication_status,
                 document_date, document_date_precision,
                 uploaded_at, uploaded_by
             )
-            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 reference,
@@ -318,6 +338,7 @@ def store_attachment_bytes(
                 description,
                 source_label,
                 normalized_classification,
+                normalized_publication_status,
                 normalized_document_date,
                 normalized_document_date_precision,
                 uploaded_at,
@@ -367,6 +388,7 @@ def store_attachment_bytes(
         "visibility": visibility,
         "redaction_status": redaction_status,
         "classification": normalized_classification,
+        "publication_status": normalized_publication_status,
         "document_date": normalized_document_date,
         "document_date_precision": normalized_document_date_precision,
         "uploaded_at": uploaded_at,
@@ -389,6 +411,7 @@ def public_manifest_attachments(
           AND redaction_status != 'withheld'
           AND is_latest = 1
           AND is_deleted = 0
+          AND publication_status = 'published'
         ORDER BY id ASC
         """,
         (reference, record_version),
@@ -429,7 +452,8 @@ def list_record_attachments(
         SELECT id, reference, record_version, attachment_version, filename,
                stored_filename, storage_path, content_type, file_size_bytes,
                sha256_hash, visibility, redaction_status, title, description,
-               source_label, classification, document_date, document_date_precision, uploaded_at,
+               source_label, classification, publication_status,
+               document_date, document_date_precision, uploaded_at,
                is_latest, is_deleted
         FROM record_attachments
         WHERE reference = ?
@@ -455,6 +479,7 @@ def list_record_attachments(
             "description": row["description"],
             "source_label": row["source_label"],
             "classification": row["classification"] or "other",
+            "publication_status": row["publication_status"] or "internal",
             "document_date": row["document_date"],
             "document_date_precision": row["document_date_precision"] or "unknown",
             "uploaded_at": row["uploaded_at"],
@@ -544,6 +569,7 @@ def _appears_in_public_manifest(row: sqlite3.Row) -> bool:
     return (
         row["visibility"] == "public"
         and row["redaction_status"] != "withheld"
+        and row["publication_status"] == "published"
         and row["is_latest"] == 1
         and row["is_deleted"] == 0
     )
