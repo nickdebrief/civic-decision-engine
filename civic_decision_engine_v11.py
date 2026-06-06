@@ -535,13 +535,13 @@ def derive_pattern_signals(
 
     if recurring_transitions:
         top_transition = recurring_transitions[0]
-    if (
-        top_transition["count"] == 1
-        and top_transition["from"] == "TRANSFER_OF_BURDEN"
-        and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
-    ):
-        signals.append("TRANSITION_DETECTED")
-        signals.append("ESCALATION_WITHOUT_RESPONSE_PRESENT")
+        if (
+            top_transition["count"] == 1
+            and top_transition["from"] == "TRANSFER_OF_BURDEN"
+            and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
+        ):
+            signals.append("TRANSITION_DETECTED")
+            signals.append("ESCALATION_WITHOUT_RESPONSE_PRESENT")
     if not recurring_transitions:
         signals.append("NO_RECURRING_TRANSITION")
 

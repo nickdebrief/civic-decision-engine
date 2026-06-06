@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from api.models import PatternRunResponse, CasesRequest
+from api.analysis_compat import normalize_analysis_request
 
 from civic_decision_engine_v11 import (
     load_stored_timeline_runs,
@@ -42,7 +45,11 @@ def pattern_stored() -> PatternRunResponse:
 
 
 @router.post("/pattern", response_model=PatternRunResponse, tags=["Analysis"])
-def pattern_live(request: CasesRequest) -> PatternRunResponse:
+def pattern_live(request: CasesRequest | dict[str, Any]) -> PatternRunResponse:
+    try:
+        request = normalize_analysis_request(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not request.cases:
         raise HTTPException(status_code=400, detail="No cases provided")
 
