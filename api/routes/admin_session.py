@@ -944,6 +944,7 @@ def _render_record_evidence_groups(
         for target in targets:
             supporting_attachments = target.get("attachments") or []
             attachment_count = len(supporting_attachments)
+            support_status = "Supported" if attachment_count else "Unsupported"
             if supporting_attachments:
                 attachment_items = "".join(
                     _render_record_evidence_attachment(attachment)
@@ -962,6 +963,7 @@ def _render_record_evidence_groups(
           <details class="evidence-target evidence-target-{escape(target_type)}">
             <summary>
               <span class="summary-title">{escape(str(target["target_label"]))}</span>
+              <span class="summary-meta">Coverage: {support_status}</span>
               <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
             </summary>
             {supporting_html}
@@ -980,6 +982,72 @@ def _render_record_evidence_groups(
       </details>""")
 
     return "".join(sections)
+
+
+def _record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    counts = {}
+    total_targets = 0
+    supported_targets = 0
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        target_total = len(targets)
+        target_supported = sum(1 for target in targets if target.get("attachments"))
+        counts[target_type] = {
+            "supported": target_supported,
+            "total": target_total,
+        }
+        total_targets += target_total
+        supported_targets += target_supported
+
+    if supported_targets == 0:
+        status = "Unsupported"
+    elif total_targets > 0 and supported_targets == total_targets:
+        status = "Complete"
+    else:
+        status = "Partial"
+
+    return {
+        "status": status,
+        "counts": counts,
+        "supported_targets": supported_targets,
+        "total_targets": total_targets,
+    }
+
+
+def _render_record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    coverage = _record_evidence_coverage(evidence_groups)
+    labels = {
+        "condition": "Conditions Supported",
+        "signal": "Signals Supported",
+        "finding": "Findings Supported",
+        "record": "Record Supported",
+    }
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        count = coverage["counts"][target_type]
+        rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{count['supported']} / {count['total']}</td>"
+            "</tr>"
+        )
+    rows.append(
+        "<tr>"
+        "<td>Overall Coverage</td>"
+        f"<td>{escape(coverage['status'])}</td>"
+        "</tr>"
+    )
+    return f"""
+      <section class="management-section record-evidence-coverage">
+        <h2>Record Evidence Coverage</h2>
+        <table>
+          <tbody>{"".join(rows)}</tbody>
+        </table>
+      </section>"""
 
 
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
@@ -1018,6 +1086,7 @@ def render_admin_record_evidence_page(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
+    evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1039,6 +1108,25 @@ def render_admin_record_evidence_page(
       background: #fff;
       border: 1px solid #ddd;
       padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }}
+    .admin-watermark {{
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(60vw, 520px);
+      max-width: 82%;
+      transform: translate(-50%, -50%);
+      opacity: 0.045;
+      pointer-events: none;
+      z-index: 0;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    main > *:not(.admin-watermark) {{
+      position: relative;
+      z-index: 1;
     }}
     .notice {{
       border: 1px solid #d8d4ca;
@@ -1131,6 +1219,9 @@ def render_admin_record_evidence_page(
       main {{
         border: none;
       }}
+      .admin-watermark {{
+        opacity: 0.06;
+      }}
       details {{
         display: block;
         break-inside: avoid;
@@ -1143,6 +1234,18 @@ def render_admin_record_evidence_page(
 </head>
 <body>
   <main>
+    <svg class="admin-watermark print-watermark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"></ellipse>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"></rect>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"></rect>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+    </svg>
     <h1>Admin Record Evidence</h1>
     <p class="notice">
       This read-only administrative view inverts attachment relationships by record target.
@@ -1154,6 +1257,7 @@ def render_admin_record_evidence_page(
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
+    {evidence_coverage}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}

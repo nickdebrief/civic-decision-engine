@@ -975,6 +975,12 @@ class AdminSessionTests(unittest.TestCase):
             self.insert_attachment_relationship(
                 conn,
                 attachment_id=condition_attachment_id,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=condition_attachment_id,
                 relationship_type="context_for",
                 target_type="record",
                 target_key="Strike-OT-20260604-ADMIN",
@@ -1033,7 +1039,19 @@ class AdminSessionTests(unittest.TestCase):
         content = response.content
 
         self.assertIn("Admin Record Evidence", content)
+        self.assertIn('class="admin-watermark print-watermark"', content)
+        self.assertIn('aria-hidden="true"', content)
+        self.assertIn("print-color-adjust: exact", content)
+        self.assertIn(">v12</text>", content)
+        self.assertIn("details {", content)
+        self.assertIn("break-inside: avoid", content)
         self.assertIn("Evidence by record target", content)
+        self.assertIn("Record Evidence Coverage", content)
+        self.assertIn("<td>Conditions Supported</td><td>1 / 5</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>1 / 2</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Partial</td>", content)
         self.assertIn('class="evidence-section evidence-section-condition" open', content)
         self.assertIn('class="evidence-section evidence-section-signal"', content)
         self.assertIn('class="evidence-section evidence-section-finding"', content)
@@ -1046,6 +1064,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Missing Response", content)
         self.assertIn("Finding &lt;requires&gt; review", content)
         self.assertIn("Strike-OT-20260604-ADMIN", content)
+        self.assertIn("Coverage: Supported", content)
+        self.assertIn("Coverage: Unsupported", content)
         self.assertIn("1 supporting attachment", content)
         self.assertIn("Attachment 1 — Condition evidence", content)
         self.assertIn("Attachment 2 — Signal and finding evidence", content)
@@ -1078,6 +1098,93 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertEqual(before_manifest, after_manifest)
+
+    def test_admin_record_evidence_coverage_unsupported_when_no_targets_linked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Record Evidence Coverage", content)
+        self.assertIn("<td>Conditions Supported</td><td>0 / 5</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>0 / 2</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", content)
+        self.assertIn("Coverage: Unsupported", content)
+        self.assertIn("0 supporting attachments", content)
+
+    def test_admin_record_evidence_coverage_complete_when_all_targets_linked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET conditions_json = ?, signals_json = ?, finding = ?
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """,
+                (
+                    json.dumps(["INSTITUTIONAL_DELAY"]),
+                    json.dumps(["Missing Response"]),
+                    "Finding <requires> review",
+                ),
+            )
+            self.insert_admin_attachment(conn, title="Complete evidence")
+            self.insert_attachment_relationship(
+                conn,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="finding",
+                target_key="Finding <requires> review",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="record",
+                target_key="Strike-OT-20260604-ADMIN",
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Complete</td>", content)
+        self.assertNotIn("Coverage: Unsupported", content)
+        self.assertIn("Coverage: Supported", content)
 
     def test_admin_record_evidence_view_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
