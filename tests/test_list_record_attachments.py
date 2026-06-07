@@ -98,18 +98,24 @@ class ListRecordAttachmentsTests(unittest.TestCase):
                 "title",
                 "description",
                 "source_label",
+                "classification",
+                "publication_status",
                 "document_date",
                 "document_date_precision",
                 "uploaded_at",
                 "is_latest",
                 "is_deleted",
                 "appears_in_public_manifest",
+                "active_relationships",
             },
         )
         self.assertEqual(attachment["filename"], "evidence.pdf")
         self.assertEqual(attachment["content_type"], "application/pdf")
         self.assertEqual(attachment["title"], "Attachment title")
+        self.assertEqual(attachment["classification"], "other")
+        self.assertEqual(attachment["publication_status"], "internal")
         self.assertEqual(attachment["document_date"], "2026-06-02")
+        self.assertEqual(attachment["active_relationships"], [])
         self.assertNotIn("storage_path", attachment)
         self.assertNotIn("stored_filename", attachment)
 
@@ -124,13 +130,15 @@ class ListRecordAttachmentsTests(unittest.TestCase):
     def test_public_manifest_eligibility_rules(self):
         conn = make_connection()
         cases = (
-            ("public.pdf", "public", "none", 1, 0, True),
-            ("private.pdf", "private", "none", 1, 0, False),
-            ("withheld.pdf", "public", "withheld", 1, 0, False),
-            ("deleted.pdf", "public", "none", 1, 1, False),
-            ("old.pdf", "public", "none", 0, 0, False),
+            ("public.pdf", "public", "none", 1, 0, "published", True),
+            ("internal.pdf", "public", "none", 1, 0, "internal", False),
+            ("withdrawn.pdf", "public", "none", 1, 0, "withdrawn", False),
+            ("private.pdf", "private", "none", 1, 0, "published", False),
+            ("withheld.pdf", "public", "withheld", 1, 0, "published", False),
+            ("deleted.pdf", "public", "none", 1, 1, "published", False),
+            ("old.pdf", "public", "none", 0, 0, "published", False),
         )
-        for filename, visibility, redaction_status, is_latest, is_deleted, _ in cases:
+        for filename, visibility, redaction_status, is_latest, is_deleted, publication_status, _ in cases:
             insert_attachment(
                 conn,
                 filename=filename,
@@ -139,6 +147,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
                 redaction_status=redaction_status,
                 is_latest=is_latest,
                 is_deleted=is_deleted,
+                publication_status=publication_status,
             )
 
         payload = build_attachment_listing(conn, reference=REFERENCE)
@@ -147,7 +156,7 @@ class ListRecordAttachmentsTests(unittest.TestCase):
             for item in payload["attachments"]
         }
 
-        for filename, _, _, _, _, expected in cases:
+        for filename, _, _, _, _, _, expected in cases:
             with self.subTest(filename=filename):
                 self.assertEqual(actual[filename], expected)
 

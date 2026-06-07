@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -48,7 +49,11 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     list_record_attachments,
     record_attachment_audit_event,
+    validate_attachment_relationship,
+    validate_attachment_classification,
+    validate_attachment_visibility,
     validate_document_date,
+    validate_publication_status,
 )
 
 router = APIRouter()
@@ -62,6 +67,26 @@ SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
 DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 PDF_CONTENT_TYPE = "application/pdf"
+ATTACHMENT_CLASSIFICATION_OPTIONS = (
+    "evidence",
+    "correspondence",
+    "decision",
+    "medical_record",
+    "legal_filing",
+    "photograph",
+    "media",
+    "research",
+    "other",
+)
+ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
+ATTACHMENT_VISIBILITY_OPTIONS = ("private", "public")
+ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS = ("supports", "contradicts", "context_for")
+ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = (
+    "condition",
+    "signal",
+    "finding",
+    "record",
+)
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -235,6 +260,8 @@ def _safe_attachment_response(row: sqlite3.Row) -> dict[str, Any]:
         "document_date": row["document_date"],
         "document_date_precision": row["document_date_precision"] or "unknown",
         "redaction_note": row["redaction_note"],
+        "classification": row["classification"] or "other",
+        "publication_status": row["publication_status"] or "internal",
         "uploaded_at": row["uploaded_at"],
         "is_latest": row["is_latest"],
         "is_deleted": row["is_deleted"],
@@ -256,6 +283,8 @@ def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
         "title": row["title"],
         "description": row["description"],
         "source_label": row["source_label"],
+        "classification": row["classification"] or "other",
+        "publication_status": row["publication_status"] or "internal",
         "document_date": row["document_date"],
         "document_date_precision": row["document_date_precision"] or "unknown",
         "uploaded_at": row["uploaded_at"],
@@ -332,12 +361,246 @@ def _audit_event_badge_label(event_type: Any) -> str:
         "attachment_withheld": "withheld",
         "attachment_restored": "restored",
         "attachment_soft_deleted": "soft deleted",
+        "attachment_classification_updated": "classification updated",
+        "attachment_publication_updated": "publication updated",
+        "attachment_visibility_updated": "visibility updated",
+        "attachment_relationship_added": "relationship added",
+        "attachment_relationship_removed": "relationship removed",
     }
     event_text = str(event_type or "audit event")
     return labels.get(event_text, "audit event")
 
 
-def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
+def _safe_json_for_script(value: Any) -> str:
+    return (
+        json.dumps(value, ensure_ascii=False, sort_keys=True)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
+
+
+def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[str]]:
+    keys = set(record.keys())
+    reference = str(record["reference"]) if "reference" in keys else ""
+    finding = (
+        str(record["finding"]).strip()
+        if "finding" in keys and record["finding"]
+        else ""
+    )
+    return {
+        "condition": _json_list_targets(
+            record["conditions_json"] if "conditions_json" in keys else None
+        ),
+        "signal": _signal_targets(
+            record["signals_json"] if "signals_json" in keys else None
+        ),
+        "finding": [finding] if finding else [],
+        "record": [reference] if reference else [],
+    }
+
+
+def _json_list_targets(raw_json: Any) -> list[str]:
+    if not raw_json:
+        return []
+    try:
+        parsed = json.loads(str(raw_json))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return _dedupe_nonblank_strings(parsed)
+
+
+def _signal_targets(raw_json: Any) -> list[str]:
+    if not raw_json:
+        return []
+    try:
+        parsed = json.loads(str(raw_json))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+
+    targets = []
+    for item in parsed:
+        if isinstance(item, str):
+            targets.append(item)
+        elif isinstance(item, dict):
+            for key in ("name", "title", "label", "signal", "key", "id"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    targets.append(value)
+                    break
+    return _dedupe_nonblank_strings(targets)
+
+
+def _dedupe_nonblank_strings(values: list[Any]) -> list[str]:
+    seen = set()
+    targets = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        targets.append(normalized)
+    return targets
+
+
+def _guided_target_display_label(value: str) -> str:
+    if re.fullmatch(r"[A-Z0-9]+(?:_[A-Z0-9]+)+", value):
+        return value.replace("_", " ").title()
+    return value
+
+
+def _render_target_key_options(
+    target_options: dict[str, list[str]], target_type: str
+) -> str:
+    values = target_options.get(target_type) or []
+    if not values:
+        return '<option value="" disabled selected>No available targets</option>'
+    return "".join(
+        f'<option value="{escape(value)}">'
+        f"{escape(_guided_target_display_label(value))}</option>"
+        for value in values
+    )
+
+
+def _relationship_coverage(
+    target_options: dict[str, list[str]],
+    relationships: list[dict[str, Any]],
+) -> dict[str, Any]:
+    available = {
+        target_type: set(values) for target_type, values in target_options.items()
+    }
+    linked = {target_type: set() for target_type in available}
+    for relationship in relationships:
+        target_type = str(relationship.get("target_type") or "")
+        target_key = str(relationship.get("target_key") or "")
+        if target_key in available.get(target_type, set()):
+            linked.setdefault(target_type, set()).add(target_key)
+
+    counts = {}
+    total_available = 0
+    total_linked = 0
+    for target_type in ("condition", "signal", "finding", "record"):
+        available_values = available.get(target_type, set())
+        linked_values = linked.get(target_type, set())
+        counts[target_type] = {
+            "linked": len(linked_values),
+            "total": len(available_values),
+            "unlinked": [
+                value
+                for value in target_options.get(target_type, [])
+                if value not in linked_values
+            ],
+        }
+        total_available += len(available_values)
+        total_linked += len(linked_values)
+
+    if not relationships:
+        status = "Unlinked"
+    elif total_available > 0 and total_linked == total_available:
+        status = "Complete"
+    else:
+        status = "Partial"
+
+    return {
+        "status": status,
+        "counts": counts,
+        "total_available": total_available,
+        "total_linked": total_linked,
+    }
+
+
+def _relationship_coverage_reason(coverage: dict[str, Any]) -> str:
+    status = coverage["status"]
+    counts = coverage["counts"]
+    if status == "Unlinked":
+        return "No active evidence relationships have been created."
+    if status == "Complete":
+        return "All available targets are linked."
+
+    incomplete = [
+        target_type
+        for target_type in ("condition", "signal", "finding", "record")
+        if counts[target_type]["linked"] < counts[target_type]["total"]
+    ]
+    conditions_complete = (
+        counts["condition"]["total"] > 0
+        and counts["condition"]["linked"] == counts["condition"]["total"]
+    )
+    if conditions_complete and any(
+        target_type in incomplete for target_type in ("signal", "finding", "record")
+    ):
+        return (
+            "Conditions complete. Signals, findings, or record targets remain unlinked."
+        )
+
+    reasons = {
+        "condition": "Conditions remain unlinked.",
+        "signal": "Signals remain unlinked.",
+        "finding": "Findings remain unlinked.",
+        "record": "Record targets remain unlinked.",
+    }
+    return " ".join(reasons[target_type] for target_type in incomplete)
+
+
+def _render_relationship_coverage(
+    target_options: dict[str, list[str]],
+    relationships: list[dict[str, Any]],
+) -> str:
+    coverage = _relationship_coverage(target_options, relationships)
+    reason = _relationship_coverage_reason(coverage)
+    labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Records",
+    }
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        count = coverage["counts"][target_type]
+        rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]} linked</td>"
+            f"<td>{count['linked']} / {count['total']}</td>"
+            "</tr>"
+        )
+
+    unlinked_conditions = coverage["counts"]["condition"]["unlinked"]
+    if unlinked_conditions:
+        unlinked_items = "".join(
+            f"<li>{escape(_guided_target_display_label(value))}</li>"
+            for value in unlinked_conditions
+        )
+        unlinked_html = f"""
+          <div class="coverage-unlinked">
+            <h4>Unlinked Conditions</h4>
+            <ul>{unlinked_items}</ul>
+          </div>"""
+    else:
+        unlinked_html = ""
+
+    return f"""
+          <section class="relationship-coverage">
+            <h4>Evidence Coverage</h4>
+            <p><strong>Status:</strong> {escape(coverage["status"])}</p>
+            <p><strong>Reason:</strong> {escape(reason)}</p>
+            <table>
+              <tbody>{"".join(rows)}</tbody>
+            </table>
+            {unlinked_html}
+          </section>"""
+
+
+def _render_admin_attachment_rows(
+    attachments: list[dict[str, Any]],
+    *,
+    relationship_target_options: dict[str, list[str]],
+) -> str:
     if not attachments:
         return """
       <p>No attachments are currently associated with this record.</p>"""
@@ -345,10 +608,19 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
     cards = []
     for index, attachment in enumerate(attachments):
         state = _attachment_state(attachment)
-        summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
+        attachment_id = attachment.get("attachment_id")
+        reference = attachment.get("reference")
+        current_classification = attachment.get("classification") or "other"
+        current_publication_status = attachment.get("publication_status") or "internal"
+        current_visibility = attachment.get("visibility") or "private"
+        summary_title = (
+            attachment.get("title") or attachment.get("filename") or "Attachment"
+        )
         summary_meta = (
-            f"{state} • {attachment.get('visibility') or 'unknown visibility'} • "
-            f"{attachment.get('redaction_status') or 'unknown redaction'}"
+            f"{current_classification} • "
+            f"{state} • {current_visibility} • "
+            f"{attachment.get('redaction_status') or 'unknown redaction'} • "
+            f"{current_publication_status}"
         )
         summary_time = _format_admin_timestamp(attachment.get("uploaded_at"))
         rows = (
@@ -356,6 +628,8 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             ("Title", attachment.get("title")),
             ("Description", attachment.get("description")),
             ("Source label", attachment.get("source_label")),
+            ("Classification", attachment.get("classification") or "other"),
+            ("Publication status", current_publication_status),
             ("Filename", attachment.get("filename")),
             ("Content type", attachment.get("content_type")),
             ("File size", attachment.get("file_size_bytes")),
@@ -374,6 +648,69 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
             "</tr>"
             for label, value in rows
         )
+        classification_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_classification else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_CLASSIFICATION_OPTIONS
+        )
+        classification_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/classification"
+        )
+        publication_status_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_publication_status else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_PUBLICATION_STATUS_OPTIONS
+        )
+        publication_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/publication"
+        )
+        visibility_options = "".join(
+            "<option "
+            f'value="{escape(option)}"'
+            f"{' selected' if option == current_visibility else ''}>"
+            f"{escape(option)}</option>"
+            for option in ATTACHMENT_VISIBILITY_OPTIONS
+        )
+        visibility_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/visibility"
+        )
+        relationship_action = (
+            f"/api/admin/session/records/{escape(str(reference))}/attachments/"
+            f"{escape(str(attachment_id))}/relationships"
+        )
+        relationships = attachment.get("active_relationships") or []
+        relationship_count = len(relationships)
+        relationship_coverage = _render_relationship_coverage(
+            relationship_target_options,
+            relationships,
+        )
+        relationship_rows = _render_attachment_relationships(
+            relationships,
+            reference=str(reference),
+            attachment_id=str(attachment_id),
+        )
+        relationship_type_options = "".join(
+            f'<option value="{escape(option)}">{escape(option)}</option>'
+            for option in ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS
+        )
+        relationship_target_type_options = "".join(
+            f'<option value="{escape(option)}">{escape(option)}</option>'
+            for option in ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS
+        )
+        target_key_options = _render_target_key_options(
+            relationship_target_options,
+            "condition",
+        )
+        relationship_submit_disabled = (
+            " disabled" if not relationship_target_options.get("condition") else ""
+        )
         open_attr = " open" if index == 0 else ""
         cards.append(f"""
       <details class="attachment-card"{open_attr}>
@@ -385,9 +722,771 @@ def _render_admin_attachment_rows(attachments: list[dict[str, Any]]) -> str:
         <table>
           <tbody>{table_rows}</tbody>
         </table>
+        <form class="attachment-metadata-update-form classification-update-form"
+              data-classification-update-form
+              data-json-field="classification"
+              action="{classification_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="classification-update-note">
+            Controlled administrative metadata action only. No upload, download, or public mutation is available here.
+          </p>
+          <label>
+            Classification
+            <select name="classification" required>
+              {classification_options}
+            </select>
+          </label>
+          <button type="submit">Update classification</button>
+        </form>
+        <form class="attachment-metadata-update-form publication-update-form"
+              data-publication-update-form
+              data-json-field="publication_status"
+              action="{publication_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="publication-update-note">
+            Controlled administrative metadata/publication workflow action only. No upload or download is available here.
+          </p>
+          <label>
+            Publication status
+            <select name="publication_status" required>
+              {publication_status_options}
+            </select>
+          </label>
+          <button type="submit">Update publication</button>
+        </form>
+        <form class="attachment-metadata-update-form visibility-update-form"
+              data-visibility-update-form
+              data-json-field="visibility"
+              action="{visibility_action}"
+              method="post"
+              data-method="PATCH">
+          <p class="visibility-update-note">
+            Controlled administrative visibility workflow action only. No upload or download is available here.
+          </p>
+          <label>
+            Visibility
+            <select name="visibility" required>
+              {visibility_options}
+            </select>
+          </label>
+          <button type="submit">Update visibility</button>
+        </form>
+        <section class="evidence-relationships">
+          <h3>Evidence Relationships ({relationship_count})</h3>
+          {relationship_coverage}
+          {relationship_rows}
+          <form class="attachment-relationship-form"
+                data-relationship-add-form
+                action="{relationship_action}"
+                method="post">
+            <p class="relationship-update-note">
+              Controlled administrative evidence-linking action only. No upload or download is available here.
+            </p>
+            <label>
+              Relationship type
+              <select name="relationship_type" required>
+                {relationship_type_options}
+              </select>
+            </label>
+            <label>
+              Target type
+              <select name="target_type" required>
+                {relationship_target_type_options}
+              </select>
+            </label>
+            <label>
+              Target key
+              <select name="target_key" required data-target-key-select>
+                {target_key_options}
+              </select>
+            </label>
+            <button type="submit" data-relationship-submit{relationship_submit_disabled}>Add relationship</button>
+          </form>
+        </section>
       </details>""")
 
     return "".join(cards)
+
+
+def _render_attachment_relationships(
+    relationships: list[dict[str, Any]], *, reference: str, attachment_id: str
+) -> str:
+    if not relationships:
+        return (
+            '<p class="relationship-empty-state">No active evidence relationships.</p>'
+        )
+
+    grouped = {
+        "condition": [],
+        "signal": [],
+        "finding": [],
+        "record": [],
+    }
+    for relationship in relationships:
+        target_type = str(relationship.get("target_type") or "")
+        grouped.setdefault(target_type, []).append(relationship)
+
+    group_labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Records",
+    }
+    groups = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        group_relationships = grouped.get(target_type) or []
+        if not group_relationships:
+            continue
+        items = []
+        for relationship in group_relationships:
+            items.append(
+                _render_attachment_relationship_card(
+                    relationship,
+                    reference=reference,
+                    attachment_id=attachment_id,
+                )
+            )
+        open_attr = " open" if target_type == "condition" else ""
+        groups.append(f"""
+          <details class="relationship-group relationship-group-{escape(target_type)}"{open_attr}>
+            <summary>{group_labels[target_type]} ({len(group_relationships)})</summary>
+            <ul class="relationship-list">{"".join(items)}</ul>
+          </details>""")
+
+    return "".join(groups)
+
+
+def _render_attachment_relationship_card(
+    relationship: dict[str, Any], *, reference: str, attachment_id: str
+) -> str:
+    relationship_id = relationship.get("relationship_id")
+    relationship_type = str(relationship.get("relationship_type") or "")
+    target_type = str(relationship.get("target_type") or "")
+    target_key = str(relationship.get("target_key") or "")
+    target_label = _guided_target_display_label(target_key)
+    remove_action = (
+        f"/api/admin/session/records/{escape(reference)}/attachments/"
+        f"{escape(attachment_id)}/relationships/{escape(str(relationship_id))}/remove"
+    )
+    return f"""
+          <li class="relationship-card"
+              data-target-key="{escape(target_key)}">
+            <div class="relationship-meta">
+              {escape(relationship_type)} • {escape(target_type)}
+            </div>
+            <div class="relationship-target">
+              → {escape(target_label)}
+            </div>
+            <form class="relationship-remove-form"
+                  data-relationship-remove-form
+                  data-target-key="{escape(target_key)}"
+                  action="{remove_action}"
+                  method="post"
+                  data-method="PATCH">
+              <button type="submit">Remove relationship</button>
+            </form>
+          </li>"""
+
+
+def _record_evidence_groups(
+    record: sqlite3.Row,
+    attachments: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    target_options = _record_relationship_target_options(record)
+    groups = {
+        target_type: [
+            {
+                "target_key": target_key,
+                "target_label": _guided_target_display_label(target_key),
+                "attachments": [],
+                "relationship_count": 0,
+                "relationship_type_counts": {},
+                "relationship_traces": [],
+                "_attachment_lookup": {},
+            }
+            for target_key in target_options.get(target_type, [])
+        ]
+        for target_type in ("condition", "signal", "finding", "record")
+    }
+    target_lookup = {
+        (target_type, target["target_key"]): target
+        for target_type, targets in groups.items()
+        for target in targets
+    }
+
+    for attachment in attachments:
+        if _attachment_state(attachment) != "active":
+            continue
+        supporting_attachment = _evidence_supporting_attachment_metadata(attachment)
+        linked_targets = set()
+        for relationship in attachment.get("active_relationships") or []:
+            target_type = str(relationship.get("target_type") or "")
+            target_key = str(relationship.get("target_key") or "")
+            relationship_type = str(relationship.get("relationship_type") or "")
+            target_identity = (target_type, target_key)
+            target = target_lookup.get(target_identity)
+            if not target:
+                continue
+            target["relationship_count"] += 1
+            target["relationship_type_counts"][relationship_type] = (
+                target["relationship_type_counts"].get(relationship_type, 0) + 1
+            )
+            target["relationship_traces"].append(
+                {
+                    "relationship_type": relationship_type,
+                    "target_type": target_type,
+                    "target_key": target_key,
+                    "target_label": _guided_target_display_label(target_key),
+                    "attachment_id": supporting_attachment.get("attachment_id"),
+                    "attachment_title": supporting_attachment.get("title")
+                    or "Untitled attachment",
+                }
+            )
+            attachment_id = supporting_attachment.get("attachment_id")
+            target_attachment = target["_attachment_lookup"].get(attachment_id)
+            if not target_attachment:
+                target_attachment = dict(supporting_attachment)
+                target_attachment["relationship_type_counts"] = {}
+                target["_attachment_lookup"][attachment_id] = target_attachment
+                target["attachments"].append(target_attachment)
+                linked_targets.add(target_identity)
+            target_attachment["relationship_type_counts"][relationship_type] = (
+                target_attachment["relationship_type_counts"].get(relationship_type, 0)
+                + 1
+            )
+
+    for targets in groups.values():
+        for target in targets:
+            target.pop("_attachment_lookup", None)
+
+    return groups
+
+
+def _evidence_supporting_attachment_metadata(
+    attachment: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "attachment_id": attachment.get("attachment_id"),
+        "title": attachment.get("title"),
+        "classification": attachment.get("classification") or "other",
+        "publication_status": attachment.get("publication_status") or "internal",
+        "visibility": attachment.get("visibility"),
+        "redaction_status": attachment.get("redaction_status"),
+        "lifecycle_state": _attachment_state(attachment),
+        "document_date": attachment.get("document_date"),
+        "sha256_hash": attachment.get("sha256_hash"),
+    }
+
+
+def _render_record_evidence_groups(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    section_labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Record",
+    }
+    sections = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        target_rows = []
+        for target in targets:
+            supporting_attachments = target.get("attachments") or []
+            attachment_count = len(supporting_attachments)
+            relationship_count = int(target.get("relationship_count") or 0)
+            support_status = "Supported" if attachment_count else "Unsupported"
+            if supporting_attachments:
+                attachment_items = "".join(
+                    _render_record_evidence_attachment(attachment)
+                    for attachment in supporting_attachments
+                )
+                supporting_html = (
+                    '<ul class="supporting-attachment-list">' f"{attachment_items}</ul>"
+                )
+            else:
+                supporting_html = (
+                    '<p class="evidence-empty-state">'
+                    "No supporting attachments linked.</p>"
+                )
+            target_rows.append(f"""
+          <details class="evidence-target evidence-target-{escape(target_type)}">
+            <summary>
+              <span class="summary-title">{escape(str(target["target_label"]))}</span>
+              <span class="summary-meta">Coverage: {support_status}</span>
+              <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
+              <span class="summary-meta">{relationship_count} supporting relationship{'s' if relationship_count != 1 else ''}</span>
+            </summary>
+            {_render_record_evidence_support_detail(target)}
+            {supporting_html}
+          </details>""")
+
+        if not target_rows:
+            target_rows.append(
+                '<p class="evidence-empty-state">No record targets are available.</p>'
+            )
+
+        open_attr = " open" if target_type == "condition" else ""
+        sections.append(f"""
+      <details class="evidence-section evidence-section-{escape(target_type)}"{open_attr}>
+        <summary>{section_labels[target_type]}</summary>
+        {"".join(target_rows)}
+      </details>""")
+
+    return "".join(sections)
+
+
+def _ordered_relationship_type_counts(counts: dict[str, int]) -> list[tuple[str, int]]:
+    ordered = []
+    seen = set()
+    for relationship_type in ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS:
+        if relationship_type in counts:
+            ordered.append((relationship_type, counts[relationship_type]))
+            seen.add(relationship_type)
+    for relationship_type in sorted(set(counts) - seen):
+        ordered.append((relationship_type, counts[relationship_type]))
+    return ordered
+
+
+def _render_relationship_type_count_list(
+    counts: dict[str, int],
+    *,
+    include_single_counts: bool,
+) -> str:
+    if not counts:
+        return '<p class="evidence-empty-state">No active relationship types.</p>'
+    items = []
+    for relationship_type, count in _ordered_relationship_type_counts(counts):
+        label = (
+            f"{relationship_type}: {count}"
+            if include_single_counts or count != 1
+            else relationship_type
+        )
+        items.append(f"<li>{escape(label)}</li>")
+    return f'<ul class="relationship-type-counts">{"".join(items)}</ul>'
+
+
+def _record_evidence_rationale(target: dict[str, Any]) -> str:
+    relationship_count = int(target.get("relationship_count") or 0)
+    attachments = target.get("attachments") or []
+    if relationship_count == 0:
+        return "No active attachment relationships support this target."
+    if relationship_count == 1 and len(attachments) == 1:
+        return (
+            f"Supported because Attachment {attachments[0].get('attachment_id')} "
+            "supports this target."
+        )
+    relationship_label = (
+        "relationship" if relationship_count == 1 else "relationships"
+    )
+    return (
+        f"Supported because {relationship_count} active attachment "
+        f"{relationship_label} support this target."
+    )
+
+
+def _render_record_evidence_support_detail(target: dict[str, Any]) -> str:
+    return f"""
+            <section class="evidence-support-detail">
+              <p><strong>Coverage rationale:</strong> {escape(_record_evidence_rationale(target))}</p>
+              <h4>Relationship Types</h4>
+              {_render_relationship_type_count_list(
+                  target.get("relationship_type_counts") or {},
+                  include_single_counts=True,
+              )}
+              {_render_record_evidence_relationship_trace(target)}
+            </section>"""
+
+
+def _render_record_evidence_relationship_trace(target: dict[str, Any]) -> str:
+    traces = target.get("relationship_traces") or []
+    if not traces:
+        return """
+              <section class="relationship-trace">
+                <h4>Relationship Trace</h4>
+                <p class="evidence-empty-state">No active relationships support this target.</p>
+              </section>"""
+
+    items = []
+    for trace in traces:
+        relationship_type = str(trace.get("relationship_type") or "")
+        target_type = str(trace.get("target_type") or "")
+        target_key = str(trace.get("target_key") or "")
+        target_label = str(trace.get("target_label") or target_key)
+        attachment_id = trace.get("attachment_id")
+        attachment_title = trace.get("attachment_title") or "Untitled attachment"
+        items.append(f"""
+                <li class="relationship-trace-entry">
+                  <div class="relationship-trace-path">
+                    {escape(relationship_type)} → {escape(target_type)} → {escape(target_label)}
+                  </div>
+                  <dl class="relationship-trace-fields">
+                    <dt>Relationship Type</dt>
+                    <dd>{escape(relationship_type)}</dd>
+                    <dt>Target Type</dt>
+                    <dd>{escape(target_type)}</dd>
+                    <dt>Target Key</dt>
+                    <dd>{escape(target_label)}</dd>
+                    <dt>Attachment Identifier</dt>
+                    <dd>{escape(str(attachment_id))}</dd>
+                    <dt>Attachment Title</dt>
+                    <dd>{escape(str(attachment_title))}</dd>
+                  </dl>
+                  <div class="relationship-trace-attachment">
+                    Attachment {escape(str(attachment_id))} — {escape(str(attachment_title))}
+                  </div>
+                </li>""")
+
+    return f"""
+              <section class="relationship-trace">
+                <h4>Relationship Trace</h4>
+                <ul class="relationship-trace-list">{"".join(items)}</ul>
+              </section>"""
+
+
+def _record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    counts = {}
+    total_targets = 0
+    supported_targets = 0
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        target_total = len(targets)
+        target_supported = sum(1 for target in targets if target.get("attachments"))
+        counts[target_type] = {
+            "supported": target_supported,
+            "total": target_total,
+        }
+        total_targets += target_total
+        supported_targets += target_supported
+
+    if supported_targets == 0:
+        status = "Unsupported"
+    elif total_targets > 0 and supported_targets == total_targets:
+        status = "Complete"
+    else:
+        status = "Partial"
+
+    return {
+        "status": status,
+        "counts": counts,
+        "supported_targets": supported_targets,
+        "total_targets": total_targets,
+    }
+
+
+def _render_record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    coverage = _record_evidence_coverage(evidence_groups)
+    labels = {
+        "condition": "Conditions Supported",
+        "signal": "Signals Supported",
+        "finding": "Findings Supported",
+        "record": "Record Supported",
+    }
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        count = coverage["counts"][target_type]
+        rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{count['supported']} / {count['total']}</td>"
+            "</tr>"
+        )
+    rows.append(
+        "<tr>"
+        "<td>Overall Coverage</td>"
+        f"<td>{escape(coverage['status'])}</td>"
+        "</tr>"
+    )
+    return f"""
+      <section class="management-section record-evidence-coverage">
+        <h2>Record Evidence Coverage</h2>
+        <table>
+          <tbody>{"".join(rows)}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
+    rows = (
+        ("Attachment ID", attachment.get("attachment_id")),
+        ("Title", attachment.get("title")),
+        ("Classification", attachment.get("classification")),
+        ("Publication status", attachment.get("publication_status")),
+        ("Visibility", attachment.get("visibility")),
+        ("Redaction status", attachment.get("redaction_status")),
+        ("Lifecycle state", attachment.get("lifecycle_state")),
+        ("Document date", attachment.get("document_date")),
+        ("SHA-256 hash", attachment.get("sha256_hash")),
+    )
+    relationship_html = _render_record_evidence_attachment_relationships(
+        attachment.get("relationship_type_counts") or {}
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(label)}</td>"
+        f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    title = attachment.get("title") or "Untitled attachment"
+    return f"""
+            <li class="supporting-attachment">
+              <h4>Attachment {escape(str(attachment.get("attachment_id")))} — {escape(str(title))}</h4>
+              {relationship_html}
+              <table>
+                <tbody>{table_rows}</tbody>
+              </table>
+            </li>"""
+
+
+def _render_record_evidence_attachment_relationships(
+    counts: dict[str, int],
+) -> str:
+    return f"""
+              <section class="attachment-relationship-detail">
+                <h5>Relationships</h5>
+                {_render_relationship_type_count_list(counts, include_single_counts=False)}
+              </section>"""
+
+
+def render_admin_record_evidence_page(
+    *,
+    reference: str,
+    record_version: int,
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    evidence_sections = _render_record_evidence_groups(evidence_groups)
+    evidence_coverage = _render_record_evidence_coverage(evidence_groups)
+    attachments_url = f"/admin/records/{escape(reference)}/attachments"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Record Evidence - {escape(reference)}</title>
+  <style>
+    body {{
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #f7f7f4;
+      color: #1a1a1a;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }}
+    .admin-watermark {{
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(60vw, 520px);
+      max-width: 82%;
+      transform: translate(-50%, -50%);
+      opacity: 0.045;
+      pointer-events: none;
+      z-index: 0;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    main > *:not(.admin-watermark) {{
+      position: relative;
+      z-index: 1;
+    }}
+    .notice {{
+      border: 1px solid #d8d4ca;
+      background: #faf9f5;
+      padding: 12px 14px;
+      margin: 18px 0 24px;
+      color: #555;
+    }}
+    .management-section {{
+      border-top: 1px solid #e5e1d8;
+      padding-top: 18px;
+      margin-top: 22px;
+    }}
+    details {{
+      break-inside: avoid;
+      border: 1px solid #e5e1d8;
+      margin-top: 12px;
+      overflow: hidden;
+    }}
+    summary {{
+      display: grid;
+      gap: 3px;
+      cursor: pointer;
+      padding: 10px;
+      background: #faf9f5;
+      color: #333;
+      font-weight: 600;
+      word-break: break-word;
+    }}
+    .summary-title,
+    .summary-meta {{
+      display: block;
+    }}
+    .summary-meta {{
+      color: #555;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }}
+    .supporting-attachment-list {{
+      display: grid;
+      gap: 10px;
+      list-style: none;
+      margin: 0;
+      padding: 10px;
+    }}
+    .supporting-attachment {{
+      border: 1px solid #e3ded4;
+      background: #fff;
+      padding: 10px;
+    }}
+    .supporting-attachment h4 {{
+      margin: 0 0 8px;
+    }}
+    .relationship-trace {{
+      margin: 10px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-trace h4 {{
+      margin: 0 0 8px;
+    }}
+    .relationship-trace-list {{
+      display: grid;
+      gap: 8px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }}
+    .relationship-trace-entry {{
+      padding: 8px;
+      border: 1px solid #eee;
+      background: #fbfaf7;
+    }}
+    .relationship-trace-path {{
+      font-weight: 650;
+      margin-bottom: 6px;
+    }}
+    .relationship-trace-fields {{
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 4px 10px;
+      margin: 0 0 6px;
+      font-size: 0.86rem;
+    }}
+    .relationship-trace-fields dt {{
+      color: #666;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-trace-fields dd {{
+      margin: 0;
+      word-break: break-word;
+    }}
+    .relationship-trace-attachment {{
+      color: #555;
+      font-size: 0.9rem;
+    }}
+    .evidence-empty-state {{
+      margin: 10px;
+      color: #666;
+    }}
+    .navigation-link {{
+      display: inline-block;
+      margin-top: 8px;
+      color: #245d61;
+      font-weight: 650;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }}
+    tr {{ border-bottom: 1px solid #eee; }}
+    tr:last-child {{ border-bottom: none; }}
+    td {{
+      padding: 8px 10px;
+      vertical-align: top;
+      word-break: break-word;
+    }}
+    td:first-child {{
+      width: 190px;
+      background: #faf9f5;
+      color: #666;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    td:last-child {{ font-family: ui-monospace, monospace; }}
+    @media print {{
+      body {{
+        background: #fff;
+      }}
+      main {{
+        border: none;
+      }}
+      .admin-watermark {{
+        opacity: 0.06;
+      }}
+      details {{
+        display: block;
+        break-inside: avoid;
+      }}
+      details > * {{
+        display: block;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <svg class="admin-watermark print-watermark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"></ellipse>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"></rect>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"></rect>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+    </svg>
+    <h1>Admin Record Evidence</h1>
+    <p class="notice">
+      This read-only administrative view inverts attachment relationships by record target.
+      No upload, download, public file access, or mutation controls are available here.
+    </p>
+    <section class="management-section record-summary">
+      <h2>Record summary</h2>
+      <p><strong>Record reference:</strong> {escape(reference)}</p>
+      <p><strong>Record version:</strong> {record_version}</p>
+      <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
+    </section>
+    {evidence_coverage}
+    <section class="management-section record-evidence">
+      <h2>Evidence by record target</h2>
+      {evidence_sections}
+    </section>
+  </main>
+</body>
+</html>"""
 
 
 def list_attachment_audit_events(
@@ -519,7 +1618,9 @@ def _validate_metadata_correction_payload(
     if not isinstance(payload, dict):
         raise _http_error(400, "metadata_payload_invalid")
 
-    unknown_fields = set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    unknown_fields = (
+        set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    )
     if unknown_fields:
         raise _http_error(400, "metadata_field_unknown")
 
@@ -554,15 +1655,88 @@ def _validate_metadata_correction_payload(
     return updates
 
 
+def _validate_classification_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "classification_payload_invalid")
+    if set(payload.keys()) != {"classification"}:
+        raise _http_error(400, "classification_payload_invalid")
+    try:
+        return validate_attachment_classification(payload.get("classification"))
+    except ValueError as exc:
+        raise _http_error(400, "classification_invalid") from exc
+
+
+def _validate_publication_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "publication_payload_invalid")
+    if set(payload.keys()) != {"publication_status"}:
+        raise _http_error(400, "publication_payload_invalid")
+    try:
+        return validate_publication_status(payload.get("publication_status"))
+    except ValueError as exc:
+        raise _http_error(400, "publication_status_invalid") from exc
+
+
+def _validate_visibility_payload(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "visibility_payload_invalid")
+    if set(payload.keys()) != {"visibility"}:
+        raise _http_error(400, "visibility_payload_invalid")
+    try:
+        return validate_attachment_visibility(payload.get("visibility"))
+    except ValueError as exc:
+        raise _http_error(400, "visibility_invalid") from exc
+
+
+def _validate_relationship_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
+    if not isinstance(payload, dict):
+        raise _http_error(400, "relationship_payload_invalid")
+    allowed_fields = {"relationship_type", "target_type", "target_key"}
+    if set(payload.keys()) != allowed_fields:
+        raise _http_error(400, "relationship_payload_invalid")
+    try:
+        return validate_attachment_relationship(
+            payload.get("relationship_type"),
+            payload.get("target_type"),
+            payload.get("target_key"),
+        )
+    except ValueError as exc:
+        raise _http_error(400, "relationship_payload_invalid") from exc
+
+
+def _relationship_response(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "relationship_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_id": row["attachment_id"],
+        "relationship_type": row["relationship_type"],
+        "target_type": row["target_type"],
+        "target_key": row["target_key"],
+        "is_active": row["is_active"],
+        "created_at": row["created_at"],
+        "created_by": row["created_by"],
+        "removed_at": row["removed_at"],
+        "removed_by": row["removed_by"],
+    }
+
+
 def render_admin_attachments_page(
     *,
     reference: str,
     record_version: int,
     attachments: list[dict[str, Any]],
     audit_events: list[dict[str, Any]],
+    relationship_target_options: dict[str, list[str]],
 ) -> str:
-    attachment_rows = _render_admin_attachment_rows(attachments)
+    attachment_rows = _render_admin_attachment_rows(
+        attachments,
+        relationship_target_options=relationship_target_options,
+    )
     audit_rows = _render_admin_audit_events(audit_events)
+    relationship_target_options_json = _safe_json_for_script(
+        relationship_target_options
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -704,6 +1878,162 @@ def render_admin_attachments_page(
       margin-top: 16px;
       overflow: hidden;
     }}
+    .attachment-metadata-update-form {{
+      border-top: 1px solid #eee;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px;
+      padding: 10px;
+      background: #fffdf8;
+    }}
+    .attachment-metadata-update-form label {{
+      display: grid;
+      gap: 4px;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .attachment-metadata-update-form select {{
+      min-width: 180px;
+      padding: 7px 8px;
+      border: 1px solid #d8d4ca;
+      background: #fff;
+      color: #222;
+      font: 0.9rem system-ui, sans-serif;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .attachment-metadata-update-form button {{
+      border: 1px solid #245d61;
+      background: #245d61;
+      color: #fff;
+      padding: 8px 10px;
+      font: 0.86rem system-ui, sans-serif;
+      cursor: pointer;
+    }}
+    .classification-update-note,
+    .publication-update-note,
+    .visibility-update-note,
+    .relationship-update-note {{
+      flex-basis: 100%;
+      margin: 0;
+      color: #666;
+      font-size: 0.84rem;
+    }}
+    .evidence-relationships {{
+      border-top: 1px solid #eee;
+      padding: 10px;
+      background: #fbfaf7;
+    }}
+    .evidence-relationships h3 {{
+      margin: 0 0 8px;
+      color: #555;
+      font-size: 0.88rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-coverage {{
+      display: grid;
+      gap: 8px;
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-coverage h4,
+    .coverage-unlinked h4 {{
+      margin: 0;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-coverage p {{
+      margin: 0;
+    }}
+    .coverage-unlinked ul {{
+      margin: 6px 0 0 20px;
+      padding: 0;
+    }}
+    .relationship-group {{
+      margin: 0 0 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-group summary {{
+      padding: 8px 10px;
+      background: #f7f4ed;
+      font-size: 0.88rem;
+    }}
+    .relationship-list {{
+      display: grid;
+      gap: 8px;
+      margin: 0 0 12px;
+      padding: 0;
+      list-style: none;
+    }}
+    .relationship-card {{
+      display: grid;
+      gap: 5px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-meta {{
+      color: #555;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-target {{
+      color: #1a1a1a;
+      font-weight: 650;
+    }}
+    .relationship-remove-form {{
+      display: inline-block;
+    }}
+    .attachment-relationship-form {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px;
+      margin-top: 10px;
+    }}
+    .attachment-relationship-form label {{
+      display: grid;
+      gap: 4px;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .attachment-relationship-form select,
+    .attachment-relationship-form input {{
+      min-width: 180px;
+      padding: 7px 8px;
+      border: 1px solid #d8d4ca;
+      background: #fff;
+      color: #222;
+      font: 0.9rem system-ui, sans-serif;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .attachment-relationship-form button,
+    .relationship-remove-form button {{
+      border: 1px solid #245d61;
+      background: #245d61;
+      color: #fff;
+      padding: 8px 10px;
+      font: 0.86rem system-ui, sans-serif;
+      cursor: pointer;
+    }}
     .audit-metadata {{
       border-top: 1px solid #eee;
       padding: 10px;
@@ -764,13 +2094,15 @@ def render_admin_attachments_page(
     </svg>
     <h1>Admin Attachment Management</h1>
     <p class="notice">
-      Administrative attachment management is read-only in this stage.
+      Administrative attachment management is controlled in this stage.
+      Classification, publication status, and visibility metadata updates are available from this page.
       No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
     </p>
     <section class="management-section record-summary">
       <h2>Record summary</h2>
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
+      <p><a href="/admin/records/{escape(reference)}/evidence">View record evidence by target</a></p>
     </section>
     <section class="management-section current-attachments">
       <h2>Current attachments</h2>
@@ -785,13 +2117,15 @@ def render_admin_attachments_page(
           <li>withhold / restore</li>
           <li>soft-delete</li>
           <li>audit trail review</li>
+          <li>visibility workflow</li>
+          <li>publication workflow</li>
         </ul>
       </div>
       <div class="capability-group">
         <h3>Planned</h3>
         <ul>
           <li>upload</li>
-          <li>publication workflow</li>
+          <li>public file serving</li>
         </ul>
       </div>
     </section>
@@ -801,10 +2135,121 @@ def render_admin_attachments_page(
     </section>
     <section class="management-section governance-notice">
       <h2>Governance notice</h2>
-      <p>Administrative attachment management is read-only in this stage.</p>
+      <p>Administrative attachment management is controlled in this stage.</p>
+      <p>Classification, publication status, and visibility metadata updates are available from this page.</p>
       <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
     </section>
   </main>
+  <script>
+    const RELATIONSHIP_TARGET_OPTIONS = {relationship_target_options_json};
+    const guidedTargetDisplayLabel = (value) => {{
+      return /^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(value)
+        ? value
+            .split("_")
+            .join(" ")
+            .toLowerCase()
+            .replace(/\\b\\w/g, (char) => char.toUpperCase())
+        : value;
+    }};
+    document.querySelectorAll("[data-json-field]").forEach((form) => {{
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const formData = new FormData(form);
+        const field = form.getAttribute("data-json-field");
+        const response = await fetch(form.action, {{
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }},
+          body: JSON.stringify({{ [field]: formData.get(field) }})
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        window.alert("Classification update failed.");
+      }});
+    }});
+    document.querySelectorAll("[data-relationship-add-form]").forEach((form) => {{
+      const targetTypeSelect = form.querySelector('select[name="target_type"]');
+      const targetKeySelect = form.querySelector("[data-target-key-select]");
+      const submitButton = form.querySelector("[data-relationship-submit]");
+      const updateTargetKeyOptions = () => {{
+        const values = RELATIONSHIP_TARGET_OPTIONS[targetTypeSelect.value] || [];
+        targetKeySelect.innerHTML = "";
+        if (!values.length) {{
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No available targets";
+          option.disabled = true;
+          option.selected = true;
+          targetKeySelect.appendChild(option);
+          submitButton.disabled = true;
+          return;
+        }}
+        values.forEach((value) => {{
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = guidedTargetDisplayLabel(value);
+          targetKeySelect.appendChild(option);
+        }});
+        submitButton.disabled = false;
+      }};
+      if (targetTypeSelect && targetKeySelect && submitButton) {{
+        targetTypeSelect.addEventListener("change", updateTargetKeyOptions);
+        updateTargetKeyOptions();
+      }}
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const formData = new FormData(form);
+        const response = await fetch(form.action, {{
+          method: "POST",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }},
+          body: JSON.stringify({{
+            relationship_type: formData.get("relationship_type"),
+            target_type: formData.get("target_type"),
+            target_key: formData.get("target_key")
+          }})
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        window.alert("Relationship update failed.");
+      }});
+    }});
+    document.querySelectorAll("[data-relationship-remove-form]").forEach((form) => {{
+      form.addEventListener("submit", async (event) => {{
+        event.preventDefault();
+        const response = await fetch(form.action, {{
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {{
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          }}
+        }});
+        if (response.ok) {{
+          window.location.reload();
+          return;
+        }}
+        let detail = "";
+        try {{
+          const payload = await response.json();
+          detail = payload?.detail ? `: ${{payload.detail}}` : "";
+        }} catch (_error) {{
+          detail = "";
+        }}
+        window.alert(`Relationship removal failed (${{response.status}}${{detail}}).`);
+      }});
+    }});
+  </script>
 </body>
 </html>"""
 
@@ -861,7 +2306,7 @@ def admin_record_attachments_page(reference: str, request: Request):
     conn = get_db()
     try:
         record = conn.execute(
-            "SELECT reference, version FROM records "
+            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
             "WHERE reference = ? AND is_latest = 1 "
             "ORDER BY version DESC LIMIT 1",
             (reference,),
@@ -885,6 +2330,40 @@ def admin_record_attachments_page(reference: str, request: Request):
                 audit_events=list_attachment_audit_events(
                     conn, reference=record["reference"]
                 ),
+                relationship_target_options=_record_relationship_target_options(record),
+            )
+        )
+    finally:
+        conn.close()
+
+
+@router.get("/admin/records/{reference}/evidence", response_class=HTMLResponse)
+def admin_record_evidence_page(reference: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
+            "WHERE reference = ? AND is_latest = 1 "
+            "ORDER BY version DESC LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            raise _http_error(404, "record_not_found")
+
+        attachments = list_record_attachments(
+            conn,
+            reference=reference,
+            verify_files=False,
+            attachment_root=Path(
+                os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))
+            ),
+        )
+        return HTMLResponse(
+            content=render_admin_record_evidence_page(
+                reference=record["reference"],
+                record_version=record["version"],
+                evidence_groups=_record_evidence_groups(record, attachments),
             )
         )
     finally:
@@ -911,7 +2390,9 @@ def list_record_attachments_route(reference: str, request: Request):
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata"
+)
 def correct_attachment_metadata_route(
     reference: str,
     attachment_id: int,
@@ -969,6 +2450,321 @@ def correct_attachment_metadata_route(
                 "audit_event_id": audit_event_id,
                 "changed_fields": changed_fields,
                 "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/classification"
+)
+def update_attachment_classification_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    classification = _validate_classification_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_classification = current["classification"] or "other"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET classification = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (classification, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_classification_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_classification": previous_classification,
+                "new_classification": updated["classification"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/publication"
+)
+def update_attachment_publication_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    publication_status = _validate_publication_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_publication_status = current["publication_status"] or "internal"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET publication_status = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (publication_status, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_publication_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_publication_status": previous_publication_status,
+                "new_publication_status": updated["publication_status"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility"
+)
+def update_attachment_visibility_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    visibility = _validate_visibility_payload(payload)
+    conn = get_db()
+    try:
+        current = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not current:
+            raise _http_error(404, "attachment_not_found")
+
+        previous_visibility = current["visibility"] or "private"
+        conn.execute(
+            """
+            UPDATE record_attachments
+            SET visibility = ?
+            WHERE id = ? AND reference = ?
+            """,
+            (visibility, attachment_id, reference),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_visibility_updated",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "previous_visibility": previous_visibility,
+                "new_visibility": updated["visibility"],
+            },
+        )
+        conn.commit()
+
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "attachment": _safe_attachment_response(updated),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.post(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships"
+)
+def add_attachment_relationship_route(
+    reference: str,
+    attachment_id: int,
+    request: Request,
+    payload: dict[str, Any],
+):
+    require_admin_session(request)
+    relationship_type, target_type, target_key = _validate_relationship_payload(payload)
+    conn = get_db()
+    try:
+        attachment = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        if not attachment:
+            raise _http_error(404, "attachment_not_found")
+
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        cursor = conn.execute(
+            """
+            INSERT INTO record_attachment_relationships (
+                reference, record_version, attachment_id, relationship_type,
+                target_type, target_key, is_active, created_at, created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'admin')
+            """,
+            (
+                reference,
+                attachment["record_version"],
+                attachment_id,
+                relationship_type,
+                target_type,
+                target_key,
+                created_at,
+            ),
+        )
+        relationship_id = int(cursor.lastrowid)
+        relationship = conn.execute(
+            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+            (relationship_id,),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_relationship_added",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=attachment["record_version"],
+            metadata={
+                "relationship_id": relationship_id,
+                "relationship_type": relationship_type,
+                "target_type": target_type,
+                "target_key": target_key,
+            },
+        )
+        conn.commit()
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "relationship": _relationship_response(relationship),
+            }
+        )
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships/{relationship_id}/remove"
+)
+def remove_attachment_relationship_route(
+    reference: str,
+    attachment_id: int,
+    relationship_id: int,
+    request: Request,
+):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        relationship = conn.execute(
+            """
+            SELECT * FROM record_attachment_relationships
+            WHERE id = ? AND reference = ? AND attachment_id = ?
+            """,
+            (relationship_id, reference, attachment_id),
+        ).fetchone()
+        if not relationship:
+            raise _http_error(404, "relationship_not_found")
+
+        removed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        conn.execute(
+            """
+            UPDATE record_attachment_relationships
+            SET is_active = 0, removed_at = ?, removed_by = 'admin'
+            WHERE id = ? AND reference = ? AND attachment_id = ?
+            """,
+            (removed_at, relationship_id, reference, attachment_id),
+        )
+        updated = conn.execute(
+            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+            (relationship_id,),
+        ).fetchone()
+        audit_event_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_relationship_removed",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=updated["record_version"],
+            metadata={
+                "relationship_id": updated["id"],
+                "relationship_type": updated["relationship_type"],
+                "target_type": updated["target_type"],
+                "target_key": updated["target_key"],
+            },
+        )
+        conn.commit()
+        return JSONResponse(
+            content={
+                "ok": True,
+                "audit_event_id": audit_event_id,
+                "relationship": _relationship_response(updated),
             }
         )
     except Exception:
@@ -1048,7 +2844,9 @@ def _apply_attachment_lifecycle_action(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold"
+)
 def withhold_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -1060,7 +2858,9 @@ def withhold_attachment_route(reference: str, attachment_id: int, request: Reque
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/restore")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/restore"
+)
 def restore_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -1073,7 +2873,9 @@ def restore_attachment_route(reference: str, attachment_id: int, request: Reques
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete"
+)
 def soft_delete_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,

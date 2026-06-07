@@ -11,7 +11,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api.attachments import ensure_attachment_tables, public_manifest_attachments
+from api.attachments import (
+    ensure_attachment_tables,
+    public_evidence_manifest_attachments,
+    public_manifest_attachments,
+)
 
 
 class FakeAPIRouter:
@@ -63,7 +67,9 @@ class FakeJSONResponse(FakeResponse):
             parts.append(f"SameSite={samesite.capitalize()}")
         self.headers["Set-Cookie"] = "; ".join(parts)
 
-    def delete_cookie(self, *, key, httponly=False, secure=False, samesite=None, **_kwargs):
+    def delete_cookie(
+        self, *, key, httponly=False, secure=False, samesite=None, **_kwargs
+    ):
         parts = [f"{key}=", "Max-Age=0"]
         if httponly:
             parts.append("HttpOnly")
@@ -85,7 +91,9 @@ def install_fastapi_stubs():
     fastapi.Request = FakeRequest
     fastapi.UploadFile = object
 
-    responses = sys.modules.get("fastapi.responses") or types.ModuleType("fastapi.responses")
+    responses = sys.modules.get("fastapi.responses") or types.ModuleType(
+        "fastapi.responses"
+    )
     responses.HTMLResponse = FakeResponse
     responses.JSONResponse = FakeJSONResponse
     responses.Response = FakeResponse
@@ -136,7 +144,7 @@ class AdminSessionTests(unittest.TestCase):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
         self.assertTrue(cookie.startswith(prefix))
-        return cookie[len(prefix):].split(";", 1)[0]
+        return cookie[len(prefix) :].split(";", 1)[0]
 
     def test_login_page_renders_without_cde_admin_token(self):
         with self.env():
@@ -185,7 +193,9 @@ class AdminSessionTests(unittest.TestCase):
                 self.admin_session.admin_session_login("wrong-password")
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
-        self.assertEqual(getattr(ctx.exception, "detail", None), "admin_session_unauthorized")
+        self.assertEqual(
+            getattr(ctx.exception, "detail", None), "admin_session_unauthorized"
+        )
         self.assertNotIn("server-only-token", getattr(ctx.exception, "detail", ""))
         self.assertNotIn("admin-password", getattr(ctx.exception, "detail", ""))
 
@@ -204,9 +214,7 @@ class AdminSessionTests(unittest.TestCase):
             with patch.object(self.admin_session.time, "time", return_value=3701):
                 with self.assertRaises(Exception) as ctx:
                     self.admin_session.require_admin_session(
-                        FakeRequest(
-                            {self.admin_session.SESSION_COOKIE_NAME: session}
-                        )
+                        FakeRequest({self.admin_session.SESSION_COOKIE_NAME: session})
                     )
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
@@ -245,16 +253,39 @@ class AdminSessionTests(unittest.TestCase):
                 reference TEXT NOT NULL,
                 version INTEGER NOT NULL DEFAULT 1,
                 verification_hash TEXT NOT NULL,
+                conditions_json TEXT,
+                signals_json TEXT,
+                finding TEXT,
+                source_narrative TEXT,
+                report_json TEXT,
                 is_latest INTEGER NOT NULL DEFAULT 1,
                 UNIQUE(reference, version)
             )
         """)
         conn.execute(
             """
-            INSERT INTO records (reference, version, verification_hash, is_latest)
-            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, 1)
+            INSERT INTO records (
+                reference, version, verification_hash, conditions_json,
+                signals_json, finding, source_narrative, report_json, is_latest
+            )
+            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, ?, ?, ?, ?, ?, 1)
             """,
-            ("c" * 64,),
+            (
+                "c" * 64,
+                json.dumps(
+                    [
+                        "INSTITUTIONAL_DELAY",
+                        "PROCEDURAL_DEFLECTION",
+                        "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+                        "Transfer of Burden",
+                        "Escalation Without Response",
+                    ]
+                ),
+                json.dumps(["Missing Response", {"name": "Procedural Loop"}]),
+                "Finding <requires> review",
+                "private source narrative must stay hidden",
+                json.dumps({"private": "report json must stay hidden"}),
+            ),
         )
         ensure_attachment_tables(conn)
         conn.commit()
@@ -278,6 +309,7 @@ class AdminSessionTests(unittest.TestCase):
             "source_label": "Attachment source",
             "document_date": "2026-06-04",
             "document_date_precision": "day",
+            "publication_status": "internal",
             "uploaded_at": "2026-06-04T12:00:00Z",
             "is_latest": 1,
             "is_deleted": 0,
@@ -329,6 +361,27 @@ class AdminSessionTests(unittest.TestCase):
         placeholders = ", ".join("?" for _ in values)
         conn.execute(
             f"INSERT INTO attachment_audit_events ({columns}) VALUES ({placeholders})",
+            list(values.values()),
+        )
+        conn.commit()
+
+    def insert_attachment_relationship(self, conn, **overrides):
+        values = {
+            "reference": "Strike-OT-20260604-ADMIN",
+            "record_version": 1,
+            "attachment_id": 1,
+            "relationship_type": "supports",
+            "target_type": "condition",
+            "target_key": "Transfer of Burden",
+            "is_active": 1,
+            "created_at": "2026-06-04T13:30:00Z",
+            "created_by": "admin",
+        }
+        values.update(overrides)
+        columns = ", ".join(values.keys())
+        placeholders = ", ".join("?" for _ in values)
+        conn.execute(
+            f"INSERT INTO record_attachment_relationships ({columns}) VALUES ({placeholders})",
             list(values.values()),
         )
         conn.commit()
@@ -386,6 +439,32 @@ class AdminSessionTests(unittest.TestCase):
                 is_deleted=1,
                 title="Deleted attachment",
             )
+            self.insert_attachment_relationship(conn)
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="supports",
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="supports",
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="contradicts",
+                target_type="condition",
+                target_key="REMOVED_RELATIONSHIP_TARGET",
+                is_active=0,
+            )
             self.insert_attachment_audit_event(
                 conn,
                 attachment_id=8,
@@ -421,6 +500,23 @@ class AdminSessionTests(unittest.TestCase):
             )
             self.insert_attachment_audit_event(
                 conn,
+                attachment_id=1,
+                event_type="attachment_relationship_added",
+                actor="admin",
+                occurred_at="2026-06-04T15:30:00Z",
+                metadata_json=json.dumps(
+                    {
+                        "relationship_id": 1,
+                        "relationship_type": "supports",
+                        "target_type": "condition",
+                        "target_key": "Transfer of Burden",
+                    },
+                    sort_keys=True,
+                ),
+                request_id="req-relationship-added",
+            )
+            self.insert_attachment_audit_event(
+                conn,
                 attachment_id=None,
                 event_type="synthetic_audit_verification",
                 actor="admin",
@@ -440,7 +536,9 @@ class AdminSessionTests(unittest.TestCase):
             conn.close()
             try:
                 with self.env():
-                    with patch.object(self.admin_session.time, "time", return_value=200):
+                    with patch.object(
+                        self.admin_session.time, "time", return_value=200
+                    ):
                         response = self.admin_session.admin_record_attachments_page(
                             "Strike-OT-20260604-ADMIN",
                             self.valid_request(),
@@ -467,7 +565,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("withhold / restore", content)
         self.assertIn("soft-delete", content)
         self.assertIn("audit trail review", content)
+        self.assertIn("visibility workflow", content)
         self.assertIn("publication workflow", content)
+        self.assertIn("public file serving", content)
         self.assertIn("Audit trail", content)
         self.assertNotIn("Audit trail placeholder", content)
         self.assertNotIn(
@@ -477,6 +577,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("No audit events are displayed in Step 4A.", content)
         self.assertIn("Governance notice", content)
         self.assertIn("Record version", content)
+        self.assertIn(
+            'href="/admin/records/Strike-OT-20260604-ADMIN/evidence"',
+            content,
+        )
+        self.assertIn("View record evidence by target", content)
         self.assertIn("Public attachment", content)
         self.assertIn("Private attachment", content)
         self.assertIn("Withheld attachment", content)
@@ -494,14 +599,182 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("deleted", content)
         self.assertIn("Attachment description", content)
         self.assertIn("Attachment source", content)
+        self.assertIn("Classification", content)
+        self.assertIn("Publication status", content)
+        self.assertIn(">other<", content)
+        self.assertIn(">internal<", content)
         self.assertIn("2026-06-04", content)
         self.assertIn("day", content)
         self.assertIn("2026-06-04T12:00:00Z", content)
         self.assertIn('<details class="attachment-card" open>', content)
         self.assertIn('<details class="audit-event" open>', content)
+        self.assertIn(
+            'class="attachment-metadata-update-form classification-update-form"',
+            content,
+        )
+        self.assertIn("data-classification-update-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/classification"',
+            content,
+        )
+        self.assertIn('data-method="PATCH"', content)
+        self.assertIn('method="post"', content)
+        self.assertIn('name="classification"', content)
+        self.assertIn('<option value="evidence">evidence</option>', content)
+        self.assertIn(
+            '<option value="correspondence">correspondence</option>',
+            content,
+        )
+        self.assertIn('<option value="decision">decision</option>', content)
+        self.assertIn(
+            '<option value="medical_record">medical_record</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="legal_filing">legal_filing</option>',
+            content,
+        )
+        self.assertIn('<option value="photograph">photograph</option>', content)
+        self.assertIn('<option value="media">media</option>', content)
+        self.assertIn('<option value="research">research</option>', content)
+        self.assertIn('<option value="other" selected>other</option>', content)
+        self.assertIn("Update classification", content)
+        self.assertIn(
+            'class="attachment-metadata-update-form publication-update-form"', content
+        )
+        self.assertIn("data-publication-update-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/publication"',
+            content,
+        )
+        self.assertIn('data-json-field="publication_status"', content)
+        self.assertIn('name="publication_status"', content)
+        self.assertIn('<option value="internal" selected>internal</option>', content)
+        self.assertIn('<option value="published">published</option>', content)
+        self.assertIn('<option value="withdrawn">withdrawn</option>', content)
+        self.assertIn("Update publication", content)
+        self.assertIn(
+            "Controlled administrative metadata/publication workflow action only.",
+            content,
+        )
+        self.assertIn(
+            'class="attachment-metadata-update-form visibility-update-form"', content
+        )
+        self.assertIn("data-visibility-update-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/visibility"',
+            content,
+        )
+        self.assertIn('data-json-field="visibility"', content)
+        self.assertIn('name="visibility"', content)
+        self.assertIn('<option value="private">private</option>', content)
+        self.assertIn('<option value="public" selected>public</option>', content)
+        self.assertIn("Update visibility", content)
+        self.assertIn(
+            "Controlled administrative visibility workflow action only.", content
+        )
+        self.assertIn("Evidence Relationships (4)", content)
+        self.assertIn("Evidence Coverage", content)
+        self.assertIn("<strong>Status:</strong> Partial", content)
+        self.assertIn(
+            "<strong>Reason:</strong> Conditions remain unlinked. Signals remain unlinked. Findings remain unlinked. Record targets remain unlinked.",
+            content,
+        )
+        self.assertIn("<td>Conditions linked</td><td>2 / 5</td>", content)
+        self.assertIn("<td>Signals linked</td><td>1 / 2</td>", content)
+        self.assertIn("<td>Findings linked</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
+        self.assertIn("Unlinked Conditions", content)
+        self.assertIn("<li>Procedural Deflection</li>", content)
+        self.assertIn("<li>Repeated Contact Without Resolution</li>", content)
+        self.assertIn("<li>Escalation Without Response</li>", content)
+        self.assertIn(
+            '<details class="relationship-group relationship-group-condition" open>',
+            content,
+        )
+        self.assertIn("<summary>Conditions (3)</summary>", content)
+        self.assertIn(
+            '<details class="relationship-group relationship-group-signal">',
+            content,
+        )
+        self.assertIn("<summary>Signals (1)</summary>", content)
+        self.assertNotIn("relationship-group-finding", content)
+        self.assertNotIn("relationship-group-record", content)
+        self.assertIn('class="relationship-card"', content)
+        self.assertIn("supports • condition", content)
+        self.assertIn("context_for • condition", content)
+        self.assertIn("supports • signal", content)
+        self.assertIn("→ Transfer of Burden", content)
+        self.assertIn("→ Institutional Delay", content)
+        self.assertIn("→ Missing Response", content)
+        self.assertIn('data-target-key="INSTITUTIONAL_DELAY"', content)
+        self.assertNotIn("REMOVED_RELATIONSHIP_TARGET", content)
+        self.assertNotIn("→ Removed Relationship Target", content)
+        self.assertIn('class="attachment-relationship-form"', content)
+        self.assertIn("data-relationship-add-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/relationships"',
+            content,
+        )
+        self.assertIn('name="relationship_type"', content)
+        self.assertIn('<option value="supports">supports</option>', content)
+        self.assertIn('<option value="contradicts">contradicts</option>', content)
+        self.assertIn('<option value="context_for">context_for</option>', content)
+        self.assertIn('name="target_type"', content)
+        self.assertIn('<option value="condition">condition</option>', content)
+        self.assertIn('<option value="signal">signal</option>', content)
+        self.assertIn('<option value="finding">finding</option>', content)
+        self.assertIn('<option value="record">record</option>', content)
+        self.assertIn('name="target_key"', content)
+        self.assertIn("data-target-key-select", content)
+        self.assertNotIn('input name="target_key"', content)
+        self.assertIn(
+            '<option value="INSTITUTIONAL_DELAY">Institutional Delay</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="PROCEDURAL_DEFLECTION">Procedural Deflection</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="REPEATED_CONTACT_WITHOUT_RESOLUTION">Repeated Contact Without Resolution</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="Transfer of Burden">Transfer of Burden</option>',
+            content,
+        )
+        self.assertIn(
+            '<option value="Escalation Without Response">Escalation Without Response</option>',
+            content,
+        )
+        self.assertIn('"condition": [', content)
+        self.assertIn('"INSTITUTIONAL_DELAY"', content)
+        self.assertIn('"PROCEDURAL_DEFLECTION"', content)
+        self.assertIn('"REPEATED_CONTACT_WITHOUT_RESOLUTION"', content)
+        self.assertIn("guidedTargetDisplayLabel", content)
+        self.assertIn("option.value = value", content)
+        self.assertIn('"signal": ["Missing Response", "Procedural Loop"]', content)
+        self.assertIn('"finding": ["Finding \\u003crequires\\u003e review"]', content)
+        self.assertIn('"record": ["Strike-OT-20260604-ADMIN"]', content)
+        self.assertIn("No available targets", content)
+        self.assertIn("RELATIONSHIP_TARGET_OPTIONS", content)
+        self.assertIn("updateTargetKeyOptions", content)
+        self.assertIn("Add relationship", content)
+        self.assertIn("data-relationship-remove-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/relationships/1/remove"',
+            content,
+        )
+        self.assertIn("Remove relationship", content)
+        self.assertIn(
+            "Controlled administrative evidence-linking action only.", content
+        )
+        self.assertIn("Controlled administrative metadata action only.", content)
+        self.assertIn('method: "PATCH"', content)
         self.assertIn('<span class="summary-title">Public attachment</span>', content)
         self.assertIn(
-            '<span class="summary-meta">active • public • none</span>',
+            '<span class="summary-meta">other • active • public • none • internal</span>',
             content,
         )
         self.assertIn(
@@ -510,17 +783,17 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn('<span class="summary-title">Private attachment</span>', content)
         self.assertIn(
-            '<span class="summary-meta">active • private • none</span>',
+            '<span class="summary-meta">other • active • private • none • internal</span>',
             content,
         )
         self.assertIn('<span class="summary-title">Withheld attachment</span>', content)
         self.assertIn(
-            '<span class="summary-meta">withheld • public • withheld</span>',
+            '<span class="summary-meta">other • withheld • public • withheld • internal</span>',
             content,
         )
         self.assertIn('<span class="summary-title">Deleted attachment</span>', content)
         self.assertIn(
-            '<span class="summary-meta">deleted • public • none</span>',
+            '<span class="summary-meta">other • deleted • public • none • internal</span>',
             content,
         )
         self.assertIn("2026-06-04T14:00:00Z", content)
@@ -534,6 +807,58 @@ class AdminSessionTests(unittest.TestCase):
             content.index("2026-06-04T12:30:00Z"),
         )
         self.assertIn('<span class="event-badge">[metadata corrected]</span>', content)
+        self.assertIn(
+            '<span class="event-badge">[classification updated]</span>',
+            self.admin_session._render_admin_audit_events(
+                [
+                    {
+                        "attachment_id": 1,
+                        "event_type": "attachment_classification_updated",
+                        "actor": "admin",
+                        "occurred_at": "2026-06-04T16:30:00Z",
+                        "record_version": 1,
+                        "request_id": "req-classification",
+                        "metadata_json": None,
+                    }
+                ]
+            ),
+        )
+        self.assertIn(
+            '<span class="event-badge">[publication updated]</span>',
+            self.admin_session._render_admin_audit_events(
+                [
+                    {
+                        "attachment_id": 1,
+                        "event_type": "attachment_publication_updated",
+                        "actor": "admin",
+                        "occurred_at": "2026-06-04T16:45:00Z",
+                        "record_version": 1,
+                        "request_id": "req-publication",
+                        "metadata_json": None,
+                    }
+                ]
+            ),
+        )
+        self.assertIn(
+            '<span class="event-badge">[visibility updated]</span>',
+            self.admin_session._render_admin_audit_events(
+                [
+                    {
+                        "attachment_id": 1,
+                        "event_type": "attachment_visibility_updated",
+                        "actor": "admin",
+                        "occurred_at": "2026-06-04T16:50:00Z",
+                        "record_version": 1,
+                        "request_id": "req-visibility",
+                        "metadata_json": None,
+                    }
+                ]
+            ),
+        )
+        self.assertIn(
+            '<span class="event-badge">[relationship added]</span>',
+            content,
+        )
         self.assertIn(
             '<span class="event-badge">[synthetic verification]</span>',
             content,
@@ -566,13 +891,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Request ID", content)
         self.assertIn("req-admin-newer", content)
         self.assertIn("metadata_json", content)
-        self.assertIn("Reviewed &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", content)
-        self.assertNotIn("<script>", content)
+        self.assertIn(
+            "Reviewed &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;", content
+        )
+        self.assertIn("<script>", content)
+        self.assertNotIn("Reviewed <script>alert", content)
         self.assertNotIn("other_record_event", content)
         self.assertNotIn("req-other", content)
         self.assertNotIn("private raw narrative", content)
+        self.assertNotIn("private source narrative must stay hidden", content)
+        self.assertNotIn("report json must stay hidden", content)
         self.assertIn(
-            "Administrative attachment management is read-only in this stage.",
+            "Administrative attachment management is controlled in this stage.",
+            content,
+        )
+        self.assertIn(
+            "Classification, publication status, and visibility metadata updates are available from this page.",
             content,
         )
         self.assertIn(
@@ -604,15 +938,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("/private/path", content)
         self.assertNotIn("server-only-token", content)
         self.assertNotIn("CDE_ADMIN_TOKEN", content)
-        self.assertNotIn("<button", content)
-        self.assertNotIn("<form", content)
-        self.assertNotIn("action=", content)
-        self.assertNotIn("href=", content)
-        self.assertNotIn("<a ", content)
-        self.assertNotIn("type=\"submit\"", content)
-        self.assertNotIn("<input", content)
+        self.assertIn(
+            'href="/admin/records/Strike-OT-20260604-ADMIN/evidence"',
+            content,
+        )
         self.assertNotIn("<textarea", content)
-        self.assertNotIn("<select", content)
         self.assertNotIn("Download attachment", content)
         self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)
@@ -620,6 +950,471 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("Restore attachment", content)
         self.assertNotIn("Withhold attachment", content)
         self.assertNotIn("Publish attachment", content)
+        self.assertNotIn("Download attachment", content)
+
+    def test_admin_record_evidence_view_groups_supporting_attachments_safely(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                title="Condition evidence",
+                classification="evidence",
+                publication_status="published",
+                visibility="public",
+                sha256_hash="a" * 64,
+            )
+            self.insert_admin_attachment(
+                conn,
+                title="Signal and finding evidence",
+                filename="signal.pdf",
+                stored_filename="internal-signal.pdf",
+                storage_path="/private/path/internal-signal.pdf",
+                classification="research",
+                publication_status="internal",
+                visibility="private",
+                sha256_hash="b" * 64,
+            )
+            self.insert_admin_attachment(
+                conn,
+                title="Deleted linked evidence",
+                filename="deleted-linked.pdf",
+                stored_filename="internal-deleted-linked.pdf",
+                storage_path="/private/path/internal-deleted-linked.pdf",
+                is_deleted=1,
+                sha256_hash="e" * 64,
+            )
+            attachment_ids = [
+                row["id"]
+                for row in conn.execute(
+                    "SELECT id FROM record_attachments ORDER BY id"
+                ).fetchall()
+            ]
+            condition_attachment_id = attachment_ids[0]
+            signal_attachment_id = attachment_ids[1]
+            deleted_attachment_id = attachment_ids[2]
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=condition_attachment_id,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=condition_attachment_id,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=condition_attachment_id,
+                relationship_type="context_for",
+                target_type="record",
+                target_key="Strike-OT-20260604-ADMIN",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=signal_attachment_id,
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=signal_attachment_id,
+                relationship_type="context_for",
+                target_type="finding",
+                target_key="Finding <requires> review",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=deleted_attachment_id,
+                target_type="condition",
+                target_key="PROCEDURAL_DEFLECTION",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=condition_attachment_id,
+                target_type="condition",
+                target_key="Escalation Without Response",
+                is_active=0,
+            )
+            before_manifest = public_evidence_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after_manifest = public_evidence_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Admin Record Evidence", content)
+        self.assertIn('class="admin-watermark print-watermark"', content)
+        self.assertIn('aria-hidden="true"', content)
+        self.assertIn("print-color-adjust: exact", content)
+        self.assertIn(">v12</text>", content)
+        self.assertIn("details {", content)
+        self.assertIn("break-inside: avoid", content)
+        self.assertIn("Evidence by record target", content)
+        self.assertIn("Record Evidence Coverage", content)
+        self.assertIn("<td>Conditions Supported</td><td>1 / 5</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>1 / 2</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Partial</td>", content)
+        self.assertIn(
+            'class="evidence-section evidence-section-condition" open', content
+        )
+        self.assertIn('class="evidence-section evidence-section-signal"', content)
+        self.assertIn('class="evidence-section evidence-section-finding"', content)
+        self.assertIn('class="evidence-section evidence-section-record"', content)
+        self.assertIn("Conditions", content)
+        self.assertIn("Signals", content)
+        self.assertIn("Findings", content)
+        self.assertIn("Record", content)
+        self.assertIn("Institutional Delay", content)
+        self.assertIn("Missing Response", content)
+        self.assertIn("Finding &lt;requires&gt; review", content)
+        self.assertIn("Strike-OT-20260604-ADMIN", content)
+        self.assertIn("Coverage: Supported", content)
+        self.assertIn("Coverage: Unsupported", content)
+        self.assertIn("1 supporting attachment", content)
+        self.assertIn("2 supporting relationships", content)
+        self.assertIn("0 supporting relationships", content)
+        self.assertIn("Relationship Types", content)
+        self.assertIn("<li>supports: 2</li>", content)
+        self.assertIn("<h5>Relationships</h5>", content)
+        self.assertIn("Relationship Trace", content)
+        self.assertIn("Relationship Type", content)
+        self.assertIn("Target Type", content)
+        self.assertIn("Target Key", content)
+        self.assertIn("Attachment Identifier", content)
+        self.assertIn("Attachment Title", content)
+        self.assertEqual(
+            content.count("supports → condition → Institutional Delay"),
+            2,
+        )
+        self.assertIn("context_for → finding → Finding &lt;requires&gt; review", content)
+        self.assertIn("context_for → record → Strike-OT-20260604-ADMIN", content)
+        self.assertIn("<dd>supports</dd>", content)
+        self.assertIn("<dd>condition</dd>", content)
+        self.assertIn("<dd>Institutional Delay</dd>", content)
+        self.assertIn("<dd>1</dd>", content)
+        self.assertIn("<dd>Condition evidence</dd>", content)
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> Supported because 2 active attachment relationships support this target.",
+            content,
+        )
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> Supported because Attachment 2 supports this target.",
+            content,
+        )
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            content,
+        )
+        self.assertIn("Attachment 1 — Condition evidence", content)
+        self.assertIn("Attachment 2 — Signal and finding evidence", content)
+        self.assertIn("<td>Classification</td><td>evidence</td>", content)
+        self.assertIn("<td>Publication status</td><td>published</td>", content)
+        self.assertIn("<td>Visibility</td><td>public</td>", content)
+        self.assertIn("<td>Redaction status</td><td>none</td>", content)
+        self.assertIn("<td>Lifecycle state</td><td>active</td>", content)
+        self.assertIn("<td>Document date</td><td>2026-06-04</td>", content)
+        self.assertIn("a" * 64, content)
+        self.assertIn("No supporting attachments linked.", content)
+        self.assertNotIn("Deleted linked evidence", content)
+        self.assertNotIn("Attachment 3 — Deleted linked evidence", content)
+        self.assertNotIn("supports → condition → Procedural Deflection", content)
+        self.assertNotIn("supports → condition → Escalation Without Response", content)
+        self.assertNotIn("internal-public.pdf", content)
+        self.assertNotIn("internal-signal.pdf", content)
+        self.assertNotIn("storage_path", content)
+        self.assertNotIn("stored_filename", content)
+        self.assertNotIn("/private/path", content)
+        self.assertNotIn("file bytes", content)
+        self.assertNotIn("source narrative", content.lower())
+        self.assertNotIn("report json", content.lower())
+        self.assertNotIn("CDE_ADMIN_TOKEN", content)
+        self.assertNotIn("server-only-token", content)
+        self.assertNotIn("Upload attachment", content)
+        self.assertNotIn("Download attachment", content)
+        self.assertNotIn("Add relationship", content)
+        self.assertNotIn("Remove relationship", content)
+        self.assertIn(
+            'href="/admin/records/Strike-OT-20260604-ADMIN/attachments"',
+            content,
+        )
+        self.assertEqual(before_manifest, after_manifest)
+
+    def test_admin_record_evidence_coverage_unsupported_when_no_targets_linked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Record Evidence Coverage", content)
+        self.assertIn("<td>Conditions Supported</td><td>0 / 5</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>0 / 2</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", content)
+        self.assertIn("Coverage: Unsupported", content)
+        self.assertIn("0 supporting attachments", content)
+        self.assertIn("0 supporting relationships", content)
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            content,
+        )
+        self.assertIn("No active relationship types.", content)
+
+    def test_admin_record_evidence_coverage_complete_when_all_targets_linked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET conditions_json = ?, signals_json = ?, finding = ?
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """,
+                (
+                    json.dumps(["INSTITUTIONAL_DELAY"]),
+                    json.dumps(["Missing Response"]),
+                    "Finding <requires> review",
+                ),
+            )
+            self.insert_admin_attachment(conn, title="Complete evidence")
+            self.insert_attachment_relationship(
+                conn,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="finding",
+                target_key="Finding <requires> review",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="record",
+                target_key="Strike-OT-20260604-ADMIN",
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Signals Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Overall Coverage</td><td>Complete</td>", content)
+        self.assertNotIn("Coverage: Unsupported", content)
+        self.assertIn("Coverage: Supported", content)
+        self.assertIn("1 supporting relationship", content)
+        self.assertIn("<li>supports</li>", content)
+        self.assertIn("<li>context_for</li>", content)
+
+    def test_admin_record_evidence_view_requires_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.admin_record_evidence_page(
+                            "Strike-OT-20260604-ADMIN",
+                            FakeRequest(),
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_admin_relationship_form_renders_no_available_targets_state(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute("""
+                UPDATE records
+                SET conditions_json = '[]', signals_json = '[]', finding = ''
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """)
+            self.insert_admin_attachment(conn)
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn(
+            '<option value="" disabled selected>No available targets</option>',
+            content,
+        )
+        self.assertIn("Evidence Relationships (0)", content)
+        self.assertIn("<strong>Status:</strong> Unlinked", content)
+        self.assertIn(
+            "<strong>Reason:</strong> No active evidence relationships have been created.",
+            content,
+        )
+        self.assertIn("<td>Conditions linked</td><td>0 / 0</td>", content)
+        self.assertIn("<td>Signals linked</td><td>0 / 0</td>", content)
+        self.assertIn("<td>Findings linked</td><td>0 / 0</td>", content)
+        self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
+        self.assertIn("No active evidence relationships.", content)
+        self.assertIn("data-relationship-submit disabled", content)
+
+    def test_admin_relationship_coverage_explains_partial_after_conditions_complete(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            for condition in (
+                "INSTITUTIONAL_DELAY",
+                "PROCEDURAL_DEFLECTION",
+                "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+                "Transfer of Burden",
+                "Escalation Without Response",
+            ):
+                self.insert_attachment_relationship(
+                    conn,
+                    target_type="condition",
+                    target_key=condition,
+                )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Evidence Relationships (5)", content)
+        self.assertIn("<strong>Status:</strong> Partial", content)
+        self.assertIn(
+            "<strong>Reason:</strong> Conditions complete. Signals, findings, or record targets remain unlinked.",
+            content,
+        )
+        self.assertIn("<td>Conditions linked</td><td>5 / 5</td>", content)
+        self.assertIn("<td>Signals linked</td><td>0 / 2</td>", content)
+        self.assertIn("<td>Findings linked</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
+        self.assertIn("<summary>Conditions (5)</summary>", content)
+        self.assertNotIn("Unlinked Conditions", content)
+
+    def test_admin_relationship_coverage_complete_when_all_targets_are_linked(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET conditions_json = ?, signals_json = '[]', finding = ''
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """,
+                (json.dumps(["TRANSFER_OF_BURDEN"]),),
+            )
+            self.insert_admin_attachment(conn)
+            self.insert_attachment_relationship(
+                conn,
+                target_type="condition",
+                target_key="TRANSFER_OF_BURDEN",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="record",
+                target_key="Strike-OT-20260604-ADMIN",
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Evidence Relationships (2)", content)
+        self.assertIn("<strong>Status:</strong> Complete", content)
+        self.assertIn(
+            "<strong>Reason:</strong> All available targets are linked.", content
+        )
+        self.assertIn("<td>Conditions linked</td><td>1 / 1</td>", content)
+        self.assertIn("<td>Signals linked</td><td>0 / 0</td>", content)
+        self.assertIn("<td>Findings linked</td><td>0 / 0</td>", content)
+        self.assertIn("<td>Records linked</td><td>1 / 1</td>", content)
+        self.assertIn("<summary>Conditions (1)</summary>", content)
+        self.assertIn("<summary>Records (1)</summary>", content)
+        self.assertIn("→ Transfer Of Burden", content)
+        self.assertIn('data-target-key="TRANSFER_OF_BURDEN"', content)
+        self.assertNotIn("Unlinked Conditions", content)
 
     def test_admin_attachment_listing_empty_state(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -750,6 +1545,7 @@ class AdminSessionTests(unittest.TestCase):
                 source_label="Original source",
                 document_date="2026-06-04",
                 document_date_precision="day",
+                publication_status="published",
                 redaction_note="Original redaction note",
             )
             attachment_id = conn.execute(
@@ -810,18 +1606,27 @@ class AdminSessionTests(unittest.TestCase):
 
         self.assertTrue(response.content["ok"])
         self.assertEqual(response.content["attachment"]["title"], "Corrected title")
-        self.assertEqual(response.content["attachment"]["description"], "Corrected description")
-        self.assertEqual(response.content["attachment"]["source_label"], "Corrected source")
+        self.assertEqual(
+            response.content["attachment"]["description"], "Corrected description"
+        )
+        self.assertEqual(
+            response.content["attachment"]["source_label"], "Corrected source"
+        )
         self.assertEqual(response.content["attachment"]["document_date"], "2026-06")
-        self.assertEqual(response.content["attachment"]["document_date_precision"], "month")
-        self.assertEqual(response.content["changed_fields"], [
-            "title",
-            "description",
-            "source_label",
-            "document_date",
-            "document_date_precision",
-            "redaction_note",
-        ])
+        self.assertEqual(
+            response.content["attachment"]["document_date_precision"], "month"
+        )
+        self.assertEqual(
+            response.content["changed_fields"],
+            [
+                "title",
+                "description",
+                "source_label",
+                "document_date",
+                "document_date_precision",
+                "redaction_note",
+            ],
+        )
         self.assertEqual(after["title"], "Corrected title")
         self.assertEqual(after["description"], "Corrected description")
         self.assertEqual(after["source_label"], "Corrected source")
@@ -844,6 +1649,7 @@ class AdminSessionTests(unittest.TestCase):
             "sha256_hash",
             "visibility",
             "redaction_status",
+            "publication_status",
             "is_latest",
             "is_deleted",
             "uploaded_at",
@@ -903,7 +1709,9 @@ class AdminSessionTests(unittest.TestCase):
                             "redaction_note": "",
                         },
                     )
-                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
             finally:
                 self.admin_session.DB_PATH = original_db_path
 
@@ -913,7 +1721,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIsNone(after["document_date"])
         self.assertEqual(after["document_date_precision"], "unknown")
         self.assertIsNone(after["redaction_note"])
-        self.assertEqual(response.content["attachment"]["document_date_precision"], "unknown")
+        self.assertEqual(
+            response.content["attachment"]["document_date_precision"], "unknown"
+        )
 
     def test_metadata_correction_rejects_unknown_field(self):
         self.assert_metadata_correction_rejected(
@@ -962,13 +1772,1022 @@ class AdminSessionTests(unittest.TestCase):
                             self.valid_request(),
                             {"title": "Corrected title"},
                         )
-                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
             finally:
                 self.admin_session.DB_PATH = original_db_path
 
         self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
         self.assertEqual(getattr(missing.exception, "status_code", None), 404)
         self.assertEqual(after["title"], "Public attachment")
+
+    def test_classification_update_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_classification_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                            {"classification": "medical_record"},
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_classification_update_only_changes_classification_and_writes_audit_event(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 classification unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                classification="other",
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            before_manifest = public_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = (
+                        self.admin_session.update_attachment_classification_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            {"classification": "medical_record"},
+                        )
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(
+            response.content["attachment"]["classification"], "medical_record"
+        )
+        self.assertEqual(before["classification"], "other")
+        self.assertEqual(after["classification"], "medical_record")
+        for preserved in (
+            "reference",
+            "record_version",
+            "attachment_version",
+            "filename",
+            "stored_filename",
+            "storage_path",
+            "content_type",
+            "file_size_bytes",
+            "sha256_hash",
+            "visibility",
+            "redaction_status",
+            "is_latest",
+            "is_deleted",
+            "uploaded_at",
+        ):
+            self.assertEqual(after[preserved], before[preserved])
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        self.assertEqual(before_manifest, after_manifest)
+        self.assertEqual(audit["event_type"], "attachment_classification_updated")
+        self.assertEqual(audit["reference"], "Strike-OT-20260604-ADMIN")
+        self.assertEqual(audit["attachment_id"], attachment_id)
+        self.assertEqual(audit["record_version"], 1)
+        self.assertEqual(audit_metadata["previous_classification"], "other")
+        self.assertEqual(audit_metadata["new_classification"], "medical_record")
+        self.assertIn(
+            '<span class="summary-meta">medical_record • active • public • none • internal</span>',
+            page_content,
+        )
+        self.assertIn("<td>Classification</td><td>medical_record</td>", page_content)
+        self.assertIn(
+            '<span class="event-badge">[classification updated]</span>',
+            page_content,
+        )
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn(str(stored_path), audit["metadata_json"])
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn(str(stored_path), serialized_response)
+        self.assertNotIn("server-only-token", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+
+    def test_classification_update_rejects_invalid_payload(self):
+        self.assert_classification_update_rejected(
+            {"classification": "secret_internal"},
+            400,
+            "classification_invalid",
+        )
+        self.assert_classification_update_rejected(
+            {"classification": "medical_record", "storage_path": "/private/file.pdf"},
+            400,
+            "classification_payload_invalid",
+        )
+
+    def test_classification_update_wrong_reference_and_missing_attachment_rejected(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.update_attachment_classification_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                            {"classification": "medical_record"},
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.update_attachment_classification_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                            {"classification": "medical_record"},
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def test_publication_update_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_publication_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                            {"publication_status": "published"},
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_publication_update_only_changes_status_and_writes_audit_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 publication unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                classification="evidence",
+                publication_status="internal",
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            before_manifest = public_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.update_attachment_publication_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                        {"publication_status": "published"},
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(
+            response.content["attachment"]["publication_status"], "published"
+        )
+        self.assertEqual(before["publication_status"], "internal")
+        self.assertEqual(after["publication_status"], "published")
+        for preserved in (
+            "reference",
+            "record_version",
+            "attachment_version",
+            "filename",
+            "stored_filename",
+            "storage_path",
+            "content_type",
+            "file_size_bytes",
+            "sha256_hash",
+            "visibility",
+            "redaction_status",
+            "classification",
+            "is_latest",
+            "is_deleted",
+            "uploaded_at",
+        ):
+            self.assertEqual(after[preserved], before[preserved])
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        self.assertEqual(before_manifest, [])
+        self.assertEqual(len(after_manifest), 1)
+        self.assertEqual(after_manifest[0]["filename"], before["filename"])
+        self.assertEqual(audit["event_type"], "attachment_publication_updated")
+        self.assertEqual(audit["reference"], "Strike-OT-20260604-ADMIN")
+        self.assertEqual(audit["attachment_id"], attachment_id)
+        self.assertEqual(audit["record_version"], 1)
+        self.assertEqual(audit_metadata["previous_publication_status"], "internal")
+        self.assertEqual(audit_metadata["new_publication_status"], "published")
+        self.assertIn(
+            '<span class="summary-meta">evidence • active • public • none • published</span>',
+            page_content,
+        )
+        self.assertIn("<td>Publication status</td><td>published</td>", page_content)
+        self.assertIn(
+            '<span class="event-badge">[publication updated]</span>',
+            page_content,
+        )
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn(str(stored_path), audit["metadata_json"])
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn(str(stored_path), serialized_response)
+        self.assertNotIn("server-only-token", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+
+    def test_publication_update_rejects_invalid_payload(self):
+        self.assert_publication_update_rejected(
+            {"publication_status": "public_now"},
+            400,
+            "publication_status_invalid",
+        )
+        self.assert_publication_update_rejected(
+            {"publication_status": "published", "storage_path": "/private/file.pdf"},
+            400,
+            "publication_payload_invalid",
+        )
+
+    def test_publication_update_wrong_reference_and_missing_attachment_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.update_attachment_publication_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                            {"publication_status": "published"},
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.update_attachment_publication_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                            {"publication_status": "published"},
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def test_visibility_update_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_visibility_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                            {"visibility": "public"},
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_visibility_update_only_changes_visibility_and_writes_audit_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 visibility unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                classification="evidence",
+                publication_status="published",
+                visibility="private",
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            before_manifest = public_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            before_evidence_manifest = public_evidence_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.update_attachment_visibility_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                        {"visibility": "public"},
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    after_evidence_manifest = public_evidence_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(response.content["attachment"]["visibility"], "public")
+        self.assertEqual(before["visibility"], "private")
+        self.assertEqual(after["visibility"], "public")
+        for preserved in (
+            "reference",
+            "record_version",
+            "attachment_version",
+            "filename",
+            "stored_filename",
+            "storage_path",
+            "content_type",
+            "file_size_bytes",
+            "sha256_hash",
+            "classification",
+            "publication_status",
+            "redaction_status",
+            "is_latest",
+            "is_deleted",
+            "uploaded_at",
+        ):
+            self.assertEqual(after[preserved], before[preserved])
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        self.assertEqual(before_manifest, [])
+        self.assertEqual(before_evidence_manifest, [])
+        self.assertEqual(len(after_manifest), 1)
+        self.assertEqual(after_manifest[0]["filename"], before["filename"])
+        self.assertEqual(len(after_evidence_manifest), 1)
+        self.assertEqual(after_evidence_manifest[0]["filename"], before["filename"])
+        self.assertEqual(audit["event_type"], "attachment_visibility_updated")
+        self.assertEqual(audit["reference"], "Strike-OT-20260604-ADMIN")
+        self.assertEqual(audit["attachment_id"], attachment_id)
+        self.assertEqual(audit["record_version"], 1)
+        self.assertEqual(audit_metadata["previous_visibility"], "private")
+        self.assertEqual(audit_metadata["new_visibility"], "public")
+        self.assertIn(
+            '<span class="summary-meta">evidence • active • public • none • published</span>',
+            page_content,
+        )
+        self.assertIn("<td>Visibility</td><td>public</td>", page_content)
+        self.assertIn(
+            '<span class="event-badge">[visibility updated]</span>',
+            page_content,
+        )
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn(str(stored_path), audit["metadata_json"])
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn(str(stored_path), serialized_response)
+        self.assertNotIn("server-only-token", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+
+    def test_visibility_update_rejects_invalid_payload(self):
+        self.assert_visibility_update_rejected(
+            {"visibility": "restricted"},
+            400,
+            "visibility_invalid",
+        )
+        self.assert_visibility_update_rejected(
+            {"visibility": "public", "storage_path": "/private/file.pdf"},
+            400,
+            "visibility_payload_invalid",
+        )
+
+    def test_visibility_update_wrong_reference_and_missing_attachment_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.update_attachment_visibility_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                            {"visibility": "public"},
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.update_attachment_visibility_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                            {"visibility": "public"},
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def test_relationship_add_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.add_attachment_relationship_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            FakeRequest(),
+                            {
+                                "relationship_type": "supports",
+                                "target_type": "condition",
+                                "target_key": "Transfer of Burden",
+                            },
+                        )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_relationship_add_trims_target_key_preserves_attachment_and_writes_audit_event(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            stored_path = Path(temp_dir) / "attachment.pdf"
+            stored_bytes = b"%PDF-1.4 relationship unchanged"
+            stored_path.write_bytes(stored_bytes)
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(
+                conn,
+                storage_path=str(stored_path),
+                stored_filename=stored_path.name,
+                classification="evidence",
+                publication_status="published",
+            )
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            before_manifest = public_manifest_attachments(
+                conn,
+                reference="Strike-OT-20260604-ADMIN",
+                record_version=1,
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.add_attachment_relationship_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        self.valid_request(),
+                        {
+                            "relationship_type": "supports",
+                            "target_type": "condition",
+                            "target_key": "  Transfer of Burden  ",
+                        },
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachments WHERE id = ?",
+                            (attachment_id,),
+                        ).fetchone()
+                    )
+                    relationship = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachment_relationships"
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                    after_manifest = public_manifest_attachments(
+                        conn,
+                        reference="Strike-OT-20260604-ADMIN",
+                        record_version=1,
+                    )
+                    stored_file_bytes_after = stored_path.read_bytes()
+                finally:
+                    conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        serialized_response = json.dumps(response.content, sort_keys=True)
+        audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(
+            response.content["relationship"]["target_key"], "Transfer of Burden"
+        )
+        self.assertEqual(relationship["relationship_type"], "supports")
+        self.assertEqual(relationship["target_type"], "condition")
+        self.assertEqual(relationship["target_key"], "Transfer of Burden")
+        self.assertEqual(relationship["is_active"], 1)
+        self.assertEqual(after, before)
+        self.assertEqual(stored_file_bytes_after, stored_bytes)
+        self.assertEqual(after_manifest, before_manifest)
+        self.assertEqual(audit["event_type"], "attachment_relationship_added")
+        self.assertEqual(audit_metadata["relationship_id"], relationship["id"])
+        self.assertEqual(audit_metadata["relationship_type"], "supports")
+        self.assertEqual(audit_metadata["target_type"], "condition")
+        self.assertEqual(audit_metadata["target_key"], "Transfer of Burden")
+        self.assertIn("Evidence Relationships (1)", page_content)
+        self.assertIn("supports • condition", page_content)
+        self.assertIn("→ Transfer of Burden", page_content)
+        self.assertIn('data-target-key="Transfer of Burden"', page_content)
+        self.assertIn(
+            '<span class="event-badge">[relationship added]</span>',
+            page_content,
+        )
+        for field in (
+            "sha256_hash",
+            "classification",
+            "publication_status",
+            "visibility",
+            "redaction_status",
+            "is_deleted",
+        ):
+            self.assertEqual(after[field], before[field])
+        self.assertNotIn("storage_path", serialized_response)
+        self.assertNotIn("stored_filename", serialized_response)
+        self.assertNotIn("CDE_ADMIN_TOKEN", serialized_response)
+        self.assertNotIn("storage_path", audit["metadata_json"])
+        self.assertNotIn("stored_filename", audit["metadata_json"])
+        self.assertNotIn("CDE_ADMIN_TOKEN", audit["metadata_json"])
+
+    def test_relationship_add_rejects_invalid_payloads_and_reference_errors(self):
+        invalid_payloads = (
+            {
+                "relationship_type": "unknown",
+                "target_type": "condition",
+                "target_key": "Transfer",
+            },
+            {
+                "relationship_type": "supports",
+                "target_type": "unknown",
+                "target_key": "Transfer",
+            },
+            {
+                "relationship_type": "supports",
+                "target_type": "condition",
+                "target_key": "   ",
+            },
+            {
+                "relationship_type": "supports",
+                "target_type": "condition",
+                "target_key": "x" * 201,
+            },
+        )
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assert_relationship_add_rejected(
+                    payload, 400, "relationship_payload_invalid"
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = self.fetch_attachment_row(
+                self.admin_session.DB_PATH, attachment_id
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as wrong_ref:
+                        self.admin_session.add_attachment_relationship_route(
+                            "Strike-OT-20260604-WRONG",
+                            attachment_id,
+                            self.valid_request(),
+                            {
+                                "relationship_type": "supports",
+                                "target_type": "condition",
+                                "target_key": "Transfer",
+                            },
+                        )
+                    with self.assertRaises(Exception) as missing:
+                        self.admin_session.add_attachment_relationship_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id + 99,
+                            self.valid_request(),
+                            {
+                                "relationship_type": "supports",
+                                "target_type": "condition",
+                                "target_key": "Transfer",
+                            },
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    relationship_count = conn.execute(
+                        "SELECT COUNT(*) FROM record_attachment_relationships"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(wrong_ref.exception, "status_code", None), 404)
+        self.assertEqual(getattr(missing.exception, "status_code", None), 404)
+        self.assertEqual(after, before)
+        self.assertEqual(relationship_count, 0)
+
+    def test_relationship_remove_marks_inactive_and_writes_audit_event(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            self.insert_attachment_relationship(conn, attachment_id=attachment_id)
+            relationship_id = conn.execute(
+                "SELECT id FROM record_attachment_relationships"
+            ).fetchone()["id"]
+            before = self.fetch_attachment_row(
+                self.admin_session.DB_PATH, attachment_id
+            )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.remove_attachment_relationship_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        relationship_id,
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    after = self.fetch_attachment_row(
+                        self.admin_session.DB_PATH, attachment_id
+                    )
+                    relationship = dict(
+                        conn.execute(
+                            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+                            (relationship_id,),
+                        ).fetchone()
+                    )
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                finally:
+                    conn.close()
+                with self.env():
+                    page_response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        audit_metadata = json.loads(audit["metadata_json"])
+        page_content = page_response.content
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(relationship["is_active"], 0)
+        self.assertIsNotNone(relationship["removed_at"])
+        self.assertEqual(relationship["removed_by"], "admin")
+        self.assertEqual(after, before)
+        self.assertEqual(audit["event_type"], "attachment_relationship_removed")
+        self.assertEqual(audit_metadata["relationship_id"], relationship_id)
+        self.assertEqual(audit_metadata["target_key"], "Transfer of Burden")
+        self.assertNotIn("→ Transfer of Burden", page_content)
+        self.assertIn("No active evidence relationships.", page_content)
+        self.assertIn(
+            '<span class="event-badge">[relationship removed]</span>',
+            page_content,
+        )
+
+    def test_relationship_remove_uses_relationship_id_not_duplicate_target_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=attachment_id,
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=attachment_id,
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            relationship_ids = [
+                row["id"]
+                for row in conn.execute(
+                    "SELECT id FROM record_attachment_relationships ORDER BY id"
+                ).fetchall()
+            ]
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.remove_attachment_relationship_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        relationship_ids[0],
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    relationships = [
+                        dict(row)
+                        for row in conn.execute(
+                            "SELECT id, is_active, target_key "
+                            "FROM record_attachment_relationships ORDER BY id"
+                        ).fetchall()
+                    ]
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        audit_metadata = json.loads(audit["metadata_json"])
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(relationships[0]["id"], relationship_ids[0])
+        self.assertEqual(relationships[0]["is_active"], 0)
+        self.assertEqual(relationships[1]["id"], relationship_ids[1])
+        self.assertEqual(relationships[1]["is_active"], 1)
+        self.assertEqual(relationships[0]["target_key"], "INSTITUTIONAL_DELAY")
+        self.assertEqual(relationships[1]["target_key"], "INSTITUTIONAL_DELAY")
+        self.assertEqual(audit["event_type"], "attachment_relationship_removed")
+        self.assertEqual(audit_metadata["relationship_id"], relationship_ids[0])
+        self.assertEqual(audit_metadata["target_key"], "INSTITUTIONAL_DELAY")
 
     def test_lifecycle_routes_require_admin_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1050,7 +2869,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(len(result["after_manifest"]), 1)
         self.assertEqual(result["audit"]["event_type"], "attachment_restored")
         self.assertEqual(result["audit_metadata"]["action"], "restore")
-        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "withheld")
+        self.assertEqual(
+            result["audit_metadata"]["previous_redaction_status"], "withheld"
+        )
         self.assertEqual(result["audit_metadata"]["new_redaction_status"], "none")
         self.assertEqual(result["audit_metadata"]["previous_is_deleted"], 1)
         self.assertEqual(result["audit_metadata"]["new_is_deleted"], 0)
@@ -1085,7 +2906,9 @@ class AdminSessionTests(unittest.TestCase):
                             attachment_id + 99,
                             self.valid_request(),
                         )
-                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
                 conn = sqlite3.connect(self.admin_session.DB_PATH)
                 try:
                     audit_count = conn.execute(
@@ -1111,7 +2934,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(result["after"]["redaction_status"], "withheld")
         self.assertEqual(result["after"]["is_deleted"], 0)
         self.assertEqual(result["audit"]["event_type"], "attachment_withheld")
-        self.assertEqual(result["audit_metadata"]["previous_redaction_status"], "withheld")
+        self.assertEqual(
+            result["audit_metadata"]["previous_redaction_status"], "withheld"
+        )
         self.assertEqual(result["audit_metadata"]["new_redaction_status"], "withheld")
 
     def run_lifecycle_action(
@@ -1134,6 +2959,7 @@ class AdminSessionTests(unittest.TestCase):
                 stored_filename=stored_path.name,
                 redaction_status=initial_redaction_status,
                 is_deleted=initial_is_deleted,
+                publication_status="published",
             )
             attachment_id = conn.execute(
                 "SELECT id FROM record_attachments"
@@ -1243,7 +3069,9 @@ class AdminSessionTests(unittest.TestCase):
                             self.valid_request(),
                             payload,
                         )
-                after = self.fetch_attachment_row(self.admin_session.DB_PATH, attachment_id)
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
                 conn = sqlite3.connect(self.admin_session.DB_PATH)
                 try:
                     audit_count = conn.execute(
@@ -1258,6 +3086,176 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(getattr(ctx.exception, "detail", None), detail)
         self.assertEqual(after, before)
         self.assertEqual(audit_count, 0)
+
+    def assert_classification_update_rejected(self, payload, status_code, detail):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_classification_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            payload,
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), status_code)
+        self.assertEqual(getattr(ctx.exception, "detail", None), detail)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def assert_publication_update_rejected(self, payload, status_code, detail):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_publication_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            payload,
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), status_code)
+        self.assertEqual(getattr(ctx.exception, "detail", None), detail)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def assert_visibility_update_rejected(self, payload, status_code, detail):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = dict(
+                conn.execute(
+                    "SELECT * FROM record_attachments WHERE id = ?",
+                    (attachment_id,),
+                ).fetchone()
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.update_attachment_visibility_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            payload,
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    audit_count = conn.execute(
+                        "SELECT COUNT(*) FROM attachment_audit_events"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), status_code)
+        self.assertEqual(getattr(ctx.exception, "detail", None), detail)
+        self.assertEqual(after, before)
+        self.assertEqual(audit_count, 0)
+
+    def assert_relationship_add_rejected(self, payload, status_code, detail):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            before = self.fetch_attachment_row(
+                self.admin_session.DB_PATH, attachment_id
+            )
+            conn.close()
+            try:
+                with self.env():
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.add_attachment_relationship_route(
+                            "Strike-OT-20260604-ADMIN",
+                            attachment_id,
+                            self.valid_request(),
+                            payload,
+                        )
+                after = self.fetch_attachment_row(
+                    self.admin_session.DB_PATH, attachment_id
+                )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                try:
+                    relationship_count = conn.execute(
+                        "SELECT COUNT(*) FROM record_attachment_relationships"
+                    ).fetchone()[0]
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), status_code)
+        self.assertEqual(getattr(ctx.exception, "detail", None), detail)
+        self.assertEqual(after, before)
+        self.assertEqual(relationship_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

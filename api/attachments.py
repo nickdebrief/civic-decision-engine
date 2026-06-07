@@ -13,6 +13,20 @@ ATTACHMENT_ROOT = Path("/data/attachments")
 VALID_VISIBILITY = {"private", "public"}
 VALID_REDACTION_STATUS = {"none", "redacted", "withheld"}
 VALID_DOCUMENT_DATE_PRECISION = {"day", "month", "year", "unknown"}
+VALID_ATTACHMENT_CLASSIFICATION = {
+    "evidence",
+    "correspondence",
+    "decision",
+    "medical_record",
+    "legal_filing",
+    "photograph",
+    "media",
+    "research",
+    "other",
+}
+VALID_PUBLICATION_STATUS = {"internal", "published", "withdrawn"}
+VALID_RELATIONSHIP_TYPE = {"supports", "contradicts", "context_for"}
+VALID_RELATIONSHIP_TARGET_TYPE = {"condition", "signal", "finding", "record"}
 SENSITIVE_AUDIT_METADATA_KEYS = {
     "CDE_ADMIN_TOKEN",
     "session_secret",
@@ -57,6 +71,13 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
             title TEXT,
             description TEXT,
             source_label TEXT,
+            classification TEXT NOT NULL DEFAULT 'other'
+                CHECK (classification IN (
+                    'evidence', 'correspondence', 'decision', 'medical_record',
+                    'legal_filing', 'photograph', 'media', 'research', 'other'
+                )),
+            publication_status TEXT NOT NULL DEFAULT 'internal'
+                CHECK (publication_status IN ('internal', 'published', 'withdrawn')),
             document_date TEXT,
             document_date_precision TEXT NOT NULL DEFAULT 'unknown',
 
@@ -79,6 +100,21 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
         "record_attachments",
         "document_date_precision",
         "TEXT NOT NULL DEFAULT 'unknown'",
+    )
+    _ensure_optional_column(
+        conn,
+        "record_attachments",
+        "classification",
+        "TEXT NOT NULL DEFAULT 'other' CHECK (classification IN "
+        "('evidence', 'correspondence', 'decision', 'medical_record', "
+        "'legal_filing', 'photograph', 'media', 'research', 'other'))",
+    )
+    _ensure_optional_column(
+        conn,
+        "record_attachments",
+        "publication_status",
+        "TEXT NOT NULL DEFAULT 'internal' CHECK "
+        "(publication_status IN ('internal', 'published', 'withdrawn'))",
     )
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_record_attachments_reference
@@ -108,6 +144,34 @@ def ensure_attachment_tables(conn: sqlite3.Connection) -> None:
             FOREIGN KEY (attachment_id)
                 REFERENCES record_attachments(id)
         )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS record_attachment_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reference TEXT NOT NULL,
+            record_version INTEGER NOT NULL,
+            attachment_id INTEGER NOT NULL,
+            relationship_type TEXT NOT NULL
+                CHECK (relationship_type IN ('supports', 'contradicts', 'context_for')),
+            target_type TEXT NOT NULL
+                CHECK (target_type IN ('condition', 'signal', 'finding', 'record')),
+            target_key TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            created_by TEXT NOT NULL DEFAULT 'admin',
+            removed_at TEXT,
+            removed_by TEXT,
+            FOREIGN KEY (attachment_id)
+                REFERENCES record_attachments(id)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_attachment_relationships_attachment
+        ON record_attachment_relationships(reference, attachment_id, is_active)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_attachment_relationships_target
+        ON record_attachment_relationships(reference, target_type, target_key, is_active)
     """)
 
 
@@ -215,6 +279,51 @@ def validate_document_date(
     return value, precision
 
 
+def validate_attachment_classification(classification: str | None) -> str:
+    value = classification.strip() if isinstance(classification, str) else None
+    if value not in VALID_ATTACHMENT_CLASSIFICATION:
+        raise ValueError("Invalid attachment classification")
+    return value
+
+
+def validate_attachment_visibility(visibility: str | None) -> str:
+    value = visibility.strip() if isinstance(visibility, str) else None
+    if value not in VALID_VISIBILITY:
+        raise ValueError("Invalid attachment visibility")
+    return value
+
+
+def validate_publication_status(publication_status: str | None) -> str:
+    value = publication_status.strip() if isinstance(publication_status, str) else None
+    if value not in VALID_PUBLICATION_STATUS:
+        raise ValueError("Invalid attachment publication status")
+    return value
+
+
+def validate_attachment_relationship(
+    relationship_type: str | None,
+    target_type: str | None,
+    target_key: str | None,
+) -> tuple[str, str, str]:
+    normalized_relationship_type = (
+        relationship_type.strip() if isinstance(relationship_type, str) else None
+    )
+    if normalized_relationship_type not in VALID_RELATIONSHIP_TYPE:
+        raise ValueError("Invalid attachment relationship type")
+
+    normalized_target_type = target_type.strip() if isinstance(target_type, str) else None
+    if normalized_target_type not in VALID_RELATIONSHIP_TARGET_TYPE:
+        raise ValueError("Invalid attachment relationship target type")
+
+    normalized_target_key = target_key.strip() if isinstance(target_key, str) else ""
+    if not normalized_target_key:
+        raise ValueError("Attachment relationship target key is required")
+    if len(normalized_target_key) > 200:
+        raise ValueError("Attachment relationship target key is too long")
+
+    return normalized_relationship_type, normalized_target_type, normalized_target_key
+
+
 def store_attachment_bytes(
     conn: sqlite3.Connection,
     *,
@@ -227,6 +336,8 @@ def store_attachment_bytes(
     title: str | None = None,
     description: str | None = None,
     source_label: str | None = None,
+    classification: str | None = "other",
+    publication_status: str | None = "internal",
     redaction_note: str | None = None,
     document_date: str | None = None,
     document_date_precision: str | None = "unknown",
@@ -237,6 +348,8 @@ def store_attachment_bytes(
     _validate_reference(reference)
     _validate_visibility(visibility)
     _validate_redaction_status(redaction_status)
+    normalized_classification = validate_attachment_classification(classification)
+    normalized_publication_status = validate_publication_status(publication_status)
     normalized_document_date, normalized_document_date_precision = validate_document_date(
         document_date, document_date_precision
     )
@@ -265,11 +378,12 @@ def store_attachment_bytes(
                 filename, stored_filename, storage_path,
                 content_type, file_size_bytes, sha256_hash,
                 visibility, redaction_status, redaction_note,
-                title, description, source_label,
+                title, description, source_label, classification,
+                publication_status,
                 document_date, document_date_precision,
                 uploaded_at, uploaded_by
             )
-            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 1, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 reference,
@@ -284,6 +398,8 @@ def store_attachment_bytes(
                 title,
                 description,
                 source_label,
+                normalized_classification,
+                normalized_publication_status,
                 normalized_document_date,
                 normalized_document_date_precision,
                 uploaded_at,
@@ -332,6 +448,8 @@ def store_attachment_bytes(
         "sha256_hash": sha256_hash,
         "visibility": visibility,
         "redaction_status": redaction_status,
+        "classification": normalized_classification,
+        "publication_status": normalized_publication_status,
         "document_date": normalized_document_date,
         "document_date_precision": normalized_document_date_precision,
         "uploaded_at": uploaded_at,
@@ -354,6 +472,7 @@ def public_manifest_attachments(
           AND redaction_status != 'withheld'
           AND is_latest = 1
           AND is_deleted = 0
+          AND publication_status = 'published'
         ORDER BY id ASC
         """,
         (reference, record_version),
@@ -381,6 +500,65 @@ def public_manifest_attachments(
     ]
 
 
+def public_evidence_manifest_attachments(
+    conn: sqlite3.Connection, *, reference: str, record_version: int
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    rows = conn.execute(
+        """
+        SELECT id, record_version, filename, content_type, file_size_bytes,
+               sha256_hash, title, description, source_label, classification,
+               publication_status, document_date, document_date_precision, uploaded_at
+        FROM record_attachments
+        WHERE reference = ?
+          AND record_version = ?
+          AND visibility = 'public'
+          AND redaction_status != 'withheld'
+          AND is_deleted = 0
+          AND publication_status = 'published'
+        ORDER BY id ASC
+        """,
+        (reference, record_version),
+    ).fetchall()
+
+    attachments = []
+    for row in rows:
+        relationships = [
+            {
+                "relationship_type": relationship["relationship_type"],
+                "target_type": relationship["target_type"],
+                "target_key": relationship["target_key"],
+            }
+            for relationship in list_attachment_relationships(
+                conn,
+                reference=reference,
+                attachment_id=row["id"],
+                active_only=True,
+            )
+        ]
+        attachments.append(
+            {
+                "attachment_id": row["id"],
+                "record_version": row["record_version"],
+                "title": row["title"],
+                "description": row["description"],
+                "source_label": row["source_label"],
+                "classification": row["classification"] or "other",
+                "publication_status": row["publication_status"] or "internal",
+                "filename": row["filename"],
+                "content_type": row["content_type"],
+                "file_size": row["file_size_bytes"],
+                "sha256_hash": row["sha256_hash"],
+                "document_date": row["document_date"],
+                "document_date_precision": row["document_date_precision"] or "unknown",
+                "uploaded_at": row["uploaded_at"],
+                "relationships": relationships,
+            }
+        )
+
+    return attachments
+
+
 def list_record_attachments(
     conn: sqlite3.Connection,
     *,
@@ -394,7 +572,8 @@ def list_record_attachments(
         SELECT id, reference, record_version, attachment_version, filename,
                stored_filename, storage_path, content_type, file_size_bytes,
                sha256_hash, visibility, redaction_status, title, description,
-               source_label, document_date, document_date_precision, uploaded_at,
+               source_label, classification, publication_status,
+               document_date, document_date_precision, uploaded_at,
                is_latest, is_deleted
         FROM record_attachments
         WHERE reference = ?
@@ -419,6 +598,8 @@ def list_record_attachments(
             "title": row["title"],
             "description": row["description"],
             "source_label": row["source_label"],
+            "classification": row["classification"] or "other",
+            "publication_status": row["publication_status"] or "internal",
             "document_date": row["document_date"],
             "document_date_precision": row["document_date_precision"] or "unknown",
             "uploaded_at": row["uploaded_at"],
@@ -430,9 +611,57 @@ def list_record_attachments(
             attachment.update(
                 _verify_attachment_file(row, attachment_root=attachment_root)
             )
+        attachment["active_relationships"] = list_attachment_relationships(
+            conn,
+            reference=reference,
+            attachment_id=row["id"],
+            active_only=True,
+        )
         attachments.append(attachment)
 
     return attachments
+
+
+def list_attachment_relationships(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+    attachment_id: int,
+    active_only: bool = True,
+) -> list[dict[str, Any]]:
+    ensure_attachment_tables(conn)
+    active_clause = "AND is_active = 1" if active_only else ""
+    rows = conn.execute(
+        f"""
+        SELECT id, reference, record_version, attachment_id, relationship_type,
+               target_type, target_key, is_active, created_at, created_by,
+               removed_at, removed_by
+        FROM record_attachment_relationships
+        WHERE reference = ?
+          AND attachment_id = ?
+          {active_clause}
+        ORDER BY id ASC
+        """,
+        (reference, attachment_id),
+    ).fetchall()
+    return [_relationship_row_to_metadata(row) for row in rows]
+
+
+def _relationship_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "relationship_id": row["id"],
+        "reference": row["reference"],
+        "record_version": row["record_version"],
+        "attachment_id": row["attachment_id"],
+        "relationship_type": row["relationship_type"],
+        "target_type": row["target_type"],
+        "target_key": row["target_key"],
+        "is_active": row["is_active"],
+        "created_at": row["created_at"],
+        "created_by": row["created_by"],
+        "removed_at": row["removed_at"],
+        "removed_by": row["removed_by"],
+    }
 
 
 def build_attachment_storage_path(
@@ -508,6 +737,7 @@ def _appears_in_public_manifest(row: sqlite3.Row) -> bool:
     return (
         row["visibility"] == "public"
         and row["redaction_status"] != "withheld"
+        and row["publication_status"] == "published"
         and row["is_latest"] == 1
         and row["is_deleted"] == 0
     )

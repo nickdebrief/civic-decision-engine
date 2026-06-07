@@ -18,6 +18,7 @@ from typing import Any
 from jsonschema import Draft7Validator
 
 SCHEMA_PATH = Path("schema/civic_case.schema.json")
+ENGINE_LINEAGE_VERSION = "v11"
 
 
 def load_civic_schema() -> dict[str, Any]:
@@ -248,7 +249,7 @@ def build_timeline_output(case: dict[str, Any]) -> dict[str, Any]:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "timeline_analysis",
             "case_count": 1,
-            "lineage": {"version": "v10"},
+            "lineage": {"version": ENGINE_LINEAGE_VERSION},
         },
         "results": [
             {
@@ -363,6 +364,7 @@ def build_timeline_output_from_runs(
     case_sequence: list[str] = []
     behaviour_indices: list[int] = []
     conditions: list[str] = []
+    primary_conditions: list[str] = []
     progression: list[str] = []
 
     for run in stored_runs:
@@ -376,7 +378,12 @@ def build_timeline_output_from_runs(
         run_sequence.append(metadata.get("run_id", ""))
         case_sequence.append(result.get("system_reference", ""))
         behaviour_indices.append(result.get("signals", {}).get("behaviour_index", 0))
-        conditions.append(result.get("condition", ""))
+        primary_conditions.append(result.get("condition", ""))
+        result_conditions = result.get("conditions")
+        if isinstance(result_conditions, list) and result_conditions:
+            conditions.extend(str(item) for item in result_conditions if item)
+        else:
+            conditions.append(result.get("condition", ""))
         progression.append(result.get("assessment", {}).get("label", ""))
 
     if len(set(behaviour_indices)) == 1:
@@ -389,18 +396,18 @@ def build_timeline_output_from_runs(
         trajectory = "Mixed"
 
     moment_of_change = None
-    for i in range(1, len(conditions)):
-        if conditions[i] != conditions[i - 1]:
+    for i in range(1, len(primary_conditions)):
+        if primary_conditions[i] != primary_conditions[i - 1]:
             moment_of_change = {
-                "from": conditions[i - 1],
-                "to": conditions[i],
+                "from": primary_conditions[i - 1],
+                "to": primary_conditions[i],
                 "at_index": i + 1,
             }
             break
 
     interpretation = interpret_timeline_result(
         behaviour_indices,
-        conditions,
+        primary_conditions,
         progression,
         trajectory,
         moment_of_change,
@@ -413,7 +420,7 @@ def build_timeline_output_from_runs(
             "source": "outputs/civic/",
             "case_count": len(case_sequence),
             "lineage": {
-                "version": "v10",
+                "version": ENGINE_LINEAGE_VERSION,
             },
         },
         "results": [
@@ -535,13 +542,13 @@ def derive_pattern_signals(
 
     if recurring_transitions:
         top_transition = recurring_transitions[0]
-    if (
-        top_transition["count"] == 1
-        and top_transition["from"] == "TRANSFER_OF_BURDEN"
-        and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
-    ):
-        signals.append("TRANSITION_DETECTED")
-        signals.append("ESCALATION_WITHOUT_RESPONSE_PRESENT")
+        if (
+            top_transition["count"] == 1
+            and top_transition["from"] == "TRANSFER_OF_BURDEN"
+            and top_transition["to"] == "ESCALATION_WITHOUT_RESPONSE"
+        ):
+            signals.append("TRANSITION_DETECTED")
+            signals.append("ESCALATION_WITHOUT_RESPONSE_PRESENT")
     if not recurring_transitions:
         signals.append("NO_RECURRING_TRANSITION")
 
@@ -710,7 +717,7 @@ def build_pattern_output_from_timelines(
             "mode": "pattern_analysis",
             "source": "outputs/timeline/",
             "case_count": len(timeline_runs),
-            "lineage": {"version": "v10"},
+            "lineage": {"version": ENGINE_LINEAGE_VERSION},
             "pattern_summary": pattern_summary,
         },
         "results": [
@@ -738,6 +745,49 @@ EXAMPLE_CASES = [
     Path("examples/civic_case_001.json"),
     Path("examples/civic_case_003.json"),
     Path("examples/civic_case_002.json"),
+]
+
+CONDITION_DETECTION_RULES: list[tuple[str, tuple[str, ...]]] = [
+    (
+        "INSTITUTIONAL_DELAY",
+        (
+            "institutional delay",
+            "prolonged inaction",
+            "INSTITUTIONAL_DELAY",
+        ),
+    ),
+    (
+        "PROCEDURAL_DEFLECTION",
+        (
+            "procedural deflection",
+            "responsibility redirected",
+            "PROCEDURAL_DEFLECTION",
+        ),
+    ),
+    (
+        "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+        (
+            "repeated contact without resolution",
+            "multiple follow-up contacts",
+            "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+        ),
+    ),
+    (
+        "TRANSFER_OF_BURDEN",
+        (
+            "transfer of burden",
+            "burden transferred to the complainant",
+            "TRANSFER_OF_BURDEN",
+        ),
+    ),
+    (
+        "ESCALATION_WITHOUT_RESPONSE",
+        (
+            "escalation without response",
+            "escalated without substantive response",
+            "ESCALATION_WITHOUT_RESPONSE",
+        ),
+    ),
 ]
 
 # ============================================================
@@ -872,9 +922,41 @@ def classify_condition(summary: dict[str, Any]) -> str:
     return "UNCLASSIFIED"
 
 
+def extract_condition_text(case: dict[str, Any]) -> str:
+    text_fields = [
+        "case_description",
+        "decision_trigger",
+        "recall_question",
+        "structural_insight",
+        "decision_note",
+        "learning_capture",
+    ]
+    values = [str(case.get(field) or "") for field in text_fields]
+    for item in case.get("evidence_bundle", []) or []:
+        if isinstance(item, dict):
+            values.extend(
+                str(item.get(field) or "")
+                for field in ("title", "summary", "description")
+            )
+    return "\n".join(value for value in values if value)
+
+
+def detect_explicit_conditions(case: dict[str, Any]) -> list[str]:
+    text = extract_condition_text(case)
+    normalized_text = text.casefold()
+    detected: list[str] = []
+    for condition, phrases in CONDITION_DETECTION_RULES:
+        if any(phrase.casefold() in normalized_text for phrase in phrases):
+            detected.append(condition)
+    return detected
+
+
 def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
     summary = extract_behaviour_summary(case)
     condition = classify_condition(summary)
+    conditions = detect_explicit_conditions(case)
+    if condition and condition != "UNCLASSIFIED" and condition not in conditions:
+        conditions.append(condition)
 
     return {
         "system_reference": case.get("strike_reference"),
@@ -892,6 +974,7 @@ def format_civic_result(case: dict[str, Any]) -> dict[str, Any]:
             "behaviour_index": summary["index"],
         },
         "condition": condition,
+        "conditions": conditions,
         "assessment": {
             "label": summary["label"],
             "interpretation": (
@@ -924,7 +1007,7 @@ def build_civic_run_metadata(
         "lineage": {
             "previous_run_id": previous_run_id,
             "depth": depth,
-            "version": "v10",
+            "version": ENGINE_LINEAGE_VERSION,
         },
     }
 
@@ -1049,7 +1132,7 @@ def print_adaptation_analysis(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "mode": "compare_analysis",
             "case_count": len(cases),
             "lineage": {
-                "version": "v10",
+                "version": ENGINE_LINEAGE_VERSION,
             },
         },
         "results": [

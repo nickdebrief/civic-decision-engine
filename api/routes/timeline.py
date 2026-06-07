@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from api.models import TimelineRunResponse, CasesRequest
+from api.analysis_compat import normalize_analysis_request
 
 from civic_decision_engine_v11 import (
     load_stored_civic_runs,
@@ -41,7 +44,11 @@ def timeline_stored() -> TimelineRunResponse:
 
 
 @router.post("/timeline", response_model=TimelineRunResponse, tags=["Analysis"])
-def timeline_live(request: CasesRequest) -> TimelineRunResponse:
+def timeline_live(request: CasesRequest | dict[str, Any]) -> TimelineRunResponse:
+    try:
+        request = normalize_analysis_request(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not request.cases:
         raise HTTPException(status_code=400, detail="No cases provided")
 
