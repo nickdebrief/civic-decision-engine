@@ -453,6 +453,100 @@ def _render_target_key_options(target_options: dict[str, list[str]], target_type
     )
 
 
+def _relationship_coverage(
+    target_options: dict[str, list[str]],
+    relationships: list[dict[str, Any]],
+) -> dict[str, Any]:
+    available = {
+        target_type: set(values)
+        for target_type, values in target_options.items()
+    }
+    linked = {target_type: set() for target_type in available}
+    for relationship in relationships:
+        target_type = str(relationship.get("target_type") or "")
+        target_key = str(relationship.get("target_key") or "")
+        if target_key in available.get(target_type, set()):
+            linked.setdefault(target_type, set()).add(target_key)
+
+    counts = {}
+    total_available = 0
+    total_linked = 0
+    for target_type in ("condition", "signal", "finding", "record"):
+        available_values = available.get(target_type, set())
+        linked_values = linked.get(target_type, set())
+        counts[target_type] = {
+            "linked": len(linked_values),
+            "total": len(available_values),
+            "unlinked": [
+                value
+                for value in target_options.get(target_type, [])
+                if value not in linked_values
+            ],
+        }
+        total_available += len(available_values)
+        total_linked += len(linked_values)
+
+    if not relationships:
+        status = "Unlinked"
+    elif total_available > 0 and total_linked == total_available:
+        status = "Complete"
+    else:
+        status = "Partial"
+
+    return {
+        "status": status,
+        "counts": counts,
+        "total_available": total_available,
+        "total_linked": total_linked,
+    }
+
+
+def _render_relationship_coverage(
+    target_options: dict[str, list[str]],
+    relationships: list[dict[str, Any]],
+) -> str:
+    coverage = _relationship_coverage(target_options, relationships)
+    labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Records",
+    }
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        count = coverage["counts"][target_type]
+        rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]} linked</td>"
+            f"<td>{count['linked']} / {count['total']}</td>"
+            "</tr>"
+        )
+
+    unlinked_conditions = coverage["counts"]["condition"]["unlinked"]
+    if unlinked_conditions:
+        unlinked_items = "".join(
+            f"<li>{escape(_guided_target_display_label(value))}</li>"
+            for value in unlinked_conditions
+        )
+        unlinked_html = f"""
+          <div class="coverage-unlinked">
+            <h4>Unlinked Conditions</h4>
+            <ul>{unlinked_items}</ul>
+          </div>"""
+    else:
+        unlinked_html = ""
+
+    return f"""
+          <section class="relationship-coverage">
+            <h4>Evidence Coverage</h4>
+            <p><strong>Status:</strong> {escape(coverage["status"])}</p>
+            <table>
+              <tbody>{"".join(rows)}</tbody>
+            </table>
+            {unlinked_html}
+          </section>"""
+
+
 def _render_admin_attachment_rows(
     attachments: list[dict[str, Any]],
     *,
@@ -542,6 +636,10 @@ def _render_admin_attachment_rows(
         )
         relationships = attachment.get("active_relationships") or []
         relationship_count = len(relationships)
+        relationship_coverage = _render_relationship_coverage(
+            relationship_target_options,
+            relationships,
+        )
         relationship_rows = _render_attachment_relationships(
             relationships,
             reference=str(reference),
@@ -626,6 +724,7 @@ def _render_admin_attachment_rows(
         </form>
         <section class="evidence-relationships">
           <h3>Evidence Relationships ({relationship_count})</h3>
+          {relationship_coverage}
           {relationship_rows}
           <form class="attachment-relationship-form"
                 data-relationship-add-form
@@ -1142,6 +1241,30 @@ def render_admin_attachments_page(
       font-family: ui-monospace, monospace;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+    }}
+    .relationship-coverage {{
+      display: grid;
+      gap: 8px;
+      margin: 0 0 12px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-coverage h4,
+    .coverage-unlinked h4 {{
+      margin: 0;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-coverage p {{
+      margin: 0;
+    }}
+    .coverage-unlinked ul {{
+      margin: 6px 0 0 20px;
+      padding: 0;
     }}
     .relationship-list {{
       display: grid;
