@@ -2279,6 +2279,72 @@ class AdminSessionTests(unittest.TestCase):
             page_content,
         )
 
+    def test_relationship_remove_uses_relationship_id_not_duplicate_target_fields(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            attachment_id = conn.execute(
+                "SELECT id FROM record_attachments"
+            ).fetchone()["id"]
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=attachment_id,
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                attachment_id=attachment_id,
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            relationship_ids = [
+                row["id"]
+                for row in conn.execute(
+                    "SELECT id FROM record_attachment_relationships ORDER BY id"
+                ).fetchall()
+            ]
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.remove_attachment_relationship_route(
+                        "Strike-OT-20260604-ADMIN",
+                        attachment_id,
+                        relationship_ids[0],
+                        self.valid_request(),
+                    )
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    relationships = [
+                        dict(row)
+                        for row in conn.execute(
+                            "SELECT id, is_active, target_key "
+                            "FROM record_attachment_relationships ORDER BY id"
+                        ).fetchall()
+                    ]
+                    audit = dict(
+                        conn.execute("SELECT * FROM attachment_audit_events").fetchone()
+                    )
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        audit_metadata = json.loads(audit["metadata_json"])
+
+        self.assertTrue(response.content["ok"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(relationships[0]["id"], relationship_ids[0])
+        self.assertEqual(relationships[0]["is_active"], 0)
+        self.assertEqual(relationships[1]["id"], relationship_ids[1])
+        self.assertEqual(relationships[1]["is_active"], 1)
+        self.assertEqual(relationships[0]["target_key"], "INSTITUTIONAL_DELAY")
+        self.assertEqual(relationships[1]["target_key"], "INSTITUTIONAL_DELAY")
+        self.assertEqual(audit["event_type"], "attachment_relationship_removed")
+        self.assertEqual(audit_metadata["relationship_id"], relationship_ids[0])
+        self.assertEqual(audit_metadata["target_key"], "INSTITUTIONAL_DELAY")
+
     def test_lifecycle_routes_require_admin_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             original_db_path = self.admin_session.DB_PATH

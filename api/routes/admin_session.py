@@ -1617,7 +1617,14 @@ def render_admin_attachments_page(
           window.location.reload();
           return;
         }}
-        window.alert("Relationship removal failed.");
+        let detail = "";
+        try {{
+          const payload = await response.json();
+          detail = payload?.detail ? `: ${{payload.detail}}` : "";
+        }} catch (_error) {{
+          detail = "";
+        }}
+        window.alert(`Relationship removal failed (${{response.status}}${{detail}}).`);
       }});
     }});
   </script>
