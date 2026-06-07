@@ -998,6 +998,9 @@ def _render_record_evidence_groups(
             attachment_count = len(supporting_attachments)
             relationship_count = int(target.get("relationship_count") or 0)
             support_status = "Supported" if attachment_count else "Unsupported"
+            evidence_gap = (
+                "Yes" if attachment_count == 0 and relationship_count == 0 else "No"
+            )
             if supporting_attachments:
                 attachment_items = "".join(
                     _render_record_evidence_attachment(attachment)
@@ -1015,6 +1018,7 @@ def _render_record_evidence_groups(
           <details class="evidence-target evidence-target-{escape(target_type)}">
             <summary>
               <span class="summary-title">{escape(str(target["target_label"]))}</span>
+              <span class="summary-meta">Evidence Gap: {evidence_gap}</span>
               <span class="summary-meta">Coverage: {support_status}</span>
               <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
               <span class="summary-meta">{relationship_count} supporting relationship{'s' if relationship_count != 1 else ''}</span>
@@ -1088,6 +1092,14 @@ def _record_evidence_rationale(target: dict[str, Any]) -> str:
 
 
 def _render_record_evidence_support_detail(target: dict[str, Any]) -> str:
+    if int(target.get("relationship_count") or 0) == 0:
+        return """
+            <section class="evidence-support-detail">
+              <p><strong>Gap rationale:</strong> No active attachment relationships support this target.</p>
+              <h4>Relationship Types</h4>
+              <p class="evidence-empty-state">No active relationship types.</p>
+            </section>"""
+
     return f"""
             <section class="evidence-support-detail">
               <p><strong>Coverage rationale:</strong> {escape(_record_evidence_rationale(target))}</p>
@@ -1144,6 +1156,106 @@ def _render_record_evidence_relationship_trace(target: dict[str, Any]) -> str:
                 <h4>Relationship Trace</h4>
                 <ul class="relationship-trace-list">{"".join(items)}</ul>
               </section>"""
+
+
+def _target_type_display_label(target_type: str) -> str:
+    labels = {
+        "condition": "Condition",
+        "signal": "Signal",
+        "finding": "Finding",
+        "record": "Record",
+    }
+    return labels.get(target_type, target_type.title())
+
+
+def _record_evidence_gap_summary(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    supported_targets = 0
+    unsupported_targets = 0
+    gap_counts = {}
+    outstanding_gaps = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        gap_count = 0
+        for target in targets:
+            attachment_count = len(target.get("attachments") or [])
+            relationship_count = int(target.get("relationship_count") or 0)
+            is_gap = attachment_count == 0 and relationship_count == 0
+            if is_gap:
+                unsupported_targets += 1
+                gap_count += 1
+                outstanding_gaps.append(
+                    {
+                        "target_type": target_type,
+                        "target_label": target.get("target_label")
+                        or target.get("target_key")
+                        or "",
+                    }
+                )
+            else:
+                supported_targets += 1
+        gap_counts[target_type] = gap_count
+
+    total_targets = supported_targets + unsupported_targets
+    coverage_percentage = (
+        (supported_targets / total_targets) * 100 if total_targets else 0.0
+    )
+    return {
+        "supported_targets": supported_targets,
+        "unsupported_targets": unsupported_targets,
+        "evidence_gap_count": unsupported_targets,
+        "coverage_percentage": coverage_percentage,
+        "gap_counts": gap_counts,
+        "outstanding_gaps": outstanding_gaps,
+    }
+
+
+def _render_record_evidence_gap_summary(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    summary = _record_evidence_gap_summary(evidence_groups)
+    gap_rows = (
+        ("Supported Targets", summary["supported_targets"]),
+        ("Unsupported Targets", summary["unsupported_targets"]),
+        ("Evidence Gap Count", summary["evidence_gap_count"]),
+        ("Coverage Percentage", f"{summary['coverage_percentage']:.1f}%"),
+        ("Condition Gaps", summary["gap_counts"]["condition"]),
+        ("Signal Gaps", summary["gap_counts"]["signal"]),
+        ("Finding Gaps", summary["gap_counts"]["finding"]),
+        ("Record Gaps", summary["gap_counts"]["record"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in gap_rows
+    )
+    if summary["outstanding_gaps"]:
+        gap_items = "".join(
+            "<li>"
+            f"{escape(_target_type_display_label(str(gap['target_type'])))} — "
+            f"{escape(str(gap['target_label']))}"
+            "</li>"
+            for gap in summary["outstanding_gaps"]
+        )
+        outstanding_html = f"""
+        <h3>Outstanding Gaps</h3>
+        <ul class="outstanding-gap-list">{gap_items}</ul>"""
+    else:
+        outstanding_html = """
+        <h3>Outstanding Gaps</h3>
+        <p class="evidence-empty-state">No outstanding evidence gaps.</p>"""
+
+    return f"""
+      <section class="management-section evidence-gap-summary">
+        <h2>Evidence Gap Summary</h2>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+        {outstanding_html}
+      </section>"""
 
 
 def _record_evidence_coverage(
@@ -1263,6 +1375,7 @@ def render_admin_record_evidence_page(
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
+    evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1402,6 +1515,13 @@ def render_admin_record_evidence_page(
       color: #555;
       font-size: 0.9rem;
     }}
+    .outstanding-gap-list {{
+      margin: 8px 0 0 20px;
+      padding: 0;
+    }}
+    .outstanding-gap-list li {{
+      margin: 4px 0;
+    }}
     .evidence-empty-state {{
       margin: 10px;
       color: #666;
@@ -1480,6 +1600,7 @@ def render_admin_record_evidence_page(
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
     {evidence_coverage}
+    {evidence_gap_summary}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
