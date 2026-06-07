@@ -1021,6 +1021,12 @@ class AdminSessionTests(unittest.TestCase):
             )
             self.insert_attachment_relationship(
                 conn,
+                attachment_id=condition_attachment_id,
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
                 attachment_id=signal_attachment_id,
                 relationship_type="context_for",
                 target_type="finding",
@@ -1093,6 +1099,27 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
         self.assertIn("<li>Condition — Procedural Deflection</li>", content)
         self.assertNotIn("<li>Condition — Institutional Delay</li>", content)
+        self.assertIn("Stage 7F — Evidence Sufficiency", content)
+        self.assertIn(
+            "Sufficiency is classified deterministically from existing attachment",
+            content,
+        )
+        self.assertIn(
+            "<td>Condition</td><td>Institutional Delay</td><td>1</td><td>2</td><td>Reinforced</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Signal</td><td>Missing Response</td><td>2</td><td>2</td><td>Corroborated</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Finding</td><td>Finding &lt;requires&gt; review</td><td>1</td><td>1</td><td>Minimal</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Signal</td><td>Procedural Loop</td><td>0</td><td>0</td><td>Unsupported</td>",
+            content,
+        )
         self.assertIn(
             'class="evidence-section evidence-section-condition" open', content
         )
@@ -1213,6 +1240,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Signal Gaps</td><td>2</td>", content)
         self.assertIn("<td>Finding Gaps</td><td>1</td>", content)
         self.assertIn("<td>Record Gaps</td><td>1</td>", content)
+        self.assertIn("Stage 7F — Evidence Sufficiency", content)
+        self.assertIn(
+            "<td>Condition</td><td>Institutional Delay</td><td>0</td><td>0</td><td>Unsupported</td>",
+            content,
+        )
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
         self.assertIn("<li>Finding — Finding &lt;requires&gt; review</li>", content)
@@ -1293,6 +1325,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Signal Gaps</td><td>0</td>", content)
         self.assertIn("<td>Finding Gaps</td><td>0</td>", content)
         self.assertIn("<td>Record Gaps</td><td>0</td>", content)
+        self.assertIn("Stage 7F — Evidence Sufficiency", content)
+        self.assertIn(
+            "<td>Condition</td><td>Institutional Delay</td><td>1</td><td>1</td><td>Minimal</td>",
+            content,
+        )
         self.assertIn("No outstanding evidence gaps.", content)
         self.assertNotIn("Coverage: Unsupported", content)
         self.assertNotIn("Evidence Gap: Yes", content)
@@ -1301,6 +1338,28 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("1 supporting relationship", content)
         self.assertIn("<li>supports</li>", content)
         self.assertIn("<li>context_for</li>", content)
+
+    def test_evidence_sufficiency_classification_helper_is_deterministic(self):
+        self.assertEqual(
+            self.admin_session.classify_evidence_sufficiency(0, 0),
+            "Unsupported",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_sufficiency(1, 1),
+            "Minimal",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_sufficiency(2, 2),
+            "Corroborated",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_sufficiency(1, 2),
+            "Reinforced",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_sufficiency(0, 1),
+            "Minimal",
+        )
 
     def test_admin_record_evidence_view_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -1258,6 +1258,72 @@ def _render_record_evidence_gap_summary(
       </section>"""
 
 
+def classify_evidence_sufficiency(
+    supporting_attachment_count: int,
+    supporting_relationship_count: int,
+) -> str:
+    if supporting_attachment_count == 0 and supporting_relationship_count == 0:
+        return "Unsupported"
+    if supporting_attachment_count >= 2:
+        return "Corroborated"
+    if supporting_attachment_count == 1 and supporting_relationship_count >= 2:
+        return "Reinforced"
+    if supporting_attachment_count > 0 or supporting_relationship_count > 0:
+        return "Minimal"
+    return "Unsupported"
+
+
+def _render_record_evidence_sufficiency(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        for target in evidence_groups.get(target_type) or []:
+            attachment_count = len(target.get("attachments") or [])
+            relationship_count = int(target.get("relationship_count") or 0)
+            sufficiency = classify_evidence_sufficiency(
+                attachment_count,
+                relationship_count,
+            )
+            rows.append(
+                "<tr>"
+                f"<td>{escape(_target_type_display_label(target_type))}</td>"
+                f"<td>{escape(str(target.get('target_label') or target.get('target_key') or ''))}</td>"
+                f"<td>{attachment_count}</td>"
+                f"<td>{relationship_count}</td>"
+                f"<td>{escape(sufficiency)}</td>"
+                "</tr>"
+            )
+
+    if not rows:
+        table_body = (
+            '<tr><td colspan="5">No record targets are available.</td></tr>'
+        )
+    else:
+        table_body = "".join(rows)
+
+    return f"""
+      <section class="management-section evidence-sufficiency">
+        <h2>Stage 7F — Evidence Sufficiency</h2>
+        <p class="notice">
+          Sufficiency is classified deterministically from existing attachment
+          and relationship counts only.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Target Type</th>
+              <th>Target</th>
+              <th>Supporting Attachments</th>
+              <th>Supporting Relationships</th>
+              <th>Sufficiency</th>
+            </tr>
+          </thead>
+          <tbody>{table_body}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -1376,6 +1442,7 @@ def render_admin_record_evidence_page(
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
+    evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1601,6 +1668,7 @@ def render_admin_record_evidence_page(
     </section>
     {evidence_coverage}
     {evidence_gap_summary}
+    {evidence_sufficiency}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
