@@ -26,3 +26,10 @@ preserving canonical target values internally.
 Stage 6G improves active evidence relationship review by rendering relationship
 counts and clearer relationship rows/cards while preserving existing add/remove
 routes and stored relationship values.
+
+## Relationship Coverage
+
+Stage 6H adds deterministic evidence relationship coverage visibility,
+including active relationship coverage counts and coverage status derived from
+current record targets. It does not create relationships automatically and does
+not change existing add/remove routes.
