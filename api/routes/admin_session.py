@@ -81,7 +81,12 @@ ATTACHMENT_CLASSIFICATION_OPTIONS = (
 ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
 ATTACHMENT_VISIBILITY_OPTIONS = ("private", "public")
 ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS = ("supports", "contradicts", "context_for")
-ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = ("condition", "signal", "finding", "record")
+ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = (
+    "condition",
+    "signal",
+    "finding",
+    "record",
+)
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -378,10 +383,18 @@ def _safe_json_for_script(value: Any) -> str:
 def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[str]]:
     keys = set(record.keys())
     reference = str(record["reference"]) if "reference" in keys else ""
-    finding = str(record["finding"]).strip() if "finding" in keys and record["finding"] else ""
+    finding = (
+        str(record["finding"]).strip()
+        if "finding" in keys and record["finding"]
+        else ""
+    )
     return {
-        "condition": _json_list_targets(record["conditions_json"] if "conditions_json" in keys else None),
-        "signal": _signal_targets(record["signals_json"] if "signals_json" in keys else None),
+        "condition": _json_list_targets(
+            record["conditions_json"] if "conditions_json" in keys else None
+        ),
+        "signal": _signal_targets(
+            record["signals_json"] if "signals_json" in keys else None
+        ),
         "finding": [finding] if finding else [],
         "record": [reference] if reference else [],
     }
@@ -442,7 +455,9 @@ def _guided_target_display_label(value: str) -> str:
     return value
 
 
-def _render_target_key_options(target_options: dict[str, list[str]], target_type: str) -> str:
+def _render_target_key_options(
+    target_options: dict[str, list[str]], target_type: str
+) -> str:
     values = target_options.get(target_type) or []
     if not values:
         return '<option value="" disabled selected>No available targets</option>'
@@ -458,8 +473,7 @@ def _relationship_coverage(
     relationships: list[dict[str, Any]],
 ) -> dict[str, Any]:
     available = {
-        target_type: set(values)
-        for target_type, values in target_options.items()
+        target_type: set(values) for target_type, values in target_options.items()
     }
     linked = {target_type: set() for target_type in available}
     for relationship in relationships:
@@ -521,7 +535,9 @@ def _relationship_coverage_reason(coverage: dict[str, Any]) -> str:
     if conditions_complete and any(
         target_type in incomplete for target_type in ("signal", "finding", "record")
     ):
-        return "Conditions complete. Signals, findings, or record targets remain unlinked."
+        return (
+            "Conditions complete. Signals, findings, or record targets remain unlinked."
+        )
 
     reasons = {
         "condition": "Conditions remain unlinked.",
@@ -597,7 +613,9 @@ def _render_admin_attachment_rows(
         current_classification = attachment.get("classification") or "other"
         current_publication_status = attachment.get("publication_status") or "internal"
         current_visibility = attachment.get("visibility") or "private"
-        summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
+        summary_title = (
+            attachment.get("title") or attachment.get("filename") or "Attachment"
+        )
         summary_meta = (
             f"{current_classification} • "
             f"{state} • {current_visibility} • "
@@ -796,7 +814,9 @@ def _render_attachment_relationships(
     relationships: list[dict[str, Any]], *, reference: str, attachment_id: str
 ) -> str:
     if not relationships:
-        return '<p class="relationship-empty-state">No active evidence relationships.</p>'
+        return (
+            '<p class="relationship-empty-state">No active evidence relationships.</p>'
+        )
 
     grouped = {
         "condition": [],
@@ -951,8 +971,7 @@ def _render_record_evidence_groups(
                     for attachment in supporting_attachments
                 )
                 supporting_html = (
-                    '<ul class="supporting-attachment-list">'
-                    f"{attachment_items}</ul>"
+                    '<ul class="supporting-attachment-list">' f"{attachment_items}</ul>"
                 )
             else:
                 supporting_html = (
@@ -1396,7 +1415,9 @@ def _validate_metadata_correction_payload(
     if not isinstance(payload, dict):
         raise _http_error(400, "metadata_payload_invalid")
 
-    unknown_fields = set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    unknown_fields = (
+        set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    )
     if unknown_fields:
         raise _http_error(400, "metadata_field_unknown")
 
@@ -2015,7 +2036,14 @@ def render_admin_attachments_page(
           window.location.reload();
           return;
         }}
-        window.alert("Relationship removal failed.");
+        let detail = "";
+        try {{
+          const payload = await response.json();
+          detail = payload?.detail ? `: ${{payload.detail}}` : "";
+        }} catch (_error) {{
+          detail = "";
+        }}
+        window.alert(`Relationship removal failed (${{response.status}}${{detail}}).`);
       }});
     }});
   </script>
@@ -2159,7 +2187,9 @@ def list_record_attachments_route(reference: str, request: Request):
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata"
+)
 def correct_attachment_metadata_route(
     reference: str,
     attachment_id: int,
@@ -2226,7 +2256,9 @@ def correct_attachment_metadata_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/classification")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/classification"
+)
 def update_attachment_classification_route(
     reference: str,
     attachment_id: int,
@@ -2284,7 +2316,9 @@ def update_attachment_classification_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/publication")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/publication"
+)
 def update_attachment_publication_route(
     reference: str,
     attachment_id: int,
@@ -2342,7 +2376,9 @@ def update_attachment_publication_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility"
+)
 def update_attachment_visibility_route(
     reference: str,
     attachment_id: int,
@@ -2400,7 +2436,9 @@ def update_attachment_visibility_route(
         conn.close()
 
 
-@router.post("/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships")
+@router.post(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships"
+)
 def add_attachment_relationship_route(
     reference: str,
     attachment_id: int,
@@ -2603,7 +2641,9 @@ def _apply_attachment_lifecycle_action(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold"
+)
 def withhold_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -2615,7 +2655,9 @@ def withhold_attachment_route(reference: str, attachment_id: int, request: Reque
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/restore")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/restore"
+)
 def restore_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -2628,7 +2670,9 @@ def restore_attachment_route(reference: str, attachment_id: int, request: Reques
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete"
+)
 def soft_delete_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
