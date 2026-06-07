@@ -870,6 +870,299 @@ def _render_attachment_relationship_card(
           </li>"""
 
 
+def _record_evidence_groups(
+    record: sqlite3.Row,
+    attachments: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    target_options = _record_relationship_target_options(record)
+    groups = {
+        target_type: [
+            {
+                "target_key": target_key,
+                "target_label": _guided_target_display_label(target_key),
+                "attachments": [],
+            }
+            for target_key in target_options.get(target_type, [])
+        ]
+        for target_type in ("condition", "signal", "finding", "record")
+    }
+    target_lookup = {
+        (target_type, target["target_key"]): target
+        for target_type, targets in groups.items()
+        for target in targets
+    }
+
+    for attachment in attachments:
+        if _attachment_state(attachment) != "active":
+            continue
+        supporting_attachment = _evidence_supporting_attachment_metadata(attachment)
+        linked_targets = set()
+        for relationship in attachment.get("active_relationships") or []:
+            target_type = str(relationship.get("target_type") or "")
+            target_key = str(relationship.get("target_key") or "")
+            target_identity = (target_type, target_key)
+            if target_identity in linked_targets:
+                continue
+            target = target_lookup.get(target_identity)
+            if not target:
+                continue
+            target["attachments"].append(supporting_attachment)
+            linked_targets.add(target_identity)
+
+    return groups
+
+
+def _evidence_supporting_attachment_metadata(
+    attachment: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "attachment_id": attachment.get("attachment_id"),
+        "title": attachment.get("title"),
+        "classification": attachment.get("classification") or "other",
+        "publication_status": attachment.get("publication_status") or "internal",
+        "visibility": attachment.get("visibility"),
+        "redaction_status": attachment.get("redaction_status"),
+        "lifecycle_state": _attachment_state(attachment),
+        "document_date": attachment.get("document_date"),
+        "sha256_hash": attachment.get("sha256_hash"),
+    }
+
+
+def _render_record_evidence_groups(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    section_labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Record",
+    }
+    sections = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        target_rows = []
+        for target in targets:
+            supporting_attachments = target.get("attachments") or []
+            attachment_count = len(supporting_attachments)
+            if supporting_attachments:
+                attachment_items = "".join(
+                    _render_record_evidence_attachment(attachment)
+                    for attachment in supporting_attachments
+                )
+                supporting_html = (
+                    '<ul class="supporting-attachment-list">'
+                    f"{attachment_items}</ul>"
+                )
+            else:
+                supporting_html = (
+                    '<p class="evidence-empty-state">'
+                    "No supporting attachments linked.</p>"
+                )
+            target_rows.append(f"""
+          <details class="evidence-target evidence-target-{escape(target_type)}">
+            <summary>
+              <span class="summary-title">{escape(str(target["target_label"]))}</span>
+              <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
+            </summary>
+            {supporting_html}
+          </details>""")
+
+        if not target_rows:
+            target_rows.append(
+                '<p class="evidence-empty-state">No record targets are available.</p>'
+            )
+
+        open_attr = " open" if target_type == "condition" else ""
+        sections.append(f"""
+      <details class="evidence-section evidence-section-{escape(target_type)}"{open_attr}>
+        <summary>{section_labels[target_type]}</summary>
+        {"".join(target_rows)}
+      </details>""")
+
+    return "".join(sections)
+
+
+def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
+    rows = (
+        ("Attachment ID", attachment.get("attachment_id")),
+        ("Title", attachment.get("title")),
+        ("Classification", attachment.get("classification")),
+        ("Publication status", attachment.get("publication_status")),
+        ("Visibility", attachment.get("visibility")),
+        ("Redaction status", attachment.get("redaction_status")),
+        ("Lifecycle state", attachment.get("lifecycle_state")),
+        ("Document date", attachment.get("document_date")),
+        ("SHA-256 hash", attachment.get("sha256_hash")),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(label)}</td>"
+        f"<td>{escape(str(value)) if value not in (None, '') else '—'}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    title = attachment.get("title") or "Untitled attachment"
+    return f"""
+            <li class="supporting-attachment">
+              <h4>Attachment {escape(str(attachment.get("attachment_id")))} — {escape(str(title))}</h4>
+              <table>
+                <tbody>{table_rows}</tbody>
+              </table>
+            </li>"""
+
+
+def render_admin_record_evidence_page(
+    *,
+    reference: str,
+    record_version: int,
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    evidence_sections = _render_record_evidence_groups(evidence_groups)
+    attachments_url = f"/admin/records/{escape(reference)}/attachments"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Record Evidence - {escape(reference)}</title>
+  <style>
+    body {{
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: #f7f7f4;
+      color: #1a1a1a;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 28px;
+    }}
+    .notice {{
+      border: 1px solid #d8d4ca;
+      background: #faf9f5;
+      padding: 12px 14px;
+      margin: 18px 0 24px;
+      color: #555;
+    }}
+    .management-section {{
+      border-top: 1px solid #e5e1d8;
+      padding-top: 18px;
+      margin-top: 22px;
+    }}
+    details {{
+      break-inside: avoid;
+      border: 1px solid #e5e1d8;
+      margin-top: 12px;
+      overflow: hidden;
+    }}
+    summary {{
+      display: grid;
+      gap: 3px;
+      cursor: pointer;
+      padding: 10px;
+      background: #faf9f5;
+      color: #333;
+      font-weight: 600;
+      word-break: break-word;
+    }}
+    .summary-title,
+    .summary-meta {{
+      display: block;
+    }}
+    .summary-meta {{
+      color: #555;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }}
+    .supporting-attachment-list {{
+      display: grid;
+      gap: 10px;
+      list-style: none;
+      margin: 0;
+      padding: 10px;
+    }}
+    .supporting-attachment {{
+      border: 1px solid #e3ded4;
+      background: #fff;
+      padding: 10px;
+    }}
+    .supporting-attachment h4 {{
+      margin: 0 0 8px;
+    }}
+    .evidence-empty-state {{
+      margin: 10px;
+      color: #666;
+    }}
+    .navigation-link {{
+      display: inline-block;
+      margin-top: 8px;
+      color: #245d61;
+      font-weight: 650;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }}
+    tr {{ border-bottom: 1px solid #eee; }}
+    tr:last-child {{ border-bottom: none; }}
+    td {{
+      padding: 8px 10px;
+      vertical-align: top;
+      word-break: break-word;
+    }}
+    td:first-child {{
+      width: 190px;
+      background: #faf9f5;
+      color: #666;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    td:last-child {{ font-family: ui-monospace, monospace; }}
+    @media print {{
+      body {{
+        background: #fff;
+      }}
+      main {{
+        border: none;
+      }}
+      details {{
+        display: block;
+        break-inside: avoid;
+      }}
+      details > * {{
+        display: block;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Admin Record Evidence</h1>
+    <p class="notice">
+      This read-only administrative view inverts attachment relationships by record target.
+      No upload, download, public file access, or mutation controls are available here.
+    </p>
+    <section class="management-section record-summary">
+      <h2>Record summary</h2>
+      <p><strong>Record reference:</strong> {escape(reference)}</p>
+      <p><strong>Record version:</strong> {record_version}</p>
+      <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
+    </section>
+    <section class="management-section record-evidence">
+      <h2>Evidence by record target</h2>
+      {evidence_sections}
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 def list_attachment_audit_events(
     conn: sqlite3.Connection, *, reference: str
 ) -> list[dict[str, Any]]:
@@ -1481,6 +1774,7 @@ def render_admin_attachments_page(
       <h2>Record summary</h2>
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
+      <p><a href="/admin/records/{escape(reference)}/evidence">View record evidence by target</a></p>
     </section>
     <section class="management-section current-attachments">
       <h2>Current attachments</h2>
@@ -1702,6 +1996,39 @@ def admin_record_attachments_page(reference: str, request: Request):
                     conn, reference=record["reference"]
                 ),
                 relationship_target_options=_record_relationship_target_options(record),
+            )
+        )
+    finally:
+        conn.close()
+
+
+@router.get("/admin/records/{reference}/evidence", response_class=HTMLResponse)
+def admin_record_evidence_page(reference: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
+            "WHERE reference = ? AND is_latest = 1 "
+            "ORDER BY version DESC LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            raise _http_error(404, "record_not_found")
+
+        attachments = list_record_attachments(
+            conn,
+            reference=reference,
+            verify_files=False,
+            attachment_root=Path(
+                os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))
+            ),
+        )
+        return HTMLResponse(
+            content=render_admin_record_evidence_page(
+                reference=record["reference"],
+                record_version=record["version"],
+                evidence_groups=_record_evidence_groups(record, attachments),
             )
         )
     finally:
