@@ -436,6 +436,19 @@ class AdminSessionTests(unittest.TestCase):
                 title="Deleted attachment",
             )
             self.insert_attachment_relationship(conn)
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="context_for",
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
+            self.insert_attachment_relationship(
+                conn,
+                relationship_type="contradicts",
+                target_type="condition",
+                target_key="REMOVED_RELATIONSHIP_TARGET",
+                is_active=0,
+            )
             self.insert_attachment_audit_event(
                 conn,
                 attachment_id=8,
@@ -625,8 +638,15 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn('<option value="public" selected>public</option>', content)
         self.assertIn("Update visibility", content)
         self.assertIn("Controlled administrative visibility workflow action only.", content)
-        self.assertIn("Evidence relationships", content)
-        self.assertIn("supports • condition • Transfer of Burden", content)
+        self.assertIn("Evidence Relationships (2)", content)
+        self.assertIn('class="relationship-card"', content)
+        self.assertIn("supports • condition", content)
+        self.assertIn("context_for • condition", content)
+        self.assertIn("→ Transfer of Burden", content)
+        self.assertIn("→ Institutional Delay", content)
+        self.assertIn('data-target-key="INSTITUTIONAL_DELAY"', content)
+        self.assertNotIn("REMOVED_RELATIONSHIP_TARGET", content)
+        self.assertNotIn("→ Removed Relationship Target", content)
         self.assertIn('class="attachment-relationship-form"', content)
         self.assertIn("data-relationship-add-form", content)
         self.assertIn(
@@ -679,6 +699,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("updateTargetKeyOptions", content)
         self.assertIn("Add relationship", content)
         self.assertIn("data-relationship-remove-form", content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/1/relationships/1/remove"',
+            content,
+        )
         self.assertIn("Remove relationship", content)
         self.assertIn("Controlled administrative evidence-linking action only.", content)
         self.assertIn("Controlled administrative metadata action only.", content)
@@ -882,6 +906,8 @@ class AdminSessionTests(unittest.TestCase):
             '<option value="" disabled selected>No available targets</option>',
             content,
         )
+        self.assertIn("Evidence Relationships (0)", content)
+        self.assertIn("No active evidence relationships.", content)
         self.assertIn("data-relationship-submit disabled", content)
 
     def test_admin_attachment_listing_empty_state(self):
@@ -1981,7 +2007,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(audit_metadata["relationship_type"], "supports")
         self.assertEqual(audit_metadata["target_type"], "condition")
         self.assertEqual(audit_metadata["target_key"], "Transfer of Burden")
-        self.assertIn("supports • condition • Transfer of Burden", page_content)
+        self.assertIn("Evidence Relationships (1)", page_content)
+        self.assertIn("supports • condition", page_content)
+        self.assertIn("→ Transfer of Burden", page_content)
+        self.assertIn('data-target-key="Transfer of Burden"', page_content)
         self.assertIn(
             '<span class="event-badge">[relationship added]</span>',
             page_content,
@@ -2101,7 +2130,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(audit["event_type"], "attachment_relationship_removed")
         self.assertEqual(audit_metadata["relationship_id"], relationship_id)
         self.assertEqual(audit_metadata["target_key"], "Transfer of Burden")
-        self.assertNotIn("supports • condition • Transfer of Burden", page_content)
+        self.assertNotIn("→ Transfer of Burden", page_content)
         self.assertIn("No active evidence relationships.", page_content)
         self.assertIn(
             '<span class="event-badge">[relationship removed]</span>',
