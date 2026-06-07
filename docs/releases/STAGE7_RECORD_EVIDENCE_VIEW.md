@@ -85,3 +85,17 @@ entries. Inactive relationships and relationships on deleted attachments remain
 excluded. Coverage calculations, supporting attachment counts, relationship
 storage, existing add/remove routes, public exposure, and canonical
 verification remain unchanged.
+
+## Stage 7E — Evidence Gaps
+
+Stage 7E adds deterministic evidence-gap reporting to the read-only Admin
+Record Evidence view. It identifies unsupported conditions, signals, findings,
+and record targets, renders gap counts, displays outstanding gaps, and
+distinguishes supported targets from unsupported targets without changing
+relationship storage, public exposure, canonical verification, or existing
+add/remove routes.
+
+Gap calculations use available record targets derived from `conditions_json`,
+`signals_json`, `finding`, and `reference`. Inactive relationships, removed
+relationships, deleted attachments, attachments from other records, and
+relationships from other records remain excluded.

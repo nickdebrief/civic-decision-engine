@@ -1080,6 +1080,19 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", content)
+        self.assertIn("Evidence Gap Summary", content)
+        self.assertIn("<td>Supported Targets</td><td>4</td>", content)
+        self.assertIn("<td>Unsupported Targets</td><td>5</td>", content)
+        self.assertIn("<td>Evidence Gap Count</td><td>5</td>", content)
+        self.assertIn("<td>Coverage Percentage</td><td>44.4%</td>", content)
+        self.assertIn("<td>Condition Gaps</td><td>4</td>", content)
+        self.assertIn("<td>Signal Gaps</td><td>1</td>", content)
+        self.assertIn("<td>Finding Gaps</td><td>0</td>", content)
+        self.assertIn("<td>Record Gaps</td><td>0</td>", content)
+        self.assertIn("Outstanding Gaps", content)
+        self.assertIn("<li>Signal — Procedural Loop</li>", content)
+        self.assertIn("<li>Condition — Procedural Deflection</li>", content)
+        self.assertNotIn("<li>Condition — Institutional Delay</li>", content)
         self.assertIn(
             'class="evidence-section evidence-section-condition" open', content
         )
@@ -1096,6 +1109,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Strike-OT-20260604-ADMIN", content)
         self.assertIn("Coverage: Supported", content)
         self.assertIn("Coverage: Unsupported", content)
+        self.assertIn("Evidence Gap: No", content)
+        self.assertIn("Evidence Gap: Yes", content)
         self.assertIn("1 supporting attachment", content)
         self.assertIn("2 supporting relationships", content)
         self.assertIn("0 supporting relationships", content)
@@ -1128,7 +1143,7 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
-            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            "<strong>Gap rationale:</strong> No active attachment relationships support this target.",
             content,
         )
         self.assertIn("Attachment 1 — Condition evidence", content)
@@ -1184,19 +1199,34 @@ class AdminSessionTests(unittest.TestCase):
         content = response.content
 
         self.assertIn("Record Evidence Coverage", content)
+        self.assertIn("Evidence Gap Summary", content)
         self.assertIn("<td>Conditions Supported</td><td>0 / 5</td>", content)
         self.assertIn("<td>Signals Supported</td><td>0 / 2</td>", content)
         self.assertIn("<td>Findings Supported</td><td>0 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>0 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Supported Targets</td><td>0</td>", content)
+        self.assertIn("<td>Unsupported Targets</td><td>9</td>", content)
+        self.assertIn("<td>Evidence Gap Count</td><td>9</td>", content)
+        self.assertIn("<td>Coverage Percentage</td><td>0.0%</td>", content)
+        self.assertIn("<td>Condition Gaps</td><td>5</td>", content)
+        self.assertIn("<td>Signal Gaps</td><td>2</td>", content)
+        self.assertIn("<td>Finding Gaps</td><td>1</td>", content)
+        self.assertIn("<td>Record Gaps</td><td>1</td>", content)
+        self.assertIn("<li>Signal — Missing Response</li>", content)
+        self.assertIn("<li>Signal — Procedural Loop</li>", content)
+        self.assertIn("<li>Finding — Finding &lt;requires&gt; review</li>", content)
+        self.assertIn("<li>Record — Strike-OT-20260604-ADMIN</li>", content)
         self.assertIn("Coverage: Unsupported", content)
+        self.assertIn("Evidence Gap: Yes", content)
         self.assertIn("0 supporting attachments", content)
         self.assertIn("0 supporting relationships", content)
         self.assertIn(
-            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            "<strong>Gap rationale:</strong> No active attachment relationships support this target.",
             content,
         )
         self.assertIn("No active relationship types.", content)
+        self.assertNotIn("Relationship Trace", content)
 
     def test_admin_record_evidence_coverage_complete_when_all_targets_linked(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1255,8 +1285,19 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Complete</td>", content)
+        self.assertIn("<td>Supported Targets</td><td>4</td>", content)
+        self.assertIn("<td>Unsupported Targets</td><td>0</td>", content)
+        self.assertIn("<td>Evidence Gap Count</td><td>0</td>", content)
+        self.assertIn("<td>Coverage Percentage</td><td>100.0%</td>", content)
+        self.assertIn("<td>Condition Gaps</td><td>0</td>", content)
+        self.assertIn("<td>Signal Gaps</td><td>0</td>", content)
+        self.assertIn("<td>Finding Gaps</td><td>0</td>", content)
+        self.assertIn("<td>Record Gaps</td><td>0</td>", content)
+        self.assertIn("No outstanding evidence gaps.", content)
         self.assertNotIn("Coverage: Unsupported", content)
+        self.assertNotIn("Evidence Gap: Yes", content)
         self.assertIn("Coverage: Supported", content)
+        self.assertIn("Evidence Gap: No", content)
         self.assertIn("1 supporting relationship", content)
         self.assertIn("<li>supports</li>", content)
         self.assertIn("<li>context_for</li>", content)
