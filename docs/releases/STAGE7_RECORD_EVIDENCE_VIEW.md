@@ -72,3 +72,16 @@ breakdowns without inflating supporting attachment counts or record coverage.
 
 It does not change relationship storage, existing add/remove routes, public
 exposure, or canonical verification.
+
+## Stage 7D — Evidence Relationship Traceability
+
+Stage 7D adds exact active relationship traces to the read-only Admin Record
+Evidence view. Each supported record target now lists the relationship rows
+that produce support, including relationship type, target type, target key,
+attachment identifier, and attachment title.
+
+Duplicate active relationships are displayed explicitly as separate trace
+entries. Inactive relationships and relationships on deleted attachments remain
+excluded. Coverage calculations, supporting attachment counts, relationship
+storage, existing add/remove routes, public exposure, and canonical
+verification remain unchanged.

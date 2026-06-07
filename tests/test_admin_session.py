@@ -1102,6 +1102,23 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Relationship Types", content)
         self.assertIn("<li>supports: 2</li>", content)
         self.assertIn("<h5>Relationships</h5>", content)
+        self.assertIn("Relationship Trace", content)
+        self.assertIn("Relationship Type", content)
+        self.assertIn("Target Type", content)
+        self.assertIn("Target Key", content)
+        self.assertIn("Attachment Identifier", content)
+        self.assertIn("Attachment Title", content)
+        self.assertEqual(
+            content.count("supports → condition → Institutional Delay"),
+            2,
+        )
+        self.assertIn("context_for → finding → Finding &lt;requires&gt; review", content)
+        self.assertIn("context_for → record → Strike-OT-20260604-ADMIN", content)
+        self.assertIn("<dd>supports</dd>", content)
+        self.assertIn("<dd>condition</dd>", content)
+        self.assertIn("<dd>Institutional Delay</dd>", content)
+        self.assertIn("<dd>1</dd>", content)
+        self.assertIn("<dd>Condition evidence</dd>", content)
         self.assertIn(
             "<strong>Coverage rationale:</strong> Supported because 2 active attachment relationships support this target.",
             content,
@@ -1126,6 +1143,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("No supporting attachments linked.", content)
         self.assertNotIn("Deleted linked evidence", content)
         self.assertNotIn("Attachment 3 — Deleted linked evidence", content)
+        self.assertNotIn("supports → condition → Procedural Deflection", content)
+        self.assertNotIn("supports → condition → Escalation Without Response", content)
         self.assertNotIn("internal-public.pdf", content)
         self.assertNotIn("internal-signal.pdf", content)
         self.assertNotIn("storage_path", content)
