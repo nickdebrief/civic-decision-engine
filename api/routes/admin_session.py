@@ -501,11 +501,43 @@ def _relationship_coverage(
     }
 
 
+def _relationship_coverage_reason(coverage: dict[str, Any]) -> str:
+    status = coverage["status"]
+    counts = coverage["counts"]
+    if status == "Unlinked":
+        return "No active evidence relationships have been created."
+    if status == "Complete":
+        return "All available targets are linked."
+
+    incomplete = [
+        target_type
+        for target_type in ("condition", "signal", "finding", "record")
+        if counts[target_type]["linked"] < counts[target_type]["total"]
+    ]
+    conditions_complete = (
+        counts["condition"]["total"] > 0
+        and counts["condition"]["linked"] == counts["condition"]["total"]
+    )
+    if conditions_complete and any(
+        target_type in incomplete for target_type in ("signal", "finding", "record")
+    ):
+        return "Conditions complete. Signals, findings, or record targets remain unlinked."
+
+    reasons = {
+        "condition": "Conditions remain unlinked.",
+        "signal": "Signals remain unlinked.",
+        "finding": "Findings remain unlinked.",
+        "record": "Record targets remain unlinked.",
+    }
+    return " ".join(reasons[target_type] for target_type in incomplete)
+
+
 def _render_relationship_coverage(
     target_options: dict[str, list[str]],
     relationships: list[dict[str, Any]],
 ) -> str:
     coverage = _relationship_coverage(target_options, relationships)
+    reason = _relationship_coverage_reason(coverage)
     labels = {
         "condition": "Conditions",
         "signal": "Signals",
@@ -540,6 +572,7 @@ def _render_relationship_coverage(
           <section class="relationship-coverage">
             <h4>Evidence Coverage</h4>
             <p><strong>Status:</strong> {escape(coverage["status"])}</p>
+            <p><strong>Reason:</strong> {escape(reason)}</p>
             <table>
               <tbody>{"".join(rows)}</tbody>
             </table>
@@ -765,18 +798,59 @@ def _render_attachment_relationships(
     if not relationships:
         return '<p class="relationship-empty-state">No active evidence relationships.</p>'
 
-    items = []
+    grouped = {
+        "condition": [],
+        "signal": [],
+        "finding": [],
+        "record": [],
+    }
     for relationship in relationships:
-        relationship_id = relationship.get("relationship_id")
-        relationship_type = str(relationship.get("relationship_type") or "")
         target_type = str(relationship.get("target_type") or "")
-        target_key = str(relationship.get("target_key") or "")
-        target_label = _guided_target_display_label(target_key)
-        remove_action = (
-            f"/api/admin/session/records/{escape(reference)}/attachments/"
-            f"{escape(attachment_id)}/relationships/{escape(str(relationship_id))}/remove"
-        )
-        items.append(f"""
+        grouped.setdefault(target_type, []).append(relationship)
+
+    group_labels = {
+        "condition": "Conditions",
+        "signal": "Signals",
+        "finding": "Findings",
+        "record": "Records",
+    }
+    groups = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        group_relationships = grouped.get(target_type) or []
+        if not group_relationships:
+            continue
+        items = []
+        for relationship in group_relationships:
+            items.append(
+                _render_attachment_relationship_card(
+                    relationship,
+                    reference=reference,
+                    attachment_id=attachment_id,
+                )
+            )
+        open_attr = " open" if target_type == "condition" else ""
+        groups.append(f"""
+          <details class="relationship-group relationship-group-{escape(target_type)}"{open_attr}>
+            <summary>{group_labels[target_type]} ({len(group_relationships)})</summary>
+            <ul class="relationship-list">{"".join(items)}</ul>
+          </details>""")
+
+    return "".join(groups)
+
+
+def _render_attachment_relationship_card(
+    relationship: dict[str, Any], *, reference: str, attachment_id: str
+) -> str:
+    relationship_id = relationship.get("relationship_id")
+    relationship_type = str(relationship.get("relationship_type") or "")
+    target_type = str(relationship.get("target_type") or "")
+    target_key = str(relationship.get("target_key") or "")
+    target_label = _guided_target_display_label(target_key)
+    remove_action = (
+        f"/api/admin/session/records/{escape(reference)}/attachments/"
+        f"{escape(attachment_id)}/relationships/{escape(str(relationship_id))}/remove"
+    )
+    return f"""
           <li class="relationship-card"
               data-target-key="{escape(target_key)}">
             <div class="relationship-meta">
@@ -793,8 +867,7 @@ def _render_attachment_relationships(
                   data-method="PATCH">
               <button type="submit">Remove relationship</button>
             </form>
-          </li>""")
-    return f'<ul class="relationship-list">{"".join(items)}</ul>'
+          </li>"""
 
 
 def list_attachment_audit_events(
@@ -1265,6 +1338,16 @@ def render_admin_attachments_page(
     .coverage-unlinked ul {{
       margin: 6px 0 0 20px;
       padding: 0;
+    }}
+    .relationship-group {{
+      margin: 0 0 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-group summary {{
+      padding: 8px 10px;
+      background: #f7f4ed;
+      font-size: 0.88rem;
     }}
     .relationship-list {{
       display: grid;

@@ -33,3 +33,10 @@ Stage 6H adds deterministic evidence relationship coverage visibility,
 including active relationship coverage counts and coverage status derived from
 current record targets. It does not create relationships automatically and does
 not change existing add/remove routes.
+
+## Coverage Explanation and Collapsible Groups
+
+Stage 6I adds deterministic coverage reasons and groups active relationships
+into collapsible target-type sections for easier review as relationship counts
+grow. It does not change relationship storage, add/remove routes, or canonical
+verification.
