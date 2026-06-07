@@ -903,6 +903,7 @@ def _record_evidence_groups(
                 "attachments": [],
                 "relationship_count": 0,
                 "relationship_type_counts": {},
+                "relationship_traces": [],
                 "_attachment_lookup": {},
             }
             for target_key in target_options.get(target_type, [])
@@ -931,6 +932,17 @@ def _record_evidence_groups(
             target["relationship_count"] += 1
             target["relationship_type_counts"][relationship_type] = (
                 target["relationship_type_counts"].get(relationship_type, 0) + 1
+            )
+            target["relationship_traces"].append(
+                {
+                    "relationship_type": relationship_type,
+                    "target_type": target_type,
+                    "target_key": target_key,
+                    "target_label": _guided_target_display_label(target_key),
+                    "attachment_id": supporting_attachment.get("attachment_id"),
+                    "attachment_title": supporting_attachment.get("title")
+                    or "Untitled attachment",
+                }
             )
             attachment_id = supporting_attachment.get("attachment_id")
             target_attachment = target["_attachment_lookup"].get(attachment_id)
@@ -1084,7 +1096,54 @@ def _render_record_evidence_support_detail(target: dict[str, Any]) -> str:
                   target.get("relationship_type_counts") or {},
                   include_single_counts=True,
               )}
+              {_render_record_evidence_relationship_trace(target)}
             </section>"""
+
+
+def _render_record_evidence_relationship_trace(target: dict[str, Any]) -> str:
+    traces = target.get("relationship_traces") or []
+    if not traces:
+        return """
+              <section class="relationship-trace">
+                <h4>Relationship Trace</h4>
+                <p class="evidence-empty-state">No active relationships support this target.</p>
+              </section>"""
+
+    items = []
+    for trace in traces:
+        relationship_type = str(trace.get("relationship_type") or "")
+        target_type = str(trace.get("target_type") or "")
+        target_key = str(trace.get("target_key") or "")
+        target_label = str(trace.get("target_label") or target_key)
+        attachment_id = trace.get("attachment_id")
+        attachment_title = trace.get("attachment_title") or "Untitled attachment"
+        items.append(f"""
+                <li class="relationship-trace-entry">
+                  <div class="relationship-trace-path">
+                    {escape(relationship_type)} → {escape(target_type)} → {escape(target_label)}
+                  </div>
+                  <dl class="relationship-trace-fields">
+                    <dt>Relationship Type</dt>
+                    <dd>{escape(relationship_type)}</dd>
+                    <dt>Target Type</dt>
+                    <dd>{escape(target_type)}</dd>
+                    <dt>Target Key</dt>
+                    <dd>{escape(target_label)}</dd>
+                    <dt>Attachment Identifier</dt>
+                    <dd>{escape(str(attachment_id))}</dd>
+                    <dt>Attachment Title</dt>
+                    <dd>{escape(str(attachment_title))}</dd>
+                  </dl>
+                  <div class="relationship-trace-attachment">
+                    Attachment {escape(str(attachment_id))} — {escape(str(attachment_title))}
+                  </div>
+                </li>""")
+
+    return f"""
+              <section class="relationship-trace">
+                <h4>Relationship Trace</h4>
+                <ul class="relationship-trace-list">{"".join(items)}</ul>
+              </section>"""
 
 
 def _record_evidence_coverage(
@@ -1296,6 +1355,52 @@ def render_admin_record_evidence_page(
     }}
     .supporting-attachment h4 {{
       margin: 0 0 8px;
+    }}
+    .relationship-trace {{
+      margin: 10px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-trace h4 {{
+      margin: 0 0 8px;
+    }}
+    .relationship-trace-list {{
+      display: grid;
+      gap: 8px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }}
+    .relationship-trace-entry {{
+      padding: 8px;
+      border: 1px solid #eee;
+      background: #fbfaf7;
+    }}
+    .relationship-trace-path {{
+      font-weight: 650;
+      margin-bottom: 6px;
+    }}
+    .relationship-trace-fields {{
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 4px 10px;
+      margin: 0 0 6px;
+      font-size: 0.86rem;
+    }}
+    .relationship-trace-fields dt {{
+      color: #666;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-trace-fields dd {{
+      margin: 0;
+      word-break: break-word;
+    }}
+    .relationship-trace-attachment {{
+      color: #555;
+      font-size: 0.9rem;
     }}
     .evidence-empty-state {{
       margin: 10px;
