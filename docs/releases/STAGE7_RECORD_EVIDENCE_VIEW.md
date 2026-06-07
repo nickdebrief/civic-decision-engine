@@ -46,3 +46,16 @@ Only active relationships on active, non-deleted attachments are counted.
 - No graph or network visualization.
 - No verification hash changes.
 - No record versioning changes.
+
+## Stage 7B — Record Evidence Coverage
+
+Stage 7B adds record-level evidence coverage metrics and target-level support
+status to the read-only Admin Record Evidence view. It also applies the
+standard v12 governance watermark/print presentation to the page.
+
+Coverage is derived from active relationships on active, non-deleted
+attachments. Duplicate relationships do not inflate coverage because support is
+counted by unique `target_type` and `target_key` record targets.
+
+No upload, download, mutation controls, public file access, storage paths, or
+canonical verification changes are introduced.

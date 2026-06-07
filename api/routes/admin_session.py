@@ -81,7 +81,12 @@ ATTACHMENT_CLASSIFICATION_OPTIONS = (
 ATTACHMENT_PUBLICATION_STATUS_OPTIONS = ("internal", "published", "withdrawn")
 ATTACHMENT_VISIBILITY_OPTIONS = ("private", "public")
 ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS = ("supports", "contradicts", "context_for")
-ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = ("condition", "signal", "finding", "record")
+ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS = (
+    "condition",
+    "signal",
+    "finding",
+    "record",
+)
 EDITABLE_ATTACHMENT_METADATA_FIELDS = {
     "title",
     "description",
@@ -378,10 +383,18 @@ def _safe_json_for_script(value: Any) -> str:
 def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[str]]:
     keys = set(record.keys())
     reference = str(record["reference"]) if "reference" in keys else ""
-    finding = str(record["finding"]).strip() if "finding" in keys and record["finding"] else ""
+    finding = (
+        str(record["finding"]).strip()
+        if "finding" in keys and record["finding"]
+        else ""
+    )
     return {
-        "condition": _json_list_targets(record["conditions_json"] if "conditions_json" in keys else None),
-        "signal": _signal_targets(record["signals_json"] if "signals_json" in keys else None),
+        "condition": _json_list_targets(
+            record["conditions_json"] if "conditions_json" in keys else None
+        ),
+        "signal": _signal_targets(
+            record["signals_json"] if "signals_json" in keys else None
+        ),
         "finding": [finding] if finding else [],
         "record": [reference] if reference else [],
     }
@@ -442,7 +455,9 @@ def _guided_target_display_label(value: str) -> str:
     return value
 
 
-def _render_target_key_options(target_options: dict[str, list[str]], target_type: str) -> str:
+def _render_target_key_options(
+    target_options: dict[str, list[str]], target_type: str
+) -> str:
     values = target_options.get(target_type) or []
     if not values:
         return '<option value="" disabled selected>No available targets</option>'
@@ -458,8 +473,7 @@ def _relationship_coverage(
     relationships: list[dict[str, Any]],
 ) -> dict[str, Any]:
     available = {
-        target_type: set(values)
-        for target_type, values in target_options.items()
+        target_type: set(values) for target_type, values in target_options.items()
     }
     linked = {target_type: set() for target_type in available}
     for relationship in relationships:
@@ -521,7 +535,9 @@ def _relationship_coverage_reason(coverage: dict[str, Any]) -> str:
     if conditions_complete and any(
         target_type in incomplete for target_type in ("signal", "finding", "record")
     ):
-        return "Conditions complete. Signals, findings, or record targets remain unlinked."
+        return (
+            "Conditions complete. Signals, findings, or record targets remain unlinked."
+        )
 
     reasons = {
         "condition": "Conditions remain unlinked.",
@@ -597,7 +613,9 @@ def _render_admin_attachment_rows(
         current_classification = attachment.get("classification") or "other"
         current_publication_status = attachment.get("publication_status") or "internal"
         current_visibility = attachment.get("visibility") or "private"
-        summary_title = attachment.get("title") or attachment.get("filename") or "Attachment"
+        summary_title = (
+            attachment.get("title") or attachment.get("filename") or "Attachment"
+        )
         summary_meta = (
             f"{current_classification} • "
             f"{state} • {current_visibility} • "
@@ -796,7 +814,9 @@ def _render_attachment_relationships(
     relationships: list[dict[str, Any]], *, reference: str, attachment_id: str
 ) -> str:
     if not relationships:
-        return '<p class="relationship-empty-state">No active evidence relationships.</p>'
+        return (
+            '<p class="relationship-empty-state">No active evidence relationships.</p>'
+        )
 
     grouped = {
         "condition": [],
@@ -944,14 +964,14 @@ def _render_record_evidence_groups(
         for target in targets:
             supporting_attachments = target.get("attachments") or []
             attachment_count = len(supporting_attachments)
+            support_status = "Supported" if attachment_count else "Unsupported"
             if supporting_attachments:
                 attachment_items = "".join(
                     _render_record_evidence_attachment(attachment)
                     for attachment in supporting_attachments
                 )
                 supporting_html = (
-                    '<ul class="supporting-attachment-list">'
-                    f"{attachment_items}</ul>"
+                    '<ul class="supporting-attachment-list">' f"{attachment_items}</ul>"
                 )
             else:
                 supporting_html = (
@@ -962,6 +982,7 @@ def _render_record_evidence_groups(
           <details class="evidence-target evidence-target-{escape(target_type)}">
             <summary>
               <span class="summary-title">{escape(str(target["target_label"]))}</span>
+              <span class="summary-meta">Coverage: {support_status}</span>
               <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
             </summary>
             {supporting_html}
@@ -980,6 +1001,72 @@ def _render_record_evidence_groups(
       </details>""")
 
     return "".join(sections)
+
+
+def _record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    counts = {}
+    total_targets = 0
+    supported_targets = 0
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = evidence_groups.get(target_type) or []
+        target_total = len(targets)
+        target_supported = sum(1 for target in targets if target.get("attachments"))
+        counts[target_type] = {
+            "supported": target_supported,
+            "total": target_total,
+        }
+        total_targets += target_total
+        supported_targets += target_supported
+
+    if supported_targets == 0:
+        status = "Unsupported"
+    elif total_targets > 0 and supported_targets == total_targets:
+        status = "Complete"
+    else:
+        status = "Partial"
+
+    return {
+        "status": status,
+        "counts": counts,
+        "supported_targets": supported_targets,
+        "total_targets": total_targets,
+    }
+
+
+def _render_record_evidence_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    coverage = _record_evidence_coverage(evidence_groups)
+    labels = {
+        "condition": "Conditions Supported",
+        "signal": "Signals Supported",
+        "finding": "Findings Supported",
+        "record": "Record Supported",
+    }
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        count = coverage["counts"][target_type]
+        rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{count['supported']} / {count['total']}</td>"
+            "</tr>"
+        )
+    rows.append(
+        "<tr>"
+        "<td>Overall Coverage</td>"
+        f"<td>{escape(coverage['status'])}</td>"
+        "</tr>"
+    )
+    return f"""
+      <section class="management-section record-evidence-coverage">
+        <h2>Record Evidence Coverage</h2>
+        <table>
+          <tbody>{"".join(rows)}</tbody>
+        </table>
+      </section>"""
 
 
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
@@ -1018,6 +1105,7 @@ def render_admin_record_evidence_page(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
+    evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1039,6 +1127,25 @@ def render_admin_record_evidence_page(
       background: #fff;
       border: 1px solid #ddd;
       padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }}
+    .admin-watermark {{
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: min(60vw, 520px);
+      max-width: 82%;
+      transform: translate(-50%, -50%);
+      opacity: 0.045;
+      pointer-events: none;
+      z-index: 0;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    main > *:not(.admin-watermark) {{
+      position: relative;
+      z-index: 1;
     }}
     .notice {{
       border: 1px solid #d8d4ca;
@@ -1131,6 +1238,9 @@ def render_admin_record_evidence_page(
       main {{
         border: none;
       }}
+      .admin-watermark {{
+        opacity: 0.06;
+      }}
       details {{
         display: block;
         break-inside: avoid;
@@ -1143,6 +1253,18 @@ def render_admin_record_evidence_page(
 </head>
 <body>
   <main>
+    <svg class="admin-watermark print-watermark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+      <ellipse cx="256" cy="256" rx="230" ry="290" stroke="#2E8B9A" stroke-width="28" fill="none"></ellipse>
+      <rect x="148" y="138" width="216" height="18" rx="9" fill="#2E8B9A"></rect>
+      <rect x="168" y="170" width="176" height="14" rx="7" fill="#2E8B9A"></rect>
+      <rect x="196" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="220" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="244" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
+      <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+    </svg>
     <h1>Admin Record Evidence</h1>
     <p class="notice">
       This read-only administrative view inverts attachment relationships by record target.
@@ -1154,6 +1276,7 @@ def render_admin_record_evidence_page(
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
+    {evidence_coverage}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
@@ -1292,7 +1415,9 @@ def _validate_metadata_correction_payload(
     if not isinstance(payload, dict):
         raise _http_error(400, "metadata_payload_invalid")
 
-    unknown_fields = set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    unknown_fields = (
+        set(payload) - EDITABLE_ATTACHMENT_METADATA_FIELDS - IMMUTABLE_ATTACHMENT_FIELDS
+    )
     if unknown_fields:
         raise _http_error(400, "metadata_field_unknown")
 
@@ -2062,7 +2187,9 @@ def list_record_attachments_route(reference: str, request: Request):
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/metadata"
+)
 def correct_attachment_metadata_route(
     reference: str,
     attachment_id: int,
@@ -2129,7 +2256,9 @@ def correct_attachment_metadata_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/classification")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/classification"
+)
 def update_attachment_classification_route(
     reference: str,
     attachment_id: int,
@@ -2187,7 +2316,9 @@ def update_attachment_classification_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/publication")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/publication"
+)
 def update_attachment_publication_route(
     reference: str,
     attachment_id: int,
@@ -2245,7 +2376,9 @@ def update_attachment_publication_route(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/visibility"
+)
 def update_attachment_visibility_route(
     reference: str,
     attachment_id: int,
@@ -2303,7 +2436,9 @@ def update_attachment_visibility_route(
         conn.close()
 
 
-@router.post("/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships")
+@router.post(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/relationships"
+)
 def add_attachment_relationship_route(
     reference: str,
     attachment_id: int,
@@ -2506,7 +2641,9 @@ def _apply_attachment_lifecycle_action(
         conn.close()
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/withhold"
+)
 def withhold_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -2518,7 +2655,9 @@ def withhold_attachment_route(reference: str, attachment_id: int, request: Reque
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/restore")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/restore"
+)
 def restore_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
@@ -2531,7 +2670,9 @@ def restore_attachment_route(reference: str, attachment_id: int, request: Reques
     )
 
 
-@router.patch("/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete")
+@router.patch(
+    "/api/admin/session/records/{reference}/attachments/{attachment_id}/soft-delete"
+)
 def soft_delete_attachment_route(reference: str, attachment_id: int, request: Request):
     return _apply_attachment_lifecycle_action(
         reference=reference,
