@@ -20,3 +20,9 @@ Scope:
 
 Guided evidence target options now display human-readable labels while
 preserving canonical target values internally.
+
+## Relationship Display Refinement
+
+Stage 6G improves active evidence relationship review by rendering relationship
+counts and clearer relationship rows/cards while preserving existing add/remove
+routes and stored relationship values.

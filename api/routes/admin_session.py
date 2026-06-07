@@ -541,6 +541,7 @@ def _render_admin_attachment_rows(
             f"{escape(str(attachment_id))}/relationships"
         )
         relationships = attachment.get("active_relationships") or []
+        relationship_count = len(relationships)
         relationship_rows = _render_attachment_relationships(
             relationships,
             reference=str(reference),
@@ -624,7 +625,7 @@ def _render_admin_attachment_rows(
           <button type="submit">Update visibility</button>
         </form>
         <section class="evidence-relationships">
-          <h3>Evidence relationships</h3>
+          <h3>Evidence Relationships ({relationship_count})</h3>
           {relationship_rows}
           <form class="attachment-relationship-form"
                 data-relationship-add-form
@@ -668,20 +669,26 @@ def _render_attachment_relationships(
     items = []
     for relationship in relationships:
         relationship_id = relationship.get("relationship_id")
+        relationship_type = str(relationship.get("relationship_type") or "")
+        target_type = str(relationship.get("target_type") or "")
+        target_key = str(relationship.get("target_key") or "")
+        target_label = _guided_target_display_label(target_key)
         remove_action = (
             f"/api/admin/session/records/{escape(reference)}/attachments/"
             f"{escape(attachment_id)}/relationships/{escape(str(relationship_id))}/remove"
         )
-        label = (
-            f"{relationship.get('relationship_type')} • "
-            f"{relationship.get('target_type')} • "
-            f"{relationship.get('target_key')}"
-        )
         items.append(f"""
-          <li>
-            <span>{escape(label)}</span>
+          <li class="relationship-card"
+              data-target-key="{escape(target_key)}">
+            <div class="relationship-meta">
+              {escape(relationship_type)} • {escape(target_type)}
+            </div>
+            <div class="relationship-target">
+              → {escape(target_label)}
+            </div>
             <form class="relationship-remove-form"
                   data-relationship-remove-form
+                  data-target-key="{escape(target_key)}"
                   action="{remove_action}"
                   method="post"
                   data-method="PATCH">
@@ -1137,15 +1144,32 @@ def render_admin_attachments_page(
       letter-spacing: 0.04em;
     }}
     .relationship-list {{
-      margin: 0 0 12px 20px;
+      display: grid;
+      gap: 8px;
+      margin: 0 0 12px;
       padding: 0;
+      list-style: none;
     }}
-    .relationship-list li {{
-      margin: 8px 0;
+    .relationship-card {{
+      display: grid;
+      gap: 5px;
+      padding: 10px;
+      border: 1px solid #e3ded4;
+      background: #fff;
+    }}
+    .relationship-meta {{
+      color: #555;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .relationship-target {{
+      color: #1a1a1a;
+      font-weight: 650;
     }}
     .relationship-remove-form {{
       display: inline-block;
-      margin-left: 8px;
     }}
     .attachment-relationship-form {{
       display: flex;
