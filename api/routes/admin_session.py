@@ -901,6 +901,9 @@ def _record_evidence_groups(
                 "target_key": target_key,
                 "target_label": _guided_target_display_label(target_key),
                 "attachments": [],
+                "relationship_count": 0,
+                "relationship_type_counts": {},
+                "_attachment_lookup": {},
             }
             for target_key in target_options.get(target_type, [])
         ]
@@ -920,14 +923,31 @@ def _record_evidence_groups(
         for relationship in attachment.get("active_relationships") or []:
             target_type = str(relationship.get("target_type") or "")
             target_key = str(relationship.get("target_key") or "")
+            relationship_type = str(relationship.get("relationship_type") or "")
             target_identity = (target_type, target_key)
-            if target_identity in linked_targets:
-                continue
             target = target_lookup.get(target_identity)
             if not target:
                 continue
-            target["attachments"].append(supporting_attachment)
-            linked_targets.add(target_identity)
+            target["relationship_count"] += 1
+            target["relationship_type_counts"][relationship_type] = (
+                target["relationship_type_counts"].get(relationship_type, 0) + 1
+            )
+            attachment_id = supporting_attachment.get("attachment_id")
+            target_attachment = target["_attachment_lookup"].get(attachment_id)
+            if not target_attachment:
+                target_attachment = dict(supporting_attachment)
+                target_attachment["relationship_type_counts"] = {}
+                target["_attachment_lookup"][attachment_id] = target_attachment
+                target["attachments"].append(target_attachment)
+                linked_targets.add(target_identity)
+            target_attachment["relationship_type_counts"][relationship_type] = (
+                target_attachment["relationship_type_counts"].get(relationship_type, 0)
+                + 1
+            )
+
+    for targets in groups.values():
+        for target in targets:
+            target.pop("_attachment_lookup", None)
 
     return groups
 
@@ -964,6 +984,7 @@ def _render_record_evidence_groups(
         for target in targets:
             supporting_attachments = target.get("attachments") or []
             attachment_count = len(supporting_attachments)
+            relationship_count = int(target.get("relationship_count") or 0)
             support_status = "Supported" if attachment_count else "Unsupported"
             if supporting_attachments:
                 attachment_items = "".join(
@@ -984,7 +1005,9 @@ def _render_record_evidence_groups(
               <span class="summary-title">{escape(str(target["target_label"]))}</span>
               <span class="summary-meta">Coverage: {support_status}</span>
               <span class="summary-meta">{attachment_count} supporting attachment{'s' if attachment_count != 1 else ''}</span>
+              <span class="summary-meta">{relationship_count} supporting relationship{'s' if relationship_count != 1 else ''}</span>
             </summary>
+            {_render_record_evidence_support_detail(target)}
             {supporting_html}
           </details>""")
 
@@ -1001,6 +1024,67 @@ def _render_record_evidence_groups(
       </details>""")
 
     return "".join(sections)
+
+
+def _ordered_relationship_type_counts(counts: dict[str, int]) -> list[tuple[str, int]]:
+    ordered = []
+    seen = set()
+    for relationship_type in ATTACHMENT_RELATIONSHIP_TYPE_OPTIONS:
+        if relationship_type in counts:
+            ordered.append((relationship_type, counts[relationship_type]))
+            seen.add(relationship_type)
+    for relationship_type in sorted(set(counts) - seen):
+        ordered.append((relationship_type, counts[relationship_type]))
+    return ordered
+
+
+def _render_relationship_type_count_list(
+    counts: dict[str, int],
+    *,
+    include_single_counts: bool,
+) -> str:
+    if not counts:
+        return '<p class="evidence-empty-state">No active relationship types.</p>'
+    items = []
+    for relationship_type, count in _ordered_relationship_type_counts(counts):
+        label = (
+            f"{relationship_type}: {count}"
+            if include_single_counts or count != 1
+            else relationship_type
+        )
+        items.append(f"<li>{escape(label)}</li>")
+    return f'<ul class="relationship-type-counts">{"".join(items)}</ul>'
+
+
+def _record_evidence_rationale(target: dict[str, Any]) -> str:
+    relationship_count = int(target.get("relationship_count") or 0)
+    attachments = target.get("attachments") or []
+    if relationship_count == 0:
+        return "No active attachment relationships support this target."
+    if relationship_count == 1 and len(attachments) == 1:
+        return (
+            f"Supported because Attachment {attachments[0].get('attachment_id')} "
+            "supports this target."
+        )
+    relationship_label = (
+        "relationship" if relationship_count == 1 else "relationships"
+    )
+    return (
+        f"Supported because {relationship_count} active attachment "
+        f"{relationship_label} support this target."
+    )
+
+
+def _render_record_evidence_support_detail(target: dict[str, Any]) -> str:
+    return f"""
+            <section class="evidence-support-detail">
+              <p><strong>Coverage rationale:</strong> {escape(_record_evidence_rationale(target))}</p>
+              <h4>Relationship Types</h4>
+              {_render_relationship_type_count_list(
+                  target.get("relationship_type_counts") or {},
+                  include_single_counts=True,
+              )}
+            </section>"""
 
 
 def _record_evidence_coverage(
@@ -1081,6 +1165,9 @@ def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
         ("Document date", attachment.get("document_date")),
         ("SHA-256 hash", attachment.get("sha256_hash")),
     )
+    relationship_html = _render_record_evidence_attachment_relationships(
+        attachment.get("relationship_type_counts") or {}
+    )
     table_rows = "".join(
         "<tr>"
         f"<td>{escape(label)}</td>"
@@ -1092,10 +1179,21 @@ def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     return f"""
             <li class="supporting-attachment">
               <h4>Attachment {escape(str(attachment.get("attachment_id")))} — {escape(str(title))}</h4>
+              {relationship_html}
               <table>
                 <tbody>{table_rows}</tbody>
               </table>
             </li>"""
+
+
+def _render_record_evidence_attachment_relationships(
+    counts: dict[str, int],
+) -> str:
+    return f"""
+              <section class="attachment-relationship-detail">
+                <h5>Relationships</h5>
+                {_render_relationship_type_count_list(counts, include_single_counts=False)}
+              </section>"""
 
 
 def render_admin_record_evidence_page(
