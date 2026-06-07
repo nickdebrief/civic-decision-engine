@@ -450,6 +450,12 @@ class AdminSessionTests(unittest.TestCase):
             )
             self.insert_attachment_relationship(
                 conn,
+                relationship_type="supports",
+                target_type="signal",
+                target_key="Missing Response",
+            )
+            self.insert_attachment_relationship(
+                conn,
                 relationship_type="contradicts",
                 target_type="condition",
                 target_key="REMOVED_RELATIONSHIP_TARGET",
@@ -644,22 +650,40 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn('<option value="public" selected>public</option>', content)
         self.assertIn("Update visibility", content)
         self.assertIn("Controlled administrative visibility workflow action only.", content)
-        self.assertIn("Evidence Relationships (3)", content)
+        self.assertIn("Evidence Relationships (4)", content)
         self.assertIn("Evidence Coverage", content)
         self.assertIn("<strong>Status:</strong> Partial", content)
+        self.assertIn(
+            "<strong>Reason:</strong> Conditions remain unlinked. Signals remain unlinked. Findings remain unlinked. Record targets remain unlinked.",
+            content,
+        )
         self.assertIn("<td>Conditions linked</td><td>2 / 5</td>", content)
-        self.assertIn("<td>Signals linked</td><td>0 / 2</td>", content)
+        self.assertIn("<td>Signals linked</td><td>1 / 2</td>", content)
         self.assertIn("<td>Findings linked</td><td>0 / 1</td>", content)
         self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
         self.assertIn("Unlinked Conditions", content)
         self.assertIn("<li>Procedural Deflection</li>", content)
         self.assertIn("<li>Repeated Contact Without Resolution</li>", content)
         self.assertIn("<li>Escalation Without Response</li>", content)
+        self.assertIn(
+            '<details class="relationship-group relationship-group-condition" open>',
+            content,
+        )
+        self.assertIn("<summary>Conditions (3)</summary>", content)
+        self.assertIn(
+            '<details class="relationship-group relationship-group-signal">',
+            content,
+        )
+        self.assertIn("<summary>Signals (1)</summary>", content)
+        self.assertNotIn("relationship-group-finding", content)
+        self.assertNotIn("relationship-group-record", content)
         self.assertIn('class="relationship-card"', content)
         self.assertIn("supports • condition", content)
         self.assertIn("context_for • condition", content)
+        self.assertIn("supports • signal", content)
         self.assertIn("→ Transfer of Burden", content)
         self.assertIn("→ Institutional Delay", content)
+        self.assertIn("→ Missing Response", content)
         self.assertIn('data-target-key="INSTITUTIONAL_DELAY"', content)
         self.assertNotIn("REMOVED_RELATIONSHIP_TARGET", content)
         self.assertNotIn("→ Removed Relationship Target", content)
@@ -924,12 +948,59 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("Evidence Relationships (0)", content)
         self.assertIn("<strong>Status:</strong> Unlinked", content)
+        self.assertIn(
+            "<strong>Reason:</strong> No active evidence relationships have been created.",
+            content,
+        )
         self.assertIn("<td>Conditions linked</td><td>0 / 0</td>", content)
         self.assertIn("<td>Signals linked</td><td>0 / 0</td>", content)
         self.assertIn("<td>Findings linked</td><td>0 / 0</td>", content)
         self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
         self.assertIn("No active evidence relationships.", content)
         self.assertIn("data-relationship-submit disabled", content)
+
+    def test_admin_relationship_coverage_explains_partial_after_conditions_complete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            self.insert_admin_attachment(conn)
+            for condition in (
+                "INSTITUTIONAL_DELAY",
+                "PROCEDURAL_DEFLECTION",
+                "REPEATED_CONTACT_WITHOUT_RESOLUTION",
+                "Transfer of Burden",
+                "Escalation Without Response",
+            ):
+                self.insert_attachment_relationship(
+                    conn,
+                    target_type="condition",
+                    target_key=condition,
+                )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Evidence Relationships (5)", content)
+        self.assertIn("<strong>Status:</strong> Partial", content)
+        self.assertIn(
+            "<strong>Reason:</strong> Conditions complete. Signals, findings, or record targets remain unlinked.",
+            content,
+        )
+        self.assertIn("<td>Conditions linked</td><td>5 / 5</td>", content)
+        self.assertIn("<td>Signals linked</td><td>0 / 2</td>", content)
+        self.assertIn("<td>Findings linked</td><td>0 / 1</td>", content)
+        self.assertIn("<td>Records linked</td><td>0 / 1</td>", content)
+        self.assertIn("<summary>Conditions (5)</summary>", content)
+        self.assertNotIn("Unlinked Conditions", content)
 
     def test_admin_relationship_coverage_complete_when_all_targets_are_linked(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -970,10 +1041,13 @@ class AdminSessionTests(unittest.TestCase):
 
         self.assertIn("Evidence Relationships (2)", content)
         self.assertIn("<strong>Status:</strong> Complete", content)
+        self.assertIn("<strong>Reason:</strong> All available targets are linked.", content)
         self.assertIn("<td>Conditions linked</td><td>1 / 1</td>", content)
         self.assertIn("<td>Signals linked</td><td>0 / 0</td>", content)
         self.assertIn("<td>Findings linked</td><td>0 / 0</td>", content)
         self.assertIn("<td>Records linked</td><td>1 / 1</td>", content)
+        self.assertIn("<summary>Conditions (1)</summary>", content)
+        self.assertIn("<summary>Records (1)</summary>", content)
         self.assertIn("→ Transfer Of Burden", content)
         self.assertIn('data-target-key="TRANSFER_OF_BURDEN"', content)
         self.assertNotIn("Unlinked Conditions", content)
