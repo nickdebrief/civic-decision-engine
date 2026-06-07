@@ -1097,6 +1097,23 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Coverage: Supported", content)
         self.assertIn("Coverage: Unsupported", content)
         self.assertIn("1 supporting attachment", content)
+        self.assertIn("2 supporting relationships", content)
+        self.assertIn("0 supporting relationships", content)
+        self.assertIn("Relationship Types", content)
+        self.assertIn("<li>supports: 2</li>", content)
+        self.assertIn("<h5>Relationships</h5>", content)
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> Supported because 2 active attachment relationships support this target.",
+            content,
+        )
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> Supported because Attachment 2 supports this target.",
+            content,
+        )
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            content,
+        )
         self.assertIn("Attachment 1 — Condition evidence", content)
         self.assertIn("Attachment 2 — Signal and finding evidence", content)
         self.assertIn("<td>Classification</td><td>evidence</td>", content)
@@ -1155,6 +1172,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", content)
         self.assertIn("Coverage: Unsupported", content)
         self.assertIn("0 supporting attachments", content)
+        self.assertIn("0 supporting relationships", content)
+        self.assertIn(
+            "<strong>Coverage rationale:</strong> No active attachment relationships support this target.",
+            content,
+        )
+        self.assertIn("No active relationship types.", content)
 
     def test_admin_record_evidence_coverage_complete_when_all_targets_linked(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1215,6 +1238,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Coverage</td><td>Complete</td>", content)
         self.assertNotIn("Coverage: Unsupported", content)
         self.assertIn("Coverage: Supported", content)
+        self.assertIn("1 supporting relationship", content)
+        self.assertIn("<li>supports</li>", content)
+        self.assertIn("<li>context_for</li>", content)
 
     def test_admin_record_evidence_view_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:

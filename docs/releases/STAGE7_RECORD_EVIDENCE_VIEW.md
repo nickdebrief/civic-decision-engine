@@ -59,3 +59,16 @@ counted by unique `target_type` and `target_key` record targets.
 
 No upload, download, mutation controls, public file access, storage paths, or
 canonical verification changes are introduced.
+
+## Stage 7C — Evidence Support Detail
+
+Stage 7C adds deterministic relationship-level support detail to the read-only
+Admin Record Evidence view. Each record target now shows supporting
+relationship counts, relationship type breakdowns, attachment-level
+relationship listings, and deterministic coverage rationale.
+
+Duplicate relationships are represented in relationship counts and type
+breakdowns without inflating supporting attachment counts or record coverage.
+
+It does not change relationship storage, existing add/remove routes, public
+exposure, or canonical verification.
