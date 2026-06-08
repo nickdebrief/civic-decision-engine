@@ -1558,6 +1558,28 @@ def build_transition_conditions(
     ]
 
 
+def classify_administrative_disposition(workflow_state: str) -> str:
+    return {
+        "Evidence Collection": "Open",
+        "Evidence Review": "Open",
+        "Administrative Review": "Pending Review",
+        "Formal Review Ready": "Ready for Review",
+    }.get(workflow_state, "Open")
+
+
+def describe_administrative_disposition(disposition: str) -> str:
+    return {
+        "Open": "The record remains within active evidence workflow.",
+        "Pending Review": (
+            "The record has satisfied evidence workflow requirements and "
+            "awaits administrative review."
+        ),
+        "Ready for Review": (
+            "The record satisfies current workflow requirements for formal review."
+        ),
+    }.get(disposition, "The record remains within active evidence workflow.")
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1574,6 +1596,14 @@ def _workflow_state_badge_class(workflow_state: str) -> str:
         "Administrative Review": "workflow-state-administrative-review",
         "Formal Review Ready": "workflow-state-formal-review-ready",
     }.get(workflow_state, "workflow-state-evidence-review")
+
+
+def _disposition_badge_class(disposition: str) -> str:
+    return {
+        "Open": "disposition-open",
+        "Pending Review": "disposition-pending-review",
+        "Ready for Review": "disposition-ready-review",
+    }.get(disposition, "disposition-open")
 
 
 def _render_record_evidence_sufficiency(
@@ -1899,6 +1929,55 @@ def _render_transition_conditions(
       </section>"""
 
 
+def _render_administrative_disposition(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    disposition_badge = (
+        f'<span class="disposition-badge {_disposition_badge_class(disposition)}">'
+        f"{escape(disposition)}</span>"
+    )
+    workflow_badge = (
+        f'<span class="workflow-state-badge {_workflow_state_badge_class(workflow_state)}">'
+        f"{escape(workflow_state)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="readiness-badge {_readiness_badge_class(readiness)}">'
+        f"{escape(readiness)}</span>"
+    )
+    rows = (
+        ("Administrative Disposition", disposition_badge),
+        (
+            "Disposition Description",
+            escape(describe_administrative_disposition(disposition)),
+        ),
+        ("Workflow State", workflow_badge),
+        ("Readiness Classification", readiness_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section administrative-disposition">
+        <h2>Stage 9A — Administrative Disposition</h2>
+        <p class="notice">
+          Administrative disposition is classified deterministically from
+          workflow state values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2024,6 +2103,9 @@ def render_admin_record_evidence_page(
     completion_requirements = _render_completion_requirements(evidence_groups)
     workflow_state = _render_workflow_state(evidence_groups)
     transition_conditions = _render_transition_conditions(evidence_groups)
+    administrative_disposition = _render_administrative_disposition(
+        evidence_groups
+    )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2312,6 +2394,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .disposition-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .disposition-open {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .disposition-pending-review {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .disposition-ready-review {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -2376,6 +2485,7 @@ def render_admin_record_evidence_page(
     {completion_requirements}
     {workflow_state}
     {transition_conditions}
+    {administrative_disposition}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
