@@ -1213,11 +1213,28 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Workflow state may advance to Administrative Review.</li>",
             content,
         )
+        self.assertIn("Stage 9A — Administrative Disposition", content)
+        self.assertIn(
+            "Administrative disposition is classified deterministically from",
+            content,
+        )
+        self.assertIn(
+            '<td>Administrative Disposition</td><td><span class="disposition-badge disposition-open">Open</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Disposition Description</td><td>The record remains within active evidence workflow.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
         self.assertIn(".workflow-state-administrative-review", content)
         self.assertIn(".workflow-state-formal-review-ready", content)
+        self.assertIn(".disposition-badge", content)
+        self.assertIn(".disposition-open", content)
+        self.assertIn(".disposition-pending-review", content)
+        self.assertIn(".disposition-ready-review", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1402,6 +1419,15 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Workflow state may advance to Evidence Review.</li>",
             content,
         )
+        self.assertIn("Stage 9A — Administrative Disposition", content)
+        self.assertIn(
+            '<td>Administrative Disposition</td><td><span class="disposition-badge disposition-open">Open</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Disposition Description</td><td>The record remains within active evidence workflow.</td>",
+            content,
+        )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
@@ -1540,6 +1566,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>No additional workflow transition conditions identified.</li>",
+            content,
+        )
+        self.assertIn("Stage 9A — Administrative Disposition", content)
+        self.assertIn(
+            '<td>Administrative Disposition</td><td><span class="disposition-badge disposition-ready-review">Ready for Review</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Disposition Description</td><td>The record satisfies current workflow requirements for formal review.</td>",
             content,
         )
         self.assertIn(
@@ -1906,6 +1941,53 @@ class AdminSessionTests(unittest.TestCase):
                 ["No additional evidence requirements identified."],
             ),
             ["No additional workflow transition conditions identified."],
+        )
+
+    def test_administrative_disposition_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session.classify_administrative_disposition(
+                "Evidence Collection"
+            ),
+            "Open",
+        )
+        self.assertEqual(
+            self.admin_session.classify_administrative_disposition(
+                "Evidence Review"
+            ),
+            "Open",
+        )
+        self.assertEqual(
+            self.admin_session.classify_administrative_disposition(
+                "Administrative Review"
+            ),
+            "Pending Review",
+        )
+        self.assertEqual(
+            self.admin_session.classify_administrative_disposition(
+                "Formal Review Ready"
+            ),
+            "Ready for Review",
+        )
+        self.assertEqual(
+            self.admin_session.describe_administrative_disposition("Open"),
+            "The record remains within active evidence workflow.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_administrative_disposition(
+                "Pending Review"
+            ),
+            (
+                "The record has satisfied evidence workflow requirements and "
+                "awaits administrative review."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_administrative_disposition(
+                "Ready for Review"
+            ),
+            (
+                "The record satisfies current workflow requirements for formal review."
+            ),
         )
 
     def test_admin_record_evidence_view_requires_session(self):
