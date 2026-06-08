@@ -1622,6 +1622,43 @@ def describe_review_eligibility(eligibility: str) -> str:
     }.get(eligibility, "The record has not yet satisfied review requirements.")
 
 
+def build_review_preconditions(
+    review_eligibility: str,
+    disposition: str,
+    workflow_state: str,
+    transition_conditions: list[str],
+) -> list[str]:
+    if review_eligibility == "Eligible":
+        return ["No additional review preconditions identified."]
+    if review_eligibility == "Conditionally Eligible":
+        return [
+            "Administrative review requirements must be satisfied.",
+            "Review eligibility may advance to Eligible.",
+        ]
+    if review_eligibility == "Not Eligible":
+        return [
+            "Workflow transition conditions must be satisfied.",
+            "Administrative disposition must advance beyond Open.",
+            "Review eligibility may advance when workflow requirements are satisfied.",
+        ]
+    if disposition == "Ready for Review" or workflow_state == "Formal Review Ready":
+        return ["No additional review preconditions identified."]
+    if transition_conditions:
+        return [
+            "Workflow transition conditions must be satisfied.",
+            "Review eligibility may advance when workflow requirements are satisfied.",
+        ]
+    return ["Review eligibility requirements must be satisfied."]
+
+
+def describe_review_precondition_target(review_eligibility: str) -> str:
+    return {
+        "Not Eligible": "Conditionally Eligible",
+        "Conditionally Eligible": "Eligible",
+        "Eligible": "No further review eligibility state identified",
+    }.get(review_eligibility, "Conditionally Eligible")
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2102,6 +2139,61 @@ def _render_review_eligibility(
       </section>"""
 
 
+def _render_review_preconditions(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    classifications = readiness_values["classifications"]
+    readiness = readiness_values["readiness"]
+    supported_targets = int(gap_summary["supported_targets"])
+    unsupported_targets = int(gap_summary["unsupported_targets"])
+    evidence_gap_count = int(gap_summary["evidence_gap_count"])
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    completion_requirements = build_completion_requirements(
+        readiness,
+        action,
+        supported_targets,
+        unsupported_targets,
+        evidence_gap_count,
+        classifications,
+    )
+    transition_conditions = build_transition_conditions(
+        workflow_state,
+        readiness,
+        action,
+        completion_requirements,
+    )
+    precondition_target = describe_review_precondition_target(eligibility)
+    preconditions = build_review_preconditions(
+        eligibility,
+        disposition,
+        workflow_state,
+        transition_conditions,
+    )
+    precondition_items = "".join(
+        f"<li>{escape(precondition)}</li>" for precondition in preconditions
+    )
+    return f"""
+      <section class="management-section review-preconditions">
+        <h2>Stage 9D — Review Preconditions</h2>
+        <p class="notice">
+          Review preconditions are derived deterministically from review
+          eligibility and workflow transition values only.
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Precondition Target</td><td>{escape(precondition_target)}</td></tr>
+          </tbody>
+        </table>
+        <h3>Review Preconditions</h3>
+        <ol class="review-preconditions-list">{precondition_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2232,6 +2324,7 @@ def render_admin_record_evidence_page(
     )
     disposition_basis = _render_disposition_basis(evidence_groups)
     review_eligibility = _render_review_eligibility(evidence_groups)
+    review_preconditions = _render_review_preconditions(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2381,7 +2474,8 @@ def render_admin_record_evidence_page(
     .action-rationale-list,
     .completion-requirements-list,
     .transition-conditions-list,
-    .disposition-basis-list {{
+    .disposition-basis-list,
+    .review-preconditions-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
@@ -2389,7 +2483,8 @@ def render_admin_record_evidence_page(
     .action-rationale-list li,
     .completion-requirements-list li,
     .transition-conditions-list li,
-    .disposition-basis-list li {{
+    .disposition-basis-list li,
+    .review-preconditions-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -2643,6 +2738,7 @@ def render_admin_record_evidence_page(
     {administrative_disposition}
     {disposition_basis}
     {review_eligibility}
+    {review_preconditions}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
