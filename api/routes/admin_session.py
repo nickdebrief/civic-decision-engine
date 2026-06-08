@@ -1580,6 +1580,30 @@ def describe_administrative_disposition(disposition: str) -> str:
     }.get(disposition, "The record remains within active evidence workflow.")
 
 
+def build_disposition_basis_trace(
+    disposition: str,
+    workflow_state: str,
+    readiness_classification: str,
+    administrative_action: str,
+) -> list[str]:
+    if disposition == "Pending Review":
+        return [
+            f"Workflow state classified as {workflow_state}.",
+            "Administrative disposition classified as Pending Review.",
+        ]
+    if disposition == "Ready for Review":
+        return [
+            f"Workflow state classified as {workflow_state}.",
+            "Administrative disposition classified as Ready for Review.",
+        ]
+    return [
+        f"Workflow state classified as {workflow_state}.",
+        f"Readiness classified as {readiness_classification}.",
+        f"Administrative action classified as {administrative_action}.",
+        "Administrative disposition classified as Open.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1978,6 +2002,33 @@ def _render_administrative_disposition(
       </section>"""
 
 
+def _render_disposition_basis(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    trace_steps = build_disposition_basis_trace(
+        disposition,
+        workflow_state,
+        readiness,
+        action,
+    )
+    trace_items = "".join(f"<li>{escape(step)}</li>" for step in trace_steps)
+    return f"""
+      <section class="management-section disposition-basis">
+        <h2>Stage 9B — Disposition Basis</h2>
+        <p class="notice">
+          Disposition basis is derived deterministically from workflow,
+          readiness, and administrative action values only.
+        </p>
+        <h3>Disposition Basis</h3>
+        <ol class="disposition-basis-list">{trace_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2106,6 +2157,7 @@ def render_admin_record_evidence_page(
     administrative_disposition = _render_administrative_disposition(
         evidence_groups
     )
+    disposition_basis = _render_disposition_basis(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2254,14 +2306,16 @@ def render_admin_record_evidence_page(
     }}
     .action-rationale-list,
     .completion-requirements-list,
-    .transition-conditions-list {{
+    .transition-conditions-list,
+    .disposition-basis-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
     }}
     .action-rationale-list li,
     .completion-requirements-list li,
-    .transition-conditions-list li {{
+    .transition-conditions-list li,
+    .disposition-basis-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -2486,6 +2540,7 @@ def render_admin_record_evidence_page(
     {workflow_state}
     {transition_conditions}
     {administrative_disposition}
+    {disposition_basis}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
