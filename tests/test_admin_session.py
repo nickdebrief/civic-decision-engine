@@ -1100,24 +1100,30 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<li>Condition — Procedural Deflection</li>", content)
         self.assertNotIn("<li>Condition — Institutional Delay</li>", content)
         self.assertIn("Stage 7F — Evidence Sufficiency", content)
+        self.assertIn('class="stage7f-sufficiency-table"', content)
+        self.assertIn('class="target-cell"', content)
+        self.assertIn(".stage7f-sufficiency-table .target-cell", content)
+        self.assertIn("word-break: normal", content)
+        self.assertIn("overflow-wrap: break-word", content)
+        self.assertIn("line-height: 1.3", content)
         self.assertIn(
             "Sufficiency is classified deterministically from existing attachment",
             content,
         )
         self.assertIn(
-            "<td>Condition</td><td>Institutional Delay</td><td>1</td><td>2</td><td>Reinforced</td>",
+            '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>1</td><td>2</td><td>Reinforced</td>',
             content,
         )
         self.assertIn(
-            "<td>Signal</td><td>Missing Response</td><td>2</td><td>2</td><td>Corroborated</td>",
+            '<td>Signal</td><td class="target-cell">Missing Response</td><td>2</td><td>2</td><td>Corroborated</td>',
             content,
         )
         self.assertIn(
-            "<td>Finding</td><td>Finding &lt;requires&gt; review</td><td>1</td><td>1</td><td>Minimal</td>",
+            '<td>Finding</td><td class="target-cell">Finding &lt;requires&gt; review</td><td>1</td><td>1</td><td>Minimal</td>',
             content,
         )
         self.assertIn(
-            "<td>Signal</td><td>Procedural Loop</td><td>0</td><td>0</td><td>Unsupported</td>",
+            '<td>Signal</td><td class="target-cell">Procedural Loop</td><td>0</td><td>0</td><td>Unsupported</td>',
             content,
         )
         self.assertIn(
@@ -1242,7 +1248,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Gaps</td><td>1</td>", content)
         self.assertIn("Stage 7F — Evidence Sufficiency", content)
         self.assertIn(
-            "<td>Condition</td><td>Institutional Delay</td><td>0</td><td>0</td><td>Unsupported</td>",
+            '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>0</td><td>0</td><td>Unsupported</td>',
             content,
         )
         self.assertIn("<li>Signal — Missing Response</li>", content)
@@ -1327,7 +1333,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Gaps</td><td>0</td>", content)
         self.assertIn("Stage 7F — Evidence Sufficiency", content)
         self.assertIn(
-            "<td>Condition</td><td>Institutional Delay</td><td>1</td><td>1</td><td>Minimal</td>",
+            '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>1</td><td>1</td><td>Minimal</td>',
             content,
         )
         self.assertIn("No outstanding evidence gaps.", content)
