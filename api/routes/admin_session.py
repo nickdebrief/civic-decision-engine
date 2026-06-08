@@ -1288,10 +1288,10 @@ def _render_record_evidence_sufficiency(
             rows.append(
                 "<tr>"
                 f"<td>{escape(_target_type_display_label(target_type))}</td>"
-                f"<td>{escape(str(target.get('target_label') or target.get('target_key') or ''))}</td>"
+                f"<td class=\"target-cell\">{escape(str(target.get('target_label') or target.get('target_key') or ''))}</td>"
                 f"<td>{attachment_count}</td>"
                 f"<td>{relationship_count}</td>"
-                f"<td>{escape(sufficiency)}</td>"
+                f"<td class=\"sufficiency-cell\">{escape(sufficiency)}</td>"
                 "</tr>"
             )
 
@@ -1309,7 +1309,7 @@ def _render_record_evidence_sufficiency(
           Sufficiency is classified deterministically from existing attachment
           and relationship counts only.
         </p>
-        <table>
+        <table class="stage7f-sufficiency-table">
           <thead>
             <tr>
               <th>Target Type</th>
@@ -1611,6 +1611,21 @@ def render_admin_record_evidence_page(
       vertical-align: top;
       word-break: break-word;
     }}
+    .stage7f-sufficiency-table .target-cell {{
+      word-break: normal;
+      overflow-wrap: break-word;
+      line-height: 1.3;
+    }}
+    .stage7f-sufficiency-table .sufficiency-cell {{
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }}
+    .stage7f-sufficiency-table th:nth-child(1) {{ width: 22%; }}
+    .stage7f-sufficiency-table th:nth-child(2) {{ width: 30%; }}
+    .stage7f-sufficiency-table th:nth-child(3) {{ width: 16%; }}
+    .stage7f-sufficiency-table th:nth-child(4) {{ width: 16%; }}
+    .stage7f-sufficiency-table th:nth-child(5) {{ width: 16%; }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
