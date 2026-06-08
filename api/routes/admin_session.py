@@ -1438,6 +1438,50 @@ def build_action_rationale_trace(
     return steps
 
 
+def build_completion_requirements(
+    readiness_classification: str,
+    administrative_action: str,
+    supported_target_count: int,
+    unsupported_target_count: int,
+    evidence_gap_count: int,
+    sufficiency_classifications: list[str],
+) -> list[str]:
+    if readiness_classification == "Unsupported":
+        return [
+            "At least one target must become supported.",
+            "Evidence support must be established.",
+        ]
+    if readiness_classification == "Evidence Gaps Present":
+        requirements = []
+        if unsupported_target_count > 0:
+            requirements.append("Unsupported targets must be resolved.")
+        if evidence_gap_count > 0:
+            requirements.append("Evidence gaps must be resolved.")
+        return requirements or ["Evidence gaps must be resolved."]
+    if readiness_classification == "Partially Ready":
+        return [
+            "At least one target must achieve corroborated or reinforced support.",
+        ]
+    if readiness_classification == "Ready":
+        return ["No additional evidence requirements identified."]
+    if supported_target_count == 0:
+        return [
+            "At least one target must become supported.",
+            "Evidence support must be established.",
+        ]
+    if (
+        unsupported_target_count == 0
+        and evidence_gap_count == 0
+        and all(value == "Minimal" for value in sufficiency_classifications)
+    ):
+        return [
+            "At least one target must achieve corroborated or reinforced support.",
+        ]
+    return [
+        f"Administrative action {administrative_action} must be resolved through current evidence requirements.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1644,6 +1688,40 @@ def _render_action_rationale(
       </section>"""
 
 
+def _render_completion_requirements(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    classifications = readiness_values["classifications"]
+    readiness = readiness_values["readiness"]
+    supported_targets = int(gap_summary["supported_targets"])
+    unsupported_targets = int(gap_summary["unsupported_targets"])
+    evidence_gap_count = int(gap_summary["evidence_gap_count"])
+    action = classify_administrative_action(readiness)
+    requirements = build_completion_requirements(
+        readiness,
+        action,
+        supported_targets,
+        unsupported_targets,
+        evidence_gap_count,
+        classifications,
+    )
+    requirement_items = "".join(
+        f"<li>{escape(requirement)}</li>" for requirement in requirements
+    )
+    return f"""
+      <section class="management-section completion-requirements">
+        <h2>Stage 8C — Completion Requirements</h2>
+        <p class="notice">
+          Completion requirements are derived deterministically from the current
+          readiness and administrative action state only.
+        </p>
+        <h3>Completion Requirements</h3>
+        <ol class="completion-requirements-list">{requirement_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -1766,6 +1844,7 @@ def render_admin_record_evidence_page(
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
     administrative_action = _render_administrative_action(evidence_groups)
     action_rationale = _render_action_rationale(evidence_groups)
+    completion_requirements = _render_completion_requirements(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1912,12 +1991,14 @@ def render_admin_record_evidence_page(
     .outstanding-gap-list li {{
       margin: 4px 0;
     }}
-    .action-rationale-list {{
+    .action-rationale-list,
+    .completion-requirements-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
     }}
-    .action-rationale-list li {{
+    .action-rationale-list li,
+    .completion-requirements-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -2080,6 +2161,7 @@ def render_admin_record_evidence_page(
     {evidence_readiness}
     {administrative_action}
     {action_rationale}
+    {completion_requirements}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}

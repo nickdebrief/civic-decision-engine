@@ -1179,6 +1179,14 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Administrative action classified as Resolve Evidence Gaps</li>",
             content,
         )
+        self.assertIn("Stage 8C — Completion Requirements", content)
+        self.assertIn(
+            "Completion requirements are derived deterministically from the current",
+            content,
+        )
+        self.assertIn('<ol class="completion-requirements-list">', content)
+        self.assertIn("<li>Unsupported targets must be resolved.</li>", content)
+        self.assertIn("<li>Evidence gaps must be resolved.</li>", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1331,6 +1339,15 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Administrative action classified as Collect Initial Evidence</li>",
             content,
         )
+        self.assertIn("Stage 8C — Completion Requirements", content)
+        self.assertIn(
+            "<li>At least one target must become supported.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Evidence support must be established.</li>",
+            content,
+        )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
@@ -1446,6 +1463,11 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>Administrative action classified as Eligible for Formal Review</li>",
+            content,
+        )
+        self.assertIn("Stage 8C — Completion Requirements", content)
+        self.assertIn(
+            "<li>No additional evidence requirements identified.</li>",
             content,
         )
         self.assertIn(
@@ -1637,6 +1659,60 @@ class AdminSessionTests(unittest.TestCase):
                 "Corroborated or reinforced support identified",
                 "Administrative action classified as Eligible for Formal Review",
             ],
+        )
+
+    def test_completion_requirements_helper_is_deterministic(self):
+        self.assertEqual(
+            self.admin_session.build_completion_requirements(
+                "Unsupported",
+                "Collect Initial Evidence",
+                0,
+                4,
+                4,
+                ["Unsupported", "Unsupported"],
+            ),
+            [
+                "At least one target must become supported.",
+                "Evidence support must be established.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_completion_requirements(
+                "Evidence Gaps Present",
+                "Resolve Evidence Gaps",
+                2,
+                1,
+                1,
+                ["Minimal", "Unsupported"],
+            ),
+            [
+                "Unsupported targets must be resolved.",
+                "Evidence gaps must be resolved.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_completion_requirements(
+                "Partially Ready",
+                "Proceed to Administrative Review",
+                3,
+                0,
+                0,
+                ["Minimal", "Minimal", "Minimal"],
+            ),
+            [
+                "At least one target must achieve corroborated or reinforced support.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_completion_requirements(
+                "Ready",
+                "Eligible for Formal Review",
+                3,
+                0,
+                0,
+                ["Minimal", "Reinforced"],
+            ),
+            ["No additional evidence requirements identified."],
         )
 
     def test_admin_record_evidence_view_requires_session(self):
