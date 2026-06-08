@@ -1273,6 +1273,63 @@ def classify_evidence_sufficiency(
     return "Unsupported"
 
 
+def classify_evidence_readiness(
+    supported_target_count: int,
+    unsupported_target_count: int,
+    evidence_gap_count: int,
+    sufficiency_classifications: list[str],
+) -> str:
+    normalized = [str(value) for value in sufficiency_classifications]
+    if supported_target_count == 0 and normalized and all(
+        value == "Unsupported" for value in normalized
+    ):
+        return "Unsupported"
+    if evidence_gap_count > 0 and unsupported_target_count > 0:
+        return "Evidence Gaps Present"
+    if (
+        evidence_gap_count == 0
+        and unsupported_target_count == 0
+        and "Unsupported" not in normalized
+        and any(value in {"Corroborated", "Reinforced"} for value in normalized)
+    ):
+        return "Ready"
+    if (
+        supported_target_count > 0
+        and evidence_gap_count == 0
+        and unsupported_target_count == 0
+        and "Unsupported" not in normalized
+    ):
+        return "Partially Ready"
+    if evidence_gap_count > 0:
+        return "Evidence Gaps Present"
+    return "Partially Ready" if supported_target_count > 0 else "Unsupported"
+
+
+def _evidence_sufficiency_classifications(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> list[str]:
+    classifications = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        for target in evidence_groups.get(target_type) or []:
+            classifications.append(
+                classify_evidence_sufficiency(
+                    len(target.get("attachments") or []),
+                    int(target.get("relationship_count") or 0),
+                )
+            )
+    return classifications
+
+
+def _summarize_sufficiency_basis(classifications: list[str]) -> str:
+    order = ("Unsupported", "Minimal", "Corroborated", "Reinforced")
+    parts = [
+        f"{classifications.count(classification)} {classification}"
+        for classification in order
+        if classifications.count(classification)
+    ]
+    return ", ".join(parts) if parts else "No record targets"
+
+
 def _render_record_evidence_sufficiency(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
@@ -1320,6 +1377,45 @@ def _render_record_evidence_sufficiency(
             </tr>
           </thead>
           <tbody>{table_body}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_record_evidence_readiness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    gap_summary = _record_evidence_gap_summary(evidence_groups)
+    classifications = _evidence_sufficiency_classifications(evidence_groups)
+    readiness = classify_evidence_readiness(
+        int(gap_summary["supported_targets"]),
+        int(gap_summary["unsupported_targets"]),
+        int(gap_summary["evidence_gap_count"]),
+        classifications,
+    )
+    rows = (
+        ("Readiness Classification", readiness),
+        ("Supported Targets", gap_summary["supported_targets"]),
+        ("Unsupported Targets", gap_summary["unsupported_targets"]),
+        ("Evidence Gap Count", gap_summary["evidence_gap_count"]),
+        ("Coverage Percentage", f"{gap_summary['coverage_percentage']:.1f}%"),
+        ("Sufficiency Basis", _summarize_sufficiency_basis(classifications)),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section evidence-readiness">
+        <h2>Stage 7G — Evidence Readiness</h2>
+        <p class="notice">
+          Readiness is classified deterministically from existing coverage,
+          gap, and sufficiency values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
         </table>
       </section>"""
 
@@ -1443,6 +1539,7 @@ def render_admin_record_evidence_page(
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
+    evidence_readiness = _render_record_evidence_readiness(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1684,6 +1781,7 @@ def render_admin_record_evidence_page(
     {evidence_coverage}
     {evidence_gap_summary}
     {evidence_sufficiency}
+    {evidence_readiness}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
