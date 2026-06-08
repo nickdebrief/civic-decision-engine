@@ -1261,6 +1261,28 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Eligibility Description</td><td>The record has not yet satisfied review requirements.</td>",
             content,
         )
+        self.assertIn("Stage 9D — Review Preconditions", content)
+        self.assertIn(
+            "Review preconditions are derived deterministically from review",
+            content,
+        )
+        self.assertIn(
+            "<td>Precondition Target</td><td>Conditionally Eligible</td>",
+            content,
+        )
+        self.assertIn('<ol class="review-preconditions-list">', content)
+        self.assertIn(
+            "<li>Workflow transition conditions must be satisfied.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative disposition must advance beyond Open.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Review eligibility may advance when workflow requirements are satisfied.</li>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1632,6 +1654,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Eligibility Description</td><td>The record satisfies current requirements for review.</td>",
+            content,
+        )
+        self.assertIn("Stage 9D — Review Preconditions", content)
+        self.assertIn(
+            "<td>Precondition Target</td><td>No further review eligibility state identified</td>",
+            content,
+        )
+        self.assertIn(
+            "<li>No additional review preconditions identified.</li>",
             content,
         )
         self.assertIn(
@@ -2112,6 +2143,64 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session.describe_review_eligibility("Eligible"),
             "The record satisfies current requirements for review.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_precondition_target(
+                "Not Eligible"
+            ),
+            "Conditionally Eligible",
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_precondition_target(
+                "Conditionally Eligible"
+            ),
+            "Eligible",
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_precondition_target("Eligible"),
+            "No further review eligibility state identified",
+        )
+        self.assertEqual(
+            self.admin_session.build_review_preconditions(
+                "Not Eligible",
+                "Open",
+                "Evidence Review",
+                [
+                    "Unsupported targets must be resolved.",
+                    "Evidence gaps must be resolved.",
+                ],
+            ),
+            [
+                "Workflow transition conditions must be satisfied.",
+                "Administrative disposition must advance beyond Open.",
+                (
+                    "Review eligibility may advance when workflow "
+                    "requirements are satisfied."
+                ),
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_review_preconditions(
+                "Conditionally Eligible",
+                "Pending Review",
+                "Administrative Review",
+                [
+                    "Corroborated or reinforced support must be identified.",
+                ],
+            ),
+            [
+                "Administrative review requirements must be satisfied.",
+                "Review eligibility may advance to Eligible.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_review_preconditions(
+                "Eligible",
+                "Ready for Review",
+                "Formal Review Ready",
+                ["No additional workflow transition conditions identified."],
+            ),
+            ["No additional review preconditions identified."],
         )
 
     def test_admin_record_evidence_view_requires_session(self):
