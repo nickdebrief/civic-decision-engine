@@ -1339,6 +1339,67 @@ def _readiness_badge_class(readiness: str) -> str:
     }.get(readiness, "readiness-unsupported")
 
 
+def classify_administrative_action(readiness_classification: str) -> str:
+    return {
+        "Unsupported": "Collect Initial Evidence",
+        "Evidence Gaps Present": "Resolve Evidence Gaps",
+        "Partially Ready": "Proceed to Administrative Review",
+        "Ready": "Eligible for Formal Review",
+    }.get(readiness_classification, "Resolve Evidence Gaps")
+
+
+def describe_administrative_action_basis(
+    readiness_classification: str,
+    supported_target_count: int,
+    unsupported_target_count: int,
+    evidence_gap_count: int,
+) -> str:
+    if readiness_classification == "Unsupported":
+        return (
+            "Administrative action is Collect Initial Evidence because no "
+            "targets are currently supported."
+        )
+    if readiness_classification == "Evidence Gaps Present":
+        return (
+            "Administrative action is Resolve Evidence Gaps because "
+            "unsupported targets or evidence gaps remain."
+        )
+    if readiness_classification == "Partially Ready":
+        return (
+            "Administrative action is Proceed to Administrative Review because "
+            "all targets are supported but sufficiency remains minimal."
+        )
+    if readiness_classification == "Ready":
+        return (
+            "Administrative action is Eligible for Formal Review because the "
+            "record has no evidence gaps and includes corroborated or "
+            "reinforced support."
+        )
+    if supported_target_count == 0:
+        return (
+            "Administrative action is Collect Initial Evidence because no "
+            "targets are currently supported."
+        )
+    if unsupported_target_count > 0 or evidence_gap_count > 0:
+        return (
+            "Administrative action is Resolve Evidence Gaps because "
+            "unsupported targets or evidence gaps remain."
+        )
+    return (
+        "Administrative action is Proceed to Administrative Review because "
+        "all targets are supported but sufficiency remains minimal."
+    )
+
+
+def _admin_action_badge_class(action: str) -> str:
+    return {
+        "Collect Initial Evidence": "admin-action-collect-initial-evidence",
+        "Resolve Evidence Gaps": "admin-action-resolve-evidence-gaps",
+        "Proceed to Administrative Review": "admin-action-proceed-review",
+        "Eligible for Formal Review": "admin-action-formal-review",
+    }.get(action, "admin-action-resolve-evidence-gaps")
+
+
 def _render_record_evidence_sufficiency(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
@@ -1390,9 +1451,9 @@ def _render_record_evidence_sufficiency(
       </section>"""
 
 
-def _render_record_evidence_readiness(
+def _record_evidence_readiness_values(
     evidence_groups: dict[str, list[dict[str, Any]]],
-) -> str:
+) -> dict[str, Any]:
     gap_summary = _record_evidence_gap_summary(evidence_groups)
     classifications = _evidence_sufficiency_classifications(evidence_groups)
     readiness = classify_evidence_readiness(
@@ -1401,6 +1462,20 @@ def _render_record_evidence_readiness(
         int(gap_summary["evidence_gap_count"]),
         classifications,
     )
+    return {
+        "gap_summary": gap_summary,
+        "classifications": classifications,
+        "readiness": readiness,
+    }
+
+
+def _render_record_evidence_readiness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    classifications = readiness_values["classifications"]
+    readiness = readiness_values["readiness"]
     rows = (
         ("Readiness Classification", readiness),
         ("Supported Targets", gap_summary["supported_targets"]),
@@ -1434,6 +1509,58 @@ def _render_record_evidence_readiness(
         </p>
         <table>
           <tbody>{"".join(table_rows)}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_administrative_action(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    readiness = readiness_values["readiness"]
+    supported_targets = int(gap_summary["supported_targets"])
+    unsupported_targets = int(gap_summary["unsupported_targets"])
+    evidence_gap_count = int(gap_summary["evidence_gap_count"])
+    action = classify_administrative_action(readiness)
+    action_basis = describe_administrative_action_basis(
+        readiness,
+        supported_targets,
+        unsupported_targets,
+        evidence_gap_count,
+    )
+    action_badge = (
+        f'<span class="admin-action-badge {_admin_action_badge_class(action)}">'
+        f"{escape(action)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="readiness-badge {_readiness_badge_class(readiness)}">'
+        f"{escape(readiness)}</span>"
+    )
+    rows = (
+        ("Administrative Action", action_badge),
+        ("Readiness Classification", readiness_badge),
+        ("Supported Targets", escape(str(supported_targets))),
+        ("Unsupported Targets", escape(str(unsupported_targets))),
+        ("Evidence Gap Count", escape(str(evidence_gap_count))),
+        ("Action Basis", escape(action_basis)),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section administrative-action">
+        <h2>Stage 8A — Administrative Action</h2>
+        <p class="notice">
+          Administrative action is classified deterministically from the
+          current readiness state only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
         </table>
       </section>"""
 
@@ -1558,6 +1685,7 @@ def render_admin_record_evidence_page(
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
+    administrative_action = _render_administrative_action(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1772,6 +1900,37 @@ def render_admin_record_evidence_page(
       border-color: #7a4c4c;
       background: #f8eeee;
     }}
+    .admin-action-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .admin-action-collect-initial-evidence {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .admin-action-resolve-evidence-gaps {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .admin-action-proceed-review {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .admin-action-formal-review {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -1831,6 +1990,7 @@ def render_admin_record_evidence_page(
     {evidence_gap_summary}
     {evidence_sufficiency}
     {evidence_readiness}
+    {administrative_action}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
