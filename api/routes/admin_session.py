@@ -1330,6 +1330,15 @@ def _summarize_sufficiency_basis(classifications: list[str]) -> str:
     return ", ".join(parts) if parts else "No record targets"
 
 
+def _readiness_badge_class(readiness: str) -> str:
+    return {
+        "Ready": "readiness-ready",
+        "Partially Ready": "readiness-partially-ready",
+        "Evidence Gaps Present": "readiness-gaps-present",
+        "Unsupported": "readiness-unsupported",
+    }.get(readiness, "readiness-unsupported")
+
+
 def _render_record_evidence_sufficiency(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
@@ -1400,13 +1409,22 @@ def _render_record_evidence_readiness(
         ("Coverage Percentage", f"{gap_summary['coverage_percentage']:.1f}%"),
         ("Sufficiency Basis", _summarize_sufficiency_basis(classifications)),
     )
-    table_rows = "".join(
-        "<tr>"
-        f"<td>{escape(str(label))}</td>"
-        f"<td>{escape(str(value))}</td>"
-        "</tr>"
-        for label, value in rows
-    )
+    table_rows = []
+    for label, value in rows:
+        if label == "Readiness Classification":
+            badge_class = _readiness_badge_class(str(value))
+            value_html = (
+                f'<span class="readiness-badge {badge_class}">'
+                f"{escape(str(value))}</span>"
+            )
+        else:
+            value_html = escape(str(value))
+        table_rows.append(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{value_html}</td>"
+            "</tr>"
+        )
     return f"""
       <section class="management-section evidence-readiness">
         <h2>Stage 7G — Evidence Readiness</h2>
@@ -1415,7 +1433,7 @@ def _render_record_evidence_readiness(
           gap, and sufficiency values only.
         </p>
         <table>
-          <tbody>{table_rows}</tbody>
+          <tbody>{"".join(table_rows)}</tbody>
         </table>
       </section>"""
 
@@ -1723,6 +1741,37 @@ def render_admin_record_evidence_page(
     .stage7f-sufficiency-table th:nth-child(3) {{ width: 16%; }}
     .stage7f-sufficiency-table th:nth-child(4) {{ width: 16%; }}
     .stage7f-sufficiency-table th:nth-child(5) {{ width: 16%; }}
+    .readiness-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .readiness-ready {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
+    .readiness-partially-ready {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .readiness-gaps-present {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .readiness-unsupported {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
