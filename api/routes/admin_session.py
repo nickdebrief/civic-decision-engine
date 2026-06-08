@@ -1291,7 +1291,7 @@ def _render_record_evidence_sufficiency(
                 f"<td class=\"target-cell\">{escape(str(target.get('target_label') or target.get('target_key') or ''))}</td>"
                 f"<td>{attachment_count}</td>"
                 f"<td>{relationship_count}</td>"
-                f"<td>{escape(sufficiency)}</td>"
+                f"<td class=\"sufficiency-cell\">{escape(sufficiency)}</td>"
                 "</tr>"
             )
 
@@ -1616,6 +1616,16 @@ def render_admin_record_evidence_page(
       overflow-wrap: break-word;
       line-height: 1.3;
     }}
+    .stage7f-sufficiency-table .sufficiency-cell {{
+      white-space: nowrap;
+      word-break: normal;
+      overflow-wrap: normal;
+    }}
+    .stage7f-sufficiency-table th:nth-child(1) {{ width: 22%; }}
+    .stage7f-sufficiency-table th:nth-child(2) {{ width: 30%; }}
+    .stage7f-sufficiency-table th:nth-child(3) {{ width: 16%; }}
+    .stage7f-sufficiency-table th:nth-child(4) {{ width: 16%; }}
+    .stage7f-sufficiency-table th:nth-child(5) {{ width: 16%; }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
