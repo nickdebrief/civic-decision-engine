@@ -1163,6 +1163,22 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Action Basis</td><td>Administrative action is Resolve Evidence Gaps because unsupported targets or evidence gaps remain.</td>",
             content,
         )
+        self.assertIn("Stage 8B — Action Rationale", content)
+        self.assertIn(
+            "Action rationale is derived deterministically from readiness and",
+            content,
+        )
+        self.assertIn('<ol class="action-rationale-list">', content)
+        self.assertIn(
+            "<li>Readiness classified as Evidence Gaps Present</li>",
+            content,
+        )
+        self.assertIn("<li>Unsupported targets remain</li>", content)
+        self.assertIn("<li>Evidence gaps remain</li>", content)
+        self.assertIn(
+            "<li>Administrative action classified as Resolve Evidence Gaps</li>",
+            content,
+        )
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1308,6 +1324,13 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Action Basis</td><td>Administrative action is Collect Initial Evidence because no targets are currently supported.</td>",
             content,
         )
+        self.assertIn("Stage 8B — Action Rationale", content)
+        self.assertIn("<li>Readiness classified as Unsupported</li>", content)
+        self.assertIn("<li>No supported targets identified</li>", content)
+        self.assertIn(
+            "<li>Administrative action classified as Collect Initial Evidence</li>",
+            content,
+        )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
@@ -1411,6 +1434,18 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Action Basis</td><td>Administrative action is Eligible for Formal Review because the record has no evidence gaps and includes corroborated or reinforced support.</td>",
+            content,
+        )
+        self.assertIn("Stage 8B — Action Rationale", content)
+        self.assertIn("<li>Readiness classified as Ready</li>", content)
+        self.assertIn("<li>No unsupported targets remain</li>", content)
+        self.assertIn("<li>No evidence gaps remain</li>", content)
+        self.assertIn(
+            "<li>Corroborated or reinforced support identified</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative action classified as Eligible for Formal Review</li>",
             content,
         )
         self.assertIn(
@@ -1540,6 +1575,68 @@ class AdminSessionTests(unittest.TestCase):
                 0,
             ),
             "Administrative action is Eligible for Formal Review because the record has no evidence gaps and includes corroborated or reinforced support.",
+        )
+
+    def test_action_rationale_trace_helper_is_deterministic(self):
+        self.assertEqual(
+            self.admin_session.build_action_rationale_trace(
+                "Unsupported",
+                "Collect Initial Evidence",
+                0,
+                4,
+                4,
+            ),
+            [
+                "Readiness classified as Unsupported",
+                "No supported targets identified",
+                "Administrative action classified as Collect Initial Evidence",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_action_rationale_trace(
+                "Evidence Gaps Present",
+                "Resolve Evidence Gaps",
+                2,
+                1,
+                1,
+            ),
+            [
+                "Readiness classified as Evidence Gaps Present",
+                "Unsupported targets remain",
+                "Evidence gaps remain",
+                "Administrative action classified as Resolve Evidence Gaps",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_action_rationale_trace(
+                "Partially Ready",
+                "Proceed to Administrative Review",
+                3,
+                0,
+                0,
+            ),
+            [
+                "Readiness classified as Partially Ready",
+                "All targets currently supported",
+                "Support remains minimal",
+                "Administrative action classified as Proceed to Administrative Review",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_action_rationale_trace(
+                "Ready",
+                "Eligible for Formal Review",
+                3,
+                0,
+                0,
+            ),
+            [
+                "Readiness classified as Ready",
+                "No unsupported targets remain",
+                "No evidence gaps remain",
+                "Corroborated or reinforced support identified",
+                "Administrative action classified as Eligible for Formal Review",
+            ],
         )
 
     def test_admin_record_evidence_view_requires_session(self):
