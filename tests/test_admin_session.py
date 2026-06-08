@@ -1248,6 +1248,19 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Administrative disposition classified as Open.</li>",
             content,
         )
+        self.assertIn("Stage 9C — Review Eligibility", content)
+        self.assertIn(
+            "Review eligibility is classified deterministically from",
+            content,
+        )
+        self.assertIn(
+            '<td>Review Eligibility</td><td><span class="eligibility-badge eligibility-not-eligible">Not Eligible</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Eligibility Description</td><td>The record has not yet satisfied review requirements.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1257,6 +1270,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".disposition-open", content)
         self.assertIn(".disposition-pending-review", content)
         self.assertIn(".disposition-ready-review", content)
+        self.assertIn(".eligibility-badge", content)
+        self.assertIn(".eligibility-not-eligible", content)
+        self.assertIn(".eligibility-conditionally-eligible", content)
+        self.assertIn(".eligibility-eligible", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1606,6 +1623,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>Administrative disposition classified as Ready for Review.</li>",
+            content,
+        )
+        self.assertIn("Stage 9C — Review Eligibility", content)
+        self.assertIn(
+            '<td>Review Eligibility</td><td><span class="eligibility-badge eligibility-eligible">Eligible</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Eligibility Description</td><td>The record satisfies current requirements for review.</td>",
             content,
         )
         self.assertIn(
@@ -2057,6 +2083,35 @@ class AdminSessionTests(unittest.TestCase):
                 "Workflow state classified as Formal Review Ready.",
                 "Administrative disposition classified as Ready for Review.",
             ],
+        )
+        self.assertEqual(
+            self.admin_session.classify_review_eligibility("Open"),
+            "Not Eligible",
+        )
+        self.assertEqual(
+            self.admin_session.classify_review_eligibility("Pending Review"),
+            "Conditionally Eligible",
+        )
+        self.assertEqual(
+            self.admin_session.classify_review_eligibility("Ready for Review"),
+            "Eligible",
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_eligibility("Not Eligible"),
+            "The record has not yet satisfied review requirements.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_eligibility(
+                "Conditionally Eligible"
+            ),
+            (
+                "The record may proceed to review subject to administrative "
+                "assessment."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_review_eligibility("Eligible"),
+            "The record satisfies current requirements for review.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
