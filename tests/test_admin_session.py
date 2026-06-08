@@ -1132,6 +1132,19 @@ class AdminSessionTests(unittest.TestCase):
             '<td>Signal</td><td class="target-cell">Procedural Loop</td><td>0</td><td>0</td><td class="sufficiency-cell">Unsupported</td>',
             content,
         )
+        self.assertIn("Stage 7G — Evidence Readiness", content)
+        self.assertIn(
+            "Readiness is classified deterministically from existing coverage",
+            content,
+        )
+        self.assertIn(
+            "<td>Readiness Classification</td><td>Evidence Gaps Present</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Sufficiency Basis</td><td>5 Unsupported, 2 Minimal, 1 Corroborated, 1 Reinforced</td>",
+            content,
+        )
         self.assertIn(
             'class="evidence-section evidence-section-condition" open', content
         )
@@ -1257,6 +1270,12 @@ class AdminSessionTests(unittest.TestCase):
             '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>0</td><td>0</td><td class="sufficiency-cell">Unsupported</td>',
             content,
         )
+        self.assertIn("Stage 7G — Evidence Readiness", content)
+        self.assertIn(
+            "<td>Readiness Classification</td><td>Unsupported</td>",
+            content,
+        )
+        self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
         self.assertIn("<li>Finding — Finding &lt;requires&gt; review</li>", content)
@@ -1290,6 +1309,11 @@ class AdminSessionTests(unittest.TestCase):
                 ),
             )
             self.insert_admin_attachment(conn, title="Complete evidence")
+            self.insert_attachment_relationship(
+                conn,
+                target_type="condition",
+                target_key="INSTITUTIONAL_DELAY",
+            )
             self.insert_attachment_relationship(
                 conn,
                 target_type="condition",
@@ -1339,7 +1363,16 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Gaps</td><td>0</td>", content)
         self.assertIn("Stage 7F — Evidence Sufficiency", content)
         self.assertIn(
-            '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>1</td><td>1</td><td class="sufficiency-cell">Minimal</td>',
+            '<td>Condition</td><td class="target-cell">Institutional Delay</td><td>1</td><td>2</td><td class="sufficiency-cell">Reinforced</td>',
+            content,
+        )
+        self.assertIn("Stage 7G — Evidence Readiness", content)
+        self.assertIn(
+            "<td>Readiness Classification</td><td>Ready</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Sufficiency Basis</td><td>3 Minimal, 1 Reinforced</td>",
             content,
         )
         self.assertIn("No outstanding evidence gaps.", content)
@@ -1371,6 +1404,44 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session.classify_evidence_sufficiency(0, 1),
             "Minimal",
+        )
+
+    def test_evidence_readiness_classification_helper_is_deterministic(self):
+        self.assertEqual(
+            self.admin_session.classify_evidence_readiness(
+                0,
+                4,
+                4,
+                ["Unsupported", "Unsupported", "Unsupported", "Unsupported"],
+            ),
+            "Unsupported",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_readiness(
+                2,
+                1,
+                1,
+                ["Minimal", "Minimal", "Unsupported"],
+            ),
+            "Evidence Gaps Present",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_readiness(
+                3,
+                0,
+                0,
+                ["Minimal", "Minimal", "Minimal"],
+            ),
+            "Partially Ready",
+        )
+        self.assertEqual(
+            self.admin_session.classify_evidence_readiness(
+                3,
+                0,
+                0,
+                ["Minimal", "Reinforced", "Corroborated"],
+            ),
+            "Ready",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
