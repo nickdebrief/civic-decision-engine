@@ -1604,6 +1604,24 @@ def build_disposition_basis_trace(
     ]
 
 
+def classify_review_eligibility(disposition: str) -> str:
+    return {
+        "Open": "Not Eligible",
+        "Pending Review": "Conditionally Eligible",
+        "Ready for Review": "Eligible",
+    }.get(disposition, "Not Eligible")
+
+
+def describe_review_eligibility(eligibility: str) -> str:
+    return {
+        "Not Eligible": "The record has not yet satisfied review requirements.",
+        "Conditionally Eligible": (
+            "The record may proceed to review subject to administrative assessment."
+        ),
+        "Eligible": "The record satisfies current requirements for review.",
+    }.get(eligibility, "The record has not yet satisfied review requirements.")
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1628,6 +1646,14 @@ def _disposition_badge_class(disposition: str) -> str:
         "Pending Review": "disposition-pending-review",
         "Ready for Review": "disposition-ready-review",
     }.get(disposition, "disposition-open")
+
+
+def _eligibility_badge_class(eligibility: str) -> str:
+    return {
+        "Not Eligible": "eligibility-not-eligible",
+        "Conditionally Eligible": "eligibility-conditionally-eligible",
+        "Eligible": "eligibility-eligible",
+    }.get(eligibility, "eligibility-not-eligible")
 
 
 def _render_record_evidence_sufficiency(
@@ -2029,6 +2055,53 @@ def _render_disposition_basis(
       </section>"""
 
 
+def _render_review_eligibility(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    disposition_badge = (
+        f'<span class="disposition-badge {_disposition_badge_class(disposition)}">'
+        f"{escape(disposition)}</span>"
+    )
+    workflow_badge = (
+        f'<span class="workflow-state-badge {_workflow_state_badge_class(workflow_state)}">'
+        f"{escape(workflow_state)}</span>"
+    )
+    rows = (
+        ("Review Eligibility", eligibility_badge),
+        ("Eligibility Description", escape(describe_review_eligibility(eligibility))),
+        ("Administrative Disposition", disposition_badge),
+        ("Workflow State", workflow_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section review-eligibility">
+        <h2>Stage 9C — Review Eligibility</h2>
+        <p class="notice">
+          Review eligibility is classified deterministically from
+          administrative disposition values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2158,6 +2231,7 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     disposition_basis = _render_disposition_basis(evidence_groups)
+    review_eligibility = _render_review_eligibility(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2475,6 +2549,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .eligibility-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .eligibility-not-eligible {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .eligibility-conditionally-eligible {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .eligibility-eligible {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -2541,6 +2642,7 @@ def render_admin_record_evidence_page(
     {transition_conditions}
     {administrative_disposition}
     {disposition_basis}
+    {review_eligibility}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
