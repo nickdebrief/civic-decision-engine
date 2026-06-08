@@ -1482,6 +1482,31 @@ def build_completion_requirements(
     ]
 
 
+def classify_workflow_state(
+    readiness_classification: str,
+    administrative_action: str,
+) -> str:
+    return {
+        "Unsupported": "Evidence Collection",
+        "Evidence Gaps Present": "Evidence Review",
+        "Partially Ready": "Administrative Review",
+        "Ready": "Formal Review Ready",
+    }.get(readiness_classification, "Evidence Review")
+
+
+def describe_workflow_state(workflow_state: str) -> str:
+    return {
+        "Evidence Collection": "Evidence support is still being established.",
+        "Evidence Review": "Evidence has been collected but gaps remain.",
+        "Administrative Review": (
+            "Evidence support is complete but remains minimally supported."
+        ),
+        "Formal Review Ready": (
+            "Evidence requirements have been satisfied for formal review."
+        ),
+    }.get(workflow_state, "Evidence has been collected but gaps remain.")
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1489,6 +1514,15 @@ def _admin_action_badge_class(action: str) -> str:
         "Proceed to Administrative Review": "admin-action-proceed-review",
         "Eligible for Formal Review": "admin-action-formal-review",
     }.get(action, "admin-action-resolve-evidence-gaps")
+
+
+def _workflow_state_badge_class(workflow_state: str) -> str:
+    return {
+        "Evidence Collection": "workflow-state-evidence-collection",
+        "Evidence Review": "workflow-state-evidence-review",
+        "Administrative Review": "workflow-state-administrative-review",
+        "Formal Review Ready": "workflow-state-formal-review-ready",
+    }.get(workflow_state, "workflow-state-evidence-review")
 
 
 def _render_record_evidence_sufficiency(
@@ -1722,6 +1756,51 @@ def _render_completion_requirements(
       </section>"""
 
 
+def _render_workflow_state(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    workflow_badge = (
+        f'<span class="workflow-state-badge {_workflow_state_badge_class(workflow_state)}">'
+        f"{escape(workflow_state)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="readiness-badge {_readiness_badge_class(readiness)}">'
+        f"{escape(readiness)}</span>"
+    )
+    action_badge = (
+        f'<span class="admin-action-badge {_admin_action_badge_class(action)}">'
+        f"{escape(action)}</span>"
+    )
+    rows = (
+        ("Workflow State", workflow_badge),
+        ("State Description", escape(describe_workflow_state(workflow_state))),
+        ("Readiness Classification", readiness_badge),
+        ("Administrative Action", action_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section workflow-state">
+        <h2>Stage 8D — Workflow State</h2>
+        <p class="notice">
+          Workflow state is classified deterministically from readiness and
+          administrative action values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -1845,6 +1924,7 @@ def render_admin_record_evidence_page(
     administrative_action = _render_administrative_action(evidence_groups)
     action_rationale = _render_action_rationale(evidence_groups)
     completion_requirements = _render_completion_requirements(evidence_groups)
+    workflow_state = _render_workflow_state(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2100,6 +2180,37 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .workflow-state-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .workflow-state-evidence-collection {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .workflow-state-evidence-review {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .workflow-state-administrative-review {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .workflow-state-formal-review-ready {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -2162,6 +2273,7 @@ def render_admin_record_evidence_page(
     {administrative_action}
     {action_rationale}
     {completion_requirements}
+    {workflow_state}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}

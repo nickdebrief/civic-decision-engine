@@ -1187,6 +1187,24 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn('<ol class="completion-requirements-list">', content)
         self.assertIn("<li>Unsupported targets must be resolved.</li>", content)
         self.assertIn("<li>Evidence gaps must be resolved.</li>", content)
+        self.assertIn("Stage 8D — Workflow State", content)
+        self.assertIn(
+            "Workflow state is classified deterministically from readiness and",
+            content,
+        )
+        self.assertIn(
+            '<td>Workflow State</td><td><span class="workflow-state-badge workflow-state-evidence-review">Evidence Review</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>State Description</td><td>Evidence has been collected but gaps remain.</td>",
+            content,
+        )
+        self.assertIn(".workflow-state-badge", content)
+        self.assertIn(".workflow-state-evidence-collection", content)
+        self.assertIn(".workflow-state-evidence-review", content)
+        self.assertIn(".workflow-state-administrative-review", content)
+        self.assertIn(".workflow-state-formal-review-ready", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1348,6 +1366,15 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Evidence support must be established.</li>",
             content,
         )
+        self.assertIn("Stage 8D — Workflow State", content)
+        self.assertIn(
+            '<td>Workflow State</td><td><span class="workflow-state-badge workflow-state-evidence-collection">Evidence Collection</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>State Description</td><td>Evidence support is still being established.</td>",
+            content,
+        )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
@@ -1468,6 +1495,15 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Stage 8C — Completion Requirements", content)
         self.assertIn(
             "<li>No additional evidence requirements identified.</li>",
+            content,
+        )
+        self.assertIn("Stage 8D — Workflow State", content)
+        self.assertIn(
+            '<td>Workflow State</td><td><span class="workflow-state-badge workflow-state-formal-review-ready">Formal Review Ready</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>State Description</td><td>Evidence requirements have been satisfied for formal review.</td>",
             content,
         )
         self.assertIn(
@@ -1713,6 +1749,52 @@ class AdminSessionTests(unittest.TestCase):
                 ["Minimal", "Reinforced"],
             ),
             ["No additional evidence requirements identified."],
+        )
+
+    def test_workflow_state_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session.classify_workflow_state(
+                "Unsupported",
+                "Collect Initial Evidence",
+            ),
+            "Evidence Collection",
+        )
+        self.assertEqual(
+            self.admin_session.classify_workflow_state(
+                "Evidence Gaps Present",
+                "Resolve Evidence Gaps",
+            ),
+            "Evidence Review",
+        )
+        self.assertEqual(
+            self.admin_session.classify_workflow_state(
+                "Partially Ready",
+                "Proceed to Administrative Review",
+            ),
+            "Administrative Review",
+        )
+        self.assertEqual(
+            self.admin_session.classify_workflow_state(
+                "Ready",
+                "Eligible for Formal Review",
+            ),
+            "Formal Review Ready",
+        )
+        self.assertEqual(
+            self.admin_session.describe_workflow_state("Evidence Collection"),
+            "Evidence support is still being established.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_workflow_state("Evidence Review"),
+            "Evidence has been collected but gaps remain.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_workflow_state("Administrative Review"),
+            "Evidence support is complete but remains minimally supported.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_workflow_state("Formal Review Ready"),
+            "Evidence requirements have been satisfied for formal review.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
