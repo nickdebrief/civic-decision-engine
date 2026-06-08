@@ -1659,6 +1659,50 @@ def describe_review_precondition_target(review_eligibility: str) -> str:
     }.get(review_eligibility, "Conditionally Eligible")
 
 
+def build_administrative_status_summary(
+    disposition: str,
+    review_eligibility: str,
+    workflow_state: str,
+    readiness_classification: str,
+) -> dict[str, str]:
+    if disposition == "Ready for Review" or review_eligibility == "Eligible":
+        return {
+            "status": "Ready for Formal Review",
+            "description": (
+                "The record satisfies current administrative review requirements."
+            ),
+        }
+    if (
+        disposition == "Pending Review"
+        or review_eligibility == "Conditionally Eligible"
+    ):
+        return {
+            "status": "Pending Administrative Review",
+            "description": (
+                "The record may proceed to administrative review subject to "
+                "assessment."
+            ),
+        }
+    if (
+        workflow_state == "Evidence Review"
+        or readiness_classification == "Evidence Gaps Present"
+    ):
+        return {
+            "status": "Active Evidence Review",
+            "description": (
+                "Evidence remains under review and review eligibility "
+                "requirements have not yet been satisfied."
+            ),
+        }
+    return {
+        "status": "Active Evidence Collection",
+        "description": (
+            "Evidence support is still being established and review "
+            "eligibility requirements have not yet been satisfied."
+        ),
+    }
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1691,6 +1735,15 @@ def _eligibility_badge_class(eligibility: str) -> str:
         "Conditionally Eligible": "eligibility-conditionally-eligible",
         "Eligible": "eligibility-eligible",
     }.get(eligibility, "eligibility-not-eligible")
+
+
+def _administrative_status_badge_class(status: str) -> str:
+    return {
+        "Active Evidence Collection": "administrative-status-active-collection",
+        "Active Evidence Review": "administrative-status-active-review",
+        "Pending Administrative Review": "administrative-status-pending-review",
+        "Ready for Formal Review": "administrative-status-ready-review",
+    }.get(status, "administrative-status-active-review")
 
 
 def _render_record_evidence_sufficiency(
@@ -2194,6 +2247,70 @@ def _render_review_preconditions(
       </section>"""
 
 
+def _render_administrative_status_summary(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    status = status_summary["status"]
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(status)}">'
+        f"{escape(status)}</span>"
+    )
+    disposition_badge = (
+        f'<span class="disposition-badge {_disposition_badge_class(disposition)}">'
+        f"{escape(disposition)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    workflow_badge = (
+        f'<span class="workflow-state-badge {_workflow_state_badge_class(workflow_state)}">'
+        f"{escape(workflow_state)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="readiness-badge {_readiness_badge_class(readiness)}">'
+        f"{escape(readiness)}</span>"
+    )
+    rows = (
+        ("Administrative Status", status_badge),
+        ("Status Description", escape(status_summary["description"])),
+        ("Administrative Disposition", disposition_badge),
+        ("Review Eligibility", eligibility_badge),
+        ("Workflow State", workflow_badge),
+        ("Readiness Classification", readiness_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section administrative-status-summary">
+        <h2>Stage 9E — Administrative Status Summary</h2>
+        <p class="notice">
+          Administrative status is summarized deterministically from
+          disposition, eligibility, workflow, and readiness values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2325,6 +2442,9 @@ def render_admin_record_evidence_page(
     disposition_basis = _render_disposition_basis(evidence_groups)
     review_eligibility = _render_review_eligibility(evidence_groups)
     review_preconditions = _render_review_preconditions(evidence_groups)
+    administrative_status_summary = _render_administrative_status_summary(
+        evidence_groups
+    )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2671,6 +2791,37 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .administrative-status-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .administrative-status-active-collection {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .administrative-status-active-review {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .administrative-status-pending-review {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .administrative-status-ready-review {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -2739,6 +2890,7 @@ def render_admin_record_evidence_page(
     {disposition_basis}
     {review_eligibility}
     {review_preconditions}
+    {administrative_status_summary}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
