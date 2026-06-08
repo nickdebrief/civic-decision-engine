@@ -1391,6 +1391,53 @@ def describe_administrative_action_basis(
     )
 
 
+def build_action_rationale_trace(
+    readiness_classification: str,
+    administrative_action: str,
+    supported_target_count: int,
+    unsupported_target_count: int,
+    evidence_gap_count: int,
+) -> list[str]:
+    if readiness_classification == "Unsupported":
+        return [
+            "Readiness classified as Unsupported",
+            "No supported targets identified",
+            f"Administrative action classified as {administrative_action}",
+        ]
+    if readiness_classification == "Evidence Gaps Present":
+        steps = ["Readiness classified as Evidence Gaps Present"]
+        if unsupported_target_count > 0:
+            steps.append("Unsupported targets remain")
+        if evidence_gap_count > 0:
+            steps.append("Evidence gaps remain")
+        steps.append(f"Administrative action classified as {administrative_action}")
+        return steps
+    if readiness_classification == "Partially Ready":
+        return [
+            "Readiness classified as Partially Ready",
+            "All targets currently supported",
+            "Support remains minimal",
+            f"Administrative action classified as {administrative_action}",
+        ]
+    if readiness_classification == "Ready":
+        return [
+            "Readiness classified as Ready",
+            "No unsupported targets remain",
+            "No evidence gaps remain",
+            "Corroborated or reinforced support identified",
+            f"Administrative action classified as {administrative_action}",
+        ]
+    steps = [f"Readiness classified as {readiness_classification}"]
+    if supported_target_count == 0:
+        steps.append("No supported targets identified")
+    if unsupported_target_count > 0:
+        steps.append("Unsupported targets remain")
+    if evidence_gap_count > 0:
+        steps.append("Evidence gaps remain")
+    steps.append(f"Administrative action classified as {administrative_action}")
+    return steps
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1565,6 +1612,38 @@ def _render_administrative_action(
       </section>"""
 
 
+def _render_action_rationale(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    readiness = readiness_values["readiness"]
+    supported_targets = int(gap_summary["supported_targets"])
+    unsupported_targets = int(gap_summary["unsupported_targets"])
+    evidence_gap_count = int(gap_summary["evidence_gap_count"])
+    action = classify_administrative_action(readiness)
+    rationale_steps = build_action_rationale_trace(
+        readiness,
+        action,
+        supported_targets,
+        unsupported_targets,
+        evidence_gap_count,
+    )
+    rationale_items = "".join(
+        f"<li>{escape(step)}</li>" for step in rationale_steps
+    )
+    return f"""
+      <section class="management-section action-rationale">
+        <h2>Stage 8B — Action Rationale</h2>
+        <p class="notice">
+          Action rationale is derived deterministically from readiness and
+          evidence state values only.
+        </p>
+        <h3>Action Rationale</h3>
+        <ol class="action-rationale-list">{rationale_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -1686,6 +1765,7 @@ def render_admin_record_evidence_page(
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
     administrative_action = _render_administrative_action(evidence_groups)
+    action_rationale = _render_action_rationale(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1831,6 +1911,14 @@ def render_admin_record_evidence_page(
     }}
     .outstanding-gap-list li {{
       margin: 4px 0;
+    }}
+    .action-rationale-list {{
+      margin: 8px 0 0 24px;
+      padding: 0;
+      line-height: 1.45;
+    }}
+    .action-rationale-list li {{
+      margin: 5px 0;
     }}
     .evidence-empty-state {{
       margin: 10px;
@@ -1991,6 +2079,7 @@ def render_admin_record_evidence_page(
     {evidence_sufficiency}
     {evidence_readiness}
     {administrative_action}
+    {action_rationale}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
