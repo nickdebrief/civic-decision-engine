@@ -1200,6 +1200,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>State Description</td><td>Evidence has been collected but gaps remain.</td>",
             content,
         )
+        self.assertIn("Stage 8E — Transition Conditions", content)
+        self.assertIn(
+            "Transition conditions are derived deterministically from workflow",
+            content,
+        )
+        self.assertIn("<td>Transition Target</td><td>Administrative Review</td>", content)
+        self.assertIn('<ol class="transition-conditions-list">', content)
+        self.assertIn("<li>Unsupported targets must be resolved.</li>", content)
+        self.assertIn("<li>Evidence gaps must be resolved.</li>", content)
+        self.assertIn(
+            "<li>Workflow state may advance to Administrative Review.</li>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1375,6 +1388,20 @@ class AdminSessionTests(unittest.TestCase):
             "<td>State Description</td><td>Evidence support is still being established.</td>",
             content,
         )
+        self.assertIn("Stage 8E — Transition Conditions", content)
+        self.assertIn("<td>Transition Target</td><td>Evidence Review</td>", content)
+        self.assertIn(
+            "<li>At least one target must become supported.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Evidence support must be established.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Workflow state may advance to Evidence Review.</li>",
+            content,
+        )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
         self.assertIn("<li>Signal — Missing Response</li>", content)
         self.assertIn("<li>Signal — Procedural Loop</li>", content)
@@ -1504,6 +1531,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>State Description</td><td>Evidence requirements have been satisfied for formal review.</td>",
+            content,
+        )
+        self.assertIn("Stage 8E — Transition Conditions", content)
+        self.assertIn(
+            "<td>Transition Target</td><td>No further workflow state identified</td>",
+            content,
+        )
+        self.assertIn(
+            "<li>No additional workflow transition conditions identified.</li>",
             content,
         )
         self.assertIn(
@@ -1795,6 +1831,81 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session.describe_workflow_state("Formal Review Ready"),
             "Evidence requirements have been satisfied for formal review.",
+        )
+
+    def test_transition_condition_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session.describe_transition_target("Evidence Collection"),
+            "Evidence Review",
+        )
+        self.assertEqual(
+            self.admin_session.describe_transition_target("Evidence Review"),
+            "Administrative Review",
+        )
+        self.assertEqual(
+            self.admin_session.describe_transition_target(
+                "Administrative Review"
+            ),
+            "Formal Review Ready",
+        )
+        self.assertEqual(
+            self.admin_session.describe_transition_target("Formal Review Ready"),
+            "No further workflow state identified",
+        )
+        self.assertEqual(
+            self.admin_session.build_transition_conditions(
+                "Evidence Collection",
+                "Unsupported",
+                "Collect Initial Evidence",
+                [
+                    "At least one target must become supported.",
+                    "Evidence support must be established.",
+                ],
+            ),
+            [
+                "At least one target must become supported.",
+                "Evidence support must be established.",
+                "Workflow state may advance to Evidence Review.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_transition_conditions(
+                "Evidence Review",
+                "Evidence Gaps Present",
+                "Resolve Evidence Gaps",
+                [
+                    "Unsupported targets must be resolved.",
+                    "Evidence gaps must be resolved.",
+                ],
+            ),
+            [
+                "Unsupported targets must be resolved.",
+                "Evidence gaps must be resolved.",
+                "Workflow state may advance to Administrative Review.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_transition_conditions(
+                "Administrative Review",
+                "Partially Ready",
+                "Proceed to Administrative Review",
+                [
+                    "At least one target must achieve corroborated or reinforced support.",
+                ],
+            ),
+            [
+                "Corroborated or reinforced support must be identified.",
+                "Workflow state may advance to Formal Review Ready.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_transition_conditions(
+                "Formal Review Ready",
+                "Ready",
+                "Eligible for Formal Review",
+                ["No additional evidence requirements identified."],
+            ),
+            ["No additional workflow transition conditions identified."],
         )
 
     def test_admin_record_evidence_view_requires_session(self):
