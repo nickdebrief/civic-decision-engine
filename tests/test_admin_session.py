@@ -1283,6 +1283,19 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Review eligibility may advance when workflow requirements are satisfied.</li>",
             content,
         )
+        self.assertIn("Stage 9E — Administrative Status Summary", content)
+        self.assertIn(
+            "Administrative status is summarized deterministically from",
+            content,
+        )
+        self.assertIn(
+            '<td>Administrative Status</td><td><span class="administrative-status-badge administrative-status-active-review">Active Evidence Review</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Status Description</td><td>Evidence remains under review and review eligibility requirements have not yet been satisfied.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1296,6 +1309,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".eligibility-not-eligible", content)
         self.assertIn(".eligibility-conditionally-eligible", content)
         self.assertIn(".eligibility-eligible", content)
+        self.assertIn(".administrative-status-badge", content)
+        self.assertIn(".administrative-status-active-collection", content)
+        self.assertIn(".administrative-status-active-review", content)
+        self.assertIn(".administrative-status-pending-review", content)
+        self.assertIn(".administrative-status-ready-review", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1663,6 +1681,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>No additional review preconditions identified.</li>",
+            content,
+        )
+        self.assertIn("Stage 9E — Administrative Status Summary", content)
+        self.assertIn(
+            '<td>Administrative Status</td><td><span class="administrative-status-badge administrative-status-ready-review">Ready for Formal Review</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Status Description</td><td>The record satisfies current administrative review requirements.</td>",
             content,
         )
         self.assertIn(
@@ -2201,6 +2228,51 @@ class AdminSessionTests(unittest.TestCase):
                 ["No additional workflow transition conditions identified."],
             ),
             ["No additional review preconditions identified."],
+        )
+        self.assertEqual(
+            self.admin_session.build_administrative_status_summary(
+                "Open",
+                "Not Eligible",
+                "Evidence Review",
+                "Evidence Gaps Present",
+            ),
+            {
+                "status": "Active Evidence Review",
+                "description": (
+                    "Evidence remains under review and review eligibility "
+                    "requirements have not yet been satisfied."
+                ),
+            },
+        )
+        self.assertEqual(
+            self.admin_session.build_administrative_status_summary(
+                "Pending Review",
+                "Conditionally Eligible",
+                "Administrative Review",
+                "Partially Ready",
+            ),
+            {
+                "status": "Pending Administrative Review",
+                "description": (
+                    "The record may proceed to administrative review subject "
+                    "to assessment."
+                ),
+            },
+        )
+        self.assertEqual(
+            self.admin_session.build_administrative_status_summary(
+                "Ready for Review",
+                "Eligible",
+                "Formal Review Ready",
+                "Ready",
+            ),
+            {
+                "status": "Ready for Formal Review",
+                "description": (
+                    "The record satisfies current administrative review "
+                    "requirements."
+                ),
+            },
         )
 
     def test_admin_record_evidence_view_requires_session(self):
