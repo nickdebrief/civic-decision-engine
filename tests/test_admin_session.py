@@ -1138,9 +1138,14 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
-            "<td>Readiness Classification</td><td>Evidence Gaps Present</td>",
+            '<td>Readiness Classification</td><td><span class="readiness-badge readiness-gaps-present">Evidence Gaps Present</span></td>',
             content,
         )
+        self.assertIn(".readiness-badge", content)
+        self.assertIn(".readiness-ready", content)
+        self.assertIn(".readiness-partially-ready", content)
+        self.assertIn(".readiness-gaps-present", content)
+        self.assertIn(".readiness-unsupported", content)
         self.assertIn(
             "<td>Sufficiency Basis</td><td>5 Unsupported, 2 Minimal, 1 Corroborated, 1 Reinforced</td>",
             content,
@@ -1272,7 +1277,7 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("Stage 7G — Evidence Readiness", content)
         self.assertIn(
-            "<td>Readiness Classification</td><td>Unsupported</td>",
+            '<td>Readiness Classification</td><td><span class="readiness-badge readiness-unsupported">Unsupported</span></td>',
             content,
         )
         self.assertIn("<td>Sufficiency Basis</td><td>9 Unsupported</td>", content)
@@ -1368,7 +1373,7 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("Stage 7G — Evidence Readiness", content)
         self.assertIn(
-            "<td>Readiness Classification</td><td>Ready</td>",
+            '<td>Readiness Classification</td><td><span class="readiness-badge readiness-ready">Ready</span></td>',
             content,
         )
         self.assertIn(
