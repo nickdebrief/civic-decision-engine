@@ -1507,6 +1507,57 @@ def describe_workflow_state(workflow_state: str) -> str:
     }.get(workflow_state, "Evidence has been collected but gaps remain.")
 
 
+def describe_transition_target(workflow_state: str) -> str:
+    return {
+        "Evidence Collection": "Evidence Review",
+        "Evidence Review": "Administrative Review",
+        "Administrative Review": "Formal Review Ready",
+        "Formal Review Ready": "No further workflow state identified",
+    }.get(workflow_state, "Evidence Review")
+
+
+def build_transition_conditions(
+    workflow_state: str,
+    readiness_classification: str,
+    administrative_action: str,
+    completion_requirements: list[str],
+) -> list[str]:
+    if workflow_state == "Evidence Collection":
+        return [
+            "At least one target must become supported.",
+            "Evidence support must be established.",
+            "Workflow state may advance to Evidence Review.",
+        ]
+    if workflow_state == "Evidence Review":
+        conditions = [
+            requirement
+            for requirement in completion_requirements
+            if requirement
+            in {
+                "Unsupported targets must be resolved.",
+                "Evidence gaps must be resolved.",
+            }
+        ]
+        if not conditions:
+            conditions = [
+                "Unsupported targets must be resolved.",
+                "Evidence gaps must be resolved.",
+            ]
+        conditions.append("Workflow state may advance to Administrative Review.")
+        return conditions
+    if workflow_state == "Administrative Review":
+        return [
+            "Corroborated or reinforced support must be identified.",
+            "Workflow state may advance to Formal Review Ready.",
+        ]
+    if workflow_state == "Formal Review Ready":
+        return ["No additional workflow transition conditions identified."]
+    return [
+        f"Workflow state {workflow_state} must satisfy {administrative_action} requirements.",
+        f"Readiness classification remains {readiness_classification}.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1801,6 +1852,53 @@ def _render_workflow_state(
       </section>"""
 
 
+def _render_transition_conditions(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    gap_summary = readiness_values["gap_summary"]
+    classifications = readiness_values["classifications"]
+    readiness = readiness_values["readiness"]
+    supported_targets = int(gap_summary["supported_targets"])
+    unsupported_targets = int(gap_summary["unsupported_targets"])
+    evidence_gap_count = int(gap_summary["evidence_gap_count"])
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    completion_requirements = build_completion_requirements(
+        readiness,
+        action,
+        supported_targets,
+        unsupported_targets,
+        evidence_gap_count,
+        classifications,
+    )
+    transition_target = describe_transition_target(workflow_state)
+    conditions = build_transition_conditions(
+        workflow_state,
+        readiness,
+        action,
+        completion_requirements,
+    )
+    condition_items = "".join(
+        f"<li>{escape(condition)}</li>" for condition in conditions
+    )
+    return f"""
+      <section class="management-section transition-conditions">
+        <h2>Stage 8E — Transition Conditions</h2>
+        <p class="notice">
+          Transition conditions are derived deterministically from workflow
+          state and completion requirement values only.
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Transition Target</td><td>{escape(transition_target)}</td></tr>
+          </tbody>
+        </table>
+        <h3>Transition Conditions</h3>
+        <ol class="transition-conditions-list">{condition_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -1925,6 +2023,7 @@ def render_admin_record_evidence_page(
     action_rationale = _render_action_rationale(evidence_groups)
     completion_requirements = _render_completion_requirements(evidence_groups)
     workflow_state = _render_workflow_state(evidence_groups)
+    transition_conditions = _render_transition_conditions(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2072,13 +2171,15 @@ def render_admin_record_evidence_page(
       margin: 4px 0;
     }}
     .action-rationale-list,
-    .completion-requirements-list {{
+    .completion-requirements-list,
+    .transition-conditions-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
     }}
     .action-rationale-list li,
-    .completion-requirements-list li {{
+    .completion-requirements-list li,
+    .transition-conditions-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -2274,6 +2375,7 @@ def render_admin_record_evidence_page(
     {action_rationale}
     {completion_requirements}
     {workflow_state}
+    {transition_conditions}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
