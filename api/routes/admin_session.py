@@ -1810,6 +1810,20 @@ def describe_outcome(outcome: str) -> str:
     )
 
 
+def build_outcome_basis_trace(
+    outcome: str,
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+) -> list[str]:
+    return [
+        f"Administrative status classified as {administrative_status}.",
+        f"Implementation action classified as {implementation_action}.",
+        f"Effective state classified as {effective_state}.",
+        f"Outcome classified as {outcome}.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2691,6 +2705,49 @@ def _render_outcome_classification(
       </section>"""
 
 
+def _render_outcome_basis(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    trace_steps = build_outcome_basis_trace(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    trace_items = "".join(f"<li>{escape(step)}</li>" for step in trace_steps)
+    return f"""
+      <section class="management-section outcome-basis">
+        <h2>Stage 11B — Outcome Basis</h2>
+        <p class="notice">
+          Outcome basis is derived deterministically from outcome, effective
+          state, implementation action, and administrative status values only.
+        </p>
+        <h3>Outcome Basis</h3>
+        <ol class="outcome-basis-list">{trace_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2829,6 +2886,7 @@ def render_admin_record_evidence_page(
     implementation_basis = _render_implementation_basis(evidence_groups)
     effective_state = _render_effective_state(evidence_groups)
     outcome_classification = _render_outcome_classification(evidence_groups)
+    outcome_basis = _render_outcome_basis(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2980,7 +3038,8 @@ def render_admin_record_evidence_page(
     .transition-conditions-list,
     .disposition-basis-list,
     .review-preconditions-list,
-    .implementation-basis-list {{
+    .implementation-basis-list,
+    .outcome-basis-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
@@ -2990,7 +3049,8 @@ def render_admin_record_evidence_page(
     .transition-conditions-list li,
     .disposition-basis-list li,
     .review-preconditions-list li,
-    .implementation-basis-list li {{
+    .implementation-basis-list li,
+    .outcome-basis-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -3362,6 +3422,7 @@ def render_admin_record_evidence_page(
     {implementation_basis}
     {effective_state}
     {outcome_classification}
+    {outcome_basis}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
