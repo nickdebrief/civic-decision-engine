@@ -1309,6 +1309,36 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Implementation Description</td><td>No implementation action is available while evidence review remains active.</td>",
             content,
         )
+        self.assertIn("Stage 10B — Implementation Basis", content)
+        self.assertIn(
+            "Implementation basis is derived deterministically from",
+            content,
+        )
+        self.assertIn('<ol class="implementation-basis-list">', content)
+        self.assertIn(
+            "<li>Administrative status classified as Active Evidence Review.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative disposition classified as Open.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Review eligibility classified as Not Eligible.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Workflow state classified as Evidence Review.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Readiness classified as Evidence Gaps Present.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Implementation action classified as No Implementation Action.</li>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1716,6 +1746,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Implementation Description</td><td>The record is ready for formal review implementation planning.</td>",
+            content,
+        )
+        self.assertIn("Stage 10B — Implementation Basis", content)
+        self.assertIn(
+            "<li>Administrative status classified as Ready for Formal Review.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Implementation action classified as Prepare Formal Review Implementation.</li>",
             content,
         )
         self.assertIn(
@@ -2341,6 +2380,63 @@ class AdminSessionTests(unittest.TestCase):
                 "Prepare Formal Review Implementation"
             ),
             "The record is ready for formal review implementation planning.",
+        )
+        self.assertEqual(
+            self.admin_session.build_implementation_basis_trace(
+                "No Implementation Action",
+                "Active Evidence Review",
+                "Open",
+                "Not Eligible",
+                "Evidence Review",
+                "Evidence Gaps Present",
+            ),
+            [
+                "Administrative status classified as Active Evidence Review.",
+                "Administrative disposition classified as Open.",
+                "Review eligibility classified as Not Eligible.",
+                "Workflow state classified as Evidence Review.",
+                "Readiness classified as Evidence Gaps Present.",
+                "Implementation action classified as No Implementation Action.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_implementation_basis_trace(
+                "Await Review Determination",
+                "Pending Administrative Review",
+                "Pending Review",
+                "Conditionally Eligible",
+                "Administrative Review",
+                "Partially Ready",
+            ),
+            [
+                "Administrative status classified as Pending Administrative Review.",
+                "Administrative disposition classified as Pending Review.",
+                "Review eligibility classified as Conditionally Eligible.",
+                "Workflow state classified as Administrative Review.",
+                "Readiness classified as Partially Ready.",
+                "Implementation action classified as Await Review Determination.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_implementation_basis_trace(
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+                "Ready for Review",
+                "Eligible",
+                "Formal Review Ready",
+                "Ready",
+            ),
+            [
+                "Administrative status classified as Ready for Formal Review.",
+                "Administrative disposition classified as Ready for Review.",
+                "Review eligibility classified as Eligible.",
+                "Workflow state classified as Formal Review Ready.",
+                "Readiness classified as Ready.",
+                (
+                    "Implementation action classified as Prepare Formal Review "
+                    "Implementation."
+                ),
+            ],
         )
 
     def test_admin_record_evidence_view_requires_session(self):

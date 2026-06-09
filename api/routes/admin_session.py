@@ -1731,6 +1731,24 @@ def describe_implementation_action(implementation_action: str) -> str:
     )
 
 
+def build_implementation_basis_trace(
+    implementation_action: str,
+    administrative_status: str,
+    administrative_disposition: str,
+    review_eligibility: str,
+    workflow_state: str,
+    readiness_classification: str,
+) -> list[str]:
+    return [
+        f"Administrative status classified as {administrative_status}.",
+        f"Administrative disposition classified as {administrative_disposition}.",
+        f"Review eligibility classified as {review_eligibility}.",
+        f"Workflow state classified as {workflow_state}.",
+        f"Readiness classified as {readiness_classification}.",
+        f"Implementation action classified as {implementation_action}.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2417,6 +2435,47 @@ def _render_implementation_action(
       </section>"""
 
 
+def _render_implementation_basis(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    trace_steps = build_implementation_basis_trace(
+        implementation_action,
+        administrative_status,
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    trace_items = "".join(f"<li>{escape(step)}</li>" for step in trace_steps)
+    return f"""
+      <section class="management-section implementation-basis">
+        <h2>Stage 10B — Implementation Basis</h2>
+        <p class="notice">
+          Implementation basis is derived deterministically from
+          administrative status, disposition, eligibility, workflow, and
+          readiness values only.
+        </p>
+        <h3>Implementation Basis</h3>
+        <ol class="implementation-basis-list">{trace_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2552,6 +2611,7 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     implementation_action = _render_implementation_action(evidence_groups)
+    implementation_basis = _render_implementation_basis(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2702,7 +2762,8 @@ def render_admin_record_evidence_page(
     .completion-requirements-list,
     .transition-conditions-list,
     .disposition-basis-list,
-    .review-preconditions-list {{
+    .review-preconditions-list,
+    .implementation-basis-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
@@ -2711,7 +2772,8 @@ def render_admin_record_evidence_page(
     .completion-requirements-list li,
     .transition-conditions-list li,
     .disposition-basis-list li,
-    .review-preconditions-list li {{
+    .review-preconditions-list li,
+    .implementation-basis-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -3026,6 +3088,7 @@ def render_admin_record_evidence_page(
     {review_preconditions}
     {administrative_status_summary}
     {implementation_action}
+    {implementation_basis}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
