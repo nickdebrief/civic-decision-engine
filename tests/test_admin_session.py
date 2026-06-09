@@ -1352,6 +1352,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Effective Description</td><td>Evidence review remains active and no implementation action has been applied.</td>",
             content,
         )
+        self.assertIn("Stage 11A — Outcome Classification", content)
+        self.assertIn(
+            "Outcome is classified deterministically from effective state values",
+            content,
+        )
+        self.assertIn(
+            '<td>Outcome</td><td><span class="outcome-badge outcome-ongoing-review">Ongoing Review</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Outcome Description</td><td>The record remains in ongoing review because evidence review continues.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1378,6 +1391,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".effective-state-evidence-review-continues", content)
         self.assertIn(".effective-state-administrative-review-pending", content)
         self.assertIn(".effective-state-formal-review-ready", content)
+        self.assertIn(".outcome-badge", content)
+        self.assertIn(".outcome-ongoing-review", content)
+        self.assertIn(".outcome-awaiting-determination", content)
+        self.assertIn(".outcome-ready-determination", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1781,6 +1798,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Effective Description</td><td>The record is ready for formal review implementation planning.</td>",
+            content,
+        )
+        self.assertIn("Stage 11A — Outcome Classification", content)
+        self.assertIn(
+            '<td>Outcome</td><td><span class="outcome-badge outcome-ready-determination">Ready For Determination</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Outcome Description</td><td>The record is ready for formal review determination.</td>",
             content,
         )
         self.assertIn(
@@ -2506,6 +2532,37 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session.describe_effective_state("Formal Review Ready"),
             "The record is ready for formal review implementation planning.",
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome("Evidence Review Continues"),
+            "Ongoing Review",
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome(
+                "Administrative Review Pending"
+            ),
+            "Review Awaiting Determination",
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome("Formal Review Ready"),
+            "Ready For Determination",
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome("Ongoing Review"),
+            (
+                "The record remains in ongoing review because evidence review "
+                "continues."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome(
+                "Review Awaiting Determination"
+            ),
+            "The record is awaiting an administrative review determination.",
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome("Ready For Determination"),
+            "The record is ready for formal review determination.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):

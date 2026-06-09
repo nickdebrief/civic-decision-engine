@@ -1785,6 +1785,31 @@ def describe_effective_state(effective_state: str) -> str:
     )
 
 
+def classify_outcome(effective_state: str) -> str:
+    return {
+        "Evidence Review Continues": "Ongoing Review",
+        "Administrative Review Pending": "Review Awaiting Determination",
+        "Formal Review Ready": "Ready For Determination",
+    }.get(effective_state, "Ongoing Review")
+
+
+def describe_outcome(outcome: str) -> str:
+    return {
+        "Ongoing Review": (
+            "The record remains in ongoing review because evidence review continues."
+        ),
+        "Review Awaiting Determination": (
+            "The record is awaiting an administrative review determination."
+        ),
+        "Ready For Determination": (
+            "The record is ready for formal review determination."
+        ),
+    }.get(
+        outcome,
+        "The record remains in ongoing review because evidence review continues.",
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1842,6 +1867,14 @@ def _effective_state_badge_class(effective_state: str) -> str:
         "Administrative Review Pending": "effective-state-administrative-review-pending",
         "Formal Review Ready": "effective-state-formal-review-ready",
     }.get(effective_state, "effective-state-evidence-review-continues")
+
+
+def _outcome_badge_class(outcome: str) -> str:
+    return {
+        "Ongoing Review": "outcome-ongoing-review",
+        "Review Awaiting Determination": "outcome-awaiting-determination",
+        "Ready For Determination": "outcome-ready-determination",
+    }.get(outcome, "outcome-ongoing-review")
 
 
 def _render_record_evidence_sufficiency(
@@ -2591,6 +2624,73 @@ def _render_effective_state(
       </section>"""
 
 
+def _render_outcome_classification(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_badge = (
+        f'<span class="outcome-badge {_outcome_badge_class(outcome)}">'
+        f"{escape(outcome)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    rows = (
+        ("Outcome", outcome_badge),
+        ("Outcome Description", escape(describe_outcome(outcome))),
+        ("Effective State", effective_state_badge),
+        ("Implementation Action", implementation_badge),
+        ("Administrative Status", status_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section outcome-classification">
+        <h2>Stage 11A — Outcome Classification</h2>
+        <p class="notice">
+          Outcome is classified deterministically from effective state values
+          only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2728,6 +2828,7 @@ def render_admin_record_evidence_page(
     implementation_action = _render_implementation_action(evidence_groups)
     implementation_basis = _render_implementation_basis(evidence_groups)
     effective_state = _render_effective_state(evidence_groups)
+    outcome_classification = _render_outcome_classification(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3161,6 +3262,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .outcome-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .outcome-ongoing-review {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .outcome-awaiting-determination {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .outcome-ready-determination {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -3233,6 +3361,7 @@ def render_admin_record_evidence_page(
     {implementation_action}
     {implementation_basis}
     {effective_state}
+    {outcome_classification}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
