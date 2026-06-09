@@ -1410,6 +1410,16 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Effective state may advance when review conditions are satisfied.</li>",
             content,
         )
+        self.assertIn("Stage 11D — Outcome Summary", content)
+        self.assertIn(
+            "Outcome summary is derived deterministically from outcome, effective",
+            content,
+        )
+        self.assertIn("<td>Outcome Summary</td><td>Ongoing Review</td>", content)
+        self.assertIn(
+            "<td>Summary Description</td><td>The record remains in ongoing review. Evidence review continues, no implementation action has been applied, and outcome advancement depends upon satisfaction of review eligibility and administrative progression requirements.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1882,6 +1892,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>Outcome advancement depends on determination completion.</li>",
+            content,
+        )
+        self.assertIn("Stage 11D — Outcome Summary", content)
+        self.assertIn(
+            "<td>Outcome Summary</td><td>Ready For Determination</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Summary Description</td><td>The record has satisfied review progression requirements and is ready for formal determination. Outcome advancement depends upon completion of the determination process.</td>",
             content,
         )
         self.assertIn(
@@ -2724,6 +2743,93 @@ class AdminSessionTests(unittest.TestCase):
                 "Formal review determination may proceed.",
                 "Outcome advancement depends on determination completion.",
             ],
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_summary(
+                "Ongoing Review",
+                [
+                    "Administrative status classified as Active Evidence Review.",
+                    "Implementation action classified as No Implementation Action.",
+                    "Effective state classified as Evidence Review Continues.",
+                    "Outcome classified as Ongoing Review.",
+                ],
+                [
+                    "Review eligibility requirements must be satisfied.",
+                    "Administrative disposition must advance beyond Open.",
+                    "Implementation action must advance beyond No Implementation Action.",
+                    "Effective state may advance when review conditions are satisfied.",
+                ],
+                "Evidence Review Continues",
+                "No Implementation Action",
+                "Active Evidence Review",
+            ),
+            {
+                "outcome": "Ongoing Review",
+                "description": (
+                    "The record remains in ongoing review. Evidence review "
+                    "continues, no implementation action has been applied, "
+                    "and outcome advancement depends upon satisfaction of "
+                    "review eligibility and administrative progression "
+                    "requirements."
+                ),
+            },
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_summary(
+                "Review Awaiting Determination",
+                [
+                    "Administrative status classified as Pending Administrative Review.",
+                    "Implementation action classified as Await Review Determination.",
+                    "Effective state classified as Administrative Review Pending.",
+                    "Outcome classified as Review Awaiting Determination.",
+                ],
+                [
+                    "Administrative review determination must be completed.",
+                    "Outcome may advance when determination requirements are satisfied.",
+                ],
+                "Administrative Review Pending",
+                "Await Review Determination",
+                "Pending Administrative Review",
+            ),
+            {
+                "outcome": "Review Awaiting Determination",
+                "description": (
+                    "The record has advanced beyond active evidence review "
+                    "and is awaiting administrative determination. Outcome "
+                    "advancement depends upon completion of the required "
+                    "review determination process."
+                ),
+            },
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_summary(
+                "Ready For Determination",
+                [
+                    "Administrative status classified as Ready for Formal Review.",
+                    (
+                        "Implementation action classified as Prepare Formal Review "
+                        "Implementation."
+                    ),
+                    "Effective state classified as Formal Review Ready.",
+                    "Outcome classified as Ready For Determination.",
+                ],
+                [
+                    "Formal review determination may proceed.",
+                    "Outcome advancement depends on determination completion.",
+                ],
+                "Formal Review Ready",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+            ),
+            {
+                "outcome": "Ready For Determination",
+                "description": (
+                    "The record has satisfied review progression requirements "
+                    "and is ready for formal determination. Outcome "
+                    "advancement depends upon completion of the determination "
+                    "process."
+                ),
+            },
         )
 
     def test_admin_record_evidence_view_requires_session(self):

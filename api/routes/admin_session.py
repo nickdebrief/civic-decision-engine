@@ -1864,6 +1864,81 @@ def build_outcome_preconditions(
     ]
 
 
+def build_outcome_summary(
+    outcome: str,
+    outcome_basis: list[str],
+    outcome_preconditions: list[str],
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+) -> dict[str, str]:
+    return {
+        "outcome": outcome,
+        "description": describe_outcome_summary(
+            outcome,
+            outcome_basis,
+            outcome_preconditions,
+            effective_state,
+            implementation_action,
+            administrative_status,
+        ),
+    }
+
+
+def describe_outcome_summary(
+    outcome: str,
+    outcome_basis: list[str],
+    outcome_preconditions: list[str],
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+) -> str:
+    if outcome == "Ready For Determination":
+        return (
+            "The record has satisfied review progression requirements and is "
+            "ready for formal determination. Outcome advancement depends upon "
+            "completion of the determination process."
+        )
+    if outcome == "Review Awaiting Determination":
+        return (
+            "The record has advanced beyond active evidence review and is "
+            "awaiting administrative determination. Outcome advancement "
+            "depends upon completion of the required review determination "
+            "process."
+        )
+    if outcome == "Ongoing Review":
+        return (
+            "The record remains in ongoing review. Evidence review continues, "
+            "no implementation action has been applied, and outcome "
+            "advancement depends upon satisfaction of review eligibility and "
+            "administrative progression requirements."
+        )
+    if (
+        effective_state == "Formal Review Ready"
+        or implementation_action == "Prepare Formal Review Implementation"
+        or administrative_status == "Ready for Formal Review"
+        or any("Formal review determination" in item for item in outcome_preconditions)
+    ):
+        return (
+            "The record has satisfied review progression requirements and is "
+            "ready for formal determination. Outcome advancement depends upon "
+            "completion of the determination process."
+        )
+    if any("Administrative review determination" in item for item in outcome_basis):
+        return (
+            "The record has advanced beyond active evidence review and is "
+            "awaiting administrative determination. Outcome advancement "
+            "depends upon completion of the required review determination "
+            "process."
+        )
+    return (
+        "The record remains in ongoing review. Evidence review continues, no "
+        "implementation action has been applied, and outcome advancement "
+        "depends upon satisfaction of review eligibility and administrative "
+        "progression requirements."
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2849,6 +2924,68 @@ def _render_outcome_preconditions(
       </section>"""
 
 
+def _render_outcome_summary(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_basis = build_outcome_basis_trace(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    summary = build_outcome_summary(
+        outcome,
+        outcome_basis,
+        outcome_preconditions,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    return f"""
+      <section class="management-section outcome-summary">
+        <h2>Stage 11D — Outcome Summary</h2>
+        <p class="notice">
+          Outcome summary is derived deterministically from outcome, effective
+          state, implementation action, administrative status, and outcome
+          precondition values only.
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Outcome Summary</td><td>{escape(summary["outcome"])}</td></tr>
+            <tr><td>Summary Description</td><td>{escape(summary["description"])}</td></tr>
+          </tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2989,6 +3126,7 @@ def render_admin_record_evidence_page(
     outcome_classification = _render_outcome_classification(evidence_groups)
     outcome_basis = _render_outcome_basis(evidence_groups)
     outcome_preconditions = _render_outcome_preconditions(evidence_groups)
+    outcome_summary = _render_outcome_summary(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3528,6 +3666,7 @@ def render_admin_record_evidence_page(
     {outcome_classification}
     {outcome_basis}
     {outcome_preconditions}
+    {outcome_summary}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
