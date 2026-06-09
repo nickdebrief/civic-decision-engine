@@ -1339,6 +1339,19 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Implementation action classified as No Implementation Action.</li>",
             content,
         )
+        self.assertIn("Stage 10C — Effective State", content)
+        self.assertIn(
+            "Effective state is derived deterministically from implementation",
+            content,
+        )
+        self.assertIn(
+            '<td>Effective State</td><td><span class="effective-state-badge effective-state-evidence-review-continues">Evidence Review Continues</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Effective Description</td><td>Evidence review remains active and no implementation action has been applied.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1361,6 +1374,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".implementation-action-none", content)
         self.assertIn(".implementation-action-await-review", content)
         self.assertIn(".implementation-action-formal-review", content)
+        self.assertIn(".effective-state-badge", content)
+        self.assertIn(".effective-state-evidence-review-continues", content)
+        self.assertIn(".effective-state-administrative-review-pending", content)
+        self.assertIn(".effective-state-formal-review-ready", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1755,6 +1772,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>Implementation action classified as Prepare Formal Review Implementation.</li>",
+            content,
+        )
+        self.assertIn("Stage 10C — Effective State", content)
+        self.assertIn(
+            '<td>Effective State</td><td><span class="effective-state-badge effective-state-formal-review-ready">Formal Review Ready</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Effective Description</td><td>The record is ready for formal review implementation planning.</td>",
             content,
         )
         self.assertIn(
@@ -2437,6 +2463,49 @@ class AdminSessionTests(unittest.TestCase):
                     "Implementation."
                 ),
             ],
+        )
+        self.assertEqual(
+            self.admin_session.classify_effective_state(
+                "No Implementation Action",
+                "Active Evidence Review",
+            ),
+            "Evidence Review Continues",
+        )
+        self.assertEqual(
+            self.admin_session.classify_effective_state(
+                "Await Review Determination",
+                "Pending Administrative Review",
+            ),
+            "Administrative Review Pending",
+        )
+        self.assertEqual(
+            self.admin_session.classify_effective_state(
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+            ),
+            "Formal Review Ready",
+        )
+        self.assertEqual(
+            self.admin_session.describe_effective_state(
+                "Evidence Review Continues"
+            ),
+            (
+                "Evidence review remains active and no implementation action "
+                "has been applied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_effective_state(
+                "Administrative Review Pending"
+            ),
+            (
+                "Administrative review remains pending before implementation "
+                "can proceed."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_effective_state("Formal Review Ready"),
+            "The record is ready for formal review implementation planning.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
