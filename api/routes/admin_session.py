@@ -1703,6 +1703,34 @@ def build_administrative_status_summary(
     }
 
 
+def classify_implementation_action(administrative_status: str) -> str:
+    return {
+        "Active Evidence Collection": "No Implementation Action",
+        "Active Evidence Review": "No Implementation Action",
+        "Pending Administrative Review": "Await Review Determination",
+        "Ready for Formal Review": "Prepare Formal Review Implementation",
+    }.get(administrative_status, "No Implementation Action")
+
+
+def describe_implementation_action(implementation_action: str) -> str:
+    return {
+        "No Implementation Action": (
+            "No implementation action is available while evidence review "
+            "remains active."
+        ),
+        "Await Review Determination": (
+            "Implementation is deferred until administrative review produces "
+            "a determination."
+        ),
+        "Prepare Formal Review Implementation": (
+            "The record is ready for formal review implementation planning."
+        ),
+    }.get(
+        implementation_action,
+        "No implementation action is available while evidence review remains active.",
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1744,6 +1772,14 @@ def _administrative_status_badge_class(status: str) -> str:
         "Pending Administrative Review": "administrative-status-pending-review",
         "Ready for Formal Review": "administrative-status-ready-review",
     }.get(status, "administrative-status-active-review")
+
+
+def _implementation_action_badge_class(implementation_action: str) -> str:
+    return {
+        "No Implementation Action": "implementation-action-none",
+        "Await Review Determination": "implementation-action-await-review",
+        "Prepare Formal Review Implementation": "implementation-action-formal-review",
+    }.get(implementation_action, "implementation-action-none")
 
 
 def _render_record_evidence_sufficiency(
@@ -2311,6 +2347,76 @@ def _render_administrative_status_summary(
       </section>"""
 
 
+def _render_implementation_action(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    disposition_badge = (
+        f'<span class="disposition-badge {_disposition_badge_class(disposition)}">'
+        f"{escape(disposition)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    workflow_badge = (
+        f'<span class="workflow-state-badge {_workflow_state_badge_class(workflow_state)}">'
+        f"{escape(workflow_state)}</span>"
+    )
+    rows = (
+        ("Implementation Action", implementation_badge),
+        (
+            "Implementation Description",
+            escape(describe_implementation_action(implementation_action)),
+        ),
+        ("Administrative Status", status_badge),
+        ("Administrative Disposition", disposition_badge),
+        ("Review Eligibility", eligibility_badge),
+        ("Workflow State", workflow_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section implementation-action">
+        <h2>Stage 10A — Implementation Action</h2>
+        <p class="notice">
+          Implementation action is classified deterministically from
+          administrative status values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2445,6 +2551,7 @@ def render_admin_record_evidence_page(
     administrative_status_summary = _render_administrative_status_summary(
         evidence_groups
     )
+    implementation_action = _render_implementation_action(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2822,6 +2929,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .implementation-action-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .implementation-action-none {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .implementation-action-await-review {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .implementation-action-formal-review {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -2891,6 +3025,7 @@ def render_admin_record_evidence_page(
     {review_eligibility}
     {review_preconditions}
     {administrative_status_summary}
+    {implementation_action}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
