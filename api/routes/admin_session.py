@@ -1824,6 +1824,46 @@ def build_outcome_basis_trace(
     ]
 
 
+def build_outcome_preconditions(
+    outcome: str,
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+    review_eligibility: str,
+) -> list[str]:
+    if outcome == "Ready For Determination":
+        return [
+            "Formal review determination may proceed.",
+            "Outcome advancement depends on determination completion.",
+        ]
+    if outcome == "Review Awaiting Determination":
+        return [
+            "Administrative review determination must be completed.",
+            "Outcome may advance when determination requirements are satisfied.",
+        ]
+    if outcome == "Ongoing Review":
+        return [
+            "Review eligibility requirements must be satisfied.",
+            "Administrative disposition must advance beyond Open.",
+            "Implementation action must advance beyond No Implementation Action.",
+            "Effective state may advance when review conditions are satisfied.",
+        ]
+    if (
+        effective_state == "Formal Review Ready"
+        or implementation_action == "Prepare Formal Review Implementation"
+        or administrative_status == "Ready for Formal Review"
+        or review_eligibility == "Eligible"
+    ):
+        return [
+            "Formal review determination may proceed.",
+            "Outcome advancement depends on determination completion.",
+        ]
+    return [
+        "Review eligibility requirements must be satisfied.",
+        "Outcome may advance when review conditions are satisfied.",
+    ]
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2748,6 +2788,67 @@ def _render_outcome_basis(
       </section>"""
 
 
+def _outcome_precondition_target(outcome: str) -> str:
+    return {
+        "Ongoing Review": "Review Awaiting Determination",
+        "Review Awaiting Determination": "Ready For Determination",
+        "Ready For Determination": "Determination Completion",
+    }.get(outcome, "Review Awaiting Determination")
+
+
+def _render_outcome_preconditions(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    precondition_target = _outcome_precondition_target(outcome)
+    precondition_items = "".join(
+        f"<li>{escape(precondition)}</li>" for precondition in preconditions
+    )
+    return f"""
+      <section class="management-section outcome-preconditions">
+        <h2>Stage 11C — Outcome Preconditions</h2>
+        <p class="notice">
+          Outcome preconditions are derived deterministically from outcome,
+          effective state, implementation action, administrative status, and
+          review eligibility values only.
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Precondition Target</td><td>{escape(precondition_target)}</td></tr>
+          </tbody>
+        </table>
+        <h3>Outcome Preconditions</h3>
+        <ol class="outcome-preconditions-list">{precondition_items}</ol>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2887,6 +2988,7 @@ def render_admin_record_evidence_page(
     effective_state = _render_effective_state(evidence_groups)
     outcome_classification = _render_outcome_classification(evidence_groups)
     outcome_basis = _render_outcome_basis(evidence_groups)
+    outcome_preconditions = _render_outcome_preconditions(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3039,7 +3141,8 @@ def render_admin_record_evidence_page(
     .disposition-basis-list,
     .review-preconditions-list,
     .implementation-basis-list,
-    .outcome-basis-list {{
+    .outcome-basis-list,
+    .outcome-preconditions-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
@@ -3050,7 +3153,8 @@ def render_admin_record_evidence_page(
     .disposition-basis-list li,
     .review-preconditions-list li,
     .implementation-basis-list li,
-    .outcome-basis-list li {{
+    .outcome-basis-list li,
+    .outcome-preconditions-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -3423,6 +3527,7 @@ def render_admin_record_evidence_page(
     {effective_state}
     {outcome_classification}
     {outcome_basis}
+    {outcome_preconditions}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
