@@ -1420,6 +1420,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Summary Description</td><td>The record remains in ongoing review. Evidence review continues, no implementation action has been applied, and outcome advancement depends upon satisfaction of review eligibility and administrative progression requirements.</td>",
             content,
         )
+        self.assertIn("Stage 11E — Outcome Readiness", content)
+        self.assertIn(
+            "Outcome readiness is classified deterministically from outcome,",
+            content,
+        )
+        self.assertIn(
+            '<td>Outcome Readiness</td><td><span class="outcome-readiness-badge outcome-readiness-not-ready">Not Ready</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Readiness Description</td><td>The outcome cannot advance while review eligibility and administrative progression requirements remain unsatisfied.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1450,6 +1463,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".outcome-ongoing-review", content)
         self.assertIn(".outcome-awaiting-determination", content)
         self.assertIn(".outcome-ready-determination", content)
+        self.assertIn(".outcome-readiness-badge", content)
+        self.assertIn(".outcome-readiness-not-ready", content)
+        self.assertIn(".outcome-readiness-conditionally-ready", content)
+        self.assertIn(".outcome-readiness-ready", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1901,6 +1918,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Summary Description</td><td>The record has satisfied review progression requirements and is ready for formal determination. Outcome advancement depends upon completion of the determination process.</td>",
+            content,
+        )
+        self.assertIn("Stage 11E — Outcome Readiness", content)
+        self.assertIn(
+            '<td>Outcome Readiness</td><td><span class="outcome-readiness-badge outcome-readiness-ready">Ready</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Readiness Description</td><td>The outcome is ready to proceed to determination.</td>",
             content,
         )
         self.assertIn(
@@ -2830,6 +2856,65 @@ class AdminSessionTests(unittest.TestCase):
                     "process."
                 ),
             },
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome_readiness(
+                "Ongoing Review",
+                [
+                    "Review eligibility requirements must be satisfied.",
+                    "Administrative disposition must advance beyond Open.",
+                ],
+                "Not Eligible",
+                "Active Evidence Review",
+                "Evidence Review Continues",
+            ),
+            "Not Ready",
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome_readiness(
+                "Review Awaiting Determination",
+                [
+                    "Administrative review determination must be completed.",
+                    "Outcome may advance when determination requirements are satisfied.",
+                ],
+                "Conditionally Eligible",
+                "Pending Administrative Review",
+                "Administrative Review Pending",
+            ),
+            "Conditionally Ready",
+        )
+        self.assertEqual(
+            self.admin_session.classify_outcome_readiness(
+                "Ready For Determination",
+                [
+                    "Formal review determination may proceed.",
+                    "Outcome advancement depends on determination completion.",
+                ],
+                "Eligible",
+                "Ready for Formal Review",
+                "Formal Review Ready",
+            ),
+            "Ready",
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome_readiness("Not Ready"),
+            (
+                "The outcome cannot advance while review eligibility and "
+                "administrative progression requirements remain unsatisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome_readiness(
+                "Conditionally Ready"
+            ),
+            (
+                "The outcome may advance when administrative review "
+                "requirements are satisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_outcome_readiness("Ready"),
+            "The outcome is ready to proceed to determination.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
