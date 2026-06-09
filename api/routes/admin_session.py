@@ -1939,6 +1939,47 @@ def describe_outcome_summary(
     )
 
 
+def classify_outcome_readiness(
+    outcome: str,
+    outcome_preconditions: list[str],
+    review_eligibility: str,
+    administrative_status: str,
+    effective_state: str,
+) -> str:
+    if outcome == "Ready For Determination" or review_eligibility == "Eligible":
+        return "Ready"
+    if (
+        outcome == "Review Awaiting Determination"
+        or review_eligibility == "Conditionally Eligible"
+        or administrative_status == "Pending Administrative Review"
+        or effective_state == "Administrative Review Pending"
+    ):
+        return "Conditionally Ready"
+    if any("Formal review determination may proceed" in item for item in outcome_preconditions):
+        return "Ready"
+    return "Not Ready"
+
+
+def describe_outcome_readiness(outcome_readiness: str) -> str:
+    return {
+        "Not Ready": (
+            "The outcome cannot advance while review eligibility and "
+            "administrative progression requirements remain unsatisfied."
+        ),
+        "Conditionally Ready": (
+            "The outcome may advance when administrative review requirements "
+            "are satisfied."
+        ),
+        "Ready": "The outcome is ready to proceed to determination.",
+    }.get(
+        outcome_readiness,
+        (
+            "The outcome cannot advance while review eligibility and "
+            "administrative progression requirements remain unsatisfied."
+        ),
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2004,6 +2045,14 @@ def _outcome_badge_class(outcome: str) -> str:
         "Review Awaiting Determination": "outcome-awaiting-determination",
         "Ready For Determination": "outcome-ready-determination",
     }.get(outcome, "outcome-ongoing-review")
+
+
+def _outcome_readiness_badge_class(outcome_readiness: str) -> str:
+    return {
+        "Not Ready": "outcome-readiness-not-ready",
+        "Conditionally Ready": "outcome-readiness-conditionally-ready",
+        "Ready": "outcome-readiness-ready",
+    }.get(outcome_readiness, "outcome-readiness-not-ready")
 
 
 def _render_record_evidence_sufficiency(
@@ -2986,6 +3035,91 @@ def _render_outcome_summary(
       </section>"""
 
 
+def _render_outcome_readiness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_readiness_badge = (
+        f'<span class="outcome-readiness-badge {_outcome_readiness_badge_class(outcome_readiness)}">'
+        f"{escape(outcome_readiness)}</span>"
+    )
+    outcome_badge = (
+        f'<span class="outcome-badge {_outcome_badge_class(outcome)}">'
+        f"{escape(outcome)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    rows = (
+        ("Outcome Readiness", outcome_readiness_badge),
+        (
+            "Readiness Description",
+            escape(describe_outcome_readiness(outcome_readiness)),
+        ),
+        ("Outcome", outcome_badge),
+        ("Review Eligibility", eligibility_badge),
+        ("Effective State", effective_state_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section outcome-readiness">
+        <h2>Stage 11E — Outcome Readiness</h2>
+        <p class="notice">
+          Outcome readiness is classified deterministically from outcome,
+          precondition, review eligibility, administrative status, and
+          effective state values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -3127,6 +3261,7 @@ def render_admin_record_evidence_page(
     outcome_basis = _render_outcome_basis(evidence_groups)
     outcome_preconditions = _render_outcome_preconditions(evidence_groups)
     outcome_summary = _render_outcome_summary(evidence_groups)
+    outcome_readiness = _render_outcome_readiness(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3591,6 +3726,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .outcome-readiness-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .outcome-readiness-not-ready {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .outcome-readiness-conditionally-ready {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .outcome-readiness-ready {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -3667,6 +3829,7 @@ def render_admin_record_evidence_page(
     {outcome_basis}
     {outcome_preconditions}
     {outcome_summary}
+    {outcome_readiness}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
