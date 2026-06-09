@@ -1384,6 +1384,32 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn("<li>Outcome classified as Ongoing Review.</li>", content)
+        self.assertIn("Stage 11C — Outcome Preconditions", content)
+        self.assertIn(
+            "Outcome preconditions are derived deterministically from outcome,",
+            content,
+        )
+        self.assertIn(
+            "<td>Precondition Target</td><td>Review Awaiting Determination</td>",
+            content,
+        )
+        self.assertIn('<ol class="outcome-preconditions-list">', content)
+        self.assertIn(
+            "<li>Review eligibility requirements must be satisfied.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative disposition must advance beyond Open.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Implementation action must advance beyond No Implementation Action.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Effective state may advance when review conditions are satisfied.</li>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1843,6 +1869,19 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<li>Outcome classified as Ready For Determination.</li>",
+            content,
+        )
+        self.assertIn("Stage 11C — Outcome Preconditions", content)
+        self.assertIn(
+            "<td>Precondition Target</td><td>Determination Completion</td>",
+            content,
+        )
+        self.assertIn(
+            "<li>Formal review determination may proceed.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Outcome advancement depends on determination completion.</li>",
             content,
         )
         self.assertIn(
@@ -2643,6 +2682,47 @@ class AdminSessionTests(unittest.TestCase):
                 ),
                 "Effective state classified as Formal Review Ready.",
                 "Outcome classified as Ready For Determination.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_preconditions(
+                "Ongoing Review",
+                "Evidence Review Continues",
+                "No Implementation Action",
+                "Active Evidence Review",
+                "Not Eligible",
+            ),
+            [
+                "Review eligibility requirements must be satisfied.",
+                "Administrative disposition must advance beyond Open.",
+                "Implementation action must advance beyond No Implementation Action.",
+                "Effective state may advance when review conditions are satisfied.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_preconditions(
+                "Review Awaiting Determination",
+                "Administrative Review Pending",
+                "Await Review Determination",
+                "Pending Administrative Review",
+                "Conditionally Eligible",
+            ),
+            [
+                "Administrative review determination must be completed.",
+                "Outcome may advance when determination requirements are satisfied.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_outcome_preconditions(
+                "Ready For Determination",
+                "Formal Review Ready",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+                "Eligible",
+            ),
+            [
+                "Formal review determination may proceed.",
+                "Outcome advancement depends on determination completion.",
             ],
         )
 
