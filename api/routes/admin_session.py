@@ -1749,6 +1749,42 @@ def build_implementation_basis_trace(
     ]
 
 
+def classify_effective_state(
+    implementation_action: str,
+    administrative_status: str,
+) -> str:
+    if (
+        implementation_action == "Prepare Formal Review Implementation"
+        or administrative_status == "Ready for Formal Review"
+    ):
+        return "Formal Review Ready"
+    if (
+        implementation_action == "Await Review Determination"
+        or administrative_status == "Pending Administrative Review"
+    ):
+        return "Administrative Review Pending"
+    return "Evidence Review Continues"
+
+
+def describe_effective_state(effective_state: str) -> str:
+    return {
+        "Evidence Review Continues": (
+            "Evidence review remains active and no implementation action has "
+            "been applied."
+        ),
+        "Administrative Review Pending": (
+            "Administrative review remains pending before implementation can "
+            "proceed."
+        ),
+        "Formal Review Ready": (
+            "The record is ready for formal review implementation planning."
+        ),
+    }.get(
+        effective_state,
+        "Evidence review remains active and no implementation action has been applied.",
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -1798,6 +1834,14 @@ def _implementation_action_badge_class(implementation_action: str) -> str:
         "Await Review Determination": "implementation-action-await-review",
         "Prepare Formal Review Implementation": "implementation-action-formal-review",
     }.get(implementation_action, "implementation-action-none")
+
+
+def _effective_state_badge_class(effective_state: str) -> str:
+    return {
+        "Evidence Review Continues": "effective-state-evidence-review-continues",
+        "Administrative Review Pending": "effective-state-administrative-review-pending",
+        "Formal Review Ready": "effective-state-formal-review-ready",
+    }.get(effective_state, "effective-state-evidence-review-continues")
 
 
 def _render_record_evidence_sufficiency(
@@ -2476,6 +2520,77 @@ def _render_implementation_basis(
       </section>"""
 
 
+def _render_effective_state(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    disposition_badge = (
+        f'<span class="disposition-badge {_disposition_badge_class(disposition)}">'
+        f"{escape(disposition)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    rows = (
+        ("Effective State", effective_state_badge),
+        ("Effective Description", escape(describe_effective_state(effective_state))),
+        ("Implementation Action", implementation_badge),
+        ("Administrative Status", status_badge),
+        ("Administrative Disposition", disposition_badge),
+        ("Review Eligibility", eligibility_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section effective-state">
+        <h2>Stage 10C — Effective State</h2>
+        <p class="notice">
+          Effective state is derived deterministically from implementation
+          action and administrative status values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -2612,6 +2727,7 @@ def render_admin_record_evidence_page(
     )
     implementation_action = _render_implementation_action(evidence_groups)
     implementation_basis = _render_implementation_basis(evidence_groups)
+    effective_state = _render_effective_state(evidence_groups)
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3018,6 +3134,33 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .effective-state-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .effective-state-evidence-review-continues {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .effective-state-administrative-review-pending {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .effective-state-formal-review-ready {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -3089,6 +3232,7 @@ def render_admin_record_evidence_page(
     {administrative_status_summary}
     {implementation_action}
     {implementation_basis}
+    {effective_state}
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
