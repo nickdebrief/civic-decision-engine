@@ -3380,6 +3380,25 @@ def _render_record_evidence_attachment_relationships(
               </section>"""
 
 
+def _render_progressive_disclosure_group(
+    *,
+    title: str,
+    description: str,
+    content: str,
+    class_name: str,
+) -> str:
+    return f"""
+    <details class="progressive-disclosure-group {escape(class_name)}">
+      <summary>
+        <span class="summary-title">{escape(title)}</span>
+        <span class="summary-meta">{escape(description)}</span>
+      </summary>
+      <div class="progressive-disclosure-content">
+        {content}
+      </div>
+    </details>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -3414,6 +3433,61 @@ def render_admin_record_evidence_page(
     outcome_summary = _render_outcome_summary(evidence_groups)
     outcome_readiness = _render_outcome_readiness(evidence_groups)
     outcome_target = _render_outcome_target(evidence_groups)
+<<<<<<< HEAD
+    evidence_assessment = _render_progressive_disclosure_group(
+        title="Evidence Assessment",
+        description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
+        content=f"{evidence_sufficiency}{evidence_readiness}",
+        class_name="evidence-assessment-group",
+    )
+    administrative_workflow = _render_progressive_disclosure_group(
+        title="Administrative Workflow",
+        description="Stage 8A through Stage 8E administrative workflow reasoning.",
+        content=(
+            f"{administrative_action}"
+            f"{action_rationale}"
+            f"{completion_requirements}"
+            f"{workflow_state}"
+            f"{transition_conditions}"
+        ),
+        class_name="administrative-workflow-group",
+    )
+    review_status = _render_progressive_disclosure_group(
+        title="Review Status",
+        description="Stage 9A through Stage 9D review classification and preconditions.",
+        content=(
+            f"{administrative_disposition}"
+            f"{disposition_basis}"
+            f"{review_eligibility}"
+            f"{review_preconditions}"
+        ),
+        class_name="review-status-group",
+    )
+    implementation_path = _render_progressive_disclosure_group(
+        title="Implementation Path",
+        description="Stage 10A implementation action and Stage 10B implementation basis.",
+        content=f"{implementation_action}{implementation_basis}",
+        class_name="implementation-path-group",
+    )
+    outcome_detail = _render_progressive_disclosure_group(
+        title="Outcome Detail",
+        description="Stage 11B through Stage 11D outcome basis, preconditions, and summary.",
+        content=f"{outcome_basis}{outcome_preconditions}{outcome_summary}",
+        class_name="outcome-detail-group",
+    )
+    supporting_evidence = _render_progressive_disclosure_group(
+        title="Supporting Evidence",
+        description="Conditions, signals, findings, and record-level supporting evidence.",
+        content=(
+            '<section class="management-section record-evidence">'
+            "<h2>Evidence by record target</h2>"
+            f"{evidence_sections}"
+            "</section>"
+        ),
+        class_name="supporting-evidence-group",
+    )
+=======
+>>>>>>> origin/main
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3466,6 +3540,19 @@ def render_admin_record_evidence_page(
       border-top: 1px solid #e5e1d8;
       padding-top: 18px;
       margin-top: 22px;
+    }}
+    .progressive-disclosure-group {{
+      border: 1px solid #d8d4ca;
+      margin-top: 22px;
+      background: #fff;
+    }}
+    .progressive-disclosure-group > summary {{
+      padding: 14px;
+      background: #f3f1eb;
+      border-bottom: 1px solid #e5e1d8;
+    }}
+    .progressive-disclosure-content {{
+      padding: 0 14px 16px;
     }}
     details {{
       break-inside: avoid;
@@ -3959,6 +4046,12 @@ def render_admin_record_evidence_page(
       details > * {{
         display: block;
       }}
+      details > summary {{
+        display: block;
+      }}
+      details:not([open]) > *:not(summary) {{
+        display: block;
+      }}
     }}
   </style>
 </head>
@@ -3989,31 +4082,24 @@ def render_admin_record_evidence_page(
     </section>
     {evidence_coverage}
     {evidence_gap_summary}
-    {evidence_sufficiency}
-    {evidence_readiness}
-    {administrative_action}
-    {action_rationale}
-    {completion_requirements}
-    {workflow_state}
-    {transition_conditions}
-    {administrative_disposition}
-    {disposition_basis}
-    {review_eligibility}
-    {review_preconditions}
+    {evidence_assessment}
+    {administrative_workflow}
+    {review_status}
     {administrative_status_summary}
-    {implementation_action}
-    {implementation_basis}
+    {implementation_path}
     {effective_state}
     {outcome_classification}
-    {outcome_basis}
-    {outcome_preconditions}
-    {outcome_summary}
+    {outcome_detail}
     {outcome_readiness}
     {outcome_target}
+<<<<<<< HEAD
+    {supporting_evidence}
+=======
     <section class="management-section record-evidence">
       <h2>Evidence by record target</h2>
       {evidence_sections}
     </section>
+>>>>>>> origin/main
   </main>
 </body>
 </html>"""
