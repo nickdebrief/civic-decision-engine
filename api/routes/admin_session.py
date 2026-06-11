@@ -2024,6 +2024,77 @@ def describe_outcome_target(outcome_target: str) -> str:
     )
 
 
+def classify_resolution(
+    outcome: str,
+    outcome_readiness: str,
+    outcome_target: str,
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+) -> str:
+    resolution_failure_values = {
+        "Corrective Action Reversed",
+        "Implementation Failed",
+    }
+    if (
+        outcome in resolution_failure_values
+        or outcome_readiness in resolution_failure_values
+        or outcome_target in resolution_failure_values
+        or effective_state in resolution_failure_values
+        or implementation_action in resolution_failure_values
+        or administrative_status in resolution_failure_values
+    ):
+        return "Resolution Failed"
+    if (
+        outcome == "Corrective Action Implemented"
+        and effective_state == "Corrective Action Effective"
+    ):
+        return "Resolved"
+    if (
+        outcome == "Determination Issued"
+        and implementation_action == "Implementation Required"
+    ):
+        return "Conditionally Resolved"
+    if (
+        outcome == "Ready For Determination"
+        and outcome_readiness == "Ready"
+        and outcome_target == "Determination Pending"
+    ):
+        return "Partially Resolved"
+    return "Unresolved"
+
+
+def describe_resolution(resolution: str) -> str:
+    return {
+        "Unresolved": (
+            "The matter remains unresolved because the current outcome has not "
+            "reached an implemented administrative determination state."
+        ),
+        "Partially Resolved": (
+            "The matter has advanced toward resolution but administrative "
+            "determination or implementation remains incomplete."
+        ),
+        "Conditionally Resolved": (
+            "The matter has reached a conditional resolution state, but "
+            "implementation or confirmation requirements remain outstanding."
+        ),
+        "Resolved": (
+            "The matter has reached a resolved state because the required "
+            "administrative action has been implemented and is effective."
+        ),
+        "Resolution Failed": (
+            "The matter has not resolved because the required corrective or "
+            "administrative action failed, reversed, or did not take effect."
+        ),
+    }.get(
+        resolution,
+        (
+            "The matter remains unresolved because the current outcome has not "
+            "reached an implemented administrative determination state."
+        ),
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2107,6 +2178,16 @@ def _outcome_target_badge_class(outcome_target: str) -> str:
         "Ready For Determination": "outcome-target-ready-for-determination",
         "Determination Pending": "outcome-target-determination-pending",
     }.get(outcome_target, "outcome-target-review-awaiting-determination")
+
+
+def _resolution_badge_class(resolution: str) -> str:
+    return {
+        "Unresolved": "resolution-unresolved",
+        "Partially Resolved": "resolution-partially-resolved",
+        "Conditionally Resolved": "resolution-conditionally-resolved",
+        "Resolved": "resolution-resolved",
+        "Resolution Failed": "resolution-failed",
+    }.get(resolution, "resolution-unresolved")
 
 
 def _render_record_evidence_sufficiency(
@@ -3271,6 +3352,118 @@ def _render_outcome_target(
       </section>"""
 
 
+def _render_resolution_classification(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        administrative_status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    resolution_badge = (
+        f'<span class="resolution-badge {_resolution_badge_class(resolution)}">'
+        f"{escape(resolution)}</span>"
+    )
+    outcome_badge = (
+        f'<span class="outcome-badge {_outcome_badge_class(outcome)}">'
+        f"{escape(outcome)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="outcome-readiness-badge {_outcome_readiness_badge_class(outcome_readiness)}">'
+        f"{escape(outcome_readiness)}</span>"
+    )
+    target_badge = (
+        f'<span class="outcome-target-badge {_outcome_target_badge_class(outcome_target)}">'
+        f"{escape(outcome_target)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    rows = (
+        ("Resolution Classification", resolution_badge),
+        ("Resolution Description", escape(describe_resolution(resolution))),
+        ("Outcome", outcome_badge),
+        ("Outcome Readiness", readiness_badge),
+        ("Outcome Target", target_badge),
+        ("Effective State", effective_state_badge),
+        ("Implementation Action", implementation_badge),
+        ("Administrative Status", status_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section resolution-classification">
+        <h2>Stage 12A — Resolution Classification</h2>
+        <p class="notice">
+          Resolution is classified deterministically from outcome, outcome
+          readiness, outcome target, effective state, implementation action,
+          and administrative status values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -3433,6 +3626,9 @@ def render_admin_record_evidence_page(
     outcome_summary = _render_outcome_summary(evidence_groups)
     outcome_readiness = _render_outcome_readiness(evidence_groups)
     outcome_target = _render_outcome_target(evidence_groups)
+    resolution_classification = _render_resolution_classification(
+        evidence_groups
+    )
     evidence_assessment = _render_progressive_disclosure_group(
         title="Evidence Assessment",
         description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
@@ -4016,6 +4212,41 @@ def render_admin_record_evidence_page(
       border-color: #2f6d4f;
       background: #eef7f1;
     }}
+    .resolution-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .resolution-unresolved {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .resolution-partially-resolved {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .resolution-conditionally-resolved {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .resolution-resolved {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
+    .resolution-failed {{
+      border-color: #6b3d3d;
+      background: #f5e2e2;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -4089,6 +4320,7 @@ def render_admin_record_evidence_page(
     {outcome_detail}
     {outcome_readiness}
     {outcome_target}
+    {resolution_classification}
     {supporting_evidence}
   </main>
 </body>
