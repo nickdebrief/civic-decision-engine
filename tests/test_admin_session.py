@@ -1488,6 +1488,33 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Resolution Description</td><td>The matter remains unresolved because the current outcome has not reached an implemented administrative determination state.</td>",
             content,
         )
+        self.assertIn("Stage 12B — Resolution Preconditions", content)
+        self.assertIn(
+            "Resolution preconditions are derived deterministically from",
+            content,
+        )
+        self.assertIn("<td>Precondition Target</td><td>Conditionally Resolved</td>", content)
+        self.assertIn("<h3>Resolution Preconditions</h3>", content)
+        self.assertIn(
+            "<li>Review eligibility requirements must be satisfied.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative disposition must advance beyond Open.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Outcome readiness must advance beyond Not Ready.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Implementation action must advance beyond No Implementation Action.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Effective state must advance beyond Evidence Review Continues.</li>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2010,6 +2037,12 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Resolution Description</td><td>The matter has advanced toward resolution but administrative determination or implementation remains incomplete.</td>",
+            content,
+        )
+        self.assertIn("Stage 12B — Resolution Preconditions", content)
+        self.assertIn("<td>Precondition Target</td><td>Conditionally Resolved</td>", content)
+        self.assertIn(
+            "<li>Administrative determination must be completed.</li>",
             content,
         )
         self.assertIn(
@@ -3145,6 +3178,95 @@ class AdminSessionTests(unittest.TestCase):
                 "The matter has not resolved because the required corrective "
                 "or administrative action failed, reversed, or did not take "
                 "effect."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.build_resolution_preconditions(
+                "Unresolved",
+                "Ongoing Review",
+                "Not Ready",
+                "Review Awaiting Determination",
+                "Evidence Review Continues",
+                "No Implementation Action",
+                "Active Evidence Review",
+                "Not Eligible",
+            ),
+            [
+                "Review eligibility requirements must be satisfied.",
+                "Administrative disposition must advance beyond Open.",
+                "Outcome readiness must advance beyond Not Ready.",
+                "Implementation action must advance beyond No Implementation Action.",
+                "Effective state must advance beyond Evidence Review Continues.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_resolution_preconditions(
+                "Partially Resolved",
+                "Ready For Determination",
+                "Ready",
+                "Determination Pending",
+                "Formal Review Ready",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+                "Eligible",
+            ),
+            [
+                "Administrative determination must be completed.",
+                "Implementation requirements must be identified.",
+                "Effective state must advance beyond Formal Review Ready.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_resolution_preconditions(
+                "Conditionally Resolved",
+                "Determination Issued",
+                "Ready",
+                "Determination Pending",
+                "Formal Review Ready",
+                "Implementation Required",
+                "Ready for Formal Review",
+                "Eligible",
+            ),
+            [
+                "Implementation requirements must be satisfied.",
+                "Resolution effectiveness must be confirmed.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.build_resolution_preconditions(
+                "Resolved",
+                "Corrective Action Implemented",
+                "Ready",
+                "Determination Pending",
+                "Corrective Action Effective",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+                "Eligible",
+            ),
+            ["No additional resolution preconditions identified."],
+        )
+        self.assertEqual(
+            self.admin_session.build_resolution_preconditions(
+                "Resolution Failed",
+                "Corrective Action Reversed",
+                "Ready",
+                "Determination Pending",
+                "Implementation Failed",
+                "Implementation Failed",
+                "Ready for Formal Review",
+                "Eligible",
+            ),
+            [
+                "Failed or reversed administrative action must be corrected.",
+                "Resolution state must be re-established through effective action.",
+            ],
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution_preconditions("Unresolved"),
+            (
+                "Resolution preconditions identify the deterministic "
+                "requirements that must be satisfied before the current "
+                "Unresolved state can advance."
             ),
         )
 
