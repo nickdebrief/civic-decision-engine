@@ -2234,6 +2234,84 @@ def _describe_resolution_pathway(pathway: str) -> str:
     )
 
 
+def _classify_resolution_readiness(
+    *,
+    resolution: str,
+    resolution_preconditions: list[str],
+    resolution_pathway: str,
+    outcome_readiness: str,
+    review_eligibility: str,
+    administrative_status: str,
+    implementation_action: str,
+    effective_state: str,
+) -> str:
+    if (
+        resolution == "Resolved"
+        and resolution_pathway == "RESOLUTION PATHWAY COMPLETE"
+    ):
+        return "Resolved"
+    if (
+        resolution == "Conditionally Resolved"
+        and resolution_pathway == "IMPLEMENTATION PATHWAY ACTIVE"
+    ):
+        return "Ready"
+    if (
+        resolution == "Partially Resolved"
+        and resolution_pathway == "DETERMINATION PATHWAY ACTIVE"
+    ):
+        return "Conditionally Ready"
+    if (
+        resolution == "Unresolved"
+        and resolution_pathway == "REVIEW PATHWAY ACTIVE"
+        and outcome_readiness != "Not Ready"
+    ):
+        return "Conditionally Ready"
+    if (
+        resolution == "Unresolved"
+        and (
+            resolution_pathway == "REVIEW ELIGIBILITY PENDING"
+            or review_eligibility == "Not Eligible"
+            or outcome_readiness == "Not Ready"
+            or effective_state == "Evidence Review Continues"
+            or implementation_action == "No Implementation Action"
+            or administrative_status in {
+                "Active Evidence Collection",
+                "Active Evidence Review",
+            }
+            or resolution_preconditions
+        )
+    ):
+        return "Not Ready"
+    return "Conditionally Ready"
+
+
+def _describe_resolution_readiness(readiness: str) -> str:
+    return {
+        "Not Ready": (
+            "Resolution readiness has not been achieved because one or more "
+            "prerequisite administrative conditions remain outstanding."
+        ),
+        "Conditionally Ready": (
+            "Resolution readiness is partially established, but further "
+            "administrative progression remains required."
+        ),
+        "Ready": (
+            "Resolution readiness has been established and the matter may "
+            "proceed toward determination, implementation, or confirmation."
+        ),
+        "Resolved": (
+            "Resolution readiness assessment is complete because the matter "
+            "has already reached a resolved administrative state."
+        ),
+    }.get(
+        readiness,
+        (
+            "Resolution readiness has not been achieved because one or more "
+            "prerequisite administrative conditions remain outstanding."
+        ),
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2327,6 +2405,15 @@ def _resolution_badge_class(resolution: str) -> str:
         "Resolved": "resolution-resolved",
         "Resolution Failed": "resolution-failed",
     }.get(resolution, "resolution-unresolved")
+
+
+def _resolution_readiness_badge_class(readiness: str) -> str:
+    return {
+        "Not Ready": "resolution-readiness-not-ready",
+        "Conditionally Ready": "resolution-readiness-conditionally-ready",
+        "Ready": "resolution-readiness-ready",
+        "Resolved": "resolution-readiness-resolved",
+    }.get(readiness, "resolution-readiness-not-ready")
 
 
 def _render_record_evidence_sufficiency(
@@ -3826,6 +3913,161 @@ def _render_resolution_pathway(
         </table>
       </section>"""
 
+def _render_resolution_readiness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        administrative_status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    resolution_preconditions = build_resolution_preconditions(
+        resolution,
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    resolution_pathway = _classify_resolution_pathway(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        outcome_target=outcome_target,
+        outcome_readiness=outcome_readiness,
+        effective_state=effective_state,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+    )
+    resolution_readiness = _classify_resolution_readiness(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        outcome_readiness=outcome_readiness,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    readiness_badge = (
+        f'<span class="resolution-readiness-badge {_resolution_readiness_badge_class(resolution_readiness)}">'
+        f"{escape(resolution_readiness)}</span>"
+    )
+    resolution_badge = (
+        f'<span class="resolution-badge {_resolution_badge_class(resolution)}">'
+        f"{escape(resolution)}</span>"
+    )
+    outcome_readiness_badge = (
+        f'<span class="outcome-readiness-badge {_outcome_readiness_badge_class(outcome_readiness)}">'
+        f"{escape(outcome_readiness)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    rows = (
+        ("Resolution Readiness", readiness_badge),
+        (
+            "Readiness Description",
+            escape(_describe_resolution_readiness(resolution_readiness)),
+        ),
+        ("Resolution Classification", resolution_badge),
+        ("Resolution Pathway", resolution_pathway),
+        ("Outcome Readiness", outcome_readiness_badge),
+        ("Review Eligibility", eligibility_badge),
+        ("Administrative Status", status_badge),
+        ("Implementation Action", implementation_badge),
+        ("Effective State", effective_state_badge),
+    )
+    badge_labels = {
+        "Resolution Readiness",
+        "Resolution Classification",
+        "Outcome Readiness",
+        "Review Eligibility",
+        "Administrative Status",
+        "Implementation Action",
+        "Effective State",
+    }
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value if label in badge_labels else escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section resolution-readiness">
+        <h2>Stage 12D — Resolution Readiness</h2>
+        <p class="notice">
+          Resolution readiness is classified deterministically from resolution,
+          precondition, pathway, outcome readiness, review eligibility,
+          administrative status, implementation action, and effective state
+          values only.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
 
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
@@ -3996,6 +4238,7 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     resolution_pathway = _render_resolution_pathway(evidence_groups)
+    resolution_readiness = _render_resolution_readiness(evidence_groups)
     evidence_assessment = _render_progressive_disclosure_group(
         title="Evidence Assessment",
         description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
@@ -4616,6 +4859,37 @@ def render_admin_record_evidence_page(
       border-color: #6b3d3d;
       background: #f5e2e2;
     }}
+    .resolution-readiness-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .resolution-readiness-not-ready {{
+      border-color: #7a4c4c;
+      background: #f8eeee;
+    }}
+    .resolution-readiness-conditionally-ready {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .resolution-readiness-ready {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .resolution-readiness-resolved {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -4692,6 +4966,7 @@ def render_admin_record_evidence_page(
     {resolution_classification}
     {resolution_preconditions}
     {resolution_pathway}
+    {resolution_readiness}
     {supporting_evidence}
   </main>
 </body>
