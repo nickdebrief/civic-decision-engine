@@ -3433,6 +3433,7 @@ def render_admin_record_evidence_page(
     outcome_summary = _render_outcome_summary(evidence_groups)
     outcome_readiness = _render_outcome_readiness(evidence_groups)
     outcome_target = _render_outcome_target(evidence_groups)
+<<<<<<< HEAD
     evidence_assessment = _render_progressive_disclosure_group(
         title="Evidence Assessment",
         description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
@@ -3485,6 +3486,8 @@ def render_admin_record_evidence_page(
         ),
         class_name="supporting-evidence-group",
     )
+=======
+>>>>>>> origin/main
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -4089,7 +4092,14 @@ def render_admin_record_evidence_page(
     {outcome_detail}
     {outcome_readiness}
     {outcome_target}
+<<<<<<< HEAD
     {supporting_evidence}
+=======
+    <section class="management-section record-evidence">
+      <h2>Evidence by record target</h2>
+      {evidence_sections}
+    </section>
+>>>>>>> origin/main
   </main>
 </body>
 </html>"""
