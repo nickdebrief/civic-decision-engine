@@ -2163,6 +2163,77 @@ def describe_resolution_preconditions(resolution: str) -> str:
         f"must be satisfied before the current {resolution} state can advance."
     )
 
+def _classify_resolution_pathway(
+    *,
+    resolution: str,
+    resolution_preconditions: list[str],
+    outcome_target: str,
+    outcome_readiness: str,
+    effective_state: str,
+    review_eligibility: str,
+    administrative_status: str,
+    implementation_action: str,
+) -> str:
+    if resolution == "Resolved" and not resolution_preconditions:
+        return "RESOLUTION PATHWAY COMPLETE"
+    if resolution == "Resolved":
+        return "RESOLUTION PATHWAY COMPLETE"
+    if implementation_action == "Implementation Required":
+        return "IMPLEMENTATION AWAITING ACTION"
+    if resolution == "Conditionally Resolved":
+        return "IMPLEMENTATION PATHWAY ACTIVE"
+    if outcome_target == "Determination Pending":
+        return "DETERMINATION PATHWAY ACTIVE"
+    if review_eligibility != "Eligible":
+        return "REVIEW ELIGIBILITY PENDING"
+    if (
+        outcome_readiness in {"Not Ready", "Conditionally Ready"}
+        or effective_state == "Evidence Review Continues"
+        or administrative_status in {
+            "Active Evidence Collection",
+            "Active Evidence Review",
+        }
+    ):
+        return "REVIEW PATHWAY ACTIVE"
+    return "REVIEW PATHWAY ACTIVE"
+
+
+def _describe_resolution_pathway(pathway: str) -> str:
+    return {
+        "REVIEW PATHWAY ACTIVE": (
+            "The current matter remains within the administrative review "
+            "pathway and must satisfy review progression requirements before "
+            "advancing."
+        ),
+        "REVIEW ELIGIBILITY PENDING": (
+            "The current matter remains within the review pathway while review "
+            "eligibility requirements remain pending."
+        ),
+        "IMPLEMENTATION PATHWAY ACTIVE": (
+            "The matter has progressed beyond review and remains within the "
+            "implementation pathway."
+        ),
+        "IMPLEMENTATION AWAITING ACTION": (
+            "The matter has reached an implementation pathway state and is "
+            "awaiting required implementation action."
+        ),
+        "DETERMINATION PATHWAY ACTIVE": (
+            "The matter has reached the determination pathway and remains "
+            "pending completion of administrative determination."
+        ),
+        "RESOLUTION PATHWAY COMPLETE": (
+            "All resolution pathway requirements have been satisfied."
+        ),
+    }.get(
+        pathway,
+        (
+            "The current matter remains within the administrative review "
+            "pathway and must satisfy review progression requirements before "
+            "advancing."
+        ),
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -3622,6 +3693,139 @@ def _render_resolution_preconditions(
         <ol class="resolution-preconditions-list">{precondition_items}</ol>
       </section>"""
 
+def _render_resolution_pathway(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        administrative_status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    precondition_target = _resolution_precondition_target(resolution)
+    resolution_preconditions = build_resolution_preconditions(
+        resolution,
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    pathway = _classify_resolution_pathway(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        outcome_target=outcome_target,
+        outcome_readiness=outcome_readiness,
+        effective_state=effective_state,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+    )
+    resolution_badge = (
+        f'<span class="resolution-badge {_resolution_badge_class(resolution)}">'
+        f"{escape(resolution)}</span>"
+    )
+    target_badge = (
+        f'<span class="outcome-target-badge {_outcome_target_badge_class(outcome_target)}">'
+        f"{escape(outcome_target)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="outcome-readiness-badge {_outcome_readiness_badge_class(outcome_readiness)}">'
+        f"{escape(outcome_readiness)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    eligibility_badge = (
+        f'<span class="eligibility-badge {_eligibility_badge_class(eligibility)}">'
+        f"{escape(eligibility)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    rows = (
+        ("Resolution Pathway", pathway),
+        ("Pathway Description", _describe_resolution_pathway(pathway)),
+        ("Resolution Classification", resolution_badge),
+        ("Resolution Preconditions Target", precondition_target),
+        ("Outcome Target", target_badge),
+        ("Administrative Status", status_badge),
+        ("Review Eligibility", eligibility_badge),
+        ("Implementation Action", implementation_badge),
+        ("Effective State", effective_state_badge),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value if label in {'Resolution Classification', 'Outcome Target', 'Administrative Status', 'Review Eligibility', 'Implementation Action', 'Effective State'} else escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section resolution-pathway">
+        <h2>Stage 12C — Resolution Pathway</h2>
+        <p class="notice">
+          Resolution pathway identifies the deterministic sequence of
+          administrative state transitions required before the current matter
+          can advance toward resolution.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
 
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
@@ -3791,6 +3995,7 @@ def render_admin_record_evidence_page(
     resolution_preconditions = _render_resolution_preconditions(
         evidence_groups
     )
+    resolution_pathway = _render_resolution_pathway(evidence_groups)
     evidence_assessment = _render_progressive_disclosure_group(
         title="Evidence Assessment",
         description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
@@ -4486,6 +4691,7 @@ def render_admin_record_evidence_page(
     {outcome_target}
     {resolution_classification}
     {resolution_preconditions}
+    {resolution_pathway}
     {supporting_evidence}
   </main>
 </body>
