@@ -3913,7 +3913,6 @@ def _render_resolution_pathway(
         </table>
       </section>"""
 
-
 def _render_resolution_readiness(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
