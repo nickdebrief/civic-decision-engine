@@ -2095,6 +2095,74 @@ def describe_resolution(resolution: str) -> str:
     )
 
 
+def _resolution_precondition_target(resolution: str) -> str:
+    return {
+        "Unresolved": "Conditionally Resolved",
+        "Partially Resolved": "Conditionally Resolved",
+        "Conditionally Resolved": "Resolved",
+        "Resolved": "No further resolution state identified",
+        "Resolution Failed": "Resolution Recovery",
+    }.get(resolution, "Conditionally Resolved")
+
+
+def build_resolution_preconditions(
+    resolution: str,
+    outcome: str,
+    outcome_readiness: str,
+    outcome_target: str,
+    effective_state: str,
+    implementation_action: str,
+    administrative_status: str,
+    review_eligibility: str,
+) -> list[str]:
+    if resolution == "Resolved":
+        return ["No additional resolution preconditions identified."]
+    if resolution == "Resolution Failed":
+        return [
+            "Failed or reversed administrative action must be corrected.",
+            "Resolution state must be re-established through effective action.",
+        ]
+    if resolution == "Conditionally Resolved":
+        return [
+            "Implementation requirements must be satisfied.",
+            "Resolution effectiveness must be confirmed.",
+        ]
+    if resolution == "Partially Resolved":
+        return [
+            "Administrative determination must be completed.",
+            "Implementation requirements must be identified.",
+            "Effective state must advance beyond Formal Review Ready.",
+        ]
+
+    preconditions = []
+    if review_eligibility != "Eligible":
+        preconditions.append("Review eligibility requirements must be satisfied.")
+    if administrative_status in {
+        "Active Evidence Collection",
+        "Active Evidence Review",
+    }:
+        preconditions.append("Administrative disposition must advance beyond Open.")
+    if outcome_readiness == "Not Ready":
+        preconditions.append("Outcome readiness must advance beyond Not Ready.")
+    if implementation_action == "No Implementation Action":
+        preconditions.append(
+            "Implementation action must advance beyond No Implementation Action."
+        )
+    if effective_state == "Evidence Review Continues":
+        preconditions.append(
+            "Effective state must advance beyond Evidence Review Continues."
+        )
+    return preconditions or [
+        "Resolution preconditions must be satisfied before resolution can occur."
+    ]
+
+
+def describe_resolution_preconditions(resolution: str) -> str:
+    return (
+        "Resolution preconditions identify the deterministic requirements that "
+        f"must be satisfied before the current {resolution} state can advance."
+    )
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -3463,6 +3531,97 @@ def _render_resolution_classification(
         </table>
       </section>"""
 
+def _render_resolution_preconditions(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        administrative_status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    precondition_target = _resolution_precondition_target(resolution)
+    preconditions = build_resolution_preconditions(
+        resolution,
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    precondition_items = "".join(
+        f"<li>{escape(precondition)}</li>" for precondition in preconditions
+    )
+    resolution_badge = (
+        f'<span class="resolution-badge {_resolution_badge_class(resolution)}">'
+        f"{escape(resolution)}</span>"
+    )
+    return f"""
+      <section class="management-section resolution-preconditions">
+        <h2>Stage 12B — Resolution Preconditions</h2>
+        <p class="notice">
+          Resolution preconditions are derived deterministically from
+          resolution, outcome, readiness, target, effective state,
+          implementation action, administrative status, and review eligibility
+          values only.
+        </p>
+        <table>
+          <tbody>
+            <tr><td>Resolution Classification</td><td>{resolution_badge}</td></tr>
+            <tr><td>Precondition Target</td><td>{escape(precondition_target)}</td></tr>
+            <tr><td>Precondition Description</td><td>{escape(describe_resolution_preconditions(resolution))}</td></tr>
+          </tbody>
+        </table>
+        <h3>Resolution Preconditions</h3>
+        <ol class="resolution-preconditions-list">{precondition_items}</ol>
+      </section>"""
+
 
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
@@ -3627,6 +3786,9 @@ def render_admin_record_evidence_page(
     outcome_readiness = _render_outcome_readiness(evidence_groups)
     outcome_target = _render_outcome_target(evidence_groups)
     resolution_classification = _render_resolution_classification(
+        evidence_groups
+    )
+    resolution_preconditions = _render_resolution_preconditions(
         evidence_groups
     )
     evidence_assessment = _render_progressive_disclosure_group(
@@ -3847,7 +4009,8 @@ def render_admin_record_evidence_page(
     .review-preconditions-list,
     .implementation-basis-list,
     .outcome-basis-list,
-    .outcome-preconditions-list {{
+    .outcome-preconditions-list,
+    .resolution-preconditions-list {{
       margin: 8px 0 0 24px;
       padding: 0;
       line-height: 1.45;
@@ -3859,7 +4022,8 @@ def render_admin_record_evidence_page(
     .review-preconditions-list li,
     .implementation-basis-list li,
     .outcome-basis-list li,
-    .outcome-preconditions-list li {{
+    .outcome-preconditions-list li,
+    .resolution-preconditions-list li {{
       margin: 5px 0;
     }}
     .evidence-empty-state {{
@@ -4321,6 +4485,7 @@ def render_admin_record_evidence_page(
     {outcome_readiness}
     {outcome_target}
     {resolution_classification}
+    {resolution_preconditions}
     {supporting_evidence}
   </main>
 </body>
