@@ -1515,6 +1515,31 @@ class AdminSessionTests(unittest.TestCase):
             "<li>Effective state must advance beyond Evidence Review Continues.</li>",
             content,
         )
+        self.assertIn("Stage 12C — Resolution Pathway", content)
+        self.assertIn(
+            "Resolution pathway identifies the deterministic sequence of",
+            content,
+        )
+        self.assertIn(
+            "<td>Resolution Pathway</td><td>REVIEW ELIGIBILITY PENDING</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Pathway Description</td><td>The current matter remains within the review pathway while review eligibility requirements remain pending.</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Resolution Preconditions Target</td><td>Conditionally Resolved</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 12B — Resolution Preconditions"),
+            content.index("Stage 12C — Resolution Pathway"),
+        )
+        self.assertLess(
+            content.index("Stage 12C — Resolution Pathway"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2043,6 +2068,15 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Precondition Target</td><td>Conditionally Resolved</td>", content)
         self.assertIn(
             "<li>Administrative determination must be completed.</li>",
+            content,
+        )
+        self.assertIn("Stage 12C — Resolution Pathway", content)
+        self.assertIn(
+            "<td>Resolution Pathway</td><td>DETERMINATION PATHWAY ACTIVE</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Pathway Description</td><td>The matter has reached the determination pathway and remains pending completion of administrative determination.</td>",
             content,
         )
         self.assertIn(
@@ -3268,6 +3302,119 @@ class AdminSessionTests(unittest.TestCase):
                 "requirements that must be satisfied before the current "
                 "Unresolved state can advance."
             ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Unresolved",
+                resolution_preconditions=[
+                    "Outcome readiness must advance beyond Not Ready.",
+                ],
+                outcome_target="Review Awaiting Determination",
+                outcome_readiness="Not Ready",
+                effective_state="Evidence Review Continues",
+                review_eligibility="Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+            ),
+            "REVIEW PATHWAY ACTIVE",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Unresolved",
+                resolution_preconditions=[
+                    "Review eligibility requirements must be satisfied.",
+                ],
+                outcome_target="Review Awaiting Determination",
+                outcome_readiness="Not Ready",
+                effective_state="Evidence Review Continues",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+            ),
+            "REVIEW ELIGIBILITY PENDING",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Conditionally Resolved",
+                resolution_preconditions=[
+                    "Resolution effectiveness must be confirmed.",
+                ],
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                effective_state="Formal Review Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+            ),
+            "IMPLEMENTATION PATHWAY ACTIVE",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Conditionally Resolved",
+                resolution_preconditions=[
+                    "Implementation requirements must be satisfied.",
+                ],
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                effective_state="Formal Review Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Implementation Required",
+            ),
+            "IMPLEMENTATION AWAITING ACTION",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Partially Resolved",
+                resolution_preconditions=[
+                    "Administrative determination must be completed.",
+                ],
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                effective_state="Formal Review Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+            ),
+            "DETERMINATION PATHWAY ACTIVE",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_pathway(
+                resolution="Resolved",
+                resolution_preconditions=[],
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                effective_state="Corrective Action Effective",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+            ),
+            "RESOLUTION PATHWAY COMPLETE",
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_pathway(
+                "REVIEW PATHWAY ACTIVE"
+            ),
+            (
+                "The current matter remains within the administrative review "
+                "pathway and must satisfy review progression requirements "
+                "before advancing."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_pathway(
+                "IMPLEMENTATION PATHWAY ACTIVE"
+            ),
+            (
+                "The matter has progressed beyond review and remains within "
+                "the implementation pathway."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_pathway(
+                "RESOLUTION PATHWAY COMPLETE"
+            ),
+            "All resolution pathway requirements have been satisfied.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
