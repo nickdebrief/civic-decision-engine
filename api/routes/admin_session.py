@@ -2163,7 +2163,6 @@ def describe_resolution_preconditions(resolution: str) -> str:
         f"must be satisfied before the current {resolution} state can advance."
     )
 
-
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -3531,7 +3530,6 @@ def _render_resolution_classification(
           <tbody>{table_rows}</tbody>
         </table>
       </section>"""
-
 
 def _render_resolution_preconditions(
     evidence_groups: dict[str, list[dict[str, Any]]],
