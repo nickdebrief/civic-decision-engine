@@ -1078,7 +1078,36 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("print-color-adjust: exact", content)
         self.assertIn(">v12</text>", content)
         self.assertIn("details {", content)
+        self.assertIn("<details", content)
+        self.assertIn("<summary>", content)
         self.assertIn("break-inside: avoid", content)
+        self.assertIn("details:not([open]) > *:not(summary)", content)
+        self.assertIn("Evidence Assessment", content)
+        self.assertIn("Administrative Workflow", content)
+        self.assertIn("Review Status", content)
+        self.assertIn("Implementation Path", content)
+        self.assertIn("Outcome Detail", content)
+        self.assertIn("Supporting Evidence", content)
+        self.assertIn(
+            "Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
+            content,
+        )
+        self.assertIn(
+            "Stage 8A through Stage 8E administrative workflow reasoning.",
+            content,
+        )
+        self.assertIn(
+            "Stage 9A through Stage 9D review classification and preconditions.",
+            content,
+        )
+        self.assertIn(
+            "Stage 10A implementation action and Stage 10B implementation basis.",
+            content,
+        )
+        self.assertIn(
+            "Stage 11B through Stage 11D outcome basis, preconditions, and summary.",
+            content,
+        )
         self.assertIn("Evidence by record target", content)
         self.assertIn("Record Evidence Coverage", content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 5</td>", content)
