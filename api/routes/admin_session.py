@@ -2163,7 +2163,6 @@ def describe_resolution_preconditions(resolution: str) -> str:
         f"must be satisfied before the current {resolution} state can advance."
     )
 
-
 def _classify_resolution_pathway(
     *,
     resolution: str,
@@ -3693,7 +3692,6 @@ def _render_resolution_preconditions(
         <h3>Resolution Preconditions</h3>
         <ol class="resolution-preconditions-list">{precondition_items}</ol>
       </section>"""
-
 
 def _render_resolution_pathway(
     evidence_groups: dict[str, list[dict[str, Any]]],
