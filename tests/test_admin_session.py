@@ -1475,6 +1475,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Target Description</td><td>The next target outcome is administrative review awaiting determination once review eligibility and progression requirements are satisfied.</td>",
             content,
         )
+        self.assertIn("Stage 12A — Resolution Classification", content)
+        self.assertIn(
+            "Resolution is classified deterministically from outcome, outcome",
+            content,
+        )
+        self.assertIn(
+            '<td>Resolution Classification</td><td><span class="resolution-badge resolution-unresolved">Unresolved</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Resolution Description</td><td>The matter remains unresolved because the current outcome has not reached an implemented administrative determination state.</td>",
+            content,
+        )
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -1513,6 +1526,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".outcome-target-review-awaiting-determination", content)
         self.assertIn(".outcome-target-ready-for-determination", content)
         self.assertIn(".outcome-target-determination-pending", content)
+        self.assertIn(".resolution-badge", content)
+        self.assertIn(".resolution-unresolved", content)
+        self.assertIn(".resolution-partially-resolved", content)
+        self.assertIn(".resolution-conditionally-resolved", content)
+        self.assertIn(".resolution-resolved", content)
+        self.assertIn(".resolution-failed", content)
         self.assertIn(".admin-action-badge", content)
         self.assertIn(".admin-action-collect-initial-evidence", content)
         self.assertIn(".admin-action-resolve-evidence-gaps", content)
@@ -1982,6 +2001,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Target Description</td><td>The next target outcome is pending determination completion.</td>",
+            content,
+        )
+        self.assertIn("Stage 12A — Resolution Classification", content)
+        self.assertIn(
+            '<td>Resolution Classification</td><td><span class="resolution-badge resolution-partially-resolved">Partially Resolved</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Resolution Description</td><td>The matter has advanced toward resolution but administrative determination or implementation remains incomplete.</td>",
             content,
         )
         self.assertIn(
@@ -3025,6 +3053,99 @@ class AdminSessionTests(unittest.TestCase):
                 "Determination Pending"
             ),
             "The next target outcome is pending determination completion.",
+        )
+        self.assertEqual(
+            self.admin_session.classify_resolution(
+                "Ongoing Review",
+                "Not Ready",
+                "Review Awaiting Determination",
+                "Evidence Review Continues",
+                "No Implementation Action",
+                "Active Evidence Review",
+            ),
+            "Unresolved",
+        )
+        self.assertEqual(
+            self.admin_session.classify_resolution(
+                "Ready For Determination",
+                "Ready",
+                "Determination Pending",
+                "Formal Review Ready",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+            ),
+            "Partially Resolved",
+        )
+        self.assertEqual(
+            self.admin_session.classify_resolution(
+                "Determination Issued",
+                "Ready",
+                "Determination Pending",
+                "Formal Review Ready",
+                "Implementation Required",
+                "Ready for Formal Review",
+            ),
+            "Conditionally Resolved",
+        )
+        self.assertEqual(
+            self.admin_session.classify_resolution(
+                "Corrective Action Implemented",
+                "Ready",
+                "Determination Pending",
+                "Corrective Action Effective",
+                "Prepare Formal Review Implementation",
+                "Ready for Formal Review",
+            ),
+            "Resolved",
+        )
+        self.assertEqual(
+            self.admin_session.classify_resolution(
+                "Corrective Action Reversed",
+                "Ready",
+                "Determination Pending",
+                "Implementation Failed",
+                "Implementation Failed",
+                "Ready for Formal Review",
+            ),
+            "Resolution Failed",
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution("Unresolved"),
+            (
+                "The matter remains unresolved because the current outcome "
+                "has not reached an implemented administrative determination "
+                "state."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution("Partially Resolved"),
+            (
+                "The matter has advanced toward resolution but administrative "
+                "determination or implementation remains incomplete."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution("Conditionally Resolved"),
+            (
+                "The matter has reached a conditional resolution state, but "
+                "implementation or confirmation requirements remain "
+                "outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution("Resolved"),
+            (
+                "The matter has reached a resolved state because the required "
+                "administrative action has been implemented and is effective."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session.describe_resolution("Resolution Failed"),
+            (
+                "The matter has not resolved because the required corrective "
+                "or administrative action failed, reversed, or did not take "
+                "effect."
+            ),
         )
 
     def test_admin_record_evidence_view_requires_session(self):
