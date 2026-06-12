@@ -1624,6 +1624,48 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 13A — Closure Classification"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 13B — Closure Preconditions", content)
+        self.assertIn(
+            "Closure preconditions are derived deterministically from closure,",
+            content,
+        )
+        self.assertIn(
+            '<td>Closure Preconditions</td><td><span class="closure-precondition-badge closure-outstanding">Closure Preconditions Outstanding</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Precondition Description</td><td>Closure requirements remain outstanding and must be satisfied before the matter can advance.</td>",
+            content,
+        )
+        self.assertIn("<h3>Closure Preconditions</h3>", content)
+        self.assertIn(
+            "<li>Resolution completion must advance beyond Not Complete.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Resolution determination must become available.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Resolution readiness must advance beyond Not Ready.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Administrative review requirements must be satisfied.</li>",
+            content,
+        )
+        self.assertIn(
+            "<li>Effective state must advance beyond Evidence Review Continues.</li>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 13A — Closure Classification"),
+            content.index("Stage 13B — Closure Preconditions"),
+        )
+        self.assertLess(
+            content.index("Stage 13B — Closure Preconditions"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1647,6 +1689,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".closure-without-resolution", content)
         self.assertIn(".closure-with-resolution", content)
         self.assertIn(".closure-failed", content)
+        self.assertIn(".closure-precondition-badge", content)
+        self.assertIn(".closure-ready", content)
+        self.assertIn(".closure-conditional", content)
+        self.assertIn(".closure-outstanding", content)
+        self.assertIn(".closure-blocked", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2220,6 +2267,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Closure Description</td><td>The matter has advanced toward closure, but completion or confirmation requirements remain outstanding.</td>",
+            content,
+        )
+        self.assertIn("Stage 13B — Closure Preconditions", content)
+        self.assertIn(
+            '<td>Closure Preconditions</td><td><span class="closure-precondition-badge closure-conditional">Conditionally Closable</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Precondition Description</td><td>The matter is approaching closure but one or more completion requirements remain outstanding.</td>",
             content,
         )
         self.assertIn(
@@ -4020,6 +4076,99 @@ class AdminSessionTests(unittest.TestCase):
             (
                 "Closure failed because the required resolution or completion "
                 "state did not take effect."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_preconditions(
+                closure="Closed With Resolution",
+                resolution="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Resolved",
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Closure Ready",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_preconditions(
+                closure="Pending Closure",
+                resolution="Partially Resolved",
+                resolution_completion="Completion Required",
+                resolution_determination="Determination Required",
+                resolution_readiness="Conditionally Ready",
+                resolution_pathway="DETERMINATION PATHWAY ACTIVE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Conditionally Closable",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_preconditions(
+                closure="Open",
+                resolution="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                resolution_readiness="Not Ready",
+                resolution_pathway="REVIEW ELIGIBILITY PENDING",
+                outcome_target="Review Awaiting Determination",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Closure Preconditions Outstanding",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_preconditions(
+                closure="Closure Failed",
+                resolution="Resolution Failed",
+                resolution_completion="Completion Failed",
+                resolution_determination="Determination Issued",
+                resolution_readiness="Ready",
+                resolution_pathway="IMPLEMENTATION PATHWAY ACTIVE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Implementation Failed",
+            ),
+            "Closure Blocked",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_preconditions(
+                "Closure Ready"
+            ),
+            "All deterministic closure requirements have been satisfied.",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_preconditions(
+                "Conditionally Closable"
+            ),
+            (
+                "The matter is approaching closure but one or more completion "
+                "requirements remain outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_preconditions(
+                "Closure Preconditions Outstanding"
+            ),
+            (
+                "Closure requirements remain outstanding and must be "
+                "satisfied before the matter can advance."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_preconditions(
+                "Closure Blocked"
+            ),
+            (
+                "Closure cannot proceed because prerequisite completion or "
+                "determination conditions have failed."
             ),
         )
 
