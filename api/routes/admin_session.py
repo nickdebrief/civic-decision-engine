@@ -4449,7 +4449,6 @@ def _render_resolution_determination(
         </table>
       </section>"""
 
-
 def _render_resolution_completion(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
