@@ -1666,6 +1666,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 13B — Closure Preconditions"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 13C — Closure Pathway", content)
+        self.assertIn(
+            "Closure pathway identifies the deterministic sequence of",
+            content,
+        )
+        self.assertIn(
+            '<td>Closure Pathway</td><td><span class="closure-pathway-badge closure-eligibility-pending">Closure Eligibility Pending</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Pathway Description</td><td>The matter remains within the closure pathway while closure eligibility requirements remain outstanding.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 13B — Closure Preconditions"),
+            content.index("Stage 13C — Closure Pathway"),
+        )
+        self.assertLess(
+            content.index("Stage 13C — Closure Pathway"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1694,6 +1715,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".closure-conditional", content)
         self.assertIn(".closure-outstanding", content)
         self.assertIn(".closure-blocked", content)
+        self.assertIn(".closure-pathway-badge", content)
+        self.assertIn(".closure-eligibility-pending", content)
+        self.assertIn(".closure-readiness-pending", content)
+        self.assertIn(".closure-determination-pending", content)
+        self.assertIn(".closure-confirmation-pending", content)
+        self.assertIn(".closure-complete", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2276,6 +2303,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Precondition Description</td><td>The matter is approaching closure but one or more completion requirements remain outstanding.</td>",
+            content,
+        )
+        self.assertIn("Stage 13C — Closure Pathway", content)
+        self.assertIn(
+            '<td>Closure Pathway</td><td><span class="closure-pathway-badge closure-determination-pending">Closure Determination Pending</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Pathway Description</td><td>The matter is awaiting closure determination following satisfaction of prerequisite readiness requirements.</td>",
             content,
         )
         self.assertIn(
@@ -4170,6 +4206,123 @@ class AdminSessionTests(unittest.TestCase):
                 "Closure cannot proceed because prerequisite completion or "
                 "determination conditions have failed."
             ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_pathway(
+                closure="Open",
+                closure_preconditions="Closure Preconditions Outstanding",
+                resolution="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                resolution_readiness="Not Ready",
+                resolution_pathway="REVIEW ELIGIBILITY PENDING",
+                outcome_target="Review Awaiting Determination",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Closure Eligibility Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_pathway(
+                closure="Pending Closure",
+                closure_preconditions="Conditionally Closable",
+                resolution="Conditionally Resolved",
+                resolution_completion="Completion Required",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Ready",
+                resolution_pathway="REVIEW PATHWAY ACTIVE",
+                outcome_target="Ready For Determination",
+                administrative_status="Pending Administrative Review",
+                implementation_action="Await Review Determination",
+                effective_state="Administrative Review Pending",
+            ),
+            "Closure Readiness Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_pathway(
+                closure="Pending Closure",
+                closure_preconditions="Conditionally Closable",
+                resolution="Partially Resolved",
+                resolution_completion="Completion Required",
+                resolution_determination="Determination Required",
+                resolution_readiness="Conditionally Ready",
+                resolution_pathway="DETERMINATION PATHWAY ACTIVE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Closure Determination Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_pathway(
+                closure="Pending Closure",
+                closure_preconditions="Closure Ready",
+                resolution="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Resolved",
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Closure Confirmation Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_pathway(
+                closure="Closed With Resolution",
+                closure_preconditions="Closure Ready",
+                resolution="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Resolved",
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Closure Complete",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_pathway(
+                "Closure Eligibility Pending"
+            ),
+            (
+                "The matter remains within the closure pathway while closure "
+                "eligibility requirements remain outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_pathway(
+                "Closure Readiness Pending"
+            ),
+            (
+                "The matter has advanced beyond eligibility review but "
+                "closure readiness requirements remain outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_pathway(
+                "Closure Determination Pending"
+            ),
+            (
+                "The matter is awaiting closure determination following "
+                "satisfaction of prerequisite readiness requirements."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_pathway(
+                "Closure Confirmation Pending"
+            ),
+            "The matter is awaiting final closure confirmation.",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_pathway("Closure Complete"),
+            "The closure pathway has completed.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
