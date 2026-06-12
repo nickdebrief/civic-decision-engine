@@ -4166,7 +4166,6 @@ def _render_resolution_readiness(
         </table>
       </section>"""
 
-
 def _render_resolution_determination(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> str:
