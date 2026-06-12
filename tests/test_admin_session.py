@@ -1603,6 +1603,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 12F — Resolution Completion"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 13A — Closure Classification", content)
+        self.assertIn(
+            "Closure is classified deterministically from resolution, completion,",
+            content,
+        )
+        self.assertIn(
+            '<td>Closure Classification</td><td><span class="closure-badge closure-open">Open</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Closure Description</td><td>The matter remains open because resolution completion has not been reached.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 12F — Resolution Completion"),
+            content.index("Stage 13A — Closure Classification"),
+        )
+        self.assertLess(
+            content.index("Stage 13A — Closure Classification"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1620,6 +1641,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".resolution-completion-required", content)
         self.assertIn(".resolution-completion-confirmed", content)
         self.assertIn(".resolution-completion-failed", content)
+        self.assertIn(".closure-badge", content)
+        self.assertIn(".closure-open", content)
+        self.assertIn(".closure-pending", content)
+        self.assertIn(".closure-without-resolution", content)
+        self.assertIn(".closure-with-resolution", content)
+        self.assertIn(".closure-failed", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2184,6 +2211,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Completion Description</td><td>Resolution completion is required before the matter can be treated as administratively resolved.</td>",
+            content,
+        )
+        self.assertIn("Stage 13A — Closure Classification", content)
+        self.assertIn(
+            '<td>Closure Classification</td><td><span class="closure-badge closure-pending">Pending Closure</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Closure Description</td><td>The matter has advanced toward closure, but completion or confirmation requirements remain outstanding.</td>",
             content,
         )
         self.assertIn(
@@ -3879,6 +3915,111 @@ class AdminSessionTests(unittest.TestCase):
             (
                 "Resolution completion failed because the required corrective "
                 "or administrative action did not take effect."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure(
+                resolution="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                resolution_readiness="Not Ready",
+                resolution_pathway="REVIEW ELIGIBILITY PENDING",
+                outcome_target="Review Awaiting Determination",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Open",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure(
+                resolution="Partially Resolved",
+                resolution_completion="Completion Required",
+                resolution_determination="Determination Required",
+                resolution_readiness="Conditionally Ready",
+                resolution_pathway="DETERMINATION PATHWAY ACTIVE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Pending Closure",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure(
+                resolution="Unresolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Resolved",
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Closed Without Resolution",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure(
+                resolution="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                resolution_readiness="Resolved",
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Closed With Resolution",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure(
+                resolution="Resolution Failed",
+                resolution_completion="Completion Failed",
+                resolution_determination="Determination Issued",
+                resolution_readiness="Ready",
+                resolution_pathway="IMPLEMENTATION PATHWAY ACTIVE",
+                outcome_target="Determination Pending",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Implementation Failed",
+            ),
+            "Closure Failed",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure("Open"),
+            (
+                "The matter remains open because resolution completion has "
+                "not been reached."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure("Pending Closure"),
+            (
+                "The matter has advanced toward closure, but completion or "
+                "confirmation requirements remain outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure("Closed Without Resolution"),
+            (
+                "The matter has been closed without reaching a resolved "
+                "administrative state."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure("Closed With Resolution"),
+            (
+                "The matter has been closed after reaching a resolved "
+                "administrative state."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure("Closure Failed"),
+            (
+                "Closure failed because the required resolution or completion "
+                "state did not take effect."
             ),
         )
 
