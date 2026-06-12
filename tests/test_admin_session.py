@@ -1687,6 +1687,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 13C — Closure Pathway"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 13D — Closure Readiness", content)
+        self.assertIn(
+            "Closure readiness is classified deterministically from closure,",
+            content,
+        )
+        self.assertIn(
+            '<td>Closure Readiness</td><td><span class="closure-readiness-badge closure-readiness-not-ready">Not Ready</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Readiness Description</td><td>Closure readiness has not been achieved because one or more prerequisite closure conditions remain outstanding.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 13C — Closure Pathway"),
+            content.index("Stage 13D — Closure Readiness"),
+        )
+        self.assertLess(
+            content.index("Stage 13D — Closure Readiness"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1721,6 +1742,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".closure-determination-pending", content)
         self.assertIn(".closure-confirmation-pending", content)
         self.assertIn(".closure-complete", content)
+        self.assertIn(".closure-readiness-badge", content)
+        self.assertIn(".closure-readiness-ready", content)
+        self.assertIn(".closure-readiness-not-ready", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2314,6 +2338,7 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Pathway Description</td><td>The matter is awaiting closure determination following satisfaction of prerequisite readiness requirements.</td>",
             content,
         )
+        self.assertIn("Stage 13D — Closure Readiness", content)
         self.assertIn(
             "<td>Sufficiency Basis</td><td>3 Minimal, 1 Reinforced</td>",
             content,
@@ -4323,6 +4348,54 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session._describe_closure_pathway("Closure Complete"),
             "The closure pathway has completed.",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_readiness(
+                closure_classification="Closable",
+                closure_preconditions="Satisfied",
+                closure_pathway="Closure Available",
+                resolution_classification="Resolved",
+                resolution_completion="Complete",
+                resolution_determination="Available",
+                resolution_readiness="Ready",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Ready",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_readiness(
+                closure_classification="Open",
+                closure_preconditions="Closure Preconditions Outstanding",
+                closure_pathway="Closure Eligibility Pending",
+                resolution_classification="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                resolution_readiness="Not Ready",
+                outcome_readiness="Not Ready",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Not Ready",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_readiness("Ready"),
+            (
+                "Closure readiness has been achieved because all "
+                "prerequisite closure conditions have been satisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_readiness("Not Ready"),
+            (
+                "Closure readiness has not been achieved because one or more "
+                "prerequisite closure conditions remain outstanding."
+            ),
         )
 
     def test_admin_record_evidence_view_requires_session(self):
