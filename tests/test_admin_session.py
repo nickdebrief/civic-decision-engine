@@ -1561,11 +1561,38 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 12D — Resolution Readiness"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 12E — Resolution Determination", content)
+        self.assertIn(
+            "Resolution determination is classified deterministically from",
+            content,
+        )
+        self.assertIn(
+            '<td>Resolution Determination</td><td><span class="resolution-determination-badge resolution-determination-not-available">Determination Not Available</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Determination Description</td><td>Resolution determination is not available because prerequisite review and readiness conditions remain unsatisfied.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 12D — Resolution Readiness"),
+            content.index("Stage 12E — Resolution Determination"),
+        )
+        self.assertLess(
+            content.index("Stage 12E — Resolution Determination"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
         self.assertIn(".resolution-readiness-ready", content)
         self.assertIn(".resolution-readiness-resolved", content)
+        self.assertIn(".resolution-determination-badge", content)
+        self.assertIn(".resolution-determination-not-available", content)
+        self.assertIn(".resolution-determination-pending", content)
+        self.assertIn(".resolution-determination-required", content)
+        self.assertIn(".resolution-determination-issued", content)
+        self.assertIn(".resolution-determination-complete", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2112,6 +2139,15 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Readiness Description</td><td>Resolution readiness is partially established, but further administrative progression remains required.</td>",
+            content,
+        )
+        self.assertIn("Stage 12E — Resolution Determination", content)
+        self.assertIn(
+            '<td>Resolution Determination</td><td><span class="resolution-determination-badge resolution-determination-required">Determination Required</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Determination Description</td><td>Resolution determination is required before the matter can advance toward implementation or completion.</td>",
             content,
         )
         self.assertIn(
@@ -3551,6 +3587,133 @@ class AdminSessionTests(unittest.TestCase):
             (
                 "Resolution readiness assessment is complete because the "
                 "matter has already reached a resolved administrative state."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_determination(
+                resolution="Unresolved",
+                resolution_preconditions=[
+                    "Review eligibility requirements must be satisfied.",
+                ],
+                resolution_pathway="REVIEW ELIGIBILITY PENDING",
+                resolution_readiness="Not Ready",
+                outcome_target="Review Awaiting Determination",
+                outcome_readiness="Not Ready",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Determination Not Available",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_determination(
+                resolution="Unresolved",
+                resolution_preconditions=[],
+                resolution_pathway="REVIEW PATHWAY ACTIVE",
+                resolution_readiness="Conditionally Ready",
+                outcome_target="Ready For Determination",
+                outcome_readiness="Conditionally Ready",
+                review_eligibility="Conditionally Eligible",
+                administrative_status="Pending Administrative Review",
+                implementation_action="Await Review Determination",
+                effective_state="Administrative Review Pending",
+            ),
+            "Determination Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_determination(
+                resolution="Partially Resolved",
+                resolution_preconditions=[
+                    "Administrative determination must be completed.",
+                ],
+                resolution_pathway="DETERMINATION PATHWAY ACTIVE",
+                resolution_readiness="Conditionally Ready",
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Determination Required",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_determination(
+                resolution="Conditionally Resolved",
+                resolution_preconditions=[
+                    "Resolution effectiveness must be confirmed.",
+                ],
+                resolution_pathway="IMPLEMENTATION PATHWAY ACTIVE",
+                resolution_readiness="Ready",
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Determination Issued",
+        )
+        self.assertEqual(
+            self.admin_session._classify_resolution_determination(
+                resolution="Resolved",
+                resolution_preconditions=[],
+                resolution_pathway="RESOLUTION PATHWAY COMPLETE",
+                resolution_readiness="Resolved",
+                outcome_target="Determination Pending",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Corrective Action Effective",
+            ),
+            "Determination Complete",
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_determination(
+                "Determination Not Available"
+            ),
+            (
+                "Resolution determination is not available because "
+                "prerequisite review and readiness conditions remain "
+                "unsatisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_determination(
+                "Determination Pending"
+            ),
+            (
+                "Resolution determination is pending because the matter "
+                "remains within the review pathway."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_determination(
+                "Determination Required"
+            ),
+            (
+                "Resolution determination is required before the matter can "
+                "advance toward implementation or completion."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_determination(
+                "Determination Issued"
+            ),
+            (
+                "Resolution determination has been issued, but implementation "
+                "or confirmation remains outstanding."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_resolution_determination(
+                "Determination Complete"
+            ),
+            (
+                "Resolution determination is complete because the matter has "
+                "reached a resolved administrative state."
             ),
         )
 
