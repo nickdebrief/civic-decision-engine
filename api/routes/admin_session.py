@@ -2817,7 +2817,6 @@ def _describe_closure_readiness(readiness: str) -> str:
         ),
     )
 
-
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2978,7 +2977,6 @@ def _closure_readiness_badge_class(readiness: str) -> str:
         "Ready": "closure-readiness-ready",
         "Not Ready": "closure-readiness-not-ready",
     }.get(readiness, "closure-readiness-not-ready")
-
 
 def _render_record_evidence_sufficiency(
     evidence_groups: dict[str, list[dict[str, Any]]],
