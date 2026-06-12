@@ -2685,6 +2685,81 @@ def _closure_precondition_items(
     ]
 
 
+def _classify_closure_pathway(
+    *,
+    closure: str,
+    closure_preconditions: str,
+    resolution: str,
+    resolution_completion: str,
+    resolution_determination: str,
+    resolution_readiness: str,
+    resolution_pathway: str,
+    outcome_target: str,
+    administrative_status: str,
+    implementation_action: str,
+    effective_state: str,
+) -> str:
+    if closure in {"Closed With Resolution", "Closed Without Resolution"}:
+        return "Closure Complete"
+    if (
+        resolution_completion == "Completion Confirmed"
+        and closure_preconditions == "Closure Ready"
+    ):
+        return "Closure Confirmation Pending"
+    if (
+        resolution_determination
+        in {
+            "Determination Pending",
+            "Determination Required",
+            "Determination Issued",
+        }
+        or resolution_completion == "Completion Pending"
+    ):
+        return "Closure Determination Pending"
+    if closure == "Pending Closure" and closure_preconditions == "Conditionally Closable":
+        return "Closure Readiness Pending"
+    if closure == "Open" and closure_preconditions == "Closure Preconditions Outstanding":
+        return "Closure Eligibility Pending"
+    if (
+        resolution == "Unresolved"
+        or resolution_readiness == "Not Ready"
+        or resolution_pathway == "REVIEW ELIGIBILITY PENDING"
+        or outcome_target == "Review Awaiting Determination"
+        or administrative_status == "Active Evidence Review"
+        or implementation_action == "No Implementation Action"
+        or effective_state == "Evidence Review Continues"
+    ):
+        return "Closure Eligibility Pending"
+    return "Closure Readiness Pending"
+
+
+def _describe_closure_pathway(pathway: str) -> str:
+    return {
+        "Closure Eligibility Pending": (
+            "The matter remains within the closure pathway while closure "
+            "eligibility requirements remain outstanding."
+        ),
+        "Closure Readiness Pending": (
+            "The matter has advanced beyond eligibility review but closure "
+            "readiness requirements remain outstanding."
+        ),
+        "Closure Determination Pending": (
+            "The matter is awaiting closure determination following "
+            "satisfaction of prerequisite readiness requirements."
+        ),
+        "Closure Confirmation Pending": (
+            "The matter is awaiting final closure confirmation."
+        ),
+        "Closure Complete": "The closure pathway has completed.",
+    }.get(
+        pathway,
+        (
+            "The matter remains within the closure pathway while closure "
+            "eligibility requirements remain outstanding."
+        ),
+    )
+
+
 def _admin_action_badge_class(action: str) -> str:
     return {
         "Collect Initial Evidence": "admin-action-collect-initial-evidence",
@@ -2828,6 +2903,16 @@ def _closure_precondition_badge_class(precondition_state: str) -> str:
         "Closure Preconditions Outstanding": "closure-outstanding",
         "Closure Blocked": "closure-blocked",
     }.get(precondition_state, "closure-outstanding")
+
+
+def _closure_pathway_badge_class(pathway: str) -> str:
+    return {
+        "Closure Eligibility Pending": "closure-eligibility-pending",
+        "Closure Readiness Pending": "closure-readiness-pending",
+        "Closure Determination Pending": "closure-determination-pending",
+        "Closure Confirmation Pending": "closure-confirmation-pending",
+        "Closure Complete": "closure-complete",
+    }.get(pathway, "closure-eligibility-pending")
 
 
 def _render_record_evidence_sufficiency(
@@ -5295,6 +5380,243 @@ def _render_closure_preconditions(
       </section>"""
 
 
+def _render_closure_pathway(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    administrative_status = status_summary["status"]
+    implementation_action = classify_implementation_action(
+        administrative_status
+    )
+    effective_state = classify_effective_state(
+        implementation_action,
+        administrative_status,
+    )
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        administrative_status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        administrative_status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+    )
+    resolution_preconditions = build_resolution_preconditions(
+        resolution,
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        administrative_status,
+        eligibility,
+    )
+    resolution_pathway = _classify_resolution_pathway(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        outcome_target=outcome_target,
+        outcome_readiness=outcome_readiness,
+        effective_state=effective_state,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+    )
+    resolution_readiness = _classify_resolution_readiness(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        outcome_readiness=outcome_readiness,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    determination = _classify_resolution_determination(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        resolution_readiness=resolution_readiness,
+        outcome_target=outcome_target,
+        outcome_readiness=outcome_readiness,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    completion = _classify_resolution_completion(
+        resolution=resolution,
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        resolution_readiness=resolution_readiness,
+        resolution_determination=determination,
+        outcome_target=outcome_target,
+        outcome_readiness=outcome_readiness,
+        review_eligibility=eligibility,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    closure = _classify_closure(
+        resolution=resolution,
+        resolution_completion=completion,
+        resolution_determination=determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=outcome_target,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    closure_preconditions = _classify_closure_preconditions(
+        closure=closure,
+        resolution=resolution,
+        resolution_completion=completion,
+        resolution_determination=determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=outcome_target,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    closure_pathway = _classify_closure_pathway(
+        closure=closure,
+        closure_preconditions=closure_preconditions,
+        resolution=resolution,
+        resolution_completion=completion,
+        resolution_determination=determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=outcome_target,
+        administrative_status=administrative_status,
+        implementation_action=implementation_action,
+        effective_state=effective_state,
+    )
+    pathway_badge = (
+        f'<span class="closure-pathway-badge {_closure_pathway_badge_class(closure_pathway)}">'
+        f"{escape(closure_pathway)}</span>"
+    )
+    closure_badge = (
+        f'<span class="closure-badge {_closure_badge_class(closure)}">'
+        f"{escape(closure)}</span>"
+    )
+    precondition_badge = (
+        f'<span class="closure-precondition-badge {_closure_precondition_badge_class(closure_preconditions)}">'
+        f"{escape(closure_preconditions)}</span>"
+    )
+    resolution_badge = (
+        f'<span class="resolution-badge {_resolution_badge_class(resolution)}">'
+        f"{escape(resolution)}</span>"
+    )
+    completion_badge = (
+        f'<span class="resolution-completion-badge {_resolution_completion_badge_class(completion)}">'
+        f"{escape(completion)}</span>"
+    )
+    determination_badge = (
+        f'<span class="resolution-determination-badge {_resolution_determination_badge_class(determination)}">'
+        f"{escape(determination)}</span>"
+    )
+    readiness_badge = (
+        f'<span class="resolution-readiness-badge {_resolution_readiness_badge_class(resolution_readiness)}">'
+        f"{escape(resolution_readiness)}</span>"
+    )
+    outcome_target_badge = (
+        f'<span class="outcome-target-badge {_outcome_target_badge_class(outcome_target)}">'
+        f"{escape(outcome_target)}</span>"
+    )
+    status_badge = (
+        f'<span class="administrative-status-badge {_administrative_status_badge_class(administrative_status)}">'
+        f"{escape(administrative_status)}</span>"
+    )
+    implementation_badge = (
+        f'<span class="implementation-action-badge {_implementation_action_badge_class(implementation_action)}">'
+        f"{escape(implementation_action)}</span>"
+    )
+    effective_state_badge = (
+        f'<span class="effective-state-badge {_effective_state_badge_class(effective_state)}">'
+        f"{escape(effective_state)}</span>"
+    )
+    rows = (
+        ("Closure Pathway", pathway_badge),
+        ("Pathway Description", escape(_describe_closure_pathway(closure_pathway))),
+        ("Closure Classification", closure_badge),
+        ("Closure Preconditions", precondition_badge),
+        ("Resolution Classification", resolution_badge),
+        ("Resolution Completion", completion_badge),
+        ("Resolution Determination", determination_badge),
+        ("Resolution Readiness", readiness_badge),
+        ("Resolution Pathway", resolution_pathway),
+        ("Outcome Target", outcome_target_badge),
+        ("Administrative Status", status_badge),
+        ("Implementation Action", implementation_badge),
+        ("Effective State", effective_state_badge),
+    )
+    badge_labels = {
+        "Closure Pathway",
+        "Closure Classification",
+        "Closure Preconditions",
+        "Resolution Classification",
+        "Resolution Completion",
+        "Resolution Determination",
+        "Resolution Readiness",
+        "Outcome Target",
+        "Administrative Status",
+        "Implementation Action",
+        "Effective State",
+    }
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{value if label in badge_labels else escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+      <section class="management-section closure-pathway">
+        <h2>Stage 13C — Closure Pathway</h2>
+        <p class="notice">
+          Closure pathway identifies the deterministic sequence of
+          administrative closure transitions required before the matter can
+          reach closure.
+        </p>
+        <table>
+          <tbody>{table_rows}</tbody>
+        </table>
+      </section>"""
+
+
 def _record_evidence_coverage(
     evidence_groups: dict[str, list[dict[str, Any]]],
 ) -> dict[str, Any]:
@@ -5471,6 +5793,7 @@ def render_admin_record_evidence_page(
     resolution_completion = _render_resolution_completion(evidence_groups)
     closure_classification = _render_closure_classification(evidence_groups)
     closure_preconditions = _render_closure_preconditions(evidence_groups)
+    closure_pathway = _render_closure_pathway(evidence_groups)
     evidence_assessment = _render_progressive_disclosure_group(
         title="Evidence Assessment",
         description="Stage 7F evidence sufficiency and Stage 7G evidence readiness.",
@@ -6260,6 +6583,41 @@ def render_admin_record_evidence_page(
       border-color: #6b3d3d;
       background: #f5e2e2;
     }}
+    .closure-pathway-badge {{
+      display: inline-block;
+      border: 1px solid #6f6a60;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: #fbfaf7;
+      color: #1f1f1f;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }}
+    .closure-eligibility-pending {{
+      border-color: #8a6a2a;
+      background: #fff7df;
+    }}
+    .closure-readiness-pending {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .closure-determination-pending {{
+      border-color: #245d61;
+      background: #edf6f7;
+    }}
+    .closure-confirmation-pending {{
+      border-color: #6f6250;
+      background: #f7f2e8;
+    }}
+    .closure-complete {{
+      border-color: #2f6d4f;
+      background: #eef7f1;
+    }}
     td:first-child {{
       width: 190px;
       background: #faf9f5;
@@ -6341,6 +6699,7 @@ def render_admin_record_evidence_page(
     {resolution_completion}
     {closure_classification}
     {closure_preconditions}
+    {closure_pathway}
     {supporting_evidence}
   </main>
 </body>
