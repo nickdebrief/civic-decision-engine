@@ -1729,6 +1729,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 13E — Closure Determination"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 13F — Closure Completion", content)
+        self.assertIn(
+            "Closure completion is classified deterministically from closure,",
+            content,
+        )
+        self.assertIn(
+            '<td>Closure Completion</td><td><span class="closure-completion-badge closure-completion-not-complete">Not Complete</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Completion Description</td><td>Closure completion has not been reached because prerequisite closure determination conditions remain unsatisfied.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 13E — Closure Determination"),
+            content.index("Stage 13F — Closure Completion"),
+        )
+        self.assertLess(
+            content.index("Stage 13F — Closure Completion"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1772,6 +1793,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".closure-determination-required", content)
         self.assertIn(".closure-determination-issued", content)
         self.assertIn(".closure-determination-complete", content)
+        self.assertIn(".closure-completion-badge", content)
+        self.assertIn(".closure-completion-not-complete", content)
+        self.assertIn(".closure-completion-pending", content)
+        self.assertIn(".closure-completion-in-progress", content)
+        self.assertIn(".closure-completion-complete", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2367,6 +2393,7 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("Stage 13D — Closure Readiness", content)
         self.assertIn("Stage 13E — Closure Determination", content)
+        self.assertIn("Stage 13F — Closure Completion", content)
         self.assertIn(
             "<td>Sufficiency Basis</td><td>3 Minimal, 1 Reinforced</td>",
             content,
@@ -4552,6 +4579,110 @@ class AdminSessionTests(unittest.TestCase):
             ),
             (
                 "Closure determination is complete because the matter has "
+                "reached a closure state."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_completion(
+                closure_classification="Open",
+                closure_preconditions="Closure Preconditions Outstanding",
+                closure_pathway="Closure Eligibility Pending",
+                closure_readiness="Not Ready",
+                closure_determination="Determination Not Available",
+                resolution_classification="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                outcome_readiness="Not Ready",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Not Complete",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_completion(
+                closure_classification="Pending Closure",
+                closure_preconditions="Conditionally Closable",
+                closure_pathway="Closure Readiness Pending",
+                closure_readiness="Ready",
+                closure_determination="Determination Pending",
+                resolution_classification="Conditionally Resolved",
+                resolution_completion="Completion Required",
+                resolution_determination="Determination Pending",
+                outcome_readiness="Conditionally Ready",
+                review_eligibility="Conditionally Eligible",
+                administrative_status="Pending Administrative Review",
+                implementation_action="Await Review Determination",
+                effective_state="Administrative Review Pending",
+            ),
+            "Completion Pending",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_completion(
+                closure_classification="Pending Closure",
+                closure_preconditions="Closure Ready",
+                closure_pathway="Closure Confirmation Pending",
+                closure_readiness="Ready",
+                closure_determination="Determination Issued",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Issued",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Completion In Progress",
+        )
+        self.assertEqual(
+            self.admin_session._classify_closure_completion(
+                closure_classification="Closed With Resolution",
+                closure_preconditions="Closure Ready",
+                closure_pathway="Closure Complete",
+                closure_readiness="Ready",
+                closure_determination="Determination Complete",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Complete",
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_completion("Not Complete"),
+            (
+                "Closure completion has not been reached because prerequisite "
+                "closure determination conditions remain unsatisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_completion(
+                "Completion Pending"
+            ),
+            (
+                "Closure completion remains pending while closure "
+                "determination requirements are being satisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_completion(
+                "Completion In Progress"
+            ),
+            (
+                "Closure completion is in progress pending final closure "
+                "confirmation."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_closure_completion("Complete"),
+            (
+                "Closure completion has been achieved because the matter has "
                 "reached a closure state."
             ),
         )
