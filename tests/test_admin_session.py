@@ -1750,6 +1750,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 13F — Closure Completion"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 14A — Archive Classification", content)
+        self.assertIn(
+            "Archive classification is determined from closure, resolution,",
+            content,
+        )
+        self.assertIn(
+            '<td>Archive Classification</td><td><span class="archive-classification-badge archive-classification-not-archivable">Not Archivable</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Description</td><td>Archive classification has not been achieved because closure completion requirements remain unsatisfied.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 13F — Closure Completion"),
+            content.index("Stage 14A — Archive Classification"),
+        )
+        self.assertLess(
+            content.index("Stage 14A — Archive Classification"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1798,6 +1819,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".closure-completion-pending", content)
         self.assertIn(".closure-completion-in-progress", content)
         self.assertIn(".closure-completion-complete", content)
+        self.assertIn(".archive-classification-badge", content)
+        self.assertIn(".archive-classification-not-archivable", content)
+        self.assertIn(".archive-classification-eligible", content)
+        self.assertIn(".archive-classification-archived", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2394,6 +2419,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Stage 13D — Closure Readiness", content)
         self.assertIn("Stage 13E — Closure Determination", content)
         self.assertIn("Stage 13F — Closure Completion", content)
+        self.assertIn("Stage 14A — Archive Classification", content)
         self.assertIn(
             "<td>Sufficiency Basis</td><td>3 Minimal, 1 Reinforced</td>",
             content,
@@ -4685,6 +4711,79 @@ class AdminSessionTests(unittest.TestCase):
                 "Closure completion has been achieved because the matter has "
                 "reached a closure state."
             ),
+        )
+        self.assertEqual(
+            self.admin_session._archive_classification(
+                closure_classification="Open",
+                closure_completion="Not Complete",
+                closure_determination="Determination Not Available",
+                closure_readiness="Not Ready",
+                resolution_classification="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                outcome_readiness="Not Ready",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Not Archivable",
+        )
+        self.assertEqual(
+            self.admin_session._archive_classification(
+                closure_classification="Closed With Resolution",
+                closure_completion="Complete",
+                closure_determination="Determination Complete",
+                closure_readiness="Ready",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Archive Eligible",
+        )
+        self.assertEqual(
+            self.admin_session._archive_classification(
+                closure_classification="Closed With Resolution",
+                closure_completion="Complete",
+                closure_determination="Determination Complete",
+                closure_readiness="Ready",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Archived",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Archived",
+            ),
+            "Archived",
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_classification(
+                "Not Archivable"
+            ),
+            (
+                "Archive classification has not been achieved because closure "
+                "completion requirements remain unsatisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_classification(
+                "Archive Eligible"
+            ),
+            (
+                "The matter satisfies archive classification requirements "
+                "and may proceed to archive evaluation."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_classification("Archived"),
+            "The matter has reached an archived administrative state.",
         )
 
     def test_admin_record_evidence_view_requires_session(self):
