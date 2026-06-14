@@ -1855,6 +1855,27 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 14D — Archive Readiness"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("Stage 14E — Archive Determination", content)
+        self.assertIn(
+            "Archive determination is classified deterministically from archive,",
+            content,
+        )
+        self.assertIn(
+            '<td>Archive Determination</td><td><span class="archive-determination-badge archive-determination-not-available">Determination Not Available</span></td>',
+            content,
+        )
+        self.assertIn(
+            "<td>Description</td><td>Archive determination is not available because prerequisite archive conditions remain unsatisfied.</td>",
+            content,
+        )
+        self.assertLess(
+            content.index("Stage 14D — Archive Readiness"),
+            content.index("Stage 14E — Archive Determination"),
+        )
+        self.assertLess(
+            content.index("Stage 14E — Archive Determination"),
+            content.index("Supporting Evidence"),
+        )
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
@@ -1919,6 +1940,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".archive-readiness-not-ready", content)
         self.assertIn(".archive-readiness-ready", content)
         self.assertIn(".archive-readiness-archived", content)
+        self.assertIn(".archive-determination-badge", content)
+        self.assertIn(".archive-determination-not-available", content)
+        self.assertIn(".archive-determination-eligible", content)
+        self.assertIn(".archive-determination-archived", content)
         self.assertIn(".workflow-state-badge", content)
         self.assertIn(".workflow-state-evidence-collection", content)
         self.assertIn(".workflow-state-evidence-review", content)
@@ -2519,6 +2544,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Stage 14B — Archive Preconditions", content)
         self.assertIn("Stage 14C — Archive Pathway", content)
         self.assertIn("Stage 14D — Archive Readiness", content)
+        self.assertIn("Stage 14E — Archive Determination", content)
         self.assertIn(
             "<td>Sufficiency Basis</td><td>3 Minimal, 1 Reinforced</td>",
             content,
@@ -5140,6 +5166,94 @@ class AdminSessionTests(unittest.TestCase):
             (
                 "Archive readiness has been satisfied and the matter has "
                 "completed archive progression."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._archive_determination(
+                archive_classification="Not Archivable",
+                archive_preconditions="Archive Preconditions Outstanding",
+                archive_pathway="Archive Eligibility Pending",
+                archive_readiness="Not Ready",
+                closure_classification="Open",
+                closure_completion="Not Complete",
+                closure_determination="Determination Not Available",
+                closure_readiness="Not Ready",
+                resolution_classification="Unresolved",
+                resolution_completion="Not Complete",
+                resolution_determination="Determination Not Available",
+                outcome_readiness="Not Ready",
+                review_eligibility="Not Eligible",
+                administrative_status="Active Evidence Review",
+                implementation_action="No Implementation Action",
+                effective_state="Evidence Review Continues",
+            ),
+            "Determination Not Available",
+        )
+        self.assertEqual(
+            self.admin_session._archive_determination(
+                archive_classification="Archive Eligible",
+                archive_preconditions="Archive Preconditions Satisfied",
+                archive_pathway="Archive Determination Pending",
+                archive_readiness="Ready",
+                closure_classification="Closed With Resolution",
+                closure_completion="Complete",
+                closure_determination="Determination Complete",
+                closure_readiness="Ready",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Ready for Formal Review",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Formal Review Ready",
+            ),
+            "Archive Eligible",
+        )
+        self.assertEqual(
+            self.admin_session._archive_determination(
+                archive_classification="Archived",
+                archive_preconditions="Archive Preconditions Satisfied",
+                archive_pathway="Archived",
+                archive_readiness="Archived",
+                closure_classification="Closed With Resolution",
+                closure_completion="Complete",
+                closure_determination="Determination Complete",
+                closure_readiness="Ready",
+                resolution_classification="Resolved",
+                resolution_completion="Completion Confirmed",
+                resolution_determination="Determination Complete",
+                outcome_readiness="Ready",
+                review_eligibility="Eligible",
+                administrative_status="Archived",
+                implementation_action="Prepare Formal Review Implementation",
+                effective_state="Archived",
+            ),
+            "Archived",
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_determination(
+                "Determination Not Available"
+            ),
+            (
+                "Archive determination is not available because prerequisite "
+                "archive conditions remain unsatisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_determination(
+                "Archive Eligible"
+            ),
+            (
+                "Archive determination confirms that archive requirements "
+                "have been satisfied."
+            ),
+        )
+        self.assertEqual(
+            self.admin_session._describe_archive_determination("Archived"),
+            (
+                "Archive determination confirms that archive progression "
+                "has completed."
             ),
         )
 
