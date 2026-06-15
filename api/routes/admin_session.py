@@ -22,9 +22,6 @@ except ImportError:
     def File(default=None, **_kwargs):
         return default
 
-    from fastapi import Form, Request
-except ImportError:
-
     def Form(default=None, **_kwargs):
         return default
 
@@ -41,14 +38,8 @@ from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
     list_record_attachments,
-    store_attachment_bytes,
-)
-from fastapi.responses import HTMLResponse, JSONResponse
-
-from api.attachments import (
-    ATTACHMENT_ROOT,
-    list_record_attachments,
     record_attachment_audit_event,
+    store_attachment_bytes,
     validate_attachment_relationship,
     validate_attachment_classification,
     validate_attachment_visibility,
@@ -228,6 +219,14 @@ def validate_pdf_attachment_upload(content_type: str | None, data: bytes) -> str
     return normalized_content_type
 
 
+def validate_temporary_attachment_upload(content_type: str | None, data: bytes) -> str:
+    if not data:
+        raise _http_error(400, "attachment_file_required")
+    if len(data) > attachment_max_upload_bytes():
+        raise _http_error(413, "attachment_too_large")
+    return (content_type or "application/octet-stream").split(";", 1)[0].strip() or "application/octet-stream"
+
+
 def attachment_metadata_response(attachment: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
@@ -398,6 +397,27 @@ def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[s
         "finding": [finding] if finding else [],
         "record": [reference] if reference else [],
     }
+
+
+def _resolve_record_target_key(
+    record: sqlite3.Row, target_type: str, target_label: str
+) -> str:
+    target_options = _record_relationship_target_options(record)
+    candidates = target_options.get(target_type, [])
+    normalized_label = str(target_label or "").strip()
+    if not normalized_label:
+        raise _http_error(400, "attachment_target_label_required")
+
+    for candidate in candidates:
+        if candidate == normalized_label:
+            return candidate
+
+    folded_label = normalized_label.casefold()
+    for candidate in candidates:
+        if _guided_target_display_label(candidate).casefold() == folded_label:
+            return candidate
+
+    raise _http_error(400, "attachment_target_not_found")
 
 
 def _json_list_targets(raw_json: Any) -> list[str]:
@@ -11032,6 +11052,44 @@ def _relationship_response(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def _render_temporary_attachment_upload_form(reference: str) -> str:
+    target_type_options = "".join(
+        f'<option value="{escape(value)}">{escape(value)}</option>'
+        for value in ATTACHMENT_RELATIONSHIP_TARGET_TYPE_OPTIONS
+    )
+    return f"""
+      <form class="temporary-upload-form" method="post" enctype="multipart/form-data"
+            action="/api/admin/session/records/{escape(reference)}/attachments/temp-upload">
+        <label>
+          Record reference / target reference
+          <input type="text" name="record_reference" value="{escape(reference)}" required>
+        </label>
+        <label>
+          Target type
+          <select name="target_type" required>
+            {target_type_options}
+          </select>
+        </label>
+        <label>
+          Target label
+          <input type="text" name="target_label" placeholder="Escalation Without Response" required>
+        </label>
+        <label>
+          Attachment title / label
+          <input type="text" name="attachment_title" placeholder="Test evidence — escalation without response" required>
+        </label>
+        <label>
+          Optional description
+          <textarea name="description"></textarea>
+        </label>
+        <label>
+          File upload
+          <input type="file" name="file" required>
+        </label>
+        <button type="submit">Upload attachment</button>
+      </form>"""
+
+
 def render_admin_attachments_page(
     *,
     reference: str,
@@ -11045,6 +11103,7 @@ def render_admin_attachments_page(
         relationship_target_options=relationship_target_options,
     )
     audit_rows = _render_admin_audit_events(audit_events)
+    temporary_upload_form = _render_temporary_attachment_upload_form(reference)
     relationship_target_options_json = _safe_json_for_script(
         relationship_target_options
     )
@@ -11345,6 +11404,47 @@ def render_admin_attachments_page(
       font: 0.86rem system-ui, sans-serif;
       cursor: pointer;
     }}
+    .temporary-upload-form {{
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid #d8d4ca;
+      background: #fffdf8;
+    }}
+    .temporary-upload-form label {{
+      display: grid;
+      gap: 5px;
+      color: #555;
+      font-size: 0.78rem;
+      font-family: ui-monospace, monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .temporary-upload-form input,
+    .temporary-upload-form select,
+    .temporary-upload-form textarea {{
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d8d4ca;
+      background: #fff;
+      color: #222;
+      font: 0.9rem system-ui, sans-serif;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .temporary-upload-form textarea {{
+      min-height: 76px;
+      resize: vertical;
+    }}
+    .temporary-upload-form button {{
+      width: max-content;
+      border: 1px solid #245d61;
+      background: #245d61;
+      color: #fff;
+      padding: 9px 12px;
+      font: 0.9rem system-ui, sans-serif;
+      cursor: pointer;
+    }}
     .audit-metadata {{
       border-top: 1px solid #eee;
       padding: 10px;
@@ -11407,13 +11507,21 @@ def render_admin_attachments_page(
     <p class="notice">
       Administrative attachment management is controlled in this stage.
       Classification, publication status, and visibility metadata updates are available from this page.
-      No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.
+      Temporary admin upload is available for evidence verification only.
+      No public download, public file access, or canonical verification changes are introduced.
     </p>
     <section class="management-section record-summary">
       <h2>Record summary</h2>
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
       <p><a href="/admin/records/{escape(reference)}/evidence">View record evidence by target</a></p>
+    </section>
+    <section class="management-section temporary-upload">
+      <h2>Temporary admin attachment upload</h2>
+      <p class="notice">
+        Temporary admin upload utility for evidence verification. Attachments do not alter canonical record verification hashes and are not publicly downloadable.
+      </p>
+      {temporary_upload_form}
     </section>
     <section class="management-section current-attachments">
       <h2>Current attachments</h2>
@@ -11430,12 +11538,12 @@ def render_admin_attachments_page(
           <li>audit trail review</li>
           <li>visibility workflow</li>
           <li>publication workflow</li>
+          <li>temporary admin upload</li>
         </ul>
       </div>
       <div class="capability-group">
         <h3>Planned</h3>
         <ul>
-          <li>upload</li>
           <li>public file serving</li>
         </ul>
       </div>
@@ -11448,7 +11556,7 @@ def render_admin_attachments_page(
       <h2>Governance notice</h2>
       <p>Administrative attachment management is controlled in this stage.</p>
       <p>Classification, publication status, and visibility metadata updates are available from this page.</p>
-      <p>No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.</p>
+      <p>Temporary admin upload is available for evidence verification only. No public download or public file access is available.</p>
     </section>
   </main>
   <script>
@@ -11697,6 +11805,158 @@ def list_record_attachments_route(reference: str, request: Request):
                 ],
             }
         )
+    finally:
+        conn.close()
+
+
+@router.post("/api/admin/session/records/{reference}/attachments/temp-upload")
+def temporary_admin_attachment_upload_route(
+    reference: str,
+    request: Request,
+    record_reference: str = Form(...),
+    target_type: str = Form(...),
+    target_label: str = Form(...),
+    attachment_title: str = Form(...),
+    description: str | None = Form(None),
+    file: UploadFile = File(...),
+):
+    require_admin_session(request)
+    target_reference = str(record_reference or "").strip()
+    if target_reference != reference:
+        raise _http_error(400, "attachment_reference_mismatch")
+
+    filename = getattr(file, "filename", None) or "attachment"
+    content_type = getattr(file, "content_type", None)
+    file_handle = getattr(file, "file", None)
+    if file_handle is None or not hasattr(file_handle, "read"):
+        raise _http_error(400, "attachment_file_required")
+    if hasattr(file_handle, "seek"):
+        file_handle.seek(0)
+    data = file_handle.read()
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    if not isinstance(data, bytes):
+        raise _http_error(400, "attachment_file_required")
+    normalized_content_type = validate_temporary_attachment_upload(content_type, data)
+
+    conn = get_db()
+    try:
+        record = conn.execute(
+            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
+            "WHERE reference = ? AND is_latest = 1 "
+            "ORDER BY version DESC LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not record:
+            raise _http_error(404, "record_not_found")
+
+        normalized_target_type = str(target_type or "").strip()
+        target_key = _resolve_record_target_key(
+            record,
+            normalized_target_type,
+            target_label,
+        )
+        relationship_type, normalized_target_type, target_key = (
+            validate_attachment_relationship(
+                "supports",
+                normalized_target_type,
+                target_key,
+            )
+        )
+
+        stored_attachment = store_attachment_bytes(
+            conn,
+            reference=reference,
+            data=data,
+            original_filename=filename,
+            content_type=normalized_content_type,
+            visibility="private",
+            redaction_status="none",
+            title=str(attachment_title or "").strip(),
+            description=(description.strip() if isinstance(description, str) else None),
+            source_label="Temporary admin upload",
+            classification="evidence",
+            publication_status="internal",
+            uploaded_by="admin",
+            root=Path(os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))),
+        )
+        attachment_id = int(stored_attachment["attachment_id"])
+
+        attachment_created_audit_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_created",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=int(stored_attachment["record_version"]),
+            metadata={
+                "temporary_admin_upload": True,
+                "filename": stored_attachment["filename"],
+                "sha256_hash": stored_attachment["sha256_hash"],
+                "file_size_bytes": stored_attachment["file_size_bytes"],
+            },
+        )
+
+        created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        cursor = conn.execute(
+            """
+            INSERT INTO record_attachment_relationships (
+                reference, record_version, attachment_id, relationship_type,
+                target_type, target_key, is_active, created_at, created_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'admin')
+            """,
+            (
+                reference,
+                int(stored_attachment["record_version"]),
+                attachment_id,
+                relationship_type,
+                normalized_target_type,
+                target_key,
+                created_at,
+            ),
+        )
+        relationship_id = int(cursor.lastrowid)
+        relationship = conn.execute(
+            "SELECT * FROM record_attachment_relationships WHERE id = ?",
+            (relationship_id,),
+        ).fetchone()
+        relationship_audit_id = record_attachment_audit_event(
+            conn,
+            event_type="attachment_relationship_added",
+            reference=reference,
+            attachment_id=attachment_id,
+            record_version=int(stored_attachment["record_version"]),
+            metadata={
+                "relationship_id": relationship_id,
+                "relationship_type": relationship_type,
+                "target_type": normalized_target_type,
+                "target_key": target_key,
+                "temporary_admin_upload": True,
+            },
+        )
+        attachment = conn.execute(
+            "SELECT * FROM record_attachments WHERE id = ? AND reference = ?",
+            (attachment_id, reference),
+        ).fetchone()
+        conn.commit()
+        return JSONResponse(
+            content={
+                "ok": True,
+                "attachment_audit_event_id": attachment_created_audit_id,
+                "relationship_audit_event_id": relationship_audit_id,
+                "attachment": _safe_attachment_response(attachment),
+                "relationship": _relationship_response(relationship),
+            }
+        )
+    except AttachmentRecordNotFound as exc:
+        conn.rollback()
+        raise _http_error(404, "record_not_found") from exc
+    except ValueError as exc:
+        conn.rollback()
+        raise _http_error(400, "attachment_upload_invalid") from exc
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 

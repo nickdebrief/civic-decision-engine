@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import io
 import importlib
 import json
 import os
@@ -111,6 +112,19 @@ def install_fastapi_stubs():
 class FakeRequest:
     def __init__(self, cookies=None):
         self.cookies = cookies or {}
+
+
+class FakeUploadFile:
+    def __init__(
+        self,
+        data: bytes,
+        *,
+        filename: str = "evidence.txt",
+        content_type: str = "text/plain",
+    ):
+        self.filename = filename
+        self.content_type = content_type
+        self.file = io.BytesIO(data)
 
 
 class AdminSessionTests(unittest.TestCase):
@@ -911,9 +925,26 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
-            "No upload, edit, delete, restore, withhold, publish, correction, or download actions are available.",
+            "Temporary admin upload is available for evidence verification only.",
             content,
         )
+        self.assertIn("No public download, public file access, or canonical verification changes are introduced.", content)
+        self.assertIn("Temporary admin attachment upload", content)
+        self.assertIn("Temporary admin upload utility for evidence verification.", content)
+        self.assertIn('class="temporary-upload-form"', content)
+        self.assertIn('enctype="multipart/form-data"', content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/temp-upload"',
+            content,
+        )
+        self.assertIn('name="record_reference"', content)
+        self.assertIn('name="target_type"', content)
+        self.assertIn('name="target_label"', content)
+        self.assertIn('name="attachment_title"', content)
+        self.assertIn('name="description"', content)
+        self.assertIn('name="file"', content)
+        self.assertIn('type="file"', content)
+        self.assertIn("Upload attachment", content)
 
     def test_admin_attachment_listing_exposes_no_paths_tokens_or_controls(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -943,15 +974,146 @@ class AdminSessionTests(unittest.TestCase):
             'href="/admin/records/Strike-OT-20260604-ADMIN/evidence"',
             content,
         )
-        self.assertNotIn("<textarea", content)
+        self.assertIn('class="temporary-upload-form"', content)
         self.assertNotIn("Download attachment", content)
-        self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)
         self.assertNotIn("Delete attachment", content)
         self.assertNotIn("Restore attachment", content)
         self.assertNotIn("Withhold attachment", content)
         self.assertNotIn("Publish attachment", content)
         self.assertNotIn("Download attachment", content)
+
+    def test_temporary_admin_attachment_upload_links_target_and_updates_evidence_coverage(self):
+        data = b"temporary evidence bytes for escalation without response"
+        expected_sha = hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            attachment_root = Path(temp_dir) / "attachments"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET reference = ?,
+                    conditions_json = ?,
+                    signals_json = ?,
+                    finding = ?
+                WHERE reference = ?
+                """,
+                (
+                    "Strike-LA-20260710-004",
+                    json.dumps(["Escalation Without Response"]),
+                    json.dumps([]),
+                    "",
+                    "Strike-OT-20260604-ADMIN",
+                ),
+            )
+            before_hash = conn.execute(
+                "SELECT verification_hash FROM records WHERE reference = ?",
+                ("Strike-LA-20260710-004",),
+            ).fetchone()["verification_hash"]
+            conn.commit()
+            conn.close()
+
+            try:
+                with self.env(), patch.dict(
+                    os.environ,
+                    {"CDE_ATTACHMENT_ROOT": str(attachment_root)},
+                    clear=False,
+                ):
+                    before_response = self.admin_session.admin_record_evidence_page(
+                        "Strike-LA-20260710-004",
+                        self.valid_request(),
+                    )
+                    upload_response = (
+                        self.admin_session.temporary_admin_attachment_upload_route(
+                            "Strike-LA-20260710-004",
+                            self.valid_request(),
+                            record_reference="Strike-LA-20260710-004",
+                            target_type="condition",
+                            target_label="Escalation Without Response",
+                            attachment_title="Test evidence — escalation without response",
+                            description="Temporary verification upload",
+                            file=FakeUploadFile(
+                                data,
+                                filename="escalation-evidence.txt",
+                                content_type="text/plain",
+                            ),
+                        )
+                    )
+                    after_response = self.admin_session.admin_record_evidence_page(
+                        "Strike-LA-20260710-004",
+                        self.valid_request(),
+                    )
+
+                conn = sqlite3.connect(self.admin_session.DB_PATH)
+                conn.row_factory = sqlite3.Row
+                try:
+                    attachment = conn.execute(
+                        "SELECT * FROM record_attachments WHERE reference = ?",
+                        ("Strike-LA-20260710-004",),
+                    ).fetchone()
+                    relationship = conn.execute(
+                        """
+                        SELECT * FROM record_attachment_relationships
+                        WHERE reference = ? AND attachment_id = ?
+                        """,
+                        ("Strike-LA-20260710-004", attachment["id"]),
+                    ).fetchone()
+                    after_hash = conn.execute(
+                        "SELECT verification_hash FROM records WHERE reference = ?",
+                        ("Strike-LA-20260710-004",),
+                    ).fetchone()["verification_hash"]
+                    stored_file_exists = Path(attachment["storage_path"]).exists()
+                finally:
+                    conn.close()
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertEqual(upload_response.content["ok"], True)
+        self.assertEqual(
+            upload_response.content["attachment"]["title"],
+            "Test evidence — escalation without response",
+        )
+        self.assertEqual(upload_response.content["attachment"]["sha256_hash"], expected_sha)
+        self.assertNotIn("storage_path", upload_response.content["attachment"])
+        self.assertNotIn("stored_filename", upload_response.content["attachment"])
+        self.assertEqual(attachment["filename"], "escalation-evidence.txt")
+        self.assertEqual(attachment["content_type"], "text/plain")
+        self.assertEqual(attachment["file_size_bytes"], len(data))
+        self.assertEqual(attachment["sha256_hash"], expected_sha)
+        self.assertEqual(attachment["classification"], "evidence")
+        self.assertEqual(attachment["visibility"], "private")
+        self.assertEqual(attachment["publication_status"], "internal")
+        self.assertTrue(stored_file_exists)
+        self.assertEqual(relationship["relationship_type"], "supports")
+        self.assertEqual(relationship["target_type"], "condition")
+        self.assertEqual(relationship["target_key"], "Escalation Without Response")
+        self.assertEqual(relationship["is_active"], 1)
+        self.assertEqual(before_hash, after_hash)
+
+        before_content = before_response.content
+        after_content = after_response.content
+        self.assertIn("<td>Conditions Supported</td><td>0 / 1</td>", before_content)
+        self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", before_content)
+        self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
+        self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
+        self.assertIn("Test evidence — escalation without response", after_content)
+        self.assertIn("Escalation Without Response", after_content)
+        self.assertNotIn("storage_path", after_content)
+        self.assertNotIn("stored_filename", after_content)
+        self.assertNotIn("Download attachment", after_content)
+        self.assertNotIn("Upload attachment", after_content)
+
+    def test_temporary_admin_attachment_upload_adds_no_public_download_route(self):
+        source = Path("api/routes/admin_session.py").read_text(encoding="utf-8")
+
+        self.assertIn(
+            '"/api/admin/session/records/{reference}/attachments/temp-upload"',
+            source,
+        )
+        self.assertNotIn("/attachments/{attachment_id}/download", source)
+        self.assertNotIn("download_attachment", source)
 
     def test_admin_record_evidence_view_groups_supporting_attachments_safely(self):
         with tempfile.TemporaryDirectory() as temp_dir:
