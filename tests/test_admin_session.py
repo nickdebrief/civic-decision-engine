@@ -1897,6 +1897,78 @@ class AdminSessionTests(unittest.TestCase):
             content.index("Stage 14F — Archive Completion"),
             content.index("Supporting Evidence"),
         )
+        self.assertIn("<details", content)
+        self.assertIn("<summary", content)
+        self.assertIn("admin-section-group", content)
+        self.assertIn(
+            'class="admin-section-group evidence-coverage-admin-group" open',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group archive-analysis-admin-group" open',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group administrative-workflow-admin-group"',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group outcome-analysis-admin-group"',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group resolution-analysis-admin-group"',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group closure-analysis-admin-group"',
+            content,
+        )
+        self.assertIn(
+            'class="admin-section-group supporting-evidence-admin-group"',
+            content,
+        )
+        self.assertIn("Evidence Coverage", content)
+        self.assertIn("Administrative Workflow", content)
+        self.assertIn("Outcome Analysis — Stages 11A–11F", content)
+        self.assertIn("Resolution Analysis — Stages 12A–12F", content)
+        self.assertIn("Closure Analysis — Stages 13A–13F", content)
+        self.assertIn("Archive Analysis — Stages 14A–14F", content)
+        self.assertIn("Supporting Evidence", content)
+        self.assertIn(
+            "Expand to inspect deterministic administrative reasoning.",
+            content,
+        )
+        self.assertIn(".admin-section-group", content)
+        self.assertIn(".admin-section-summary", content)
+        self.assertIn(".admin-section-body", content)
+        self.assertIn(".admin-section-hint", content)
+        self.assertIn(".admin-section-count", content)
+        self.assertIn(
+            ".admin-section-group:not([open]) > .admin-section-body",
+            content,
+        )
+        for stage in (
+            "Stage 12A — Resolution Classification",
+            "Stage 12B — Resolution Preconditions",
+            "Stage 12C — Resolution Pathway",
+            "Stage 12D — Resolution Readiness",
+            "Stage 12E — Resolution Determination",
+            "Stage 12F — Resolution Completion",
+            "Stage 13A — Closure Classification",
+            "Stage 13B — Closure Preconditions",
+            "Stage 13C — Closure Pathway",
+            "Stage 13D — Closure Readiness",
+            "Stage 13E — Closure Determination",
+            "Stage 13F — Closure Completion",
+            "Stage 14A — Archive Classification",
+            "Stage 14B — Archive Preconditions",
+            "Stage 14C — Archive Pathway",
+            "Stage 14D — Archive Readiness",
+            "Stage 14E — Archive Determination",
+            "Stage 14F — Archive Completion",
+        ):
+            self.assertIn(stage, content)
         self.assertIn(".resolution-readiness-badge", content)
         self.assertIn(".resolution-readiness-not-ready", content)
         self.assertIn(".resolution-readiness-conditionally-ready", content)
