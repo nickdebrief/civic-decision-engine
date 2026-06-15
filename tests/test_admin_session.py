@@ -3,6 +3,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -1944,6 +1945,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn(".admin-section-body", content)
         self.assertIn(".admin-section-hint", content)
         self.assertIn(".admin-section-count", content)
+        self.assertIn(".print-admin-section-body", content)
+        self.assertIn("@media screen", content)
+        self.assertIn("@media print", content)
+        self.assertIn(
+            '<section class="print-admin-section-body archive-analysis-admin-group-print"',
+            content,
+        )
+        self.assertIn(
+            "details.admin-section-group > .admin-section-body",
+            content,
+        )
+        self.assertIn("display: none !important;", content)
+        self.assertIn(
+            ".print-admin-section-body {\n        display: block !important;",
+            content,
+        )
         self.assertIn(
             ".admin-section-group:not([open]) > .admin-section-body",
             content,
@@ -2119,8 +2136,14 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Target Key", content)
         self.assertIn("Attachment Identifier", content)
         self.assertIn("Attachment Title", content)
+        screen_content = re.sub(
+            r'<section class="print-admin-section-body.*?</section>',
+            "",
+            content,
+            flags=re.DOTALL,
+        )
         self.assertEqual(
-            content.count("supports → condition → Institutional Delay"),
+            screen_content.count("supports → condition → Institutional Delay"),
             2,
         )
         self.assertIn("context_for → finding → Finding &lt;requires&gt; review", content)
