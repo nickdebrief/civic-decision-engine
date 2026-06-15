@@ -1,0 +1,187 @@
+{
+  "strike_reference": "Strike-LA-20260710-004",
+  "case_title": "Escalating administrative delay with partial institutional response",
+  "civic_domain": "local_government",
+  "decision_trigger": "A local authority provided a partial procedural response after repeated delay but did not resolve the substantive issue.",
+  "recall_question": "What evidence supports the pattern of delay, partial response, and escalation readiness?",
+  "user_priority": "timeline clarity, evidence linkage, administrative readiness",
+  "desired_outcome": "A complete substantive response, clear ownership of the issue, and an auditable evidence record for escalation.",
+  "urgency": "high",
+  "institutions": [
+    "Local Authority Housing Service",
+    "Local Authority Complaints Team",
+    "External Local Government Ombudsman"
+  ],
+  "case_lifecycle": {
+    "current_stage": "escalation_ready",
+    "status": "active",
+    "resolution_status": "partial",
+    "stalled": true,
+    "days_open": 86,
+    "next_decision_point": "prepare_external_ombudsman_referral",
+    "next_deadline": "2026-07-10",
+    "recommended_mode": "escalate"
+  },
+  "rules_or_procedures": [
+    "Local authority complaint procedure",
+    "Stage 1 complaint response target",
+    "Stage 2 escalation procedure",
+    "External ombudsman referral after internal delay or incomplete response"
+  ],
+  "constraints": [
+    "Partial response did not address the substantive issue",
+    "Responsibility was redirected between service and complaints teams",
+    "Escalation requires a clear chronology and supporting evidence",
+    "The complainant must avoid creating duplicate complaint threads"
+  ],
+  "actors": [
+    {
+      "name": "Citizen complainant",
+      "actor_type": "individual",
+      "role_in_case": "documenting delay, requesting a substantive response, and preparing escalation",
+      "incentive_or_pressure": "needs resolution without losing procedural footing",
+      "likely_behaviour": "maintain chronology, preserve correspondence, and link evidence to each unresolved target"
+    },
+    {
+      "name": "Housing case officer",
+      "actor_type": "institutional_actor",
+      "role_in_case": "initial service owner for the substantive issue",
+      "incentive_or_pressure": "manage operational workload and avoid accepting unresolved responsibility",
+      "likely_behaviour": "provide limited updates and redirect formal complaint handling"
+    },
+    {
+      "name": "Complaints team",
+      "actor_type": "institutional_actor",
+      "role_in_case": "issuing partial procedural response and managing escalation route",
+      "incentive_or_pressure": "close procedural steps while limiting scope of admission",
+      "likely_behaviour": "acknowledge delay, describe process, but leave substantive remedy unresolved"
+    },
+    {
+      "name": "External Local Government Ombudsman",
+      "actor_type": "oversight_actor",
+      "role_in_case": "potential external review route if internal response remains incomplete",
+      "incentive_or_pressure": "require evidence of completed or stalled internal process",
+      "likely_behaviour": "request chronology, correspondence, decision records, and proof of unresolved complaint outcome"
+    }
+  ],
+  "evidence_bundle": [
+    {
+      "label": "Initial service request and complaint",
+      "evidence_type": "email",
+      "relevance": "Establishes the starting point for the administrative delay and the substantive issue raised",
+      "strength": "high",
+      "linked_timeline_label": "Initial complaint submitted"
+    },
+    {
+      "label": "Acknowledgement without substantive answer",
+      "evidence_type": "correspondence",
+      "relevance": "Shows partial institutional response without resolving the underlying issue",
+      "strength": "high",
+      "linked_timeline_label": "Partial acknowledgement received"
+    },
+    {
+      "label": "Follow-up chronology",
+      "evidence_type": "chronology",
+      "relevance": "Documents repeated contact without resolution and supports evidence coverage review",
+      "strength": "high",
+      "linked_timeline_label": "Repeated follow-up contacts recorded"
+    },
+    {
+      "label": "Responsibility redirection email",
+      "evidence_type": "email",
+      "relevance": "Shows the issue was redirected between service and complaints functions",
+      "strength": "medium",
+      "linked_timeline_label": "Responsibility redirected"
+    },
+    {
+      "label": "Stage 2 escalation draft",
+      "evidence_type": "draft_submission",
+      "relevance": "Frames the unresolved targets for administrative evidence review through outcome, resolution, closure, and archive stages",
+      "strength": "medium",
+      "linked_timeline_label": "Escalation prepared after partial response"
+    }
+  ],
+  "deadlines": [
+    {
+      "label": "Stage 1 substantive response deadline",
+      "due_date": "2026-06-19",
+      "consequence": "Missed deadline supports institutional delay and escalation readiness"
+    },
+    {
+      "label": "Stage 2 escalation preparation date",
+      "due_date": "2026-07-10",
+      "consequence": "Escalation package should be evidence-linked before external review"
+    }
+  ],
+  "timeline": [
+    {
+      "event_date": "2026-04-15",
+      "label": "Initial complaint submitted",
+      "event_type": "submission",
+      "description": "The complainant submitted a formal complaint to the local authority housing service after prolonged inaction on a service issue."
+    },
+    {
+      "event_date": "2026-04-19",
+      "label": "Partial acknowledgement received",
+      "event_type": "acknowledgement",
+      "description": "The authority acknowledged receipt and referenced the complaints process but did not answer the substantive issue."
+    },
+    {
+      "event_date": "2026-05-08",
+      "label": "Repeated follow-up contacts recorded",
+      "event_type": "follow_up",
+      "description": "Multiple follow-up contacts were made after no substantive decision or remedy was provided."
+    },
+    {
+      "event_date": "2026-05-22",
+      "label": "Responsibility redirected",
+      "event_type": "procedural_deflection",
+      "description": "The service team redirected responsibility to the complaints team while the complaints team referred back to service ownership."
+    },
+    {
+      "event_date": "2026-06-20",
+      "label": "Escalation prepared after partial response",
+      "event_type": "escalation",
+      "description": "The complainant prepared a Stage 2 escalation after the authority issued only a partial procedural response and no substantive remedy."
+    }
+  ],
+  "escalation_paths": [
+    {
+      "name": "Stage 2 internal complaint escalation",
+      "route_type": "internal_complaint",
+      "trigger": "Partial procedural response did not resolve the substantive issue",
+      "likely_response": "A further procedural review or request for additional chronology",
+      "time_horizon": "short",
+      "risk_level": "medium",
+      "jurisdiction_fit": "yes",
+      "evidence_readiness": "medium",
+      "deadline_pressure": "high",
+      "outcome_status": "partial",
+      "outcome_note": "Acknowledgement and process explanation received, but substantive resolution remains outstanding"
+    },
+    {
+      "name": "External Local Government Ombudsman referral",
+      "route_type": "oversight_review",
+      "trigger": "Internal escalation remains delayed or substantively incomplete",
+      "likely_response": "Request for complaint chronology, authority responses, and evidence of unresolved issue",
+      "time_horizon": "medium",
+      "risk_level": "medium",
+      "jurisdiction_fit": "partial",
+      "evidence_readiness": "medium",
+      "deadline_pressure": "medium",
+      "outcome_status": "unknown",
+      "outcome_note": ""
+    }
+  ],
+  "linked_cases": [
+    {
+      "strike_reference": "CIVIC-CASE-001",
+      "relationship_type": "same_pattern",
+      "note": "Earlier case also involved staged institutional response and escalation readiness"
+    }
+  ],
+  "structural_insight": "The case shows institutional delay shifting into partial procedural response, with responsibility redirected rather than the substantive issue resolved.",
+  "personal_positioning": "The complainant should keep the evidence record precise, distinguish partial acknowledgement from substantive remedy, and link each attachment to a specific unresolved target.",
+  "decision_note": "Use the Admin Record Evidence view to verify evidence coverage for delay, partial response, responsibility redirection, repeated contact, and escalation readiness before external referral.",
+  "learning_capture": "Partial institutional response can make a case appear active while leaving outcome, resolution, closure, and archive readiness incomplete unless the supporting evidence is linked target by target."
+}

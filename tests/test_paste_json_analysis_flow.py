@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 import sys
@@ -158,6 +159,16 @@ def dominant_condition_ids(response):
     return ids
 
 
+def model_value(obj, key):
+    if isinstance(obj, dict):
+        return obj[key]
+    return getattr(obj, key)
+
+
+def timeline_case_sequence(response):
+    return model_value(response.results[0], "case_sequence")
+
+
 class PasteJsonAnalysisFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -202,6 +213,51 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertEqual(request.cases[0].case_description, VALID_CASE_TEXT)
         self.assertEqual(request.cases[0].institutions, ["LA"])
 
+    def test_case_text_payload_preserves_supplied_strike_reference(self):
+        request = self.normalize_analysis_request(
+            {
+                "case_text": VALID_CASE_TEXT,
+                "institution_type": "LA",
+                "strike_reference": "Strike-LA-20260710-004",
+            }
+        )
+
+        self.assertEqual(request.cases[0].strike_reference, "Strike-LA-20260710-004")
+
+    def test_case_text_payload_accepts_reference_alias(self):
+        request = self.normalize_analysis_request(
+            {
+                "case_text": VALID_CASE_TEXT,
+                "reference": "Strike-LA-20260710-004",
+            }
+        )
+
+        self.assertEqual(request.cases[0].strike_reference, "Strike-LA-20260710-004")
+        self.assertEqual(request.cases[0].institutions, ["LA"])
+
+    def test_cases_payload_accepts_reference_alias(self):
+        request = self.normalize_analysis_request(
+            {
+                "cases": [
+                    {
+                        "reference": "Strike-LA-20260710-004",
+                        "case_title": "Wrapped reference alias",
+                        "decision_trigger": VALID_CASE_TEXT,
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(request.cases[0].strike_reference, "Strike-LA-20260710-004")
+
+    def test_single_civic_case_payload_preserves_strike_reference(self):
+        payload = json.loads(Path("examples/civic_case_004.json").read_text())
+
+        request = self.normalize_analysis_request(payload)
+
+        self.assertEqual(len(request.cases), 1)
+        self.assertEqual(request.cases[0].strike_reference, "Strike-LA-20260710-004")
+
     def test_valid_case_text_payload_returns_timeline_and_pattern_analysis(self):
         payload = {"case_text": VALID_CASE_TEXT, "institution_type": "LA"}
 
@@ -239,6 +295,40 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertTrue(
             EXPECTED_CONDITIONS.issubset(dominant_condition_ids(pattern_result))
         )
+
+    def test_supplied_strike_reference_reaches_timeline_and_pattern_outputs(self):
+        payload = {
+            "case_text": VALID_CASE_TEXT,
+            "institution_type": "LA",
+            "strike_reference": "Strike-LA-20260710-004",
+        }
+
+        with patch.object(self.timeline, "save_run_snapshot"), patch.object(
+            self.pattern, "save_run_snapshot"
+        ):
+            timeline_result = self.timeline.timeline_live(payload)
+            pattern_result = self.pattern.pattern_live(payload)
+
+        self.assertEqual(timeline_case_sequence(timeline_result), ["Strike-LA-20260710-004"])
+        self.assertEqual(len(pattern_result.results), 1)
+
+    def test_single_civic_case_payload_reaches_timeline_and_pattern_outputs(self):
+        payload = json.loads(Path("examples/civic_case_004.json").read_text())
+
+        with patch.object(self.timeline, "save_run_snapshot"), patch.object(
+            self.pattern, "save_run_snapshot"
+        ):
+            timeline_result = self.timeline.timeline_live(payload)
+            pattern_result = self.pattern.pattern_live(payload)
+
+        self.assertEqual(timeline_case_sequence(timeline_result), ["Strike-LA-20260710-004"])
+        self.assertEqual(len(pattern_result.results), 1)
+
+    def test_paste_json_ui_attaches_supplied_reference_for_export(self):
+        html = Path("api/static/index.html").read_text(encoding="utf-8")
+
+        self.assertIn("function extractStrikeReference(payload)", html)
+        self.assertIn("const attachedRef = extractStrikeReference(payload);", html)
 
     def test_canonical_condition_identifiers_are_detected(self):
         payload = {
