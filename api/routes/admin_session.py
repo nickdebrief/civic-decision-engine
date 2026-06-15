@@ -9459,7 +9459,12 @@ def _render_admin_section_group(
       <div class="admin-section-body">
         {content}
       </div>
-    </details>"""
+    </details>
+    <section class="print-admin-section-body {escape(class_name)}-print" aria-hidden="true">
+      <h2>{escape(title)}</h2>
+      <p class="admin-section-hint">{escape(description)}</p>
+      {content}
+    </section>"""
 
 
 def render_admin_record_evidence_page(
@@ -9728,6 +9733,9 @@ def render_admin_record_evidence_page(
     }}
     .admin-section-body {{
       padding: 0 16px 18px;
+    }}
+    .print-admin-section-body {{
+      display: none;
     }}
     .admin-section-hint {{
       display: block;
@@ -10706,6 +10714,11 @@ def render_admin_record_evidence_page(
       letter-spacing: 0.04em;
     }}
     td:last-child {{ font-family: ui-monospace, monospace; }}
+    @media screen {{
+      .print-admin-section-body {{
+        display: none;
+      }}
+    }}
     @media print {{
       body {{
         background: #fff;
@@ -10729,11 +10742,23 @@ def render_admin_record_evidence_page(
       details:not([open]) > *:not(summary) {{
         display: block;
       }}
-      .admin-section-group,
-      .admin-section-group > summary,
-      .admin-section-body,
-      .admin-section-group:not([open]) > .admin-section-body {{
-        display: block;
+      details.admin-section-group {{
+        display: block !important;
+      }}
+      details.admin-section-group > summary {{
+        display: block !important;
+      }}
+      details.admin-section-group > .admin-section-body {{
+        display: none !important;
+      }}
+      details.admin-section-group:not([open]) > .admin-section-body {{
+        display: none !important;
+      }}
+      .print-admin-section-body {{
+        display: block !important;
+        border-top: 1px solid #e5e1d8;
+        margin-top: 22px;
+        padding-top: 18px;
       }}
     }}
   </style>
