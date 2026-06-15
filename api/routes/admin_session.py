@@ -9441,6 +9441,27 @@ def _render_progressive_disclosure_group(
     </details>"""
 
 
+def _render_admin_section_group(
+    *,
+    title: str,
+    description: str,
+    content: str,
+    class_name: str,
+    open_by_default: bool = False,
+) -> str:
+    open_attr = " open" if open_by_default else ""
+    return f"""
+    <details class="admin-section-group {escape(class_name)}"{open_attr}>
+      <summary class="admin-section-summary">
+        <span class="summary-title">{escape(title)}</span>
+        <span class="admin-section-hint">{escape(description)}</span>
+      </summary>
+      <div class="admin-section-body">
+        {content}
+      </div>
+    </details>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -9551,6 +9572,83 @@ def render_admin_record_evidence_page(
         ),
         class_name="supporting-evidence-group",
     )
+    evidence_coverage_group = _render_admin_section_group(
+        title="Evidence Coverage",
+        description="Current evidence coverage and outstanding gap summary.",
+        content=f"{evidence_coverage}{evidence_gap_summary}",
+        class_name="evidence-coverage-admin-group",
+        open_by_default=True,
+    )
+    administrative_workflow_group = _render_admin_section_group(
+        title="Administrative Workflow",
+        description="Expand to inspect deterministic administrative reasoning.",
+        content=(
+            f"{evidence_assessment}"
+            f"{administrative_workflow}"
+            f"{review_status}"
+            f"{administrative_status_summary}"
+            f"{implementation_path}"
+            f"{effective_state}"
+        ),
+        class_name="administrative-workflow-admin-group",
+    )
+    outcome_analysis_group = _render_admin_section_group(
+        title="Outcome Analysis — Stages 11A–11F",
+        description="Expand to inspect deterministic outcome reasoning.",
+        content=(
+            f"{outcome_classification}"
+            f"{outcome_detail}"
+            f"{outcome_readiness}"
+            f"{outcome_target}"
+        ),
+        class_name="outcome-analysis-admin-group",
+    )
+    resolution_analysis_group = _render_admin_section_group(
+        title="Resolution Analysis — Stages 12A–12F",
+        description="Expand to inspect deterministic resolution reasoning.",
+        content=(
+            f"{resolution_classification}"
+            f"{resolution_preconditions}"
+            f"{resolution_pathway}"
+            f"{resolution_readiness}"
+            f"{resolution_determination}"
+            f"{resolution_completion}"
+        ),
+        class_name="resolution-analysis-admin-group",
+    )
+    closure_analysis_group = _render_admin_section_group(
+        title="Closure Analysis — Stages 13A–13F",
+        description="Expand to inspect deterministic closure reasoning.",
+        content=(
+            f"{closure_classification}"
+            f"{closure_preconditions}"
+            f"{closure_pathway}"
+            f"{closure_readiness}"
+            f"{closure_determination}"
+            f"{closure_completion}"
+        ),
+        class_name="closure-analysis-admin-group",
+    )
+    archive_analysis_group = _render_admin_section_group(
+        title="Archive Analysis — Stages 14A–14F",
+        description="Current archive layer and deterministic archive reasoning.",
+        content=(
+            f"{archive_classification}"
+            f"{archive_preconditions}"
+            f"{archive_pathway}"
+            f"{archive_readiness}"
+            f"{archive_determination}"
+            f"{archive_completion}"
+        ),
+        class_name="archive-analysis-admin-group",
+        open_by_default=True,
+    )
+    supporting_evidence_group = _render_admin_section_group(
+        title="Supporting Evidence",
+        description="Expand to inspect linked evidence by record target.",
+        content=supporting_evidence,
+        class_name="supporting-evidence-admin-group",
+    )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -9616,6 +9714,34 @@ def render_admin_record_evidence_page(
     }}
     .progressive-disclosure-content {{
       padding: 0 14px 16px;
+    }}
+    .admin-section-group {{
+      border: 1px solid #cdc7ba;
+      margin-top: 24px;
+      background: #fff;
+      break-inside: avoid;
+    }}
+    .admin-section-summary {{
+      padding: 15px 16px;
+      background: #eeeae0;
+      border-bottom: 1px solid #d8d4ca;
+    }}
+    .admin-section-body {{
+      padding: 0 16px 18px;
+    }}
+    .admin-section-hint {{
+      display: block;
+      color: #555;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }}
+    .admin-section-count {{
+      color: #666;
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }}
     details {{
       break-inside: avoid;
@@ -10603,6 +10729,12 @@ def render_admin_record_evidence_page(
       details:not([open]) > *:not(summary) {{
         display: block;
       }}
+      .admin-section-group,
+      .admin-section-group > summary,
+      .admin-section-body,
+      .admin-section-group:not([open]) > .admin-section-body {{
+        display: block;
+      }}
     }}
   </style>
 </head>
@@ -10631,37 +10763,13 @@ def render_admin_record_evidence_page(
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
-    {evidence_coverage}
-    {evidence_gap_summary}
-    {evidence_assessment}
-    {administrative_workflow}
-    {review_status}
-    {administrative_status_summary}
-    {implementation_path}
-    {effective_state}
-    {outcome_classification}
-    {outcome_detail}
-    {outcome_readiness}
-    {outcome_target}
-    {resolution_classification}
-    {resolution_preconditions}
-    {resolution_pathway}
-    {resolution_readiness}
-    {resolution_determination}
-    {resolution_completion}
-    {closure_classification}
-    {closure_preconditions}
-    {closure_pathway}
-    {closure_readiness}
-    {closure_determination}
-    {closure_completion}
-    {archive_classification}
-    {archive_preconditions}
-    {archive_pathway}
-    {archive_readiness}
-    {archive_determination}
-    {archive_completion}
-    {supporting_evidence}
+    {evidence_coverage_group}
+    {administrative_workflow_group}
+    {outcome_analysis_group}
+    {resolution_analysis_group}
+    {closure_analysis_group}
+    {archive_analysis_group}
+    {supporting_evidence_group}
   </main>
 </body>
 </html>"""
