@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from api.models import PatternRunResponse, CasesRequest
+from fastapi import APIRouter, Body, HTTPException
+from api.models import PatternRunResponse
 from api.analysis_compat import normalize_analysis_request
 
 from civic_decision_engine_v11 import (
@@ -45,7 +45,7 @@ def pattern_stored() -> PatternRunResponse:
 
 
 @router.post("/pattern", response_model=PatternRunResponse, tags=["Analysis"])
-def pattern_live(request: CasesRequest | dict[str, Any]) -> PatternRunResponse:
+def pattern_live(request: Any = Body(...)) -> PatternRunResponse:
     try:
         request = normalize_analysis_request(request)
     except ValueError as exc:

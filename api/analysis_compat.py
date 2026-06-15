@@ -13,18 +13,33 @@ def normalize_analysis_request(payload: Any) -> CasesRequest:
         raise ValueError("analysis_payload_invalid")
 
     if "cases" in payload:
+        payload = _normalize_case_references(payload)
         request = CasesRequest.model_validate(payload)
         if not request.cases:
             raise ValueError("analysis_cases_empty")
         return request
 
+    if _looks_like_single_case(payload):
+        case = dict(payload)
+        if not case.get("strike_reference") and case.get("reference"):
+            case["strike_reference"] = case["reference"]
+        case.pop("reference", None)
+        return CasesRequest.model_validate({"cases": [case]})
+
     narrative = _first_nonblank(payload.get("case_text"), payload.get("source_narrative"))
     if not narrative:
         raise ValueError("analysis_text_required")
 
-    institution_type = _safe_institution_type(payload.get("institution_type"))
+    supplied_reference = _first_nonblank(
+        payload.get("strike_reference"),
+        payload.get("reference"),
+    )
+    institution_type = _safe_institution_type(
+        payload.get("institution_type")
+        or _institution_type_from_reference(supplied_reference)
+    )
     case = {
-        "strike_reference": payload.get("strike_reference")
+        "strike_reference": supplied_reference
         or f"Strike-{institution_type}-PASTE-JSON",
         "case_title": payload.get("case_title") or "Pasted JSON civic analysis",
         "civic_domain": payload.get("civic_domain") or institution_type,
@@ -67,9 +82,48 @@ def _first_nonblank(*values: Any) -> str | None:
     return None
 
 
+def _normalize_case_references(payload: dict[str, Any]) -> dict[str, Any]:
+    cases = payload.get("cases")
+    if not isinstance(cases, list):
+        return payload
+
+    normalized_payload = dict(payload)
+    normalized_cases: list[Any] = []
+    for case in cases:
+        if isinstance(case, dict):
+            normalized_case = dict(case)
+            if not normalized_case.get("strike_reference") and normalized_case.get("reference"):
+                normalized_case["strike_reference"] = normalized_case["reference"]
+            normalized_case.pop("reference", None)
+            normalized_cases.append(normalized_case)
+        else:
+            normalized_cases.append(case)
+    normalized_payload["cases"] = normalized_cases
+    return normalized_payload
+
+
 def _safe_institution_type(value: Any) -> str:
     if isinstance(value, str):
         normalized = value.strip().upper()
         if re.fullmatch(r"[A-Z0-9]{2,6}", normalized):
             return normalized
     return "OT"
+
+
+def _institution_type_from_reference(value: Any) -> str | None:
+    if isinstance(value, str):
+        match = re.match(r"^Strike-([A-Za-z0-9]{2,6})-", value.strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def _looks_like_single_case(payload: dict[str, Any]) -> bool:
+    if not _first_nonblank(payload.get("strike_reference"), payload.get("reference")):
+        return False
+    if not isinstance(payload.get("case_title"), str) or not payload["case_title"].strip():
+        return False
+    return any(
+        isinstance(payload.get(key), str) and payload[key].strip()
+        for key in ("decision_trigger", "case_description", "case_text", "source_narrative")
+    )

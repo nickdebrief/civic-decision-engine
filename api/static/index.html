@@ -2048,7 +2048,7 @@ function renderConditionDistribution(caseHistory) {
 
         const tResult = timelineData?.results?.[0] || {};
         const pResult = patternData?.results?.[0] || {};
-        const attachedRef = null;
+        const attachedRef = extractStrikeReference(payload);
 
         latestReportData = {
           generated_at: new Date().toISOString(),
@@ -2441,6 +2441,26 @@ function renderConditionDistribution(caseHistory) {
         if (value && typeof value === "object") {
           const found = findSystemState(value);
           if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function extractStrikeReference(payload) {
+      if (!payload || typeof payload !== "object") return null;
+      if (typeof payload.strike_reference === "string" && payload.strike_reference.trim()) {
+        return payload.strike_reference.trim();
+      }
+      if (typeof payload.reference === "string" && payload.reference.trim()) {
+        return payload.reference.trim();
+      }
+      const firstCase = Array.isArray(payload.cases) ? payload.cases[0] : null;
+      if (firstCase && typeof firstCase === "object") {
+        if (typeof firstCase.strike_reference === "string" && firstCase.strike_reference.trim()) {
+          return firstCase.strike_reference.trim();
+        }
+        if (typeof firstCase.reference === "string" && firstCase.reference.trim()) {
+          return firstCase.reference.trim();
         }
       }
       return null;
