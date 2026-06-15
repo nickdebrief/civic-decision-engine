@@ -35,8 +35,9 @@ class FakeResponse:
 
 
 def install_fastapi_stubs():
-    fastapi = types.ModuleType("fastapi")
+    fastapi = sys.modules.get("fastapi") or types.ModuleType("fastapi")
     fastapi.APIRouter = FakeAPIRouter
+    fastapi.Body = lambda default=None, **kwargs: default
     fastapi.File = lambda default=None, **kwargs: default
     fastapi.Form = lambda default=None, **kwargs: default
     fastapi.Header = lambda default=None, **kwargs: default
@@ -44,13 +45,13 @@ def install_fastapi_stubs():
     fastapi.Query = lambda default=None, **kwargs: default
     fastapi.UploadFile = object
 
-    responses = types.ModuleType("fastapi.responses")
+    responses = sys.modules.get("fastapi.responses") or types.ModuleType("fastapi.responses")
     responses.HTMLResponse = FakeResponse
     responses.JSONResponse = FakeResponse
     responses.Response = FakeResponse
 
-    sys.modules.setdefault("fastapi", fastapi)
-    sys.modules.setdefault("fastapi.responses", responses)
+    sys.modules["fastapi"] = fastapi
+    sys.modules["fastapi.responses"] = responses
 
 
 class _SimpleModel:
@@ -324,11 +325,27 @@ class PasteJsonAnalysisFlowTests(unittest.TestCase):
         self.assertEqual(timeline_case_sequence(timeline_result), ["Strike-LA-20260710-004"])
         self.assertEqual(len(pattern_result.results), 1)
 
+    def test_timeline_and_pattern_routes_accept_raw_json_body_before_normalization(self):
+        timeline_source = Path("api/routes/timeline.py").read_text(encoding="utf-8")
+        pattern_source = Path("api/routes/pattern.py").read_text(encoding="utf-8")
+
+        self.assertIn("def timeline_live(request: Any = Body(...))", timeline_source)
+        self.assertIn("def pattern_live(request: Any = Body(...))", pattern_source)
+        self.assertNotIn("def timeline_live(request: CasesRequest | dict[str, Any])", timeline_source)
+        self.assertNotIn("def pattern_live(request: CasesRequest | dict[str, Any])", pattern_source)
+
     def test_paste_json_ui_attaches_supplied_reference_for_export(self):
         html = Path("api/static/index.html").read_text(encoding="utf-8")
 
         self.assertIn("function extractStrikeReference(payload)", html)
         self.assertIn("const attachedRef = extractStrikeReference(payload);", html)
+
+    def test_paste_json_ui_sends_raw_parsed_json_without_wrapper(self):
+        html = Path("api/static/index.html").read_text(encoding="utf-8")
+
+        self.assertIn("? JSON.parse(inputJson.value)", html)
+        self.assertIn("body: JSON.stringify(payload)", html)
+        self.assertNotIn("body: JSON.stringify({ payload })", html)
 
     def test_canonical_condition_identifiers_are_detected(self):
         payload = {

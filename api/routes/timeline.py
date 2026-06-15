@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
-from api.models import TimelineRunResponse, CasesRequest
+from fastapi import APIRouter, Body, HTTPException
+from api.models import TimelineRunResponse
 from api.analysis_compat import normalize_analysis_request
 
 from civic_decision_engine_v11 import (
@@ -44,7 +44,7 @@ def timeline_stored() -> TimelineRunResponse:
 
 
 @router.post("/timeline", response_model=TimelineRunResponse, tags=["Analysis"])
-def timeline_live(request: CasesRequest | dict[str, Any]) -> TimelineRunResponse:
+def timeline_live(request: Any = Body(...)) -> TimelineRunResponse:
     try:
         request = normalize_analysis_request(request)
     except ValueError as exc:
