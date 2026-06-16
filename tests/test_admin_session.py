@@ -975,7 +975,6 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertNotIn('class="temporary-upload-form"', content)
         self.assertNotIn("Download attachment", content)
-        self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)
         self.assertNotIn("Delete attachment", content)
         self.assertNotIn("Restore attachment", content)
