@@ -9409,6 +9409,182 @@ def _render_record_evidence_coverage(
       </section>"""
 
 
+def _stage15d_support_relationship_count(target: dict[str, Any]) -> int:
+    return int((target.get("relationship_type_counts") or {}).get("supports", 0))
+
+
+def _stage15d_support_attachment_count(target: dict[str, Any]) -> int:
+    count = 0
+    for attachment in target.get("attachments") or []:
+        relationship_counts = attachment.get("relationship_type_counts") or {}
+        if int(relationship_counts.get("supports", 0)) > 0:
+            count += 1
+    return count
+
+
+def _classify_stage15d_target_sufficiency(
+    support_relationship_count: int,
+) -> str:
+    if support_relationship_count >= 3:
+        return "Strong"
+    if support_relationship_count >= 2:
+        return "Sufficient"
+    if support_relationship_count == 1:
+        return "Partial"
+    return "Unsupported"
+
+
+def _classify_stage15d_group_sufficiency(
+    target_summaries: list[dict[str, Any]],
+) -> str:
+    if not target_summaries:
+        return "Unsupported"
+    classifications = [
+        str(summary.get("sufficiency") or "Unsupported")
+        for summary in target_summaries
+    ]
+    if all(classification == "Strong" for classification in classifications):
+        return "Strong"
+    if all(classification in {"Sufficient", "Strong"} for classification in classifications):
+        return "Sufficient"
+    if any(classification != "Unsupported" for classification in classifications):
+        return "Partial"
+    return "Unsupported"
+
+
+def _record_stage15d_evidence_sufficiency(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    groups: dict[str, dict[str, Any]] = {}
+    total_support_relationships = 0
+    required_group_summaries = []
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        target_summaries = []
+        for target in evidence_groups.get(target_type) or []:
+            relationship_count = _stage15d_support_relationship_count(target)
+            attachment_count = _stage15d_support_attachment_count(target)
+            total_support_relationships += relationship_count
+            target_summaries.append(
+                {
+                    "target_key": target.get("target_key"),
+                    "target_label": target.get("target_label")
+                    or target.get("target_key")
+                    or "",
+                    "supporting_attachment_count": attachment_count,
+                    "supporting_relationship_count": relationship_count,
+                    "sufficiency": _classify_stage15d_target_sufficiency(
+                        relationship_count
+                    ),
+                }
+            )
+
+        group_sufficiency = _classify_stage15d_group_sufficiency(target_summaries)
+        group_summary = {
+            "sufficiency": group_sufficiency,
+            "targets": target_summaries,
+            "target_count": len(target_summaries),
+        }
+        groups[target_type] = group_summary
+        if target_summaries:
+            required_group_summaries.append(group_summary)
+
+    if total_support_relationships == 0:
+        overall = "Unsupported"
+    elif required_group_summaries and all(
+        group["sufficiency"] == "Strong" for group in required_group_summaries
+    ):
+        overall = "Strong"
+    elif required_group_summaries and all(
+        group["sufficiency"] in {"Sufficient", "Strong"}
+        for group in required_group_summaries
+    ):
+        overall = "Sufficient"
+    else:
+        overall = "Partial"
+
+    return {
+        "overall": overall,
+        "groups": groups,
+        "supporting_relationship_count": total_support_relationships,
+    }
+
+
+def _supporting_attachment_label(count: int) -> str:
+    return "supporting attachment" if count == 1 else "supporting attachments"
+
+
+def _render_stage15d_target_sufficiency_list(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Sufficiency</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+    items = "".join(
+        "<li>"
+        f"{escape(str(target['target_label']))} — "
+        f"{escape(str(target['sufficiency']))} — "
+        f"{int(target['supporting_attachment_count'])} "
+        f"{_supporting_attachment_label(int(target['supporting_attachment_count']))}"
+        "</li>"
+        for target in targets
+    )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Sufficiency</h3>"
+        f'<ul class="stage15d-target-sufficiency-list">{items}</ul>'
+    )
+
+
+def _render_stage15d_evidence_sufficiency(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    labels = {
+        "condition": "Conditions Sufficiency",
+        "signal": "Signals Sufficiency",
+        "finding": "Findings Sufficiency",
+        "record": "Record Sufficiency",
+    }
+    summary_rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        summary_rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{escape(str(sufficiency['groups'][target_type]['sufficiency']))}</td>"
+            "</tr>"
+        )
+    summary_rows.append(
+        "<tr>"
+        "<td>Overall Sufficiency</td>"
+        f"<td>{escape(str(sufficiency['overall']))}</td>"
+        "</tr>"
+    )
+    target_sections = "".join(
+        _render_stage15d_target_sufficiency_list(
+            target_type,
+            sufficiency["groups"][target_type]["targets"],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage15d-evidence-sufficiency">
+        <h2>Evidence Sufficiency</h2>
+        <p class="notice">
+          Evidence sufficiency is classified deterministically from active
+          supports relationships and target coverage only.
+        </p>
+        <table class="stage15d-sufficiency-summary">
+          <tbody>{"".join(summary_rows)}</tbody>
+        </table>
+        <section class="stage15d-target-sufficiency">
+          {target_sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -9505,6 +9681,9 @@ def render_admin_record_evidence_page(
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
+    stage15d_evidence_sufficiency = _render_stage15d_evidence_sufficiency(
+        evidence_groups
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -9610,7 +9789,11 @@ def render_admin_record_evidence_page(
     evidence_coverage_group = _render_admin_section_group(
         title="Evidence Coverage",
         description="Current evidence coverage and outstanding gap summary.",
-        content=f"{evidence_coverage}{evidence_gap_summary}",
+        content=(
+            f"{evidence_coverage}"
+            f"{stage15d_evidence_sufficiency}"
+            f"{evidence_gap_summary}"
+        ),
         class_name="evidence-coverage-admin-group",
         open_by_default=True,
     )

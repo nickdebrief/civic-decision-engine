@@ -1156,8 +1156,20 @@ class AdminSessionTests(unittest.TestCase):
         after_content = after_response.content
         self.assertIn("<td>Conditions Supported</td><td>0 / 1</td>", before_content)
         self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", before_content)
+        self.assertIn("Evidence Sufficiency", before_content)
+        self.assertIn("<td>Conditions Sufficiency</td><td>Unsupported</td>", before_content)
+        self.assertIn("<td>Overall Sufficiency</td><td>Unsupported</td>", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Signals Sufficiency</td><td>Unsupported</td>", after_content)
+        self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", after_content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", after_content)
+        self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", after_content)
+        self.assertIn(
+            "Escalation Without Response — Partial — 1 supporting attachment",
+            after_content,
+        )
         self.assertIn("Test evidence — escalation without response", after_content)
         self.assertIn("Escalation Without Response", after_content)
         self.assertNotIn("storage_path", after_content)
@@ -1338,6 +1350,29 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", content)
+        self.assertIn("Evidence Sufficiency", content)
+        self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", content)
+        self.assertIn("<td>Signals Sufficiency</td><td>Partial</td>", content)
+        self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", content)
+        self.assertIn(
+            "Institutional Delay — Sufficient — 1 supporting attachment",
+            content,
+        )
+        self.assertIn(
+            "Procedural Deflection — Unsupported — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
+            "Finding &lt;requires&gt; review — Unsupported — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
+            "Strike-OT-20260604-ADMIN — Unsupported — 0 supporting attachments",
+            content,
+        )
+        self.assertIn("print-admin-section-body", content)
         self.assertIn("Evidence Gap Summary", content)
         self.assertIn("<td>Supported Targets</td><td>4</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>5</td>", content)
@@ -2447,6 +2482,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Supported</td><td>0 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>0 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Conditions Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Signals Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Overall Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Supported Targets</td><td>0</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>9</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>9</td>", content)
@@ -2600,6 +2640,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Record Supported</td><td>1 / 1</td>", content)
         self.assertIn("<td>Overall Coverage</td><td>Complete</td>", content)
+        self.assertIn("<td>Conditions Sufficiency</td><td>Sufficient</td>", content)
+        self.assertIn("<td>Signals Sufficiency</td><td>Partial</td>", content)
+        self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", content)
         self.assertIn("<td>Supported Targets</td><td>4</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>0</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>0</td>", content)
@@ -2920,6 +2965,52 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session.classify_evidence_sufficiency(0, 1),
             "Minimal",
+        )
+
+    def test_stage15d_evidence_sufficiency_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session._classify_stage15d_target_sufficiency(0),
+            "Unsupported",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_target_sufficiency(1),
+            "Partial",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_target_sufficiency(2),
+            "Sufficient",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_target_sufficiency(3),
+            "Strong",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_group_sufficiency([]),
+            "Unsupported",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_group_sufficiency(
+                [{"sufficiency": "Unsupported"}]
+            ),
+            "Unsupported",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_group_sufficiency(
+                [{"sufficiency": "Partial"}, {"sufficiency": "Unsupported"}]
+            ),
+            "Partial",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_group_sufficiency(
+                [{"sufficiency": "Sufficient"}, {"sufficiency": "Strong"}]
+            ),
+            "Sufficient",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15d_group_sufficiency(
+                [{"sufficiency": "Strong"}, {"sufficiency": "Strong"}]
+            ),
+            "Strong",
         )
 
     def test_evidence_readiness_classification_helper_is_deterministic(self):
