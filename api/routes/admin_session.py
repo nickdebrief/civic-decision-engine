@@ -53,6 +53,7 @@ DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 
 ADMIN_PASSWORD_ENV = "CDE_ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
+ADMIN_TEMP_UPLOAD_ENABLED_ENV = "ADMIN_TEMP_UPLOAD_ENABLED"
 SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
@@ -208,6 +209,15 @@ def attachment_max_upload_bytes() -> int:
     if parsed < 1:
         raise _http_error(500, "admin_attachment_size_limit_invalid")
     return parsed
+
+
+def admin_temp_upload_enabled() -> bool:
+    return str(os.getenv(ADMIN_TEMP_UPLOAD_ENABLED_ENV, "false")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def validate_pdf_attachment_upload(content_type: str | None, data: bytes) -> str:
@@ -11103,7 +11113,33 @@ def render_admin_attachments_page(
         relationship_target_options=relationship_target_options,
     )
     audit_rows = _render_admin_audit_events(audit_events)
-    temporary_upload_form = _render_temporary_attachment_upload_form(reference)
+    temporary_upload_enabled = admin_temp_upload_enabled()
+    temporary_upload_intro = (
+        "Temporary admin upload is available for evidence verification only. "
+        "No public download, public file access, or canonical verification changes are introduced."
+        if temporary_upload_enabled
+        else "Temporary admin upload is disabled. No public download, public file access, or canonical verification changes are introduced."
+    )
+    temporary_upload_section = (
+        f"""
+    <section class="management-section temporary-upload">
+      <h2>Temporary admin attachment upload</h2>
+      <p class="notice">
+        Temporary admin upload utility for evidence verification. Attachments do not alter canonical record verification hashes and are not publicly downloadable.
+      </p>
+      {_render_temporary_attachment_upload_form(reference)}
+    </section>"""
+        if temporary_upload_enabled
+        else ""
+    )
+    temporary_upload_capability = (
+        "<li>temporary admin upload</li>" if temporary_upload_enabled else ""
+    )
+    temporary_upload_governance = (
+        "Temporary admin upload is available for evidence verification only. No public download or public file access is available."
+        if temporary_upload_enabled
+        else "Temporary admin upload is disabled. No public download or public file access is available."
+    )
     relationship_target_options_json = _safe_json_for_script(
         relationship_target_options
     )
@@ -11507,8 +11543,7 @@ def render_admin_attachments_page(
     <p class="notice">
       Administrative attachment management is controlled in this stage.
       Classification, publication status, and visibility metadata updates are available from this page.
-      Temporary admin upload is available for evidence verification only.
-      No public download, public file access, or canonical verification changes are introduced.
+      {escape(temporary_upload_intro)}
     </p>
     <section class="management-section record-summary">
       <h2>Record summary</h2>
@@ -11516,13 +11551,7 @@ def render_admin_attachments_page(
       <p><strong>Record version:</strong> {record_version}</p>
       <p><a href="/admin/records/{escape(reference)}/evidence">View record evidence by target</a></p>
     </section>
-    <section class="management-section temporary-upload">
-      <h2>Temporary admin attachment upload</h2>
-      <p class="notice">
-        Temporary admin upload utility for evidence verification. Attachments do not alter canonical record verification hashes and are not publicly downloadable.
-      </p>
-      {temporary_upload_form}
-    </section>
+    {temporary_upload_section}
     <section class="management-section current-attachments">
       <h2>Current attachments</h2>
       {attachment_rows}
@@ -11538,7 +11567,7 @@ def render_admin_attachments_page(
           <li>audit trail review</li>
           <li>visibility workflow</li>
           <li>publication workflow</li>
-          <li>temporary admin upload</li>
+          {temporary_upload_capability}
         </ul>
       </div>
       <div class="capability-group">
@@ -11556,7 +11585,7 @@ def render_admin_attachments_page(
       <h2>Governance notice</h2>
       <p>Administrative attachment management is controlled in this stage.</p>
       <p>Classification, publication status, and visibility metadata updates are available from this page.</p>
-      <p>Temporary admin upload is available for evidence verification only. No public download or public file access is available.</p>
+      <p>{escape(temporary_upload_governance)}</p>
     </section>
   </main>
   <script>
@@ -11821,6 +11850,9 @@ def temporary_admin_attachment_upload_route(
     file: UploadFile = File(...),
 ):
     require_admin_session(request)
+    if not admin_temp_upload_enabled():
+        raise _http_error(404, "temporary_upload_disabled")
+
     target_reference = str(record_reference or "").strip()
     if target_reference != reference:
         raise _http_error(400, "attachment_reference_mismatch")

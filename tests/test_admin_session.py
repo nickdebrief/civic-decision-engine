@@ -140,6 +140,7 @@ class AdminSessionTests(unittest.TestCase):
                 "CDE_ADMIN_PASSWORD": "admin-password",
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_ADMIN_TOKEN": "server-only-token",
+                "ADMIN_TEMP_UPLOAD_ENABLED": "false",
             },
             clear=False,
         )
@@ -925,26 +926,24 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
-            "Temporary admin upload is available for evidence verification only.",
+            "Temporary admin upload is disabled.",
             content,
         )
         self.assertIn("No public download, public file access, or canonical verification changes are introduced.", content)
-        self.assertIn("Temporary admin attachment upload", content)
-        self.assertIn("Temporary admin upload utility for evidence verification.", content)
-        self.assertIn('class="temporary-upload-form"', content)
-        self.assertIn('enctype="multipart/form-data"', content)
-        self.assertIn(
+        self.assertNotIn("Temporary admin attachment upload", content)
+        self.assertNotIn("Temporary admin upload utility for evidence verification.", content)
+        self.assertNotIn('class="temporary-upload-form"', content)
+        self.assertNotIn('enctype="multipart/form-data"', content)
+        self.assertNotIn(
             'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/temp-upload"',
             content,
         )
-        self.assertIn('name="record_reference"', content)
-        self.assertIn('name="target_type"', content)
-        self.assertIn('name="target_label"', content)
-        self.assertIn('name="attachment_title"', content)
-        self.assertIn('name="description"', content)
-        self.assertIn('name="file"', content)
-        self.assertIn('type="file"', content)
-        self.assertIn("Upload attachment", content)
+        self.assertNotIn('name="record_reference"', content)
+        self.assertNotIn('name="target_label"', content)
+        self.assertNotIn('name="attachment_title"', content)
+        self.assertNotIn('name="file"', content)
+        self.assertNotIn('type="file"', content)
+        self.assertNotIn("Upload attachment", content)
 
     def test_admin_attachment_listing_exposes_no_paths_tokens_or_controls(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -974,14 +973,73 @@ class AdminSessionTests(unittest.TestCase):
             'href="/admin/records/Strike-OT-20260604-ADMIN/evidence"',
             content,
         )
-        self.assertIn('class="temporary-upload-form"', content)
+        self.assertNotIn('class="temporary-upload-form"', content)
         self.assertNotIn("Download attachment", content)
+        self.assertNotIn("Upload attachment", content)
         self.assertNotIn("Edit attachment", content)
         self.assertNotIn("Delete attachment", content)
         self.assertNotIn("Restore attachment", content)
         self.assertNotIn("Withhold attachment", content)
         self.assertNotIn("Publish attachment", content)
         self.assertNotIn("Download attachment", content)
+
+    def test_temporary_admin_attachment_upload_flag_disabled_by_default(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(self.admin_session.admin_temp_upload_enabled())
+
+    def test_temporary_admin_attachment_upload_form_renders_when_enabled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env(), patch.dict(
+                    os.environ,
+                    {"ADMIN_TEMP_UPLOAD_ENABLED": "true"},
+                    clear=False,
+                ):
+                    response = self.admin_session.admin_record_attachments_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+        self.assertIn("Temporary admin attachment upload", content)
+        self.assertIn("Temporary admin upload utility for evidence verification.", content)
+        self.assertIn('class="temporary-upload-form"', content)
+        self.assertIn('enctype="multipart/form-data"', content)
+        self.assertIn(
+            'action="/api/admin/session/records/Strike-OT-20260604-ADMIN/attachments/temp-upload"',
+            content,
+        )
+        self.assertIn('name="record_reference"', content)
+        self.assertIn('name="target_type"', content)
+        self.assertIn('name="target_label"', content)
+        self.assertIn('name="attachment_title"', content)
+        self.assertIn('name="description"', content)
+        self.assertIn('name="file"', content)
+        self.assertIn('type="file"', content)
+        self.assertIn("Upload attachment", content)
+
+    def test_temporary_admin_attachment_upload_post_blocked_when_disabled(self):
+        with self.env():
+            with self.assertRaises(Exception) as ctx:
+                self.admin_session.temporary_admin_attachment_upload_route(
+                    "Strike-OT-20260604-ADMIN",
+                    self.valid_request(),
+                    record_reference="Strike-OT-20260604-ADMIN",
+                    target_type="condition",
+                    target_label="Escalation Without Response",
+                    attachment_title="Blocked upload",
+                    description=None,
+                    file=FakeUploadFile(b"blocked"),
+                )
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 404)
+        self.assertEqual(getattr(ctx.exception, "detail", None), "temporary_upload_disabled")
 
     def test_temporary_admin_attachment_upload_links_target_and_updates_evidence_coverage(self):
         data = b"temporary evidence bytes for escalation without response"
@@ -1018,7 +1076,10 @@ class AdminSessionTests(unittest.TestCase):
             try:
                 with self.env(), patch.dict(
                     os.environ,
-                    {"CDE_ATTACHMENT_ROOT": str(attachment_root)},
+                    {
+                        "ADMIN_TEMP_UPLOAD_ENABLED": "true",
+                        "CDE_ATTACHMENT_ROOT": str(attachment_root),
+                    },
                     clear=False,
                 ):
                     before_response = self.admin_session.admin_record_evidence_page(
