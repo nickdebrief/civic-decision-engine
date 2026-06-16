@@ -9585,6 +9585,168 @@ def _render_stage15d_evidence_sufficiency(
       </section>"""
 
 
+def _stage15e_target_is_complete(sufficiency: str) -> bool:
+    return sufficiency in {"Sufficient", "Strong"}
+
+
+def _classify_stage15e_group_completeness(
+    target_summaries: list[dict[str, Any]],
+) -> str:
+    if not target_summaries:
+        return "Not Applicable"
+    complete_count = sum(
+        1 for summary in target_summaries if bool(summary.get("is_complete"))
+    )
+    if complete_count == 0:
+        return "Incomplete"
+    if complete_count == len(target_summaries):
+        return "Complete"
+    return "Partial"
+
+
+def _classify_stage15e_overall_completeness(
+    complete_targets: int,
+    total_targets: int,
+) -> str:
+    if total_targets <= 0 or complete_targets == 0:
+        return "Incomplete"
+    if complete_targets == total_targets:
+        return "Complete"
+    return "Partial"
+
+
+def _format_stage15e_percentage(complete_targets: int, total_targets: int) -> str:
+    if total_targets <= 0:
+        return "0%"
+    percentage = (complete_targets / total_targets) * 100
+    if percentage.is_integer():
+        return f"{int(percentage)}%"
+    return f"{percentage:.1f}%"
+
+
+def _record_stage15e_evidence_completeness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    groups: dict[str, dict[str, Any]] = {}
+    complete_targets = 0
+    total_targets = 0
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        target_summaries = []
+        for target in sufficiency["groups"][target_type]["targets"]:
+            target_sufficiency = str(target["sufficiency"])
+            is_complete = _stage15e_target_is_complete(target_sufficiency)
+            if is_complete:
+                complete_targets += 1
+            total_targets += 1
+            target_summaries.append(
+                {
+                    **target,
+                    "is_complete": is_complete,
+                    "completeness": "Complete" if is_complete else "Incomplete",
+                }
+            )
+        groups[target_type] = {
+            "completeness": _classify_stage15e_group_completeness(
+                target_summaries
+            ),
+            "targets": target_summaries,
+            "target_count": len(target_summaries),
+        }
+
+    incomplete_targets = max(total_targets - complete_targets, 0)
+    return {
+        "overall": _classify_stage15e_overall_completeness(
+            complete_targets,
+            total_targets,
+        ),
+        "groups": groups,
+        "complete_targets": complete_targets,
+        "incomplete_targets": incomplete_targets,
+        "total_targets": total_targets,
+        "percentage": _format_stage15e_percentage(complete_targets, total_targets),
+    }
+
+
+def _render_stage15e_target_completeness_list(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Completeness</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+    items = "".join(
+        "<li>"
+        f"{escape(str(target['target_label']))} — "
+        f"{escape(str(target['completeness']))} — "
+        f"{escape(str(target['sufficiency']))} sufficiency — "
+        f"{int(target['supporting_attachment_count'])} "
+        f"{_supporting_attachment_label(int(target['supporting_attachment_count']))}"
+        "</li>"
+        for target in targets
+    )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Completeness</h3>"
+        f'<ul class="stage15e-target-completeness-list">{items}</ul>'
+    )
+
+
+def _render_stage15e_evidence_completeness(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    labels = {
+        "condition": "Conditions Completeness",
+        "signal": "Signals Completeness",
+        "finding": "Findings Completeness",
+        "record": "Record Completeness",
+    }
+    summary_rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        summary_rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{escape(str(completeness['groups'][target_type]['completeness']))}</td>"
+            "</tr>"
+        )
+    for label, value in (
+        ("Overall Completeness", completeness["overall"]),
+        ("Complete Targets", completeness["complete_targets"]),
+        ("Incomplete Targets", completeness["incomplete_targets"]),
+        ("Completeness Percentage", completeness["percentage"]),
+    ):
+        summary_rows.append(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+        )
+    target_sections = "".join(
+        _render_stage15e_target_completeness_list(
+            target_type,
+            completeness["groups"][target_type]["targets"],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage15e-evidence-completeness">
+        <h2>Evidence Completeness</h2>
+        <p class="notice">
+          Evidence completeness is classified deterministically from Stage 15D
+          sufficiency values and required record targets only.
+        </p>
+        <table class="stage15e-completeness-summary">
+          <tbody>{"".join(summary_rows)}</tbody>
+        </table>
+        <section class="stage15e-target-completeness">
+          {target_sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -9682,6 +9844,9 @@ def render_admin_record_evidence_page(
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     stage15d_evidence_sufficiency = _render_stage15d_evidence_sufficiency(
+        evidence_groups
+    )
+    stage15e_evidence_completeness = _render_stage15e_evidence_completeness(
         evidence_groups
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
@@ -9792,6 +9957,7 @@ def render_admin_record_evidence_page(
         content=(
             f"{evidence_coverage}"
             f"{stage15d_evidence_sufficiency}"
+            f"{stage15e_evidence_completeness}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
