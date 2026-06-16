@@ -9747,6 +9747,179 @@ def _render_stage15e_evidence_completeness(
       </section>"""
 
 
+def _stage15f_additional_attachments_required(
+    support_relationship_count: int,
+) -> int:
+    return max(0, 2 - int(support_relationship_count))
+
+
+def _classify_stage15f_group_requirement_status(
+    target_summaries: list[dict[str, Any]],
+) -> str:
+    if not target_summaries:
+        return "not_applicable"
+    if any(int(target.get("additional_required") or 0) > 0 for target in target_summaries):
+        return "outstanding"
+    return "none_required"
+
+
+def _classify_stage15f_overall_requirement_status(
+    targets_requiring_evidence: int,
+) -> str:
+    return "outstanding" if int(targets_requiring_evidence) > 0 else "none_required"
+
+
+def _record_stage15f_evidence_requirements(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    groups: dict[str, dict[str, Any]] = {}
+    total_targets_requiring_evidence = 0
+    total_additional_required = 0
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        target_summaries = []
+        for target in sufficiency["groups"][target_type]["targets"]:
+            support_count = int(target["supporting_relationship_count"])
+            additional_required = _stage15f_additional_attachments_required(
+                support_count
+            )
+            if additional_required > 0:
+                total_targets_requiring_evidence += 1
+                total_additional_required += additional_required
+            target_summaries.append(
+                {
+                    **target,
+                    "additional_required": additional_required,
+                    "requires_evidence": additional_required > 0,
+                }
+            )
+
+        groups[target_type] = {
+            "requirement_status": _classify_stage15f_group_requirement_status(
+                target_summaries
+            ),
+            "targets": target_summaries,
+            "target_count": len(target_summaries),
+            "targets_requiring_evidence": sum(
+                1 for target in target_summaries if target["requires_evidence"]
+            ),
+            "additional_required": sum(
+                int(target["additional_required"]) for target in target_summaries
+            ),
+        }
+
+    return {
+        "overall_status": _classify_stage15f_overall_requirement_status(
+            total_targets_requiring_evidence
+        ),
+        "groups": groups,
+        "targets_requiring_evidence": total_targets_requiring_evidence,
+        "additional_required": total_additional_required,
+    }
+
+
+def _stage15f_attachment_requirement_label(count: int) -> str:
+    return (
+        "additional supporting attachment"
+        if int(count) == 1
+        else "additional supporting attachments"
+    )
+
+
+def _render_stage15f_target_requirements_list(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Requirements</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+
+    requiring_targets = [
+        target for target in targets if int(target.get("additional_required") or 0) > 0
+    ]
+    if not requiring_targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Requirements</h3>"
+            '<p class="evidence-empty-state">No additional evidence required.</p>'
+        )
+
+    items = "".join(
+        "<li>"
+        f"{escape(str(target['target_label']))} — "
+        f"{int(target['additional_required'])} "
+        f"{_stage15f_attachment_requirement_label(int(target['additional_required']))} "
+        "required to reach sufficient"
+        "</li>"
+        for target in requiring_targets
+    )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Requirements</h3>"
+        f'<ul class="stage15f-target-requirements-list">{items}</ul>'
+    )
+
+
+def _render_stage15f_evidence_requirements(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    requirements = _record_stage15f_evidence_requirements(evidence_groups)
+    labels = {
+        "condition": "Conditions Requirement Status",
+        "signal": "Signals Requirement Status",
+        "finding": "Findings Requirement Status",
+        "record": "Record Requirement Status",
+    }
+    summary_rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        group = requirements["groups"][target_type]
+        summary_rows.extend(
+            (
+                "<tr>"
+                f"<td>{labels[target_type]}</td>"
+                f"<td>{escape(str(group['requirement_status']))}</td>"
+                "</tr>",
+                "<tr>"
+                f"<td>{escape(_target_type_display_label(target_type))} Additional Attachments Required</td>"
+                f"<td>{int(group['additional_required'])}</td>"
+                "</tr>",
+            )
+        )
+    for label, value in (
+        ("Overall Requirement Status", requirements["overall_status"]),
+        ("Targets Requiring Evidence", requirements["targets_requiring_evidence"]),
+        ("Additional Attachments Required", requirements["additional_required"]),
+    ):
+        summary_rows.append(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+        )
+    target_sections = "".join(
+        _render_stage15f_target_requirements_list(
+            target_type,
+            requirements["groups"][target_type]["targets"],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage15f-evidence-requirements">
+        <h2>Evidence Requirements</h2>
+        <p class="notice">
+          Evidence requirements are classified deterministically from Stage 15D
+          sufficiency thresholds and active supports relationships only.
+        </p>
+        <table class="stage15f-requirements-summary">
+          <tbody>{"".join(summary_rows)}</tbody>
+        </table>
+        <section class="stage15f-target-requirements">
+          {target_sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -9847,6 +10020,9 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     stage15e_evidence_completeness = _render_stage15e_evidence_completeness(
+        evidence_groups
+    )
+    stage15f_evidence_requirements = _render_stage15f_evidence_requirements(
         evidence_groups
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
@@ -9958,6 +10134,7 @@ def render_admin_record_evidence_page(
             f"{evidence_coverage}"
             f"{stage15d_evidence_sufficiency}"
             f"{stage15e_evidence_completeness}"
+            f"{stage15f_evidence_requirements}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
