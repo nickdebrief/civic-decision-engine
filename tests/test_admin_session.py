@@ -1060,8 +1060,15 @@ class AdminSessionTests(unittest.TestCase):
                 (
                     "Strike-LA-20260710-004",
                     json.dumps(["Escalation Without Response"]),
-                    json.dumps([]),
-                    "",
+                    json.dumps(
+                        [
+                            "No Recurring Transition",
+                            "Dominant Resistance",
+                            "Partial Institutional Response",
+                            "Administrative Delay Pattern",
+                        ]
+                    ),
+                    "Trajectory recorded as Stable",
                     "Strike-OT-20260604-ADMIN",
                 ),
             )
@@ -1159,6 +1166,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Evidence Sufficiency", before_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Unsupported</td>", before_content)
         self.assertIn("<td>Overall Sufficiency</td><td>Unsupported</td>", before_content)
+        self.assertIn("Evidence Completeness", before_content)
+        self.assertIn("<td>Conditions Completeness</td><td>Incomplete</td>", before_content)
+        self.assertIn("<td>Overall Completeness</td><td>Incomplete</td>", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1166,8 +1176,32 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", after_content)
         self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", after_content)
         self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Conditions Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Signals Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Findings Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Overall Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Complete Targets</td><td>0</td>", after_content)
+        self.assertIn("<td>Incomplete Targets</td><td>7</td>", after_content)
+        self.assertIn("<td>Completeness Percentage</td><td>0%</td>", after_content)
         self.assertIn(
             "Escalation Without Response — Partial — 1 supporting attachment",
+            after_content,
+        )
+        self.assertIn(
+            "Escalation Without Response — Incomplete — Partial sufficiency — 1 supporting attachment",
+            after_content,
+        )
+        self.assertIn(
+            "No Recurring Transition — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            after_content,
+        )
+        self.assertIn(
+            "Trajectory recorded as Stable — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            after_content,
+        )
+        self.assertIn(
+            "Strike-LA-20260710-004 — Incomplete — Unsupported sufficiency — 0 supporting attachments",
             after_content,
         )
         self.assertIn("Test evidence — escalation without response", after_content)
@@ -1356,8 +1390,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", content)
+        self.assertIn("Evidence Completeness", content)
+        self.assertIn("<td>Conditions Completeness</td><td>Partial</td>", content)
+        self.assertIn("<td>Signals Completeness</td><td>Partial</td>", content)
+        self.assertIn("<td>Findings Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Overall Completeness</td><td>Partial</td>", content)
+        self.assertIn("<td>Complete Targets</td><td>2</td>", content)
+        self.assertIn("<td>Incomplete Targets</td><td>7</td>", content)
+        self.assertIn("<td>Completeness Percentage</td><td>22.2%</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
+            content,
+        )
+        self.assertIn(
+            "Institutional Delay — Complete — Sufficient sufficiency — 1 supporting attachment",
             content,
         )
         self.assertIn(
@@ -1365,11 +1412,23 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
+            "Procedural Deflection — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
             "Finding &lt;requires&gt; review — Unsupported — 0 supporting attachments",
             content,
         )
         self.assertIn(
+            "Finding &lt;requires&gt; review — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
             "Strike-OT-20260604-ADMIN — Unsupported — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
+            "Strike-OT-20260604-ADMIN — Incomplete — Unsupported sufficiency — 0 supporting attachments",
             content,
         )
         self.assertIn("print-admin-section-body", content)
@@ -2487,6 +2546,14 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Overall Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Conditions Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Signals Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Findings Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Overall Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Complete Targets</td><td>0</td>", content)
+        self.assertIn("<td>Incomplete Targets</td><td>9</td>", content)
+        self.assertIn("<td>Completeness Percentage</td><td>0%</td>", content)
         self.assertIn("<td>Supported Targets</td><td>0</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>9</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>9</td>", content)
@@ -2645,6 +2712,14 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Findings Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
         self.assertIn("<td>Overall Sufficiency</td><td>Partial</td>", content)
+        self.assertIn("<td>Conditions Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Signals Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Findings Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Overall Completeness</td><td>Partial</td>", content)
+        self.assertIn("<td>Complete Targets</td><td>1</td>", content)
+        self.assertIn("<td>Incomplete Targets</td><td>3</td>", content)
+        self.assertIn("<td>Completeness Percentage</td><td>25%</td>", content)
         self.assertIn("<td>Supported Targets</td><td>4</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>0</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>0</td>", content)
@@ -2945,6 +3020,75 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<li>supports</li>", content)
         self.assertIn("<li>context_for</li>", content)
 
+    def test_admin_record_evidence_completeness_complete_when_all_targets_sufficient(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.execute(
+                """
+                UPDATE records
+                SET conditions_json = ?, signals_json = ?, finding = ?
+                WHERE reference = 'Strike-OT-20260604-ADMIN'
+                """,
+                (
+                    json.dumps(["INSTITUTIONAL_DELAY"]),
+                    json.dumps([]),
+                    "",
+                ),
+            )
+            self.insert_admin_attachment(conn, title="First complete evidence")
+            self.insert_admin_attachment(
+                conn,
+                title="Second complete evidence",
+                filename="second-complete.pdf",
+                stored_filename="internal-second-complete.pdf",
+                storage_path="/private/path/internal-second-complete.pdf",
+                sha256_hash="e" * 64,
+            )
+            for attachment_id in (1, 2):
+                self.insert_attachment_relationship(
+                    conn,
+                    attachment_id=attachment_id,
+                    target_type="condition",
+                    target_key="INSTITUTIONAL_DELAY",
+                )
+                self.insert_attachment_relationship(
+                    conn,
+                    attachment_id=attachment_id,
+                    target_type="record",
+                    target_key="Strike-OT-20260604-ADMIN",
+                )
+            conn.close()
+            try:
+                with self.env():
+                    response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request(),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        content = response.content
+
+        self.assertIn("Evidence Completeness", content)
+        self.assertIn("<td>Conditions Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Signals Completeness</td><td>Not Applicable</td>", content)
+        self.assertIn("<td>Findings Completeness</td><td>Not Applicable</td>", content)
+        self.assertIn("<td>Record Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Overall Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Complete Targets</td><td>2</td>", content)
+        self.assertIn("<td>Incomplete Targets</td><td>0</td>", content)
+        self.assertIn("<td>Completeness Percentage</td><td>100%</td>", content)
+        self.assertIn(
+            "Institutional Delay — Complete — Sufficient sufficiency — 2 supporting attachments",
+            content,
+        )
+        self.assertIn(
+            "Strike-OT-20260604-ADMIN — Complete — Sufficient sufficiency — 2 supporting attachments",
+            content,
+        )
+
     def test_evidence_sufficiency_classification_helper_is_deterministic(self):
         self.assertEqual(
             self.admin_session.classify_evidence_sufficiency(0, 0),
@@ -3011,6 +3155,68 @@ class AdminSessionTests(unittest.TestCase):
                 [{"sufficiency": "Strong"}, {"sufficiency": "Strong"}]
             ),
             "Strong",
+        )
+
+    def test_stage15e_evidence_completeness_helpers_are_deterministic(self):
+        self.assertFalse(
+            self.admin_session._stage15e_target_is_complete("Unsupported")
+        )
+        self.assertFalse(
+            self.admin_session._stage15e_target_is_complete("Partial")
+        )
+        self.assertTrue(
+            self.admin_session._stage15e_target_is_complete("Sufficient")
+        )
+        self.assertTrue(self.admin_session._stage15e_target_is_complete("Strong"))
+        self.assertEqual(
+            self.admin_session._classify_stage15e_group_completeness([]),
+            "Not Applicable",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_group_completeness(
+                [{"is_complete": False}]
+            ),
+            "Incomplete",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_group_completeness(
+                [{"is_complete": True}, {"is_complete": False}]
+            ),
+            "Partial",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_group_completeness(
+                [{"is_complete": True}, {"is_complete": True}]
+            ),
+            "Complete",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_overall_completeness(0, 4),
+            "Incomplete",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_overall_completeness(1, 4),
+            "Partial",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15e_overall_completeness(4, 4),
+            "Complete",
+        )
+        self.assertEqual(
+            self.admin_session._format_stage15e_percentage(0, 7),
+            "0%",
+        )
+        self.assertEqual(
+            self.admin_session._format_stage15e_percentage(1, 4),
+            "25%",
+        )
+        self.assertEqual(
+            self.admin_session._format_stage15e_percentage(1, 9),
+            "11.1%",
+        )
+        self.assertEqual(
+            self.admin_session._format_stage15e_percentage(4, 4),
+            "100%",
         )
 
     def test_evidence_readiness_classification_helper_is_deterministic(self):
