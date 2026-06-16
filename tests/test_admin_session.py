@@ -1169,6 +1169,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Evidence Completeness", before_content)
         self.assertIn("<td>Conditions Completeness</td><td>Incomplete</td>", before_content)
         self.assertIn("<td>Overall Completeness</td><td>Incomplete</td>", before_content)
+        self.assertIn("Evidence Requirements", before_content)
+        self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1184,6 +1186,17 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Complete Targets</td><td>0</td>", after_content)
         self.assertIn("<td>Incomplete Targets</td><td>7</td>", after_content)
         self.assertIn("<td>Completeness Percentage</td><td>0%</td>", after_content)
+        self.assertIn("<td>Conditions Requirement Status</td><td>outstanding</td>", after_content)
+        self.assertIn("<td>Condition Additional Attachments Required</td><td>1</td>", after_content)
+        self.assertIn("<td>Signals Requirement Status</td><td>outstanding</td>", after_content)
+        self.assertIn("<td>Signal Additional Attachments Required</td><td>8</td>", after_content)
+        self.assertIn("<td>Findings Requirement Status</td><td>outstanding</td>", after_content)
+        self.assertIn("<td>Finding Additional Attachments Required</td><td>2</td>", after_content)
+        self.assertIn("<td>Record Requirement Status</td><td>outstanding</td>", after_content)
+        self.assertIn("<td>Record Additional Attachments Required</td><td>2</td>", after_content)
+        self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", after_content)
+        self.assertIn("<td>Targets Requiring Evidence</td><td>7</td>", after_content)
+        self.assertIn("<td>Additional Attachments Required</td><td>13</td>", after_content)
         self.assertIn(
             "Escalation Without Response — Partial — 1 supporting attachment",
             after_content,
@@ -1202,6 +1215,34 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "Strike-LA-20260710-004 — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            after_content,
+        )
+        self.assertIn(
+            "Escalation Without Response — 1 additional supporting attachment required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "No Recurring Transition — 2 additional supporting attachments required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "Dominant Resistance — 2 additional supporting attachments required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "Partial Institutional Response — 2 additional supporting attachments required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "Administrative Delay Pattern — 2 additional supporting attachments required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "Trajectory recorded as Stable — 2 additional supporting attachments required to reach sufficient",
+            after_content,
+        )
+        self.assertIn(
+            "Strike-LA-20260710-004 — 2 additional supporting attachments required to reach sufficient",
             after_content,
         )
         self.assertIn("Test evidence — escalation without response", after_content)
@@ -1399,6 +1440,18 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Complete Targets</td><td>2</td>", content)
         self.assertIn("<td>Incomplete Targets</td><td>7</td>", content)
         self.assertIn("<td>Completeness Percentage</td><td>22.2%</td>", content)
+        self.assertIn("Evidence Requirements", content)
+        self.assertIn("<td>Conditions Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Condition Additional Attachments Required</td><td>8</td>", content)
+        self.assertIn("<td>Signals Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Signal Additional Attachments Required</td><td>2</td>", content)
+        self.assertIn("<td>Findings Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Finding Additional Attachments Required</td><td>2</td>", content)
+        self.assertIn("<td>Record Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Record Additional Attachments Required</td><td>2</td>", content)
+        self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Targets Requiring Evidence</td><td>7</td>", content)
+        self.assertIn("<td>Additional Attachments Required</td><td>14</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -1416,6 +1469,10 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn(
+            "Procedural Deflection — 2 additional supporting attachments required to reach sufficient",
+            content,
+        )
+        self.assertIn(
             "Finding &lt;requires&gt; review — Unsupported — 0 supporting attachments",
             content,
         )
@@ -1429,6 +1486,10 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "Strike-OT-20260604-ADMIN — Incomplete — Unsupported sufficiency — 0 supporting attachments",
+            content,
+        )
+        self.assertIn(
+            "Strike-OT-20260604-ADMIN — 2 additional supporting attachments required to reach sufficient",
             content,
         )
         self.assertIn("print-admin-section-body", content)
@@ -2554,6 +2615,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Complete Targets</td><td>0</td>", content)
         self.assertIn("<td>Incomplete Targets</td><td>9</td>", content)
         self.assertIn("<td>Completeness Percentage</td><td>0%</td>", content)
+        self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Targets Requiring Evidence</td><td>9</td>", content)
+        self.assertIn("<td>Additional Attachments Required</td><td>18</td>", content)
         self.assertIn("<td>Supported Targets</td><td>0</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>9</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>9</td>", content)
@@ -2720,6 +2784,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Complete Targets</td><td>1</td>", content)
         self.assertIn("<td>Incomplete Targets</td><td>3</td>", content)
         self.assertIn("<td>Completeness Percentage</td><td>25%</td>", content)
+        self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", content)
+        self.assertIn("<td>Targets Requiring Evidence</td><td>3</td>", content)
+        self.assertIn("<td>Additional Attachments Required</td><td>5</td>", content)
         self.assertIn("<td>Supported Targets</td><td>4</td>", content)
         self.assertIn("<td>Unsupported Targets</td><td>0</td>", content)
         self.assertIn("<td>Evidence Gap Count</td><td>0</td>", content)
@@ -3080,6 +3147,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Complete Targets</td><td>2</td>", content)
         self.assertIn("<td>Incomplete Targets</td><td>0</td>", content)
         self.assertIn("<td>Completeness Percentage</td><td>100%</td>", content)
+        self.assertIn("<td>Conditions Requirement Status</td><td>none_required</td>", content)
+        self.assertIn("<td>Record Requirement Status</td><td>none_required</td>", content)
+        self.assertIn("<td>Overall Requirement Status</td><td>none_required</td>", content)
+        self.assertIn("<td>Targets Requiring Evidence</td><td>0</td>", content)
+        self.assertIn("<td>Additional Attachments Required</td><td>0</td>", content)
+        self.assertIn("No additional evidence required.", content)
         self.assertIn(
             "Institutional Delay — Complete — Sufficient sufficiency — 2 supporting attachments",
             content,
@@ -3217,6 +3290,48 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session._format_stage15e_percentage(4, 4),
             "100%",
+        )
+
+    def test_stage15f_evidence_requirements_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session._stage15f_additional_attachments_required(0),
+            2,
+        )
+        self.assertEqual(
+            self.admin_session._stage15f_additional_attachments_required(1),
+            1,
+        )
+        self.assertEqual(
+            self.admin_session._stage15f_additional_attachments_required(2),
+            0,
+        )
+        self.assertEqual(
+            self.admin_session._stage15f_additional_attachments_required(3),
+            0,
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15f_group_requirement_status([]),
+            "not_applicable",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15f_group_requirement_status(
+                [{"additional_required": 2}, {"additional_required": 0}]
+            ),
+            "outstanding",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15f_group_requirement_status(
+                [{"additional_required": 0}, {"additional_required": 0}]
+            ),
+            "none_required",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15f_overall_requirement_status(1),
+            "outstanding",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage15f_overall_requirement_status(0),
+            "none_required",
         )
 
     def test_evidence_readiness_classification_helper_is_deterministic(self):
