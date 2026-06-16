@@ -2313,6 +2313,46 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Closure Analysis — Stages 13A–13F", content)
         self.assertIn("Archive Analysis — Stages 14A–14F", content)
         self.assertIn("Supporting Evidence", content)
+        self.assertLess(
+            content.index("Administrative Workflow"),
+            content.index("Outcome Analysis — Stages 11A–11F"),
+        )
+        self.assertLess(
+            content.index("Outcome Analysis — Stages 11A–11F"),
+            content.index("Resolution Analysis — Stages 12A–12F"),
+        )
+        self.assertLess(
+            content.index("Resolution Analysis — Stages 12A–12F"),
+            content.index("Closure Analysis — Stages 13A–13F"),
+        )
+        self.assertLess(
+            content.index("Closure Analysis — Stages 13A–13F"),
+            content.index("Archive Analysis — Stages 14A–14F"),
+        )
+        self.assertLess(
+            content.index("Archive Analysis — Stages 14A–14F"),
+            content.index("Supporting Evidence"),
+        )
+        self.assertLess(
+            content.index("Supporting Evidence"),
+            content.index("Evidence Coverage"),
+        )
+        governance_start = content.index(
+            'class="admin-section-group evidence-coverage-admin-group"'
+        )
+        governance_content = content[governance_start:]
+        self.assertLess(
+            governance_content.index("Evidence Coverage"),
+            governance_content.index("<h2>Evidence Sufficiency</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Sufficiency</h2>"),
+            governance_content.index("<h2>Evidence Completeness</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Completeness</h2>"),
+            governance_content.index("<h2>Evidence Requirements</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,

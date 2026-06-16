@@ -11344,13 +11344,13 @@ def render_admin_record_evidence_page(
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
-    {evidence_coverage_group}
     {administrative_workflow_group}
     {outcome_analysis_group}
     {resolution_analysis_group}
     {closure_analysis_group}
     {archive_analysis_group}
     {supporting_evidence_group}
+    {evidence_coverage_group}
   </main>
 </body>
 </html>"""
