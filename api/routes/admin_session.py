@@ -10117,6 +10117,179 @@ def _render_stage16b_evidence_justification(
       </section>"""
 
 
+_STAGE16C_CONFIDENCE_ORDER = {
+    "Low Confidence": 0,
+    "Limited Confidence": 1,
+    "High Confidence": 2,
+    "Very High Confidence": 3,
+}
+
+
+def _classify_stage16c_evidence_confidence(
+    sufficiency: str,
+    completeness: str,
+) -> str:
+    confidence = {
+        "Unsupported": "Low Confidence",
+        "Partial": "Limited Confidence",
+        "Sufficient": "High Confidence",
+        "Strong": "Very High Confidence",
+    }.get(sufficiency, "Low Confidence")
+    if (
+        completeness != "Complete"
+        and _STAGE16C_CONFIDENCE_ORDER[confidence]
+        > _STAGE16C_CONFIDENCE_ORDER["Limited Confidence"]
+    ):
+        return "Limited Confidence"
+    return confidence
+
+
+def _stage16c_confidence_reason(
+    sufficiency: str,
+    completeness: str,
+) -> str:
+    if completeness == "Complete":
+        return (
+            f"Target has {sufficiency} sufficiency and meets the completion "
+            "threshold."
+        )
+    return f"Target has {sufficiency} sufficiency and is not Complete."
+
+
+def _record_stage16c_evidence_confidence(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    groups: dict[str, dict[str, Any]] = {}
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        target_summaries = []
+        for target in completeness["groups"][target_type]["targets"]:
+            target_sufficiency = str(target["sufficiency"])
+            target_completeness = str(target["completeness"])
+            target_summaries.append(
+                {
+                    **target,
+                    "confidence": _classify_stage16c_evidence_confidence(
+                        target_sufficiency,
+                        target_completeness,
+                    ),
+                    "confidence_reason": _stage16c_confidence_reason(
+                        target_sufficiency,
+                        target_completeness,
+                    ),
+                }
+            )
+
+        group_sufficiency = str(sufficiency["groups"][target_type]["sufficiency"])
+        group_completeness = str(completeness["groups"][target_type]["completeness"])
+        groups[target_type] = {
+            "confidence": (
+                "Not Applicable"
+                if group_completeness == "Not Applicable"
+                else _classify_stage16c_evidence_confidence(
+                    group_sufficiency,
+                    group_completeness,
+                )
+            ),
+            "targets": target_summaries,
+        }
+
+    return {
+        "overall": _classify_stage16c_evidence_confidence(
+            str(sufficiency["overall"]),
+            str(completeness["overall"]),
+        ),
+        "groups": groups,
+    }
+
+
+def _render_stage16c_target_confidence(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Confidence</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+
+    cards = []
+    for target in targets:
+        rows = (
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+            ("Reason", target["confidence_reason"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage16c-target-confidence">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "</article>"
+        )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Confidence</h3>"
+        f"{''.join(cards)}"
+    )
+
+
+def _render_stage16c_evidence_confidence(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    confidence = _record_stage16c_evidence_confidence(evidence_groups)
+    labels = {
+        "condition": "Conditions Confidence",
+        "signal": "Signals Confidence",
+        "finding": "Findings Confidence",
+        "record": "Record Confidence",
+    }
+    summary_rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        summary_rows.append(
+            "<tr>"
+            f"<td>{labels[target_type]}</td>"
+            f"<td>{escape(str(confidence['groups'][target_type]['confidence']))}</td>"
+            "</tr>"
+        )
+    summary_rows.append(
+        "<tr>"
+        "<td>Overall Confidence</td>"
+        f"<td>{escape(str(confidence['overall']))}</td>"
+        "</tr>"
+    )
+    sections = "".join(
+        _render_stage16c_target_confidence(
+            target_type,
+            confidence["groups"][target_type]["targets"],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage16c-evidence-confidence">
+        <h2>Evidence Confidence</h2>
+        <p class="notice">
+          Evidence confidence is deterministic and derived only from existing
+          sufficiency and completeness values. It is not statistical confidence,
+          AI confidence, or probability.
+        </p>
+        <table class="stage16c-confidence-summary">
+          <tbody>{"".join(summary_rows)}</tbody>
+        </table>
+        <section class="stage16c-target-confidence-list">
+          {sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -10224,6 +10397,9 @@ def render_admin_record_evidence_page(
     )
     stage16a_evidence_standards = _render_stage16a_evidence_standards()
     stage16b_evidence_justification = _render_stage16b_evidence_justification(
+        evidence_groups
+    )
+    stage16c_evidence_confidence = _render_stage16c_evidence_confidence(
         evidence_groups
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
@@ -10338,6 +10514,7 @@ def render_admin_record_evidence_page(
             f"{stage15f_evidence_requirements}"
             f"{stage16a_evidence_standards}"
             f"{stage16b_evidence_justification}"
+            f"{stage16c_evidence_confidence}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

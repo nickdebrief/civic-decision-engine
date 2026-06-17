@@ -1173,6 +1173,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", before_content)
         self.assertIn("Evidence Standards", before_content)
         self.assertIn("Current deterministic standard", before_content)
+        self.assertIn("Evidence Justification", before_content)
+        self.assertIn("Evidence Confidence", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1241,6 +1243,24 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Additional attachments required</td><td>2</td>", after_content)
         self.assertIn(
             "<td>Standard applied</td><td>Unsupported = 0 active supports; Sufficient = 2 active supports</td>",
+            after_content,
+        )
+        self.assertIn("Evidence Confidence", after_content)
+        self.assertIn("<td>Conditions Confidence</td><td>Limited Confidence</td>", after_content)
+        self.assertIn("<td>Signals Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn("<td>Findings Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn("<td>Overall Confidence</td><td>Limited Confidence</td>", after_content)
+        self.assertIn("<h3>Condition Confidence</h3>", after_content)
+        self.assertIn("<h3>Signal Confidence</h3>", after_content)
+        self.assertIn("<td>Confidence</td><td>Limited Confidence</td>", after_content)
+        self.assertIn("<td>Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn(
+            "<td>Reason</td><td>Target has Partial sufficiency and is not Complete.</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reason</td><td>Target has Unsupported sufficiency and is not Complete.</td>",
             after_content,
         )
         self.assertIn(
@@ -1526,6 +1546,20 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "This target is classified as Sufficient because it has 2 active supports. It is Complete because completion requires Sufficient or Strong sufficiency. No additional supporting attachments are required.",
+            content,
+        )
+        self.assertIn("Evidence Confidence", content)
+        self.assertIn("<td>Conditions Confidence</td><td>Limited Confidence</td>", content)
+        self.assertIn("<td>Signals Confidence</td><td>Limited Confidence</td>", content)
+        self.assertIn("<td>Findings Confidence</td><td>Low Confidence</td>", content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", content)
+        self.assertIn("<td>Overall Confidence</td><td>Limited Confidence</td>", content)
+        self.assertIn(
+            "<td>Reason</td><td>Target has Sufficient sufficiency and meets the completion threshold.</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Reason</td><td>Target has Unsupported sufficiency and is not Complete.</td>",
             content,
         )
         self.assertIn(
@@ -2436,6 +2470,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Standards</h2>"),
             governance_content.index("<h2>Evidence Justification</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Justification</h2>"),
+            governance_content.index("<h2>Evidence Confidence</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
@@ -3485,6 +3523,57 @@ class AdminSessionTests(unittest.TestCase):
             "This target is classified as Strong because it has 3 active supports. "
             "It is Complete because completion requires Sufficient or Strong "
             "sufficiency. No additional supporting attachments are required.",
+        )
+
+    def test_stage16c_evidence_confidence_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Unsupported",
+                "Incomplete",
+            ),
+            "Low Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Partial",
+                "Incomplete",
+            ),
+            "Limited Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Sufficient",
+                "Complete",
+            ),
+            "High Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Strong",
+                "Complete",
+            ),
+            "Very High Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Sufficient",
+                "Incomplete",
+            ),
+            "Limited Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._classify_stage16c_evidence_confidence(
+                "Strong",
+                "Incomplete",
+            ),
+            "Limited Confidence",
+        )
+        self.assertEqual(
+            self.admin_session._stage16c_confidence_reason(
+                "Strong",
+                "Complete",
+            ),
+            "Target has Strong sufficiency and meets the completion threshold.",
         )
 
     def test_evidence_readiness_classification_helper_is_deterministic(self):
