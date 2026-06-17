@@ -1171,6 +1171,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Completeness</td><td>Incomplete</td>", before_content)
         self.assertIn("Evidence Requirements", before_content)
         self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", before_content)
+        self.assertIn("Evidence Standards", before_content)
+        self.assertIn("Current deterministic standard", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1197,6 +1199,26 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", after_content)
         self.assertIn("<td>Targets Requiring Evidence</td><td>7</td>", after_content)
         self.assertIn("<td>Additional Attachments Required</td><td>13</td>", after_content)
+        self.assertIn("Evidence Standards", after_content)
+        self.assertIn("<td>Standard Type</td><td>Current deterministic standard</td>", after_content)
+        self.assertIn("<td>Minimum for Partial</td><td>1 active supporting attachment</td>", after_content)
+        self.assertIn("<td>Minimum for Sufficient</td><td>2 active supporting attachments</td>", after_content)
+        self.assertIn("<td>Minimum for Strong</td><td>3 active supporting attachments</td>", after_content)
+        self.assertIn("<td>Completion Threshold</td><td>sufficient or strong</td>", after_content)
+        self.assertIn(
+            "<td>Requirement Basis</td><td>additional attachments required to reach sufficient</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Relationship Scope</td><td>active supports relationships only</td>",
+            after_content,
+        )
+        self.assertIn("Unsupported targets require 2 additional supporting attachments.", after_content)
+        self.assertIn("Partial targets require 1 additional supporting attachment.", after_content)
+        self.assertIn(
+            "Sufficient and strong targets require no additional supporting attachments.",
+            after_content,
+        )
         self.assertIn(
             "Escalation Without Response — Partial — 1 supporting attachment",
             after_content,
@@ -1452,6 +1474,20 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Overall Requirement Status</td><td>outstanding</td>", content)
         self.assertIn("<td>Targets Requiring Evidence</td><td>7</td>", content)
         self.assertIn("<td>Additional Attachments Required</td><td>14</td>", content)
+        self.assertIn("Evidence Standards", content)
+        self.assertIn("<td>Standard Type</td><td>Current deterministic standard</td>", content)
+        self.assertIn("<td>Minimum for Partial</td><td>1 active supporting attachment</td>", content)
+        self.assertIn("<td>Minimum for Sufficient</td><td>2 active supporting attachments</td>", content)
+        self.assertIn("<td>Minimum for Strong</td><td>3 active supporting attachments</td>", content)
+        self.assertIn("<td>Completion Threshold</td><td>sufficient or strong</td>", content)
+        self.assertIn(
+            "<td>Requirement Basis</td><td>additional attachments required to reach sufficient</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Relationship Scope</td><td>active supports relationships only</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2352,6 +2388,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Completeness</h2>"),
             governance_content.index("<h2>Evidence Requirements</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Requirements</h2>"),
+            governance_content.index("<h2>Evidence Standards</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
