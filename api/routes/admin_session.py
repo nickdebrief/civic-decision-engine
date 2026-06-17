@@ -9972,6 +9972,151 @@ def _render_stage16a_evidence_standards() -> str:
       </section>"""
 
 
+def _stage16b_standard_applied(sufficiency: str) -> str:
+    return {
+        "Unsupported": "Unsupported = 0 active supports; Sufficient = 2 active supports",
+        "Partial": "Partial = 1 active support; Sufficient = 2 active supports",
+        "Sufficient": "Sufficient = 2 active supports",
+        "Strong": "Strong = 3 or more active supports",
+    }.get(
+        sufficiency,
+        "Sufficient = 2 active supports",
+    )
+
+
+def _stage16b_justification_sentence(
+    *,
+    support_count: int,
+    sufficiency: str,
+    completeness: str,
+    additional_required: int,
+) -> str:
+    support_label = "active support" if support_count == 1 else "active supports"
+    sentence = (
+        f"This target is classified as {sufficiency} because it has "
+        f"{support_count} {support_label}. "
+    )
+    if completeness == "Complete":
+        sentence += (
+            "It is Complete because completion requires Sufficient or Strong "
+            "sufficiency. "
+        )
+    else:
+        sentence += (
+            "It remains Incomplete because completion requires Sufficient or "
+            "Strong sufficiency. "
+        )
+    if additional_required > 0:
+        attachment_label = (
+            "additional supporting attachment"
+            if additional_required == 1
+            else "additional supporting attachments"
+        )
+        sentence += (
+            f"It requires {additional_required} {attachment_label} to reach "
+            "Sufficient."
+        )
+    else:
+        sentence += "No additional supporting attachments are required."
+    return sentence
+
+
+def _record_stage16b_evidence_justifications(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    requirements = _record_stage15f_evidence_requirements(evidence_groups)
+    justifications: dict[str, list[dict[str, Any]]] = {}
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = []
+        for target in requirements["groups"][target_type]["targets"]:
+            sufficiency = str(target["sufficiency"])
+            completeness = (
+                "Complete"
+                if _stage15e_target_is_complete(sufficiency)
+                else "Incomplete"
+            )
+            support_count = int(target["supporting_relationship_count"])
+            additional_required = int(target["additional_required"])
+            targets.append(
+                {
+                    "target_label": target["target_label"],
+                    "active_supports": support_count,
+                    "sufficiency": sufficiency,
+                    "completeness": completeness,
+                    "additional_required": additional_required,
+                    "standard_applied": _stage16b_standard_applied(sufficiency),
+                    "justification": _stage16b_justification_sentence(
+                        support_count=support_count,
+                        sufficiency=sufficiency,
+                        completeness=completeness,
+                        additional_required=additional_required,
+                    ),
+                }
+            )
+        justifications[target_type] = targets
+    return justifications
+
+
+def _render_stage16b_target_justifications(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Justification</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            ("Active supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Additional attachments required", target["additional_required"]),
+            ("Standard applied", target["standard_applied"]),
+            ("Justification", target["justification"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage16b-target-justification">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "</article>"
+        )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Justification</h3>"
+        f"{''.join(cards)}"
+    )
+
+
+def _render_stage16b_evidence_justification(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    justifications = _record_stage16b_evidence_justifications(evidence_groups)
+    sections = "".join(
+        _render_stage16b_target_justifications(
+            target_type,
+            justifications[target_type],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage16b-evidence-justification">
+        <h2>Evidence Justification</h2>
+        <p class="notice">
+          Evidence justification is derived deterministically from active
+          supports, sufficiency, completeness, requirements, and standards.
+        </p>
+        {sections}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -10078,6 +10223,9 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     stage16a_evidence_standards = _render_stage16a_evidence_standards()
+    stage16b_evidence_justification = _render_stage16b_evidence_justification(
+        evidence_groups
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -10189,6 +10337,7 @@ def render_admin_record_evidence_page(
             f"{stage15e_evidence_completeness}"
             f"{stage15f_evidence_requirements}"
             f"{stage16a_evidence_standards}"
+            f"{stage16b_evidence_justification}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

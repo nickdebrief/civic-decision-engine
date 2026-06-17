@@ -1219,6 +1219,34 @@ class AdminSessionTests(unittest.TestCase):
             "Sufficient and strong targets require no additional supporting attachments.",
             after_content,
         )
+        self.assertIn("Evidence Justification", after_content)
+        self.assertIn("<h3>Condition Justification</h3>", after_content)
+        self.assertIn("<h3>Signal Justification</h3>", after_content)
+        self.assertIn("<h3>Finding Justification</h3>", after_content)
+        self.assertIn("<h3>Record Justification</h3>", after_content)
+        self.assertIn("<td>Active supports</td><td>1</td>", after_content)
+        self.assertIn("<td>Sufficiency</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Additional attachments required</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Standard applied</td><td>Partial = 1 active support; Sufficient = 2 active supports</td>",
+            after_content,
+        )
+        self.assertIn(
+            "This target is classified as Partial because it has 1 active support. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 1 additional supporting attachment to reach Sufficient.",
+            after_content,
+        )
+        self.assertIn("<td>Active supports</td><td>0</td>", after_content)
+        self.assertIn("<td>Sufficiency</td><td>Unsupported</td>", after_content)
+        self.assertIn("<td>Additional attachments required</td><td>2</td>", after_content)
+        self.assertIn(
+            "<td>Standard applied</td><td>Unsupported = 0 active supports; Sufficient = 2 active supports</td>",
+            after_content,
+        )
+        self.assertIn(
+            "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
+            after_content,
+        )
         self.assertIn(
             "Escalation Without Response — Partial — 1 supporting attachment",
             after_content,
@@ -1486,6 +1514,18 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Relationship Scope</td><td>active supports relationships only</td>",
+            content,
+        )
+        self.assertIn("Evidence Justification", content)
+        self.assertIn("<td>Sufficiency</td><td>Sufficient</td>", content)
+        self.assertIn("<td>Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Additional attachments required</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Standard applied</td><td>Sufficient = 2 active supports</td>",
+            content,
+        )
+        self.assertIn(
+            "This target is classified as Sufficient because it has 2 active supports. It is Complete because completion requires Sufficient or Strong sufficiency. No additional supporting attachments are required.",
             content,
         )
         self.assertIn(
@@ -2392,6 +2432,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Requirements</h2>"),
             governance_content.index("<h2>Evidence Standards</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Standards</h2>"),
+            governance_content.index("<h2>Evidence Justification</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
@@ -3412,6 +3456,35 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(
             self.admin_session._classify_stage15f_overall_requirement_status(0),
             "none_required",
+        )
+
+    def test_stage16b_evidence_justification_helpers_are_deterministic(self):
+        self.assertEqual(
+            self.admin_session._stage16b_standard_applied("Unsupported"),
+            "Unsupported = 0 active supports; Sufficient = 2 active supports",
+        )
+        self.assertEqual(
+            self.admin_session._stage16b_standard_applied("Partial"),
+            "Partial = 1 active support; Sufficient = 2 active supports",
+        )
+        self.assertEqual(
+            self.admin_session._stage16b_standard_applied("Sufficient"),
+            "Sufficient = 2 active supports",
+        )
+        self.assertEqual(
+            self.admin_session._stage16b_standard_applied("Strong"),
+            "Strong = 3 or more active supports",
+        )
+        self.assertEqual(
+            self.admin_session._stage16b_justification_sentence(
+                support_count=3,
+                sufficiency="Strong",
+                completeness="Complete",
+                additional_required=0,
+            ),
+            "This target is classified as Strong because it has 3 active supports. "
+            "It is Complete because completion requires Sufficient or Strong "
+            "sufficiency. No additional supporting attachments are required.",
         )
 
     def test_evidence_readiness_classification_helper_is_deterministic(self):
