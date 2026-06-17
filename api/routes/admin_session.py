@@ -9920,6 +9920,58 @@ def _render_stage15f_evidence_requirements(
       </section>"""
 
 
+def _render_stage16a_evidence_standards() -> str:
+    summary_rows = (
+        ("Standard Type", "Current deterministic standard"),
+        ("Minimum for Partial", "1 active supporting attachment"),
+        ("Minimum for Sufficient", "2 active supporting attachments"),
+        ("Minimum for Strong", "3 active supporting attachments"),
+        ("Completion Threshold", "sufficient or strong"),
+        (
+            "Requirement Basis",
+            "additional attachments required to reach sufficient",
+        ),
+        ("Relationship Scope", "active supports relationships only"),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(label)}</td>"
+        f"<td>{escape(value)}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage16a-evidence-standards">
+        <h2>Evidence Standards</h2>
+        <p class="notice">
+          Evidence standards are displayed as the current deterministic standard
+          used by the admin evidence assessment layer.
+        </p>
+        <table class="stage16a-standards-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        <section class="stage16a-target-standard">
+          <h3>Target Standard</h3>
+          <dl>
+            <dt>Unsupported</dt>
+            <dd>0 active supporting attachments</dd>
+            <dt>Partial</dt>
+            <dd>1 active supporting attachment</dd>
+            <dt>Sufficient</dt>
+            <dd>2 active supporting attachments</dd>
+            <dt>Strong</dt>
+            <dd>3 or more active supporting attachments</dd>
+          </dl>
+        </section>
+        <section class="stage16a-requirement-standard">
+          <h3>Requirement Standard</h3>
+          <p>Unsupported targets require 2 additional supporting attachments.</p>
+          <p>Partial targets require 1 additional supporting attachment.</p>
+          <p>Sufficient and strong targets require no additional supporting attachments.</p>
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -10025,6 +10077,7 @@ def render_admin_record_evidence_page(
     stage15f_evidence_requirements = _render_stage15f_evidence_requirements(
         evidence_groups
     )
+    stage16a_evidence_standards = _render_stage16a_evidence_standards()
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -10135,6 +10188,7 @@ def render_admin_record_evidence_page(
             f"{stage15d_evidence_sufficiency}"
             f"{stage15e_evidence_completeness}"
             f"{stage15f_evidence_requirements}"
+            f"{stage16a_evidence_standards}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
