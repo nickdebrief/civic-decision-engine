@@ -37,6 +37,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
+    list_attachment_relationships,
     list_record_attachments,
     record_attachment_audit_event,
     store_attachment_bytes,
@@ -920,6 +921,22 @@ def _render_attachment_relationship_card(
           </li>"""
 
 
+def _attach_relationship_lineage_metadata(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+    attachments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for attachment in attachments:
+        attachment["all_relationships"] = list_attachment_relationships(
+            conn,
+            reference=reference,
+            attachment_id=int(attachment.get("attachment_id") or 0),
+            active_only=False,
+        )
+    return attachments
+
+
 def _record_evidence_groups(
     record: sqlite3.Row,
     attachments: list[dict[str, Any]],
@@ -934,6 +951,7 @@ def _record_evidence_groups(
                 "relationship_count": 0,
                 "relationship_type_counts": {},
                 "relationship_traces": [],
+                "relationship_lineage_events": [],
                 "_attachment_lookup": {},
             }
             for target_key in target_options.get(target_type, [])
@@ -986,9 +1004,44 @@ def _record_evidence_groups(
                 target_attachment["relationship_type_counts"].get(relationship_type, 0)
                 + 1
             )
+        for relationship in attachment.get("all_relationships") or []:
+            target_type = str(relationship.get("target_type") or "")
+            target_key = str(relationship.get("target_key") or "")
+            relationship_type = str(relationship.get("relationship_type") or "")
+            if relationship_type != "supports":
+                continue
+            target = target_lookup.get((target_type, target_key))
+            if not target:
+                continue
+            is_active = int(relationship.get("is_active") or 0) == 1
+            target["relationship_lineage_events"].append(
+                {
+                    "relationship_type": relationship_type,
+                    "target_type": target_type,
+                    "target_key": target_key,
+                    "target_label": _guided_target_display_label(target_key),
+                    "attachment_id": supporting_attachment.get("attachment_id"),
+                    "attachment_title": supporting_attachment.get("title")
+                    or "Untitled attachment",
+                    "is_active": is_active,
+                    "state": "active" if is_active else "removed",
+                    "created_at": relationship.get("created_at"),
+                    "created_by": relationship.get("created_by"),
+                    "removed_at": relationship.get("removed_at"),
+                    "removed_by": relationship.get("removed_by"),
+                }
+            )
 
     for targets in groups.values():
         for target in targets:
+            target["relationship_lineage_events"].sort(
+                key=lambda event: (
+                    str(event.get("created_at") or ""),
+                    str(event.get("attachment_id") or ""),
+                    str(event.get("relationship_type") or ""),
+                    str(event.get("target_key") or ""),
+                )
+            )
             target.pop("_attachment_lookup", None)
 
     return groups
@@ -10475,6 +10528,227 @@ def _render_stage16d_evidence_traceability(
       </section>"""
 
 
+def _stage16e_active_attachment_titles(events: list[dict[str, Any]]) -> list[str]:
+    titles: list[str] = []
+    seen_attachment_ids = set()
+    for event in events:
+        if not bool(event.get("is_active")):
+            continue
+        attachment_id = event.get("attachment_id")
+        if attachment_id in seen_attachment_ids:
+            continue
+        seen_attachment_ids.add(attachment_id)
+        titles.append(str(event.get("attachment_title") or "Untitled attachment"))
+    return titles
+
+
+def _stage16e_first_created_at(events: list[dict[str, Any]]) -> str:
+    created_values = sorted(str(event.get("created_at") or "") for event in events)
+    created_values = [value for value in created_values if value]
+    return created_values[0] if created_values else "Not recorded"
+
+
+def _stage16e_latest_created_at(events: list[dict[str, Any]]) -> str:
+    created_values = sorted(str(event.get("created_at") or "") for event in events)
+    created_values = [value for value in created_values if value]
+    return created_values[-1] if created_values else "Not recorded"
+
+
+def _record_stage16e_evidence_lineage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    confidence = _record_stage16c_evidence_confidence(evidence_groups)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    total_lineage_targets = 0
+    total_relationship_events = 0
+    active_support_relationships = 0
+    inactive_relationships = 0
+    targets_with_lineage = 0
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        target_lineage = []
+        for index, target in enumerate(evidence_groups.get(target_type) or []):
+            events = list(target.get("relationship_lineage_events") or [])
+            active_events = [event for event in events if bool(event.get("is_active"))]
+            inactive_events = [
+                event for event in events if not bool(event.get("is_active"))
+            ]
+            total_lineage_targets += 1
+            total_relationship_events += len(events)
+            active_support_relationships += len(active_events)
+            inactive_relationships += len(inactive_events)
+            if events:
+                targets_with_lineage += 1
+
+            target_lineage.append(
+                {
+                    "target_type": target_type,
+                    "target_label": target.get("target_label")
+                    or target.get("target_key")
+                    or "",
+                    "total_relationship_events": len(events),
+                    "active_support_count": len(active_events),
+                    "inactive_relationship_count": len(inactive_events),
+                    "first_support_created_at": _stage16e_first_created_at(events),
+                    "latest_support_created_at": _stage16e_latest_created_at(events),
+                    "active_supporting_attachment_titles": (
+                        _stage16e_active_attachment_titles(events)
+                    ),
+                    "events": events,
+                    "sufficiency": sufficiency["groups"][target_type]["targets"][
+                        index
+                    ]["sufficiency"],
+                    "completeness": completeness["groups"][target_type]["targets"][
+                        index
+                    ]["completeness"],
+                    "confidence": confidence["groups"][target_type]["targets"][
+                        index
+                    ]["confidence"],
+                }
+            )
+        groups[target_type] = target_lineage
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_lineage_targets": total_lineage_targets,
+            "total_relationship_events": total_relationship_events,
+            "active_support_relationships": active_support_relationships,
+            "inactive_removed_relationships": inactive_relationships,
+            "targets_with_lineage": targets_with_lineage,
+            "targets_without_lineage": max(total_lineage_targets - targets_with_lineage, 0),
+        },
+    }
+
+
+def _stage16e_lineage_event_label(event: dict[str, Any]) -> str:
+    created_by = event.get("created_by") or "unknown"
+    created_at = event.get("created_at") or "Not recorded"
+    label = (
+        f"{event.get('relationship_type') or 'relationship'} relationship created "
+        f"by {created_by} at {created_at} — {event.get('state') or 'unknown'}"
+    )
+    if not bool(event.get("is_active")) and event.get("removed_at"):
+        removed_by = event.get("removed_by") or "unknown"
+        label += f" at {event.get('removed_at')} by {removed_by}"
+    return label
+
+
+def _render_stage16e_lineage_events(events: list[dict[str, Any]]) -> str:
+    if not events:
+        return '<p class="evidence-empty-state">No recorded evidence lineage events.</p>'
+    items = "".join(
+        "<li>"
+        f"{escape(_stage16e_lineage_event_label(event))}"
+        f" — Attachment {escape(str(event.get('attachment_id') or '—'))}: "
+        f"{escape(str(event.get('attachment_title') or 'Untitled attachment'))}"
+        "</li>"
+        for event in events
+    )
+    return f"<ol>{items}</ol>"
+
+
+def _render_stage16e_target_lineage(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Lineage</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+
+    cards = []
+    for target in targets:
+        active_titles = _stage16d_traceability_value_list(
+            target["active_supporting_attachment_titles"],
+            "No active supporting attachments.",
+        )
+        rows = (
+            ("Total relationship events", target["total_relationship_events"]),
+            ("Active support relationships", target["active_support_count"]),
+            (
+                "Inactive / removed relationships",
+                target["inactive_relationship_count"],
+            ),
+            ("First support created at", target["first_support_created_at"]),
+            ("Latest support created at", target["latest_support_created_at"]),
+            ("Active supporting attachments", active_titles),
+            ("Current sufficiency", target["sufficiency"]),
+            ("Current completeness", target["completeness"]),
+            ("Current confidence", target["confidence"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage16e-target-lineage">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Lineage Events</h5>"
+            f"{_render_stage16e_lineage_events(target['events'])}"
+            "</article>"
+        )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Lineage</h3>"
+        f"{''.join(cards)}"
+    )
+
+
+def _render_stage16e_evidence_lineage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    lineage = _record_stage16e_evidence_lineage(evidence_groups)
+    summary = lineage["summary"]
+    summary_rows = (
+        ("Total Lineage Targets", summary["total_lineage_targets"]),
+        ("Total Relationship Events", summary["total_relationship_events"]),
+        ("Active Support Relationships", summary["active_support_relationships"]),
+        (
+            "Inactive / Removed Relationships",
+            summary["inactive_removed_relationships"],
+        ),
+        ("Targets With Lineage", summary["targets_with_lineage"]),
+        ("Targets Without Lineage", summary["targets_without_lineage"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    sections = "".join(
+        _render_stage16e_target_lineage(
+            target_type,
+            lineage["groups"][target_type],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage16e-evidence-lineage">
+        <h2>Evidence Lineage</h2>
+        <p class="notice">
+          Evidence lineage is derived deterministically from existing attachment
+          relationship history, safe attachment metadata, sufficiency,
+          completeness, and confidence outputs only.
+        </p>
+        <h3>Evidence Lineage Summary</h3>
+        <table class="stage16e-lineage-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        <section class="stage16e-target-lineage-list">
+          {sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -10590,6 +10864,7 @@ def render_admin_record_evidence_page(
     stage16d_evidence_traceability = _render_stage16d_evidence_traceability(
         evidence_groups
     )
+    stage16e_evidence_lineage = _render_stage16e_evidence_lineage(evidence_groups)
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -10704,6 +10979,7 @@ def render_admin_record_evidence_page(
             f"{stage16b_evidence_justification}"
             f"{stage16c_evidence_confidence}"
             f"{stage16d_evidence_traceability}"
+            f"{stage16e_evidence_lineage}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -12901,6 +13177,11 @@ def admin_record_evidence_page(reference: str, request: Request):
             attachment_root=Path(
                 os.getenv("CDE_ATTACHMENT_ROOT", str(ATTACHMENT_ROOT))
             ),
+        )
+        attachments = _attach_relationship_lineage_metadata(
+            conn,
+            reference=reference,
+            attachments=attachments,
         )
         return HTMLResponse(
             content=render_admin_record_evidence_page(
