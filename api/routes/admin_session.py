@@ -990,6 +990,8 @@ def _record_evidence_groups(
                     "attachment_id": supporting_attachment.get("attachment_id"),
                     "attachment_title": supporting_attachment.get("title")
                     or "Untitled attachment",
+                    "created_at": relationship.get("created_at"),
+                    "created_by": relationship.get("created_by"),
                 }
             )
             attachment_id = supporting_attachment.get("attachment_id")
@@ -1058,7 +1060,9 @@ def _evidence_supporting_attachment_metadata(
         "visibility": attachment.get("visibility"),
         "redaction_status": attachment.get("redaction_status"),
         "lifecycle_state": _attachment_state(attachment),
+        "source_label": attachment.get("source_label"),
         "document_date": attachment.get("document_date"),
+        "uploaded_at": attachment.get("uploaded_at"),
         "sha256_hash": attachment.get("sha256_hash"),
     }
 
@@ -10749,6 +10753,224 @@ def _render_stage16e_evidence_lineage(
       </section>"""
 
 
+def _record_stage16f_evidence_provenance(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    attachments_by_id: dict[Any, dict[str, Any]] = {}
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        for target in evidence_groups.get(target_type) or []:
+            attachment_lookup = {
+                attachment.get("attachment_id"): attachment
+                for attachment in target.get("attachments") or []
+            }
+            for trace in _stage16d_support_relationship_traces(target):
+                attachment_id = trace.get("attachment_id")
+                if attachment_id in (None, ""):
+                    continue
+                attachment = attachments_by_id.setdefault(
+                    attachment_id,
+                    {
+                        "attachment_id": attachment_id,
+                        "attachment_title": trace.get("attachment_title")
+                        or "Untitled attachment",
+                        "source_label": None,
+                        "created_at": None,
+                        "uploaded_at": None,
+                        "current_status": None,
+                        "active_relationship_count": 0,
+                        "supported_targets": [],
+                        "_supported_target_keys": set(),
+                        "relationship_provenance": [],
+                    },
+                )
+                metadata = attachment_lookup.get(attachment_id) or {}
+                attachment["source_label"] = (
+                    attachment.get("source_label") or metadata.get("source_label")
+                )
+                attachment["created_at"] = (
+                    attachment.get("created_at") or metadata.get("document_date")
+                )
+                attachment["uploaded_at"] = (
+                    attachment.get("uploaded_at") or metadata.get("uploaded_at")
+                )
+                attachment["current_status"] = (
+                    attachment.get("current_status")
+                    or metadata.get("lifecycle_state")
+                    or "active"
+                )
+                attachment["active_relationship_count"] += 1
+                supported_target_key = (
+                    str(trace.get("target_type") or ""),
+                    str(trace.get("target_key") or ""),
+                )
+                if supported_target_key not in attachment["_supported_target_keys"]:
+                    attachment["_supported_target_keys"].add(supported_target_key)
+                    attachment["supported_targets"].append(
+                        trace.get("target_label")
+                        or _guided_target_display_label(trace.get("target_key") or "")
+                    )
+                attachment["relationship_provenance"].append(
+                    {
+                        "relationship_created_at": trace.get("created_at")
+                        or "Not recorded",
+                        "relationship_type": trace.get("relationship_type")
+                        or "supports",
+                        "current_status": "active",
+                    }
+                )
+
+    provenance_records = []
+    for attachment in sorted(
+        attachments_by_id.values(),
+        key=lambda item: str(item.get("attachment_id") or ""),
+    ):
+        attachment.pop("_supported_target_keys", None)
+        attachment["supported_target_count"] = len(attachment["supported_targets"])
+        has_provenance = bool(
+            attachment.get("source_label")
+            or attachment.get("created_at")
+            or attachment.get("uploaded_at")
+        )
+        attachment["has_provenance"] = has_provenance
+        provenance_records.append(attachment)
+
+    return {
+        "attachments": provenance_records,
+        "summary": {
+            "total_attachments_referenced": len(provenance_records),
+            "total_active_support_relationships": sum(
+                int(attachment["active_relationship_count"])
+                for attachment in provenance_records
+            ),
+            "total_provenance_records_available": sum(
+                1 for attachment in provenance_records if attachment["has_provenance"]
+            ),
+            "attachments_with_provenance": sum(
+                1 for attachment in provenance_records if attachment["has_provenance"]
+            ),
+            "attachments_missing_provenance": sum(
+                1 for attachment in provenance_records if not attachment["has_provenance"]
+            ),
+        },
+    }
+
+
+def _render_stage16f_supported_targets(targets: list[str]) -> str:
+    if not targets:
+        return '<p class="evidence-empty-state">No active supported targets.</p>'
+    items = "".join(f"<li>{escape(str(target))}</li>" for target in targets)
+    return f"<ul>{items}</ul>"
+
+
+def _render_stage16f_relationship_provenance(
+    relationships: list[dict[str, Any]],
+) -> str:
+    if not relationships:
+        return '<p class="evidence-empty-state">No active relationship provenance.</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(relationship['relationship_created_at']))}</td>"
+        f"<td>{escape(str(relationship['relationship_type']))}</td>"
+        f"<td>{escape(str(relationship['current_status']))}</td>"
+        "</tr>"
+        for relationship in relationships
+    )
+    return f"""
+        <table class="stage16f-relationship-provenance">
+          <thead>
+            <tr>
+              <th>Relationship Created At</th>
+              <th>Relationship Type</th>
+              <th>Current Status</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage16f_attachment_provenance(
+    attachment: dict[str, Any],
+) -> str:
+    rows = (
+        ("Attachment ID", attachment.get("attachment_id")),
+        ("Attachment Title", attachment.get("attachment_title")),
+        ("Source Label", attachment.get("source_label") or "Not recorded"),
+        ("Created At", attachment.get("created_at") or "Not recorded"),
+        ("Uploaded At", attachment.get("uploaded_at") or "Not recorded"),
+        ("Current Status", attachment.get("current_status") or "Not recorded"),
+        ("Active Relationships", attachment.get("active_relationship_count")),
+        ("Supported Targets", attachment.get("supported_target_count")),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <article class="stage16f-attachment-provenance">
+          <h3>{escape(str(attachment.get('attachment_title') or 'Untitled attachment'))}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+          <h4>Supported Targets</h4>
+          {_render_stage16f_supported_targets(attachment['supported_targets'])}
+          <h4>Relationship Provenance</h4>
+          {_render_stage16f_relationship_provenance(attachment['relationship_provenance'])}
+        </article>"""
+
+
+def _render_stage16f_evidence_provenance(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    provenance = _record_stage16f_evidence_provenance(evidence_groups)
+    summary = provenance["summary"]
+    summary_rows = (
+        ("Total Attachments Referenced", summary["total_attachments_referenced"]),
+        (
+            "Total Active Support Relationships",
+            summary["total_active_support_relationships"],
+        ),
+        (
+            "Total Provenance Records Available",
+            summary["total_provenance_records_available"],
+        ),
+        ("Attachments With Provenance", summary["attachments_with_provenance"]),
+        ("Attachments Missing Provenance", summary["attachments_missing_provenance"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    if provenance["attachments"]:
+        attachment_sections = "".join(
+            _render_stage16f_attachment_provenance(attachment)
+            for attachment in provenance["attachments"]
+        )
+    else:
+        attachment_sections = (
+            '<p class="evidence-empty-state">No active evidence provenance records.</p>'
+        )
+    return f"""
+      <section class="management-section stage16f-evidence-provenance">
+        <h2>Evidence Provenance</h2>
+        <p class="notice">
+          Evidence provenance is derived deterministically from existing
+          attachment metadata and active supports relationship records only.
+        </p>
+        <h3>Provenance Summary</h3>
+        <table class="stage16f-provenance-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        <section class="stage16f-attachment-provenance-list">
+          {attachment_sections}
+        </section>
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -10865,6 +11087,9 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     stage16e_evidence_lineage = _render_stage16e_evidence_lineage(evidence_groups)
+    stage16f_evidence_provenance = _render_stage16f_evidence_provenance(
+        evidence_groups
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -10980,6 +11205,7 @@ def render_admin_record_evidence_page(
             f"{stage16c_evidence_confidence}"
             f"{stage16d_evidence_traceability}"
             f"{stage16e_evidence_lineage}"
+            f"{stage16f_evidence_provenance}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
