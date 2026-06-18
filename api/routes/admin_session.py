@@ -11227,6 +11227,197 @@ def _render_stage17a_record_dependency_section(
       </section>"""
 
 
+def _stage17b_impact_classification(sufficiency: str) -> str:
+    if sufficiency in {"Sufficient", "Strong"}:
+        return "Evidence-Supported Impact"
+    return "Unsupported Impact"
+
+
+def _record_stage17b_record_impact(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    impacted_outputs: set[str] = set()
+    supported_impacts = 0
+    unsupported_impacts = 0
+
+    for target_type in ("condition", "signal", "finding"):
+        rows = []
+        for target in dependency["groups"][target_type]:
+            impact_classification = _stage17b_impact_classification(
+                target["sufficiency"]
+            )
+            if impact_classification == "Evidence-Supported Impact":
+                supported_impacts += 1
+            else:
+                unsupported_impacts += 1
+            impacted_outputs.update(str(output) for output in target["dependent_outputs"])
+            rows.append(
+                {
+                    "target_label": target["target_label"],
+                    "active_supports": target["active_supports"],
+                    "sufficiency": target["sufficiency"],
+                    "completeness": target["completeness"],
+                    "confidence": target["confidence"],
+                    "impact_classification": impact_classification,
+                    "impacted_outputs": target["dependent_outputs"],
+                }
+            )
+        groups[target_type] = rows
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_impacted_outputs": len(impacted_outputs),
+            "total_conditions_affecting_outputs": len(groups["condition"]),
+            "total_signals_affecting_outputs": len(groups["signal"]),
+            "total_findings_affecting_outputs": len(groups["finding"]),
+            "evidence_supported_impacts": supported_impacts,
+            "unsupported_impacts": unsupported_impacts,
+        },
+        "record": {
+            "reference": dependency["record"]["reference"],
+            "trajectory": dependency["record"]["current_trajectory"],
+            "finding": dependency["record"]["current_finding"],
+            "impacting_conditions": len(groups["condition"]),
+            "impacting_signals": len(groups["signal"]),
+            "impacting_findings": len(groups["finding"]),
+            "evidence_supported_dependencies": supported_impacts,
+            "unsupported_dependencies": unsupported_impacts,
+        },
+    }
+
+
+def _render_stage17b_target_impacts(
+    title: str,
+    target_label: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(title)}</h3>"
+            '<p class="evidence-empty-state">No impact targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            (target_label, target["target_label"]),
+            ("Active Supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+            ("Impact Classification", target["impact_classification"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage17b-target-impact">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Impacted Outputs</h5>"
+            f"{_render_stage17a_dependency_outputs(target['impacted_outputs'])}"
+            "</article>"
+        )
+    return f"<h3>{escape(title)}</h3>{''.join(cards)}"
+
+
+def _render_stage17b_record_impact(impact: dict[str, Any]) -> str:
+    record = impact["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Impacting Conditions", record["impacting_conditions"]),
+        ("Impacting Signals", record["impacting_signals"]),
+        ("Impacting Findings", record["impacting_findings"]),
+        (
+            "Evidence-Supported Dependencies",
+            record["evidence_supported_dependencies"],
+        ),
+        ("Unsupported Dependencies", record["unsupported_dependencies"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17b-record-impact">
+          <h3>Record Impact</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17b_record_impact_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    impact = _record_stage17b_record_impact(evidence_groups, record_outputs)
+    summary = impact["summary"]
+    summary_rows = (
+        ("Total Impacted Outputs", summary["total_impacted_outputs"]),
+        (
+            "Total Conditions Affecting Outputs",
+            summary["total_conditions_affecting_outputs"],
+        ),
+        (
+            "Total Signals Affecting Outputs",
+            summary["total_signals_affecting_outputs"],
+        ),
+        (
+            "Total Findings Affecting Outputs",
+            summary["total_findings_affecting_outputs"],
+        ),
+        ("Evidence-Supported Impacts", summary["evidence_supported_impacts"]),
+        ("Unsupported Impacts", summary["unsupported_impacts"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage17b-record-impact">
+        <h2>Record Impact</h2>
+        <p class="notice">
+          Record impact is derived deterministically from existing dependency
+          mappings, visible record outputs, and existing evidence target states
+          only.
+        </p>
+        <h3>Impact Summary</h3>
+        <table class="stage17b-impact-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17b_target_impacts(
+            "Condition Impact",
+            "Condition",
+            impact["groups"]["condition"],
+        )}
+        {_render_stage17b_target_impacts(
+            "Signal Impact",
+            "Signal",
+            impact["groups"]["signal"],
+        )}
+        {_render_stage17b_target_impacts(
+            "Finding Impact",
+            "Finding",
+            impact["groups"]["finding"],
+        )}
+        {_render_stage17b_record_impact(impact)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -11351,6 +11542,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17b_record_impact = _render_stage17b_record_impact_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -11468,6 +11663,7 @@ def render_admin_record_evidence_page(
             f"{stage16e_evidence_lineage}"
             f"{stage16f_evidence_provenance}"
             f"{stage17a_record_dependency}"
+            f"{stage17b_record_impact}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

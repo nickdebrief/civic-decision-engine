@@ -1386,6 +1386,43 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", after_content)
         self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", after_content)
         self.assertIn("<td>Record Active Supports</td><td>0</td>", after_content)
+        self.assertIn("Record Impact", after_content)
+        self.assertIn("Impact Summary", after_content)
+        self.assertIn("<td>Total Impacted Outputs</td><td>3</td>", after_content)
+        self.assertIn(
+            "<td>Total Conditions Affecting Outputs</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Total Signals Affecting Outputs</td><td>4</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Total Findings Affecting Outputs</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Evidence-Supported Impacts</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Unsupported Impacts</td><td>6</td>", after_content)
+        self.assertIn("<h3>Condition Impact</h3>", after_content)
+        self.assertIn("<h3>Signal Impact</h3>", after_content)
+        self.assertIn("<h3>Finding Impact</h3>", after_content)
+        self.assertIn("<h3>Record Impact</h3>", after_content)
+        self.assertIn(
+            "<td>Impact Classification</td><td>Unsupported Impact</td>",
+            after_content,
+        )
+        self.assertIn("<h5>Impacted Outputs</h5>", after_content)
+        self.assertIn("<td>Trajectory</td><td>Stable</td>", after_content)
+        self.assertIn(
+            "<td>Finding</td><td>Trajectory recorded as Stable</td>",
+            after_content,
+        )
+        self.assertIn("<td>Impacting Conditions</td><td>1</td>", after_content)
+        self.assertIn("<td>Impacting Signals</td><td>4</td>", after_content)
+        self.assertIn("<td>Impacting Findings</td><td>1</td>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -1847,6 +1884,41 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", content)
         self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", content)
         self.assertIn("<td>Record Active Supports</td><td>0</td>", content)
+        self.assertIn("Record Impact", content)
+        self.assertIn("Impact Summary", content)
+        self.assertIn("<td>Total Impacted Outputs</td><td>3</td>", content)
+        self.assertIn(
+            "<td>Total Conditions Affecting Outputs</td><td>5</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Total Signals Affecting Outputs</td><td>2</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Total Findings Affecting Outputs</td><td>1</td>",
+            content,
+        )
+        self.assertIn("<td>Evidence-Supported Impacts</td><td>2</td>", content)
+        self.assertIn("<td>Unsupported Impacts</td><td>6</td>", content)
+        self.assertIn("<h3>Condition Impact</h3>", content)
+        self.assertIn("<h3>Signal Impact</h3>", content)
+        self.assertIn("<h3>Finding Impact</h3>", content)
+        self.assertIn("<h3>Record Impact</h3>", content)
+        self.assertIn(
+            "<td>Impact Classification</td><td>Evidence-Supported Impact</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Impact Classification</td><td>Unsupported Impact</td>",
+            content,
+        )
+        self.assertIn("<h5>Impacted Outputs</h5>", content)
+        self.assertIn("<td>Trajectory</td><td>Stable</td>", content)
+        self.assertIn("<td>Finding</td><td>Finding &lt;requires&gt; review</td>", content)
+        self.assertIn("<td>Impacting Conditions</td><td>5</td>", content)
+        self.assertIn("<td>Impacting Signals</td><td>2</td>", content)
+        self.assertIn("<td>Impacting Findings</td><td>1</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2776,6 +2848,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Evidence Provenance</h2>"),
             governance_content.index("<h2>Record Dependency</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Dependency</h2>"),
+            governance_content.index("<h2>Record Impact</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -2792,6 +2868,16 @@ class AdminSessionTests(unittest.TestCase):
             '<section class="print-admin-section-body archive-analysis-admin-group-print"',
             content,
         )
+        self.assertIn(
+            '<section class="print-admin-section-body evidence-coverage-admin-group-print"',
+            content,
+        )
+        print_governance_content = content[
+            content.index(
+                '<section class="print-admin-section-body evidence-coverage-admin-group-print"'
+            ) :
+        ]
+        self.assertIn("<h2>Record Impact</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
