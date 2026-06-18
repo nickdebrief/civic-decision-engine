@@ -10289,6 +10289,191 @@ def _render_stage16c_evidence_confidence(
         </section>
       </section>"""
 
+def _stage16d_support_relationship_traces(target: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        trace
+        for trace in target.get("relationship_traces") or []
+        if str(trace.get("relationship_type") or "") == "supports"
+    ]
+
+
+def _stage16d_support_attachment_titles(target: dict[str, Any]) -> list[str]:
+    titles: list[str] = []
+    seen_attachment_ids = set()
+    for attachment in target.get("attachments") or []:
+        relationship_counts = attachment.get("relationship_type_counts") or {}
+        if int(relationship_counts.get("supports", 0)) <= 0:
+            continue
+        attachment_id = attachment.get("attachment_id")
+        if attachment_id in seen_attachment_ids:
+            continue
+        seen_attachment_ids.add(attachment_id)
+        titles.append(str(attachment.get("title") or "Untitled attachment"))
+    return titles
+
+
+def _record_stage16d_evidence_traceability(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    justifications = _record_stage16b_evidence_justifications(evidence_groups)
+    confidence = _record_stage16c_evidence_confidence(evidence_groups)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    total_traced_targets = 0
+    total_traced_relationships = 0
+    referenced_attachment_ids = set()
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        targets = []
+        for index, target in enumerate(evidence_groups.get(target_type) or []):
+            support_traces = _stage16d_support_relationship_traces(target)
+            support_attachment_titles = _stage16d_support_attachment_titles(target)
+            relationship_types = sorted(
+                {
+                    str(trace.get("relationship_type") or "")
+                    for trace in support_traces
+                    if trace.get("relationship_type")
+                }
+            )
+            for trace in support_traces:
+                attachment_id = trace.get("attachment_id")
+                if attachment_id not in (None, ""):
+                    referenced_attachment_ids.add(attachment_id)
+
+            sufficiency_target = sufficiency["groups"][target_type]["targets"][index]
+            completeness_target = completeness["groups"][target_type]["targets"][index]
+            justification_target = justifications[target_type][index]
+            confidence_target = confidence["groups"][target_type]["targets"][index]
+            total_traced_targets += 1
+            total_traced_relationships += len(support_traces)
+            targets.append(
+                {
+                    "target_name": target.get("target_label")
+                    or target.get("target_key")
+                    or "",
+                    "active_supports": len(support_traces),
+                    "supporting_attachment_titles": support_attachment_titles,
+                    "relationship_types": relationship_types,
+                    "sufficiency": sufficiency_target["sufficiency"],
+                    "completeness": completeness_target["completeness"],
+                    "confidence": confidence_target["confidence"],
+                    "justification_summary": justification_target["justification"],
+                }
+            )
+        groups[target_type] = targets
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_traced_targets": total_traced_targets,
+            "total_traced_relationships": total_traced_relationships,
+            "total_supporting_attachments_referenced": len(referenced_attachment_ids),
+        },
+    }
+
+
+def _stage16d_traceability_value_list(values: list[str], empty_label: str) -> str:
+    if not values:
+        return empty_label
+    return ", ".join(values)
+
+
+def _render_stage16d_target_traceability(
+    target_type: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(_target_type_display_label(target_type))} Traceability</h3>"
+            '<p class="evidence-empty-state">No targets available.</p>'
+        )
+
+    cards = []
+    for target in targets:
+        rows = (
+            ("Active supports count", target["active_supports"]),
+            (
+                "Supporting attachment titles",
+                _stage16d_traceability_value_list(
+                    target["supporting_attachment_titles"],
+                    "No supporting attachment titles.",
+                ),
+            ),
+            (
+                "Relationship type(s)",
+                _stage16d_traceability_value_list(
+                    target["relationship_types"],
+                    "No active supports relationships.",
+                ),
+            ),
+            ("Sufficiency state", target["sufficiency"]),
+            ("Completeness state", target["completeness"]),
+            ("Confidence state", target["confidence"]),
+            ("Justification summary", target["justification_summary"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage16d-target-traceability">'
+            f"<h4>{escape(str(target['target_name']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "</article>"
+        )
+    return (
+        f"<h3>{escape(_target_type_display_label(target_type))} Traceability</h3>"
+        f"{''.join(cards)}"
+    )
+
+
+def _render_stage16d_evidence_traceability(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> str:
+    traceability = _record_stage16d_evidence_traceability(evidence_groups)
+    summary = traceability["summary"]
+    summary_rows = (
+        ("Total Traced Targets", summary["total_traced_targets"]),
+        ("Total Traced Relationships", summary["total_traced_relationships"]),
+        (
+            "Total Supporting Attachments Referenced",
+            summary["total_supporting_attachments_referenced"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    sections = "".join(
+        _render_stage16d_target_traceability(
+            target_type,
+            traceability["groups"][target_type],
+        )
+        for target_type in ("condition", "signal", "finding", "record")
+    )
+    return f"""
+      <section class="management-section stage16d-evidence-traceability">
+        <h2>Evidence Traceability</h2>
+        <p class="notice">
+          Evidence traceability is derived deterministically from active supports
+          relationships, linked attachment metadata, sufficiency, completeness,
+          justification, and confidence outputs only.
+        </p>
+        <table class="stage16d-traceability-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        <section class="stage16d-target-traceability-list">
+          {sections}
+        </section>
+      </section>"""
+
 
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
@@ -10400,6 +10585,9 @@ def render_admin_record_evidence_page(
         evidence_groups
     )
     stage16c_evidence_confidence = _render_stage16c_evidence_confidence(
+        evidence_groups
+    )
+    stage16d_evidence_traceability = _render_stage16d_evidence_traceability(
         evidence_groups
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
@@ -10515,6 +10703,7 @@ def render_admin_record_evidence_page(
             f"{stage16a_evidence_standards}"
             f"{stage16b_evidence_justification}"
             f"{stage16c_evidence_confidence}"
+            f"{stage16d_evidence_traceability}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
