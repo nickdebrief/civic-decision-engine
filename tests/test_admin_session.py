@@ -1177,6 +1177,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Evidence Confidence", before_content)
         self.assertIn("Evidence Traceability", before_content)
         self.assertIn("Evidence Lineage", before_content)
+        self.assertIn("Evidence Provenance", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1322,6 +1323,32 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("supports relationship created by admin at", after_content)
         self.assertIn("— active — Attachment", after_content)
         self.assertIn("No recorded evidence lineage events.", after_content)
+        self.assertIn("Evidence Provenance", after_content)
+        self.assertIn("Provenance Summary", after_content)
+        self.assertIn("<td>Total Attachments Referenced</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Total Active Support Relationships</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Total Provenance Records Available</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn("<td>Attachments With Provenance</td><td>1</td>", after_content)
+        self.assertIn("<td>Attachments Missing Provenance</td><td>0</td>", after_content)
+        self.assertIn("<h3>Test evidence — escalation without response</h3>", after_content)
+        self.assertIn("<td>Attachment ID</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Attachment Title</td><td>Test evidence — escalation without response</td>",
+            after_content,
+        )
+        self.assertIn("<td>Current Status</td><td>active</td>", after_content)
+        self.assertIn("<td>Active Relationships</td><td>1</td>", after_content)
+        self.assertIn("<td>Supported Targets</td><td>1</td>", after_content)
+        self.assertIn("<li>Escalation Without Response</li>", after_content)
+        self.assertIn("Relationship Created At", after_content)
+        self.assertIn("<td>supports</td>", after_content)
+        self.assertIn("<td>active</td>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -1716,6 +1743,41 @@ class AdminSessionTests(unittest.TestCase):
         lineage_content = content[content.index("<h2>Evidence Lineage</h2>") :]
         self.assertNotIn("Deleted linked evidence", lineage_content)
         self.assertNotIn("context_for", lineage_content)
+        self.assertIn("Evidence Provenance", content)
+        self.assertIn("Provenance Summary", content)
+        self.assertIn("<td>Total Attachments Referenced</td><td>2</td>", content)
+        self.assertIn(
+            "<td>Total Active Support Relationships</td><td>4</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Total Provenance Records Available</td><td>2</td>",
+            content,
+        )
+        self.assertIn("<td>Attachments With Provenance</td><td>2</td>", content)
+        self.assertIn("<td>Attachments Missing Provenance</td><td>0</td>", content)
+        self.assertIn("<h3>Condition evidence</h3>", content)
+        self.assertIn("<h3>Signal and finding evidence</h3>", content)
+        self.assertIn("<td>Attachment ID</td><td>1</td>", content)
+        self.assertIn("<td>Attachment Title</td><td>Condition evidence</td>", content)
+        self.assertIn("<td>Source Label</td><td>Attachment source</td>", content)
+        self.assertIn("<td>Created At</td><td>2026-06-04</td>", content)
+        self.assertIn("<td>Uploaded At</td><td>2026-06-04T12:00:00Z</td>", content)
+        self.assertIn("<td>Current Status</td><td>active</td>", content)
+        self.assertIn("<td>Active Relationships</td><td>3</td>", content)
+        self.assertIn("<td>Supported Targets</td><td>2</td>", content)
+        self.assertIn("<li>Institutional Delay</li>", content)
+        self.assertIn("<li>Missing Response</li>", content)
+        self.assertIn("Relationship Created At", content)
+        self.assertIn("Relationship Type", content)
+        self.assertIn("<td>2026-06-04T13:30:00Z</td>", content)
+        self.assertIn("<td>supports</td>", content)
+        self.assertIn("<td>active</td>", content)
+        provenance_content = content[
+            content.index("<h2>Evidence Provenance</h2>") :
+        ]
+        self.assertNotIn("Deleted linked evidence", provenance_content)
+        self.assertNotIn("context_for", provenance_content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2636,6 +2698,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Traceability</h2>"),
             governance_content.index("<h2>Evidence Lineage</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Lineage</h2>"),
+            governance_content.index("<h2>Evidence Provenance</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
