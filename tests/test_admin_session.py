@@ -1175,6 +1175,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Current deterministic standard", before_content)
         self.assertIn("Evidence Justification", before_content)
         self.assertIn("Evidence Confidence", before_content)
+        self.assertIn("Evidence Traceability", before_content)
         self.assertIn("<td>Conditions Supported</td><td>1 / 1</td>", after_content)
         self.assertIn("<td>Overall Coverage</td><td>Partial</td>", after_content)
         self.assertIn("<td>Conditions Sufficiency</td><td>Partial</td>", after_content)
@@ -1261,6 +1262,35 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Reason</td><td>Target has Unsupported sufficiency and is not Complete.</td>",
+            after_content,
+        )
+        self.assertIn("Evidence Traceability", after_content)
+        self.assertIn("<td>Total Traced Targets</td><td>7</td>", after_content)
+        self.assertIn("<td>Total Traced Relationships</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Total Supporting Attachments Referenced</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Condition Traceability</h3>", after_content)
+        self.assertIn("<h3>Signal Traceability</h3>", after_content)
+        self.assertIn("<h3>Finding Traceability</h3>", after_content)
+        self.assertIn("<h3>Record Traceability</h3>", after_content)
+        self.assertIn("<td>Active supports count</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Supporting attachment titles</td><td>Test evidence — escalation without response</td>",
+            after_content,
+        )
+        self.assertIn("<td>Relationship type(s)</td><td>supports</td>", after_content)
+        self.assertIn("<td>Sufficiency state</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Completeness state</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Confidence state</td><td>Limited Confidence</td>", after_content)
+        self.assertIn("<td>Active supports count</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Supporting attachment titles</td><td>No supporting attachment titles.</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Relationship type(s)</td><td>No active supports relationships.</td>",
             after_content,
         )
         self.assertIn(
@@ -1562,6 +1592,53 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reason</td><td>Target has Unsupported sufficiency and is not Complete.</td>",
             content,
         )
+        self.assertIn("Evidence Traceability", content)
+        self.assertIn("<td>Total Traced Targets</td><td>9</td>", content)
+        self.assertIn("<td>Total Traced Relationships</td><td>4</td>", content)
+        self.assertIn(
+            "<td>Total Supporting Attachments Referenced</td><td>2</td>",
+            content,
+        )
+        self.assertIn("<h3>Condition Traceability</h3>", content)
+        self.assertIn("<h3>Signal Traceability</h3>", content)
+        self.assertIn("<h3>Finding Traceability</h3>", content)
+        self.assertIn("<h3>Record Traceability</h3>", content)
+        self.assertIn("<h4>Institutional Delay</h4>", content)
+        self.assertIn("<td>Active supports count</td><td>2</td>", content)
+        self.assertIn(
+            "<td>Supporting attachment titles</td><td>Condition evidence</td>",
+            content,
+        )
+        self.assertIn("<td>Relationship type(s)</td><td>supports</td>", content)
+        self.assertIn("<td>Sufficiency state</td><td>Sufficient</td>", content)
+        self.assertIn("<td>Completeness state</td><td>Complete</td>", content)
+        self.assertIn("<td>Confidence state</td><td>High Confidence</td>", content)
+        self.assertIn(
+            "<td>Justification summary</td><td>This target is classified as Sufficient because it has 2 active supports. It is Complete because completion requires Sufficient or Strong sufficiency. No additional supporting attachments are required.</td>",
+            content,
+        )
+        self.assertIn("<h4>Procedural Deflection</h4>", content)
+        self.assertIn("<td>Active supports count</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Supporting attachment titles</td><td>No supporting attachment titles.</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Relationship type(s)</td><td>No active supports relationships.</td>",
+            content,
+        )
+        self.assertIn("<td>Sufficiency state</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Completeness state</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Confidence state</td><td>Low Confidence</td>", content)
+        self.assertIn(
+            "<td>Supporting attachment titles</td><td>Condition evidence, Signal and finding evidence</td>",
+            content,
+        )
+        traceability_content = content[
+            content.index("<h2>Evidence Traceability</h2>") :
+        ]
+        self.assertNotIn("Deleted linked evidence", traceability_content)
+        self.assertNotIn("context_for", traceability_content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2474,6 +2551,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Justification</h2>"),
             governance_content.index("<h2>Evidence Confidence</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Confidence</h2>"),
+            governance_content.index("<h2>Evidence Traceability</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
