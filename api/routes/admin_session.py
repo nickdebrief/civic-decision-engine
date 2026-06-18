@@ -10289,7 +10289,6 @@ def _render_stage16c_evidence_confidence(
         </section>
       </section>"""
 
-
 def _stage16d_support_relationship_traces(target: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         trace
