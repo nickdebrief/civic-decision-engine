@@ -410,6 +410,28 @@ def _record_relationship_target_options(record: sqlite3.Row) -> dict[str, list[s
     }
 
 
+def _record_outputs_from_record(record: sqlite3.Row) -> dict[str, str]:
+    keys = set(record.keys())
+    return {
+        "reference": str(record["reference"]) if "reference" in keys else "",
+        "trajectory": (
+            str(record["trajectory"]).strip()
+            if "trajectory" in keys and record["trajectory"]
+            else ""
+        ),
+        "finding": (
+            str(record["finding"]).strip()
+            if "finding" in keys and record["finding"]
+            else ""
+        ),
+        "system_state": (
+            str(record["system_state"]).strip()
+            if "system_state" in keys and record["system_state"]
+            else ""
+        ),
+    }
+
+
 def _resolve_record_target_key(
     record: sqlite3.Row, target_type: str, target_label: str
 ) -> str:
@@ -10971,6 +10993,240 @@ def _render_stage16f_evidence_provenance(
       </section>"""
 
 
+def _stage17a_output_value(record_outputs: dict[str, Any], key: str) -> str:
+    value = record_outputs.get(key)
+    if value in (None, ""):
+        return "Not recorded"
+    return str(value)
+
+
+def _stage17a_dependent_outputs(
+    record_outputs: dict[str, Any],
+    *,
+    include_finding: bool = True,
+) -> list[str]:
+    outputs = [
+        _stage17a_output_value(record_outputs, "reference"),
+        f"Trajectory: {_stage17a_output_value(record_outputs, 'trajectory')}",
+    ]
+    if include_finding:
+        outputs.append(f"Finding: {_stage17a_output_value(record_outputs, 'finding')}")
+    return outputs
+
+
+def _record_stage17a_record_dependency(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    confidence = _record_stage16c_evidence_confidence(evidence_groups)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    total_dependencies = 0
+    supported_dependencies = 0
+
+    for target_type in ("condition", "signal", "finding", "record"):
+        rows = []
+        for index, target in enumerate(evidence_groups.get(target_type) or []):
+            active_supports = _stage15d_support_relationship_count(target)
+            total_dependencies += 1
+            if active_supports > 0:
+                supported_dependencies += 1
+            rows.append(
+                {
+                    "target_label": target.get("target_label")
+                    or target.get("target_key")
+                    or "",
+                    "active_supports": active_supports,
+                    "sufficiency": sufficiency["groups"][target_type]["targets"][
+                        index
+                    ]["sufficiency"],
+                    "completeness": completeness["groups"][target_type]["targets"][
+                        index
+                    ]["completeness"],
+                    "confidence": confidence["groups"][target_type]["targets"][index][
+                        "confidence"
+                    ],
+                    "dependent_outputs": _stage17a_dependent_outputs(
+                        record_outputs,
+                        include_finding=(target_type != "finding"),
+                    ),
+                }
+            )
+        groups[target_type] = rows
+
+    record_outputs_display = [
+        _stage17a_output_value(record_outputs, "reference"),
+        f"Trajectory: {_stage17a_output_value(record_outputs, 'trajectory')}",
+        f"Finding: {_stage17a_output_value(record_outputs, 'finding')}",
+    ]
+    if _stage17a_output_value(record_outputs, "system_state") != "Not recorded":
+        record_outputs_display.append(
+            f"System state: {_stage17a_output_value(record_outputs, 'system_state')}"
+        )
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_conditions": len(groups["condition"]),
+            "total_signals": len(groups["signal"]),
+            "total_findings": len(groups["finding"]),
+            "total_record_outputs": len(record_outputs_display),
+            "total_dependency_relationships": total_dependencies,
+            "evidence_supported_dependencies": supported_dependencies,
+            "unsupported_dependencies": max(total_dependencies - supported_dependencies, 0),
+        },
+        "record": {
+            "reference": _stage17a_output_value(record_outputs, "reference"),
+            "dependent_conditions": len(groups["condition"]),
+            "dependent_signals": len(groups["signal"]),
+            "dependent_findings": len(groups["finding"]),
+            "current_trajectory": _stage17a_output_value(record_outputs, "trajectory"),
+            "current_finding": _stage17a_output_value(record_outputs, "finding"),
+            "record_sufficiency": (
+                groups["record"][0]["sufficiency"] if groups["record"] else "Unsupported"
+            ),
+            "record_completeness": (
+                groups["record"][0]["completeness"] if groups["record"] else "Incomplete"
+            ),
+            "record_confidence": (
+                groups["record"][0]["confidence"] if groups["record"] else "Low Confidence"
+            ),
+            "record_active_supports": (
+                groups["record"][0]["active_supports"] if groups["record"] else 0
+            ),
+        },
+    }
+
+
+def _render_stage17a_dependency_outputs(outputs: list[str]) -> str:
+    items = "".join(f"<li>{escape(str(output))}</li>" for output in outputs)
+    return f"<ul>{items}</ul>"
+
+
+def _render_stage17a_target_dependencies(
+    title: str,
+    target_label: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(title)}</h3>"
+            '<p class="evidence-empty-state">No dependency targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            (target_label, target["target_label"]),
+            ("Active Supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage17a-target-dependency">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Dependent Outputs</h5>"
+            f"{_render_stage17a_dependency_outputs(target['dependent_outputs'])}"
+            "</article>"
+        )
+    return f"<h3>{escape(title)}</h3>{''.join(cards)}"
+
+
+def _render_stage17a_record_dependency(
+    dependency: dict[str, Any],
+) -> str:
+    record = dependency["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Dependent Conditions", record["dependent_conditions"]),
+        ("Dependent Signals", record["dependent_signals"]),
+        ("Dependent Findings", record["dependent_findings"]),
+        ("Current Trajectory", record["current_trajectory"]),
+        ("Current Finding", record["current_finding"]),
+        ("Record Sufficiency", record["record_sufficiency"]),
+        ("Record Completeness", record["record_completeness"]),
+        ("Record Confidence", record["record_confidence"]),
+        ("Record Active Supports", record["record_active_supports"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17a-record-dependencies">
+          <h3>Record Dependencies</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17a_record_dependency_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    summary = dependency["summary"]
+    summary_rows = (
+        ("Total Conditions", summary["total_conditions"]),
+        ("Total Signals", summary["total_signals"]),
+        ("Total Findings", summary["total_findings"]),
+        ("Total Record Outputs", summary["total_record_outputs"]),
+        ("Total Dependency Relationships", summary["total_dependency_relationships"]),
+        (
+            "Evidence-Supported Dependencies",
+            summary["evidence_supported_dependencies"],
+        ),
+        ("Unsupported Dependencies", summary["unsupported_dependencies"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage17a-record-dependency">
+        <h2>Record Dependency</h2>
+        <p class="notice">
+          Record dependency is derived deterministically from existing record
+          structure, visible record outputs, and existing evidence target states
+          only.
+        </p>
+        <h3>Dependency Summary</h3>
+        <table class="stage17a-dependency-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17a_target_dependencies(
+            "Condition Dependencies",
+            "Condition",
+            dependency["groups"]["condition"],
+        )}
+        {_render_stage17a_target_dependencies(
+            "Signal Dependencies",
+            "Signal",
+            dependency["groups"]["signal"],
+        )}
+        {_render_stage17a_target_dependencies(
+            "Finding Dependencies",
+            "Finding",
+            dependency["groups"]["finding"],
+        )}
+        {_render_stage17a_record_dependency(dependency)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -11064,6 +11320,7 @@ def render_admin_record_evidence_page(
     reference: str,
     record_version: int,
     evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
@@ -11089,6 +11346,10 @@ def render_admin_record_evidence_page(
     stage16e_evidence_lineage = _render_stage16e_evidence_lineage(evidence_groups)
     stage16f_evidence_provenance = _render_stage16f_evidence_provenance(
         evidence_groups
+    )
+    stage17a_record_dependency = _render_stage17a_record_dependency_section(
+        evidence_groups,
+        record_outputs,
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
@@ -11206,6 +11467,7 @@ def render_admin_record_evidence_page(
             f"{stage16d_evidence_traceability}"
             f"{stage16e_evidence_lineage}"
             f"{stage16f_evidence_provenance}"
+            f"{stage17a_record_dependency}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -12642,6 +12904,22 @@ def _validate_relationship_payload(payload: dict[str, Any]) -> tuple[str, str, s
         raise _http_error(400, "relationship_payload_invalid") from exc
 
 
+def _record_table_columns(conn: sqlite3.Connection) -> set[str]:
+    return {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(records)").fetchall()
+    }
+
+
+def _admin_record_select_fields(conn: sqlite3.Connection) -> str:
+    columns = _record_table_columns(conn)
+    fields = ["reference", "version", "conditions_json", "signals_json", "finding"]
+    for optional_field in ("trajectory", "system_state"):
+        if optional_field in columns:
+            fields.append(optional_field)
+    return ", ".join(fields)
+
+
 def _relationship_response(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "relationship_id": row["id"],
@@ -13351,7 +13629,7 @@ def admin_record_attachments_page(reference: str, request: Request):
     conn = get_db()
     try:
         record = conn.execute(
-            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
+            f"SELECT {_admin_record_select_fields(conn)} FROM records "
             "WHERE reference = ? AND is_latest = 1 "
             "ORDER BY version DESC LIMIT 1",
             (reference,),
@@ -13388,7 +13666,7 @@ def admin_record_evidence_page(reference: str, request: Request):
     conn = get_db()
     try:
         record = conn.execute(
-            "SELECT reference, version, conditions_json, signals_json, finding FROM records "
+            f"SELECT {_admin_record_select_fields(conn)} FROM records "
             "WHERE reference = ? AND is_latest = 1 "
             "ORDER BY version DESC LIMIT 1",
             (reference,),
@@ -13414,6 +13692,7 @@ def admin_record_evidence_page(reference: str, request: Request):
                 reference=record["reference"],
                 record_version=record["version"],
                 evidence_groups=_record_evidence_groups(record, attachments),
+                record_outputs=_record_outputs_from_record(record),
             )
         )
     finally:

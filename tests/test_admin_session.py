@@ -269,6 +269,8 @@ class AdminSessionTests(unittest.TestCase):
                 reference TEXT NOT NULL,
                 version INTEGER NOT NULL DEFAULT 1,
                 verification_hash TEXT NOT NULL,
+                trajectory TEXT,
+                system_state TEXT,
                 conditions_json TEXT,
                 signals_json TEXT,
                 finding TEXT,
@@ -281,13 +283,16 @@ class AdminSessionTests(unittest.TestCase):
         conn.execute(
             """
             INSERT INTO records (
-                reference, version, verification_hash, conditions_json,
-                signals_json, finding, source_narrative, report_json, is_latest
+                reference, version, verification_hash, trajectory, system_state,
+                conditions_json, signals_json, finding, source_narrative,
+                report_json, is_latest
             )
-            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, ?, ?, ?, ?, ?, 1)
+            VALUES ('Strike-OT-20260604-ADMIN', 1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
             """,
             (
                 "c" * 64,
+                "Stable",
+                "Persistent resistance without adaptation",
                 json.dumps(
                     [
                         "INSTITUTIONAL_DELAY",
@@ -1349,6 +1354,38 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Relationship Created At", after_content)
         self.assertIn("<td>supports</td>", after_content)
         self.assertIn("<td>active</td>", after_content)
+        self.assertIn("Record Dependency", after_content)
+        self.assertIn("Dependency Summary", after_content)
+        self.assertIn("<td>Total Conditions</td><td>1</td>", after_content)
+        self.assertIn("<td>Total Signals</td><td>4</td>", after_content)
+        self.assertIn("<td>Total Findings</td><td>1</td>", after_content)
+        self.assertIn("<td>Total Record Outputs</td><td>4</td>", after_content)
+        self.assertIn("<td>Total Dependency Relationships</td><td>7</td>", after_content)
+        self.assertIn("<td>Evidence-Supported Dependencies</td><td>1</td>", after_content)
+        self.assertIn("<td>Unsupported Dependencies</td><td>6</td>", after_content)
+        self.assertIn("<h3>Condition Dependencies</h3>", after_content)
+        self.assertIn("<h3>Signal Dependencies</h3>", after_content)
+        self.assertIn("<h3>Finding Dependencies</h3>", after_content)
+        self.assertIn("<h3>Record Dependencies</h3>", after_content)
+        self.assertIn("<td>Condition</td><td>Escalation Without Response</td>", after_content)
+        self.assertIn("<td>Active Supports</td><td>1</td>", after_content)
+        self.assertIn("<td>Sufficiency</td><td>Partial</td>", after_content)
+        self.assertIn("<td>Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Confidence</td><td>Limited Confidence</td>", after_content)
+        self.assertIn("<h5>Dependent Outputs</h5>", after_content)
+        self.assertIn("<li>Strike-LA-20260710-004</li>", after_content)
+        self.assertIn("<li>Trajectory: Stable</li>", after_content)
+        self.assertIn("<li>Finding: Trajectory recorded as Stable</li>", after_content)
+        self.assertIn("<td>Record Reference</td><td>Strike-LA-20260710-004</td>", after_content)
+        self.assertIn("<td>Dependent Conditions</td><td>1</td>", after_content)
+        self.assertIn("<td>Dependent Signals</td><td>4</td>", after_content)
+        self.assertIn("<td>Dependent Findings</td><td>1</td>", after_content)
+        self.assertIn("<td>Current Trajectory</td><td>Stable</td>", after_content)
+        self.assertIn("<td>Current Finding</td><td>Trajectory recorded as Stable</td>", after_content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", after_content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", after_content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn("<td>Record Active Supports</td><td>0</td>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -1778,6 +1815,38 @@ class AdminSessionTests(unittest.TestCase):
         ]
         self.assertNotIn("Deleted linked evidence", provenance_content)
         self.assertNotIn("context_for", provenance_content)
+        self.assertIn("Record Dependency", content)
+        self.assertIn("Dependency Summary", content)
+        self.assertIn("<td>Total Conditions</td><td>5</td>", content)
+        self.assertIn("<td>Total Signals</td><td>2</td>", content)
+        self.assertIn("<td>Total Findings</td><td>1</td>", content)
+        self.assertIn("<td>Total Record Outputs</td><td>4</td>", content)
+        self.assertIn("<td>Total Dependency Relationships</td><td>9</td>", content)
+        self.assertIn("<td>Evidence-Supported Dependencies</td><td>2</td>", content)
+        self.assertIn("<td>Unsupported Dependencies</td><td>7</td>", content)
+        self.assertIn("<h3>Condition Dependencies</h3>", content)
+        self.assertIn("<h3>Signal Dependencies</h3>", content)
+        self.assertIn("<h3>Finding Dependencies</h3>", content)
+        self.assertIn("<h3>Record Dependencies</h3>", content)
+        self.assertIn("<td>Condition</td><td>Institutional Delay</td>", content)
+        self.assertIn("<td>Active Supports</td><td>2</td>", content)
+        self.assertIn("<td>Sufficiency</td><td>Sufficient</td>", content)
+        self.assertIn("<td>Completeness</td><td>Complete</td>", content)
+        self.assertIn("<td>Confidence</td><td>High Confidence</td>", content)
+        self.assertIn("<h5>Dependent Outputs</h5>", content)
+        self.assertIn("<li>Strike-OT-20260604-ADMIN</li>", content)
+        self.assertIn("<li>Trajectory: Stable</li>", content)
+        self.assertIn("<li>Finding: Finding &lt;requires&gt; review</li>", content)
+        self.assertIn("<td>Record Reference</td><td>Strike-OT-20260604-ADMIN</td>", content)
+        self.assertIn("<td>Dependent Conditions</td><td>5</td>", content)
+        self.assertIn("<td>Dependent Signals</td><td>2</td>", content)
+        self.assertIn("<td>Dependent Findings</td><td>1</td>", content)
+        self.assertIn("<td>Current Trajectory</td><td>Stable</td>", content)
+        self.assertIn("<td>Current Finding</td><td>Finding &lt;requires&gt; review</td>", content)
+        self.assertIn("<td>Record Sufficiency</td><td>Unsupported</td>", content)
+        self.assertIn("<td>Record Completeness</td><td>Incomplete</td>", content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", content)
+        self.assertIn("<td>Record Active Supports</td><td>0</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2702,6 +2771,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             governance_content.index("<h2>Evidence Lineage</h2>"),
             governance_content.index("<h2>Evidence Provenance</h2>"),
+        )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Provenance</h2>"),
+            governance_content.index("<h2>Record Dependency</h2>"),
         )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
