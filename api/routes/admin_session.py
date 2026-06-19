@@ -11627,6 +11627,243 @@ def _render_stage17c_record_stability_section(
       </section>"""
 
 
+def _stage17d_reproducibility_classification(
+    sufficiency: str,
+    completeness: str,
+    confidence: str,
+    stability: str,
+) -> str:
+    if (
+        sufficiency in {"Sufficient", "Strong"}
+        and completeness == "Complete"
+        and confidence != "Low Confidence"
+        and stability == "Stable"
+    ):
+        return "Reproducible"
+    if (
+        sufficiency == "Partial"
+        and confidence == "Limited Confidence"
+        and stability == "Limited Stability"
+    ):
+        return "Limited Reproducibility"
+    return "Non-Reproducible"
+
+
+def _record_stage17d_record_reproducibility(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    stability = _record_stage17c_record_stability(evidence_groups, record_outputs)
+    dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    reproducible_targets = 0
+    limited_targets = 0
+    non_reproducible_targets = 0
+    evidence_supported_targets = 0
+    unsupported_targets = 0
+
+    for target_type in ("condition", "signal", "finding"):
+        rows = []
+        for target in stability["groups"][target_type]:
+            reproducibility = _stage17d_reproducibility_classification(
+                target["sufficiency"],
+                target["completeness"],
+                target["confidence"],
+                target["stability_classification"],
+            )
+            if reproducibility == "Reproducible":
+                reproducible_targets += 1
+            elif reproducibility == "Limited Reproducibility":
+                limited_targets += 1
+            else:
+                non_reproducible_targets += 1
+            if target["sufficiency"] in {"Sufficient", "Strong"}:
+                evidence_supported_targets += 1
+            else:
+                unsupported_targets += 1
+            rows.append(
+                {
+                    "target_label": target["target_label"],
+                    "active_supports": target["active_supports"],
+                    "sufficiency": target["sufficiency"],
+                    "completeness": target["completeness"],
+                    "confidence": target["confidence"],
+                    "stability": target["stability_classification"],
+                    "reproducibility_classification": reproducibility,
+                    "affected_outputs": target["affected_outputs"],
+                }
+            )
+        groups[target_type] = rows
+
+    record = dependency["record"]
+    record_stability = stability["record"]["record_stability_classification"]
+    record_reproducibility = _stage17d_reproducibility_classification(
+        record["record_sufficiency"],
+        record["record_completeness"],
+        record["record_confidence"],
+        record_stability,
+    )
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_reproducibility_targets": (
+                len(groups["condition"])
+                + len(groups["signal"])
+                + len(groups["finding"])
+            ),
+            "reproducible_targets": reproducible_targets,
+            "limited_reproducibility_targets": limited_targets,
+            "non_reproducible_targets": non_reproducible_targets,
+            "evidence_supported_targets": evidence_supported_targets,
+            "unsupported_targets": unsupported_targets,
+        },
+        "record": {
+            "reference": record["reference"],
+            "trajectory": record["current_trajectory"],
+            "finding": record["current_finding"],
+            "supporting_conditions": record["dependent_conditions"],
+            "supporting_signals": record["dependent_signals"],
+            "supporting_findings": record["dependent_findings"],
+            "record_confidence": record["record_confidence"],
+            "record_stability": record_stability,
+            "record_reproducibility_classification": record_reproducibility,
+        },
+    }
+
+
+def _render_stage17d_target_reproducibility(
+    title: str,
+    target_label: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(title)}</h3>"
+            '<p class="evidence-empty-state">No reproducibility targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            (target_label, target["target_label"]),
+            ("Active Supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+            ("Stability", target["stability"]),
+            (
+                "Reproducibility Classification",
+                target["reproducibility_classification"],
+            ),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage17d-target-reproducibility">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Affected Outputs</h5>"
+            f"{_render_stage17a_dependency_outputs(target['affected_outputs'])}"
+            "</article>"
+        )
+    return f"<h3>{escape(title)}</h3>{''.join(cards)}"
+
+
+def _render_stage17d_record_reproducibility(
+    reproducibility: dict[str, Any],
+) -> str:
+    record = reproducibility["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Supporting Conditions", record["supporting_conditions"]),
+        ("Supporting Signals", record["supporting_signals"]),
+        ("Supporting Findings", record["supporting_findings"]),
+        ("Record Confidence", record["record_confidence"]),
+        ("Record Stability", record["record_stability"]),
+        (
+            "Record Reproducibility Classification",
+            record["record_reproducibility_classification"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17d-record-reproducibility">
+          <h3>Record Reproducibility</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17d_record_reproducibility_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    reproducibility = _record_stage17d_record_reproducibility(
+        evidence_groups,
+        record_outputs,
+    )
+    summary = reproducibility["summary"]
+    summary_rows = (
+        ("Total Reproducibility Targets", summary["total_reproducibility_targets"]),
+        ("Reproducible Targets", summary["reproducible_targets"]),
+        (
+            "Limited Reproducibility Targets",
+            summary["limited_reproducibility_targets"],
+        ),
+        ("Non-Reproducible Targets", summary["non_reproducible_targets"]),
+        ("Evidence-Supported Targets", summary["evidence_supported_targets"]),
+        ("Unsupported Targets", summary["unsupported_targets"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage17d-record-reproducibility">
+        <h2>Record Reproducibility</h2>
+        <p class="notice">
+          Record reproducibility is derived deterministically from existing
+          record structure, evidence relationships, governance outputs,
+          dependency outputs, impact outputs, and stability outputs only.
+        </p>
+        <h3>Reproducibility Summary</h3>
+        <table class="stage17d-reproducibility-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17d_target_reproducibility(
+            "Condition Reproducibility",
+            "Condition",
+            reproducibility["groups"]["condition"],
+        )}
+        {_render_stage17d_target_reproducibility(
+            "Signal Reproducibility",
+            "Signal",
+            reproducibility["groups"]["signal"],
+        )}
+        {_render_stage17d_target_reproducibility(
+            "Finding Reproducibility",
+            "Finding",
+            reproducibility["groups"]["finding"],
+        )}
+        {_render_stage17d_record_reproducibility(reproducibility)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -11759,6 +11996,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17d_record_reproducibility = _render_stage17d_record_reproducibility_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -11878,6 +12119,7 @@ def render_admin_record_evidence_page(
             f"{stage17a_record_dependency}"
             f"{stage17b_record_impact}"
             f"{stage17c_record_stability}"
+            f"{stage17d_record_reproducibility}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
