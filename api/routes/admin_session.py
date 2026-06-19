@@ -12114,6 +12114,342 @@ def _render_stage17e_record_integrity_section(
       </section>"""
 
 
+def _stage17f_layer_supported(classification: str) -> bool:
+    return classification not in {
+        "Unsupported",
+        "Unsupported Impact",
+        "Unstable",
+        "Non-Reproducible",
+        "Compromised Integrity",
+    }
+
+
+def _stage17f_governance_classification(
+    dependency_classification: str,
+    impact_classification: str,
+    stability_classification: str,
+    reproducibility_classification: str,
+    integrity_classification: str,
+) -> str:
+    if (
+        dependency_classification == "Unsupported"
+        or impact_classification == "Unsupported Impact"
+        or stability_classification == "Unstable"
+        or reproducibility_classification == "Non-Reproducible"
+        or integrity_classification == "Compromised Integrity"
+    ):
+        return "Governance Gap"
+    if (
+        dependency_classification == "Supported"
+        and impact_classification == "Evidence-Supported Impact"
+        and stability_classification == "Stable"
+        and reproducibility_classification == "Reproducible"
+        and integrity_classification == "High Integrity"
+    ):
+        return "Governed"
+    return "Partially Governed"
+
+
+def _stage17f_stability_layer_classification(summary: dict[str, Any]) -> str:
+    if summary["unstable_targets"] > 0:
+        return "Unstable"
+    if summary["limited_stability_targets"] > 0:
+        return "Limited Stability"
+    return "Stable"
+
+
+def _stage17f_reproducibility_layer_classification(summary: dict[str, Any]) -> str:
+    if summary["non_reproducible_targets"] > 0:
+        return "Non-Reproducible"
+    if summary["limited_reproducibility_targets"] > 0:
+        return "Limited Reproducibility"
+    return "Reproducible"
+
+
+def _stage17f_integrity_layer_classification(summary: dict[str, Any]) -> str:
+    if summary["compromised_integrity_targets"] > 0:
+        return "Compromised Integrity"
+    if summary["limited_integrity_targets"] > 0:
+        return "Limited Integrity"
+    return "High Integrity"
+
+
+def _record_stage17f_governance_summary(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    impact = _record_stage17b_record_impact(evidence_groups, record_outputs)
+    stability = _record_stage17c_record_stability(evidence_groups, record_outputs)
+    reproducibility = _record_stage17d_record_reproducibility(
+        evidence_groups,
+        record_outputs,
+    )
+    integrity = _record_stage17e_record_integrity(evidence_groups, record_outputs)
+
+    dependency_summary = dependency["summary"]
+    impact_summary = impact["summary"]
+    stability_summary = stability["summary"]
+    reproducibility_summary = reproducibility["summary"]
+    integrity_summary = integrity["summary"]
+
+    dependency_classification = (
+        "Supported"
+        if dependency_summary["unsupported_dependencies"] == 0
+        else "Unsupported"
+    )
+    impact_classification = (
+        "Evidence-Supported Impact"
+        if impact_summary["unsupported_impacts"] == 0
+        else "Unsupported Impact"
+    )
+    stability_classification = _stage17f_stability_layer_classification(
+        stability_summary
+    )
+    reproducibility_classification = (
+        _stage17f_reproducibility_layer_classification(reproducibility_summary)
+    )
+    integrity_classification = _stage17f_integrity_layer_classification(
+        integrity_summary
+    )
+    governance_classification = _stage17f_governance_classification(
+        dependency_classification,
+        impact_classification,
+        stability_classification,
+        reproducibility_classification,
+        integrity_classification,
+    )
+    layer_classifications = (
+        dependency_classification,
+        impact_classification,
+        stability_classification,
+        reproducibility_classification,
+        integrity_classification,
+    )
+    supported_layers = sum(
+        1
+        for classification in layer_classifications
+        if _stage17f_layer_supported(classification)
+    )
+    total_layers = len(layer_classifications)
+
+    return {
+        "summary": {
+            "total_governance_layers": total_layers,
+            "supported_governance_layers": supported_layers,
+            "unsupported_governance_layers": total_layers - supported_layers,
+            "dependency_classification": dependency_classification,
+            "impact_classification": impact_classification,
+            "stability_classification": stability_classification,
+            "reproducibility_classification": reproducibility_classification,
+            "integrity_classification": integrity_classification,
+            "governance_classification": governance_classification,
+        },
+        "reviews": {
+            "dependency": {
+                "classification": dependency_classification,
+                "evidence_supported": dependency_summary[
+                    "evidence_supported_dependencies"
+                ],
+                "unsupported": dependency_summary["unsupported_dependencies"],
+            },
+            "impact": {
+                "classification": impact_classification,
+                "evidence_supported": impact_summary["evidence_supported_impacts"],
+                "unsupported": impact_summary["unsupported_impacts"],
+            },
+            "stability": {
+                "classification": stability_classification,
+                "stable": stability_summary["stable_targets"],
+                "limited_stability": stability_summary[
+                    "limited_stability_targets"
+                ],
+                "unstable": stability_summary["unstable_targets"],
+            },
+            "reproducibility": {
+                "classification": reproducibility_classification,
+                "reproducible": reproducibility_summary["reproducible_targets"],
+                "limited_reproducibility": reproducibility_summary[
+                    "limited_reproducibility_targets"
+                ],
+                "non_reproducible": reproducibility_summary[
+                    "non_reproducible_targets"
+                ],
+            },
+            "integrity": {
+                "classification": integrity_classification,
+                "high_integrity": integrity_summary["high_integrity_targets"],
+                "limited_integrity": integrity_summary["limited_integrity_targets"],
+                "compromised_integrity": integrity_summary[
+                    "compromised_integrity_targets"
+                ],
+            },
+        },
+        "record": {
+            "reference": integrity["record"]["reference"],
+            "trajectory": integrity["record"]["trajectory"],
+            "finding": integrity["record"]["finding"],
+            "dependency_classification": dependency_classification,
+            "impact_classification": impact_classification,
+            "stability_classification": stability_classification,
+            "reproducibility_classification": reproducibility_classification,
+            "integrity_classification": integrity_classification,
+            "governance_classification": governance_classification,
+        },
+    }
+
+
+def _render_stage17f_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17f-governance-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17f_record_summary(governance: dict[str, Any]) -> str:
+    record = governance["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Dependency Classification", record["dependency_classification"]),
+        ("Impact Classification", record["impact_classification"]),
+        ("Stability Classification", record["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Governance Classification", record["governance_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17f-record-governance-summary">
+          <h3>Record Governance Summary</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17f_governance_summary_content(
+    governance: dict[str, Any],
+) -> str:
+    summary = governance["summary"]
+    reviews = governance["reviews"]
+    summary_rows = (
+        ("Total Governance Layers", summary["total_governance_layers"]),
+        ("Supported Governance Layers", summary["supported_governance_layers"]),
+        ("Unsupported Governance Layers", summary["unsupported_governance_layers"]),
+        ("Dependency Classification", summary["dependency_classification"]),
+        ("Impact Classification", summary["impact_classification"]),
+        ("Stability Classification", summary["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            summary["reproducibility_classification"],
+        ),
+        ("Integrity Classification", summary["integrity_classification"]),
+        ("Governance Classification", summary["governance_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Governance Summary</h3>
+        <table class="stage17f-governance-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17f_review(
+            "Dependency Review",
+            (
+                ("Classification", reviews["dependency"]["classification"]),
+                ("Evidence Supported", reviews["dependency"]["evidence_supported"]),
+                ("Unsupported", reviews["dependency"]["unsupported"]),
+            ),
+        )}
+        {_render_stage17f_review(
+            "Impact Review",
+            (
+                ("Classification", reviews["impact"]["classification"]),
+                ("Evidence Supported", reviews["impact"]["evidence_supported"]),
+                ("Unsupported", reviews["impact"]["unsupported"]),
+            ),
+        )}
+        {_render_stage17f_review(
+            "Stability Review",
+            (
+                ("Classification", reviews["stability"]["classification"]),
+                ("Stable", reviews["stability"]["stable"]),
+                ("Limited Stability", reviews["stability"]["limited_stability"]),
+                ("Unstable", reviews["stability"]["unstable"]),
+            ),
+        )}
+        {_render_stage17f_review(
+            "Reproducibility Review",
+            (
+                ("Classification", reviews["reproducibility"]["classification"]),
+                ("Reproducible", reviews["reproducibility"]["reproducible"]),
+                (
+                    "Limited Reproducibility",
+                    reviews["reproducibility"]["limited_reproducibility"],
+                ),
+                (
+                    "Non-Reproducible",
+                    reviews["reproducibility"]["non_reproducible"],
+                ),
+            ),
+        )}
+        {_render_stage17f_review(
+            "Integrity Review",
+            (
+                ("Classification", reviews["integrity"]["classification"]),
+                ("High Integrity", reviews["integrity"]["high_integrity"]),
+                ("Limited Integrity", reviews["integrity"]["limited_integrity"]),
+                (
+                    "Compromised Integrity",
+                    reviews["integrity"]["compromised_integrity"],
+                ),
+            ),
+        )}
+        {_render_stage17f_record_summary(governance)}"""
+
+
+def _render_stage17f_governance_summary_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    governance = _record_stage17f_governance_summary(evidence_groups, record_outputs)
+    return f"""
+      <section class="management-section stage17f-record-governance-summary">
+        <h2>Record Governance Summary</h2>
+        <p class="notice">
+          Record governance summary is derived deterministically from existing
+          dependency, impact, stability, reproducibility, and integrity outputs
+          only.
+        </p>
+        {_render_stage17f_governance_summary_content(governance)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -12254,6 +12590,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17f_record_governance_summary = _render_stage17f_governance_summary_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -12375,6 +12715,7 @@ def render_admin_record_evidence_page(
             f"{stage17c_record_stability}"
             f"{stage17d_record_reproducibility}"
             f"{stage17e_record_integrity}"
+            f"{stage17f_record_governance_summary}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
