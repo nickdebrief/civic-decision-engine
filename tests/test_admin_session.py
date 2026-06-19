@@ -1458,6 +1458,41 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Record Stability Classification</td><td>Unstable</td>",
             after_content,
         )
+        self.assertIn("Record Reproducibility", after_content)
+        self.assertIn("Reproducibility Summary", after_content)
+        self.assertIn(
+            "<td>Total Reproducibility Targets</td><td>6</td>",
+            after_content,
+        )
+        self.assertIn("<td>Reproducible Targets</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Limited Reproducibility Targets</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn("<td>Non-Reproducible Targets</td><td>5</td>", after_content)
+        self.assertIn("<td>Evidence-Supported Targets</td><td>0</td>", after_content)
+        self.assertIn("<td>Unsupported Targets</td><td>6</td>", after_content)
+        self.assertIn("<h3>Condition Reproducibility</h3>", after_content)
+        self.assertIn("<h3>Signal Reproducibility</h3>", after_content)
+        self.assertIn("<h3>Finding Reproducibility</h3>", after_content)
+        self.assertIn("<h3>Record Reproducibility</h3>", after_content)
+        self.assertIn("<td>Stability</td><td>Limited Stability</td>", after_content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Limited Reproducibility</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Record Stability</td><td>Unstable</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Record Reproducibility Classification</td><td>Non-Reproducible</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -1984,6 +2019,35 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", content)
         self.assertIn(
             "<td>Record Stability Classification</td><td>Unstable</td>",
+            content,
+        )
+        self.assertIn("Record Reproducibility", content)
+        self.assertIn("Reproducibility Summary", content)
+        self.assertIn("<td>Total Reproducibility Targets</td><td>8</td>", content)
+        self.assertIn("<td>Reproducible Targets</td><td>2</td>", content)
+        self.assertIn(
+            "<td>Limited Reproducibility Targets</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Non-Reproducible Targets</td><td>6</td>", content)
+        self.assertIn("<td>Evidence-Supported Targets</td><td>2</td>", content)
+        self.assertIn("<td>Unsupported Targets</td><td>6</td>", content)
+        self.assertIn("<h3>Condition Reproducibility</h3>", content)
+        self.assertIn("<h3>Signal Reproducibility</h3>", content)
+        self.assertIn("<h3>Finding Reproducibility</h3>", content)
+        self.assertIn("<h3>Record Reproducibility</h3>", content)
+        self.assertIn("<td>Stability</td><td>Stable</td>", content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Reproducible</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible</td>",
+            content,
+        )
+        self.assertIn("<td>Record Stability</td><td>Unstable</td>", content)
+        self.assertIn(
+            "<td>Record Reproducibility Classification</td><td>Non-Reproducible</td>",
             content,
         )
         self.assertIn(
@@ -2923,6 +2987,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Impact</h2>"),
             governance_content.index("<h2>Record Stability</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Stability</h2>"),
+            governance_content.index("<h2>Record Reproducibility</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -2950,6 +3018,7 @@ class AdminSessionTests(unittest.TestCase):
         ]
         self.assertIn("<h2>Record Impact</h2>", print_governance_content)
         self.assertIn("<h2>Record Stability</h2>", print_governance_content)
+        self.assertIn("<h2>Record Reproducibility</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
