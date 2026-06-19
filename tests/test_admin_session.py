@@ -156,6 +156,114 @@ class AdminSessionTests(unittest.TestCase):
         self.assertNotIn("server-only-token", serialized)
         self.assertNotIn("CDE_ADMIN_TOKEN", serialized)
 
+    def test_stage17f_governance_summary_renders_classification_states(self):
+        def governance(classification):
+            return {
+                "summary": {
+                    "total_governance_layers": 5,
+                    "supported_governance_layers": 5,
+                    "unsupported_governance_layers": 0,
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "governance_classification": classification,
+                },
+                "reviews": {
+                    "dependency": {
+                        "classification": "Supported",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                    },
+                    "impact": {
+                        "classification": "Evidence-Supported Impact",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                    },
+                    "stability": {
+                        "classification": "Stable",
+                        "stable": 5,
+                        "limited_stability": 0,
+                        "unstable": 0,
+                    },
+                    "reproducibility": {
+                        "classification": "Reproducible",
+                        "reproducible": 5,
+                        "limited_reproducibility": 0,
+                        "non_reproducible": 0,
+                    },
+                    "integrity": {
+                        "classification": "High Integrity",
+                        "high_integrity": 5,
+                        "limited_integrity": 0,
+                        "compromised_integrity": 0,
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "governance_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17f_governance_classification
+
+        self.assertEqual(
+            "Governance Gap",
+            classify(
+                "Unsupported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+            ),
+        )
+        self.assertEqual(
+            "Governed",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+            ),
+        )
+        self.assertEqual(
+            "Partially Governed",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Limited Stability",
+                "Limited Reproducibility",
+                "Limited Integrity",
+            ),
+        )
+
+        for classification in (
+            "Governed",
+            "Partially Governed",
+            "Governance Gap",
+        ):
+            rendered = self.admin_session._render_stage17f_governance_summary_content(
+                governance(classification)
+            )
+            self.assertIn(
+                f"<td>Governance Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Dependency Review</h3>", rendered)
+            self.assertIn("<h3>Impact Review</h3>", rendered)
+            self.assertIn("<h3>Stability Review</h3>", rendered)
+            self.assertIn("<h3>Reproducibility Review</h3>", rendered)
+            self.assertIn("<h3>Integrity Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -1528,6 +1636,34 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Record Integrity Classification</td><td>Compromised Integrity</td>",
             after_content,
         )
+        self.assertIn("Record Governance Summary", after_content)
+        self.assertIn("Governance Summary", after_content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", after_content)
+        self.assertIn("<td>Supported Governance Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Unsupported Governance Layers</td><td>5</td>", after_content)
+        self.assertIn("<td>Dependency Classification</td><td>Unsupported</td>", after_content)
+        self.assertIn(
+            "<td>Impact Classification</td><td>Unsupported Impact</td>",
+            after_content,
+        )
+        self.assertIn("<td>Stability Classification</td><td>Unstable</td>", after_content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Compromised Integrity</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Governance Classification</td><td>Governance Gap</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Dependency Review</h3>", after_content)
+        self.assertIn("<h3>Impact Review</h3>", after_content)
+        self.assertIn("<h3>Stability Review</h3>", after_content)
+        self.assertIn("<h3>Reproducibility Review</h3>", after_content)
+        self.assertIn("<h3>Integrity Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2117,6 +2253,34 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Record Integrity Classification</td><td>Compromised Integrity</td>",
             content,
         )
+        self.assertIn("Record Governance Summary", content)
+        self.assertIn("Governance Summary", content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", content)
+        self.assertIn("<td>Supported Governance Layers</td><td>0</td>", content)
+        self.assertIn("<td>Unsupported Governance Layers</td><td>5</td>", content)
+        self.assertIn("<td>Dependency Classification</td><td>Unsupported</td>", content)
+        self.assertIn(
+            "<td>Impact Classification</td><td>Unsupported Impact</td>",
+            content,
+        )
+        self.assertIn("<td>Stability Classification</td><td>Unstable</td>", content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Compromised Integrity</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Governance Classification</td><td>Governance Gap</td>",
+            content,
+        )
+        self.assertIn("<h3>Dependency Review</h3>", content)
+        self.assertIn("<h3>Impact Review</h3>", content)
+        self.assertIn("<h3>Stability Review</h3>", content)
+        self.assertIn("<h3>Reproducibility Review</h3>", content)
+        self.assertIn("<h3>Integrity Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -3062,6 +3226,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Reproducibility</h2>"),
             governance_content.index("<h2>Record Integrity</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Integrity</h2>"),
+            governance_content.index("<h2>Record Governance Summary</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3091,6 +3259,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Stability</h2>", print_governance_content)
         self.assertIn("<h2>Record Reproducibility</h2>", print_governance_content)
         self.assertIn("<h2>Record Integrity</h2>", print_governance_content)
+        self.assertIn("<h2>Record Governance Summary</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
