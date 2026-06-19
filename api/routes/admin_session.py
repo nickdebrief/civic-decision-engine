@@ -11418,6 +11418,215 @@ def _render_stage17b_record_impact_section(
       </section>"""
 
 
+def _stage17c_stability_classification(
+    confidence: str,
+    completeness: str,
+) -> str:
+    if confidence in {"High Confidence", "Very High Confidence"} and completeness == "Complete":
+        return "Stable"
+    if confidence == "Limited Confidence":
+        return "Limited Stability"
+    return "Unstable"
+
+
+def _record_stage17c_record_stability(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    impact = _record_stage17b_record_impact(evidence_groups, record_outputs)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    stable_targets = 0
+    limited_targets = 0
+    unstable_targets = 0
+    evidence_supported_targets = 0
+    unsupported_targets = 0
+
+    for target_type in ("condition", "signal", "finding"):
+        rows = []
+        for target in impact["groups"][target_type]:
+            stability = _stage17c_stability_classification(
+                target["confidence"],
+                target["completeness"],
+            )
+            if stability == "Stable":
+                stable_targets += 1
+            elif stability == "Limited Stability":
+                limited_targets += 1
+            else:
+                unstable_targets += 1
+            if target["impact_classification"] == "Evidence-Supported Impact":
+                evidence_supported_targets += 1
+            else:
+                unsupported_targets += 1
+            rows.append(
+                {
+                    "target_label": target["target_label"],
+                    "active_supports": target["active_supports"],
+                    "sufficiency": target["sufficiency"],
+                    "completeness": target["completeness"],
+                    "confidence": target["confidence"],
+                    "stability_classification": stability,
+                    "affected_outputs": target["impacted_outputs"],
+                }
+            )
+        groups[target_type] = rows
+
+    record_dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    record = record_dependency["record"]
+    record_stability = _stage17c_stability_classification(
+        record["record_confidence"],
+        record["record_completeness"],
+    )
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_stability_targets": (
+                len(groups["condition"])
+                + len(groups["signal"])
+                + len(groups["finding"])
+            ),
+            "stable_targets": stable_targets,
+            "limited_stability_targets": limited_targets,
+            "unstable_targets": unstable_targets,
+            "evidence_supported_stability_targets": evidence_supported_targets,
+            "unsupported_stability_targets": unsupported_targets,
+        },
+        "record": {
+            "reference": record["reference"],
+            "trajectory": record["current_trajectory"],
+            "finding": record["current_finding"],
+            "supporting_conditions": record["dependent_conditions"],
+            "supporting_signals": record["dependent_signals"],
+            "supporting_findings": record["dependent_findings"],
+            "record_confidence": record["record_confidence"],
+            "record_stability_classification": record_stability,
+        },
+    }
+
+
+def _render_stage17c_target_stability(
+    title: str,
+    target_label: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(title)}</h3>"
+            '<p class="evidence-empty-state">No stability targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            (target_label, target["target_label"]),
+            ("Active Supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+            ("Stability Classification", target["stability_classification"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage17c-target-stability">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Affected Outputs</h5>"
+            f"{_render_stage17a_dependency_outputs(target['affected_outputs'])}"
+            "</article>"
+        )
+    return f"<h3>{escape(title)}</h3>{''.join(cards)}"
+
+
+def _render_stage17c_record_stability(stability: dict[str, Any]) -> str:
+    record = stability["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Supporting Conditions", record["supporting_conditions"]),
+        ("Supporting Signals", record["supporting_signals"]),
+        ("Supporting Findings", record["supporting_findings"]),
+        ("Record Confidence", record["record_confidence"]),
+        (
+            "Record Stability Classification",
+            record["record_stability_classification"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17c-record-stability">
+          <h3>Record Stability</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17c_record_stability_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    stability = _record_stage17c_record_stability(evidence_groups, record_outputs)
+    summary = stability["summary"]
+    summary_rows = (
+        ("Total Stability Targets", summary["total_stability_targets"]),
+        ("Stable Targets", summary["stable_targets"]),
+        ("Limited Stability Targets", summary["limited_stability_targets"]),
+        ("Unstable Targets", summary["unstable_targets"]),
+        (
+            "Evidence-Supported Stability Targets",
+            summary["evidence_supported_stability_targets"],
+        ),
+        ("Unsupported Stability Targets", summary["unsupported_stability_targets"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage17c-record-stability">
+        <h2>Record Stability</h2>
+        <p class="notice">
+          Record stability is derived deterministically from existing
+          dependency outputs, impact outputs, sufficiency, completeness,
+          confidence, and support states only.
+        </p>
+        <h3>Stability Summary</h3>
+        <table class="stage17c-stability-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17c_target_stability(
+            "Condition Stability",
+            "Condition",
+            stability["groups"]["condition"],
+        )}
+        {_render_stage17c_target_stability(
+            "Signal Stability",
+            "Signal",
+            stability["groups"]["signal"],
+        )}
+        {_render_stage17c_target_stability(
+            "Finding Stability",
+            "Finding",
+            stability["groups"]["finding"],
+        )}
+        {_render_stage17c_record_stability(stability)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -11546,6 +11755,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17c_record_stability = _render_stage17c_record_stability_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -11664,6 +11877,7 @@ def render_admin_record_evidence_page(
             f"{stage16f_evidence_provenance}"
             f"{stage17a_record_dependency}"
             f"{stage17b_record_impact}"
+            f"{stage17c_record_stability}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

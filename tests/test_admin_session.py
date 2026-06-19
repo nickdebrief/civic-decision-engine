@@ -1423,6 +1423,41 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Impacting Conditions</td><td>1</td>", after_content)
         self.assertIn("<td>Impacting Signals</td><td>4</td>", after_content)
         self.assertIn("<td>Impacting Findings</td><td>1</td>", after_content)
+        self.assertIn("Record Stability", after_content)
+        self.assertIn("Stability Summary", after_content)
+        self.assertIn("<td>Total Stability Targets</td><td>6</td>", after_content)
+        self.assertIn("<td>Stable Targets</td><td>0</td>", after_content)
+        self.assertIn("<td>Limited Stability Targets</td><td>1</td>", after_content)
+        self.assertIn("<td>Unstable Targets</td><td>5</td>", after_content)
+        self.assertIn(
+            "<td>Evidence-Supported Stability Targets</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Unsupported Stability Targets</td><td>6</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Condition Stability</h3>", after_content)
+        self.assertIn("<h3>Signal Stability</h3>", after_content)
+        self.assertIn("<h3>Finding Stability</h3>", after_content)
+        self.assertIn("<h3>Record Stability</h3>", after_content)
+        self.assertIn(
+            "<td>Stability Classification</td><td>Limited Stability</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Stability Classification</td><td>Unstable</td>",
+            after_content,
+        )
+        self.assertIn("<h5>Affected Outputs</h5>", after_content)
+        self.assertIn("<td>Supporting Conditions</td><td>1</td>", after_content)
+        self.assertIn("<td>Supporting Signals</td><td>4</td>", after_content)
+        self.assertIn("<td>Supporting Findings</td><td>1</td>", after_content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", after_content)
+        self.assertIn(
+            "<td>Record Stability Classification</td><td>Unstable</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -1919,6 +1954,38 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Impacting Conditions</td><td>5</td>", content)
         self.assertIn("<td>Impacting Signals</td><td>2</td>", content)
         self.assertIn("<td>Impacting Findings</td><td>1</td>", content)
+        self.assertIn("Record Stability", content)
+        self.assertIn("Stability Summary", content)
+        self.assertIn("<td>Total Stability Targets</td><td>8</td>", content)
+        self.assertIn("<td>Stable Targets</td><td>2</td>", content)
+        self.assertIn("<td>Limited Stability Targets</td><td>0</td>", content)
+        self.assertIn("<td>Unstable Targets</td><td>6</td>", content)
+        self.assertIn(
+            "<td>Evidence-Supported Stability Targets</td><td>2</td>",
+            content,
+        )
+        self.assertIn("<td>Unsupported Stability Targets</td><td>6</td>", content)
+        self.assertIn("<h3>Condition Stability</h3>", content)
+        self.assertIn("<h3>Signal Stability</h3>", content)
+        self.assertIn("<h3>Finding Stability</h3>", content)
+        self.assertIn("<h3>Record Stability</h3>", content)
+        self.assertIn(
+            "<td>Stability Classification</td><td>Stable</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Stability Classification</td><td>Unstable</td>",
+            content,
+        )
+        self.assertIn("<h5>Affected Outputs</h5>", content)
+        self.assertIn("<td>Supporting Conditions</td><td>5</td>", content)
+        self.assertIn("<td>Supporting Signals</td><td>2</td>", content)
+        self.assertIn("<td>Supporting Findings</td><td>1</td>", content)
+        self.assertIn("<td>Record Confidence</td><td>Low Confidence</td>", content)
+        self.assertIn(
+            "<td>Record Stability Classification</td><td>Unstable</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -2852,6 +2919,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Dependency</h2>"),
             governance_content.index("<h2>Record Impact</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Impact</h2>"),
+            governance_content.index("<h2>Record Stability</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -2878,6 +2949,7 @@ class AdminSessionTests(unittest.TestCase):
             ) :
         ]
         self.assertIn("<h2>Record Impact</h2>", print_governance_content)
+        self.assertIn("<h2>Record Stability</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
