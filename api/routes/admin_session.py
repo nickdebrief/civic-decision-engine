@@ -11864,6 +11864,256 @@ def _render_stage17d_record_reproducibility_section(
       </section>"""
 
 
+def _stage17e_integrity_classification(
+    active_supports: int,
+    sufficiency: str,
+    completeness: str,
+    confidence: str,
+    stability: str,
+    reproducibility: str,
+) -> str:
+    if (
+        active_supports == 0
+        or sufficiency == "Unsupported"
+        or confidence == "Low Confidence"
+        or stability == "Unstable"
+        or reproducibility == "Non-Reproducible"
+    ):
+        return "Compromised Integrity"
+    if (
+        active_supports > 0
+        and (
+            sufficiency == "Partial"
+            or completeness == "Incomplete"
+            or confidence == "Limited Confidence"
+            or stability == "Limited Stability"
+            or reproducibility == "Limited Reproducibility"
+        )
+    ):
+        return "Limited Integrity"
+    return "High Integrity"
+
+
+def _record_stage17e_record_integrity(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    reproducibility = _record_stage17d_record_reproducibility(
+        evidence_groups,
+        record_outputs,
+    )
+    dependency = _record_stage17a_record_dependency(evidence_groups, record_outputs)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    high_targets = 0
+    limited_targets = 0
+    compromised_targets = 0
+    evidence_supported_targets = 0
+    unsupported_targets = 0
+
+    for target_type in ("condition", "signal", "finding"):
+        rows = []
+        for target in reproducibility["groups"][target_type]:
+            integrity = _stage17e_integrity_classification(
+                target["active_supports"],
+                target["sufficiency"],
+                target["completeness"],
+                target["confidence"],
+                target["stability"],
+                target["reproducibility_classification"],
+            )
+            if integrity == "High Integrity":
+                high_targets += 1
+            elif integrity == "Limited Integrity":
+                limited_targets += 1
+            else:
+                compromised_targets += 1
+            if target["active_supports"] > 0:
+                evidence_supported_targets += 1
+            else:
+                unsupported_targets += 1
+            rows.append(
+                {
+                    "target_label": target["target_label"],
+                    "active_supports": target["active_supports"],
+                    "sufficiency": target["sufficiency"],
+                    "completeness": target["completeness"],
+                    "confidence": target["confidence"],
+                    "stability": target["stability"],
+                    "reproducibility": target["reproducibility_classification"],
+                    "integrity_classification": integrity,
+                    "affected_outputs": target["affected_outputs"],
+                }
+            )
+        groups[target_type] = rows
+
+    record = dependency["record"]
+    record_reproducibility = reproducibility["record"]
+    record_integrity = _stage17e_integrity_classification(
+        record["record_active_supports"],
+        record["record_sufficiency"],
+        record["record_completeness"],
+        record["record_confidence"],
+        record_reproducibility["record_stability"],
+        record_reproducibility["record_reproducibility_classification"],
+    )
+
+    return {
+        "groups": groups,
+        "summary": {
+            "total_integrity_targets": (
+                len(groups["condition"])
+                + len(groups["signal"])
+                + len(groups["finding"])
+            ),
+            "high_integrity_targets": high_targets,
+            "limited_integrity_targets": limited_targets,
+            "compromised_integrity_targets": compromised_targets,
+            "evidence_supported_integrity_targets": evidence_supported_targets,
+            "unsupported_integrity_targets": unsupported_targets,
+        },
+        "record": {
+            "reference": record["reference"],
+            "trajectory": record["current_trajectory"],
+            "finding": record["current_finding"],
+            "supporting_conditions": record["dependent_conditions"],
+            "supporting_signals": record["dependent_signals"],
+            "supporting_findings": record["dependent_findings"],
+            "record_confidence": record["record_confidence"],
+            "record_stability": record_reproducibility["record_stability"],
+            "record_reproducibility": record_reproducibility[
+                "record_reproducibility_classification"
+            ],
+            "record_integrity_classification": record_integrity,
+        },
+    }
+
+
+def _render_stage17e_target_integrity(
+    title: str,
+    target_label: str,
+    targets: list[dict[str, Any]],
+) -> str:
+    if not targets:
+        return (
+            f"<h3>{escape(title)}</h3>"
+            '<p class="evidence-empty-state">No integrity targets available.</p>'
+        )
+    cards = []
+    for target in targets:
+        rows = (
+            (target_label, target["target_label"]),
+            ("Active Supports", target["active_supports"]),
+            ("Sufficiency", target["sufficiency"]),
+            ("Completeness", target["completeness"]),
+            ("Confidence", target["confidence"]),
+            ("Stability", target["stability"]),
+            ("Reproducibility", target["reproducibility"]),
+            ("Integrity Classification", target["integrity_classification"]),
+        )
+        table_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(str(value))}</td>"
+            "</tr>"
+            for label, value in rows
+        )
+        cards.append(
+            '<article class="stage17e-target-integrity">'
+            f"<h4>{escape(str(target['target_label']))}</h4>"
+            f"<table><tbody>{table_rows}</tbody></table>"
+            "<h5>Affected Outputs</h5>"
+            f"{_render_stage17a_dependency_outputs(target['affected_outputs'])}"
+            "</article>"
+        )
+    return f"<h3>{escape(title)}</h3>{''.join(cards)}"
+
+
+def _render_stage17e_record_integrity(integrity: dict[str, Any]) -> str:
+    record = integrity["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Supporting Conditions", record["supporting_conditions"]),
+        ("Supporting Signals", record["supporting_signals"]),
+        ("Supporting Findings", record["supporting_findings"]),
+        ("Record Confidence", record["record_confidence"]),
+        ("Record Stability", record["record_stability"]),
+        ("Record Reproducibility", record["record_reproducibility"]),
+        (
+            "Record Integrity Classification",
+            record["record_integrity_classification"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17e-record-integrity">
+          <h3>Record Integrity</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17e_record_integrity_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    integrity = _record_stage17e_record_integrity(evidence_groups, record_outputs)
+    summary = integrity["summary"]
+    summary_rows = (
+        ("Total Integrity Targets", summary["total_integrity_targets"]),
+        ("High Integrity Targets", summary["high_integrity_targets"]),
+        ("Limited Integrity Targets", summary["limited_integrity_targets"]),
+        ("Compromised Integrity Targets", summary["compromised_integrity_targets"]),
+        (
+            "Evidence-Supported Integrity Targets",
+            summary["evidence_supported_integrity_targets"],
+        ),
+        ("Unsupported Integrity Targets", summary["unsupported_integrity_targets"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+      <section class="management-section stage17e-record-integrity">
+        <h2>Record Integrity</h2>
+        <p class="notice">
+          Record integrity is derived deterministically from existing evidence
+          support counts, dependency outputs, impact outputs, stability outputs,
+          reproducibility outputs, and record structure only.
+        </p>
+        <h3>Integrity Summary</h3>
+        <table class="stage17e-integrity-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17e_target_integrity(
+            "Condition Integrity",
+            "Condition",
+            integrity["groups"]["condition"],
+        )}
+        {_render_stage17e_target_integrity(
+            "Signal Integrity",
+            "Signal",
+            integrity["groups"]["signal"],
+        )}
+        {_render_stage17e_target_integrity(
+            "Finding Integrity",
+            "Finding",
+            integrity["groups"]["finding"],
+        )}
+        {_render_stage17e_record_integrity(integrity)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -12000,6 +12250,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17e_record_integrity = _render_stage17e_record_integrity_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -12120,6 +12374,7 @@ def render_admin_record_evidence_page(
             f"{stage17b_record_impact}"
             f"{stage17c_record_stability}"
             f"{stage17d_record_reproducibility}"
+            f"{stage17e_record_integrity}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

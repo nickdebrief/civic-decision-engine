@@ -1493,6 +1493,41 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Record Reproducibility Classification</td><td>Non-Reproducible</td>",
             after_content,
         )
+        self.assertIn("Record Integrity", after_content)
+        self.assertIn("Integrity Summary", after_content)
+        self.assertIn("<td>Total Integrity Targets</td><td>6</td>", after_content)
+        self.assertIn("<td>High Integrity Targets</td><td>0</td>", after_content)
+        self.assertIn("<td>Limited Integrity Targets</td><td>1</td>", after_content)
+        self.assertIn("<td>Compromised Integrity Targets</td><td>5</td>", after_content)
+        self.assertIn(
+            "<td>Evidence-Supported Integrity Targets</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn("<td>Unsupported Integrity Targets</td><td>5</td>", after_content)
+        self.assertIn("<h3>Condition Integrity</h3>", after_content)
+        self.assertIn("<h3>Signal Integrity</h3>", after_content)
+        self.assertIn("<h3>Finding Integrity</h3>", after_content)
+        self.assertIn("<h3>Record Integrity</h3>", after_content)
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Limited Integrity</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Compromised Integrity</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reproducibility</td><td>Limited Reproducibility</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Record Reproducibility</td><td>Non-Reproducible</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Record Integrity Classification</td><td>Compromised Integrity</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2048,6 +2083,38 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Record Stability</td><td>Unstable</td>", content)
         self.assertIn(
             "<td>Record Reproducibility Classification</td><td>Non-Reproducible</td>",
+            content,
+        )
+        self.assertIn("Record Integrity", content)
+        self.assertIn("Integrity Summary", content)
+        self.assertIn("<td>Total Integrity Targets</td><td>8</td>", content)
+        self.assertIn("<td>High Integrity Targets</td><td>2</td>", content)
+        self.assertIn("<td>Limited Integrity Targets</td><td>0</td>", content)
+        self.assertIn("<td>Compromised Integrity Targets</td><td>6</td>", content)
+        self.assertIn(
+            "<td>Evidence-Supported Integrity Targets</td><td>2</td>",
+            content,
+        )
+        self.assertIn("<td>Unsupported Integrity Targets</td><td>6</td>", content)
+        self.assertIn("<h3>Condition Integrity</h3>", content)
+        self.assertIn("<h3>Signal Integrity</h3>", content)
+        self.assertIn("<h3>Finding Integrity</h3>", content)
+        self.assertIn("<h3>Record Integrity</h3>", content)
+        self.assertIn(
+            "<td>Integrity Classification</td><td>High Integrity</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Compromised Integrity</td>",
+            content,
+        )
+        self.assertIn("<td>Reproducibility</td><td>Reproducible</td>", content)
+        self.assertIn(
+            "<td>Record Reproducibility</td><td>Non-Reproducible</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Record Integrity Classification</td><td>Compromised Integrity</td>",
             content,
         )
         self.assertIn(
@@ -2991,6 +3058,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Stability</h2>"),
             governance_content.index("<h2>Record Reproducibility</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Reproducibility</h2>"),
+            governance_content.index("<h2>Record Integrity</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3019,6 +3090,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Impact</h2>", print_governance_content)
         self.assertIn("<h2>Record Stability</h2>", print_governance_content)
         self.assertIn("<h2>Record Reproducibility</h2>", print_governance_content)
+        self.assertIn("<h2>Record Integrity</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
