@@ -13695,6 +13695,296 @@ def _render_stage17j_governance_pattern_detection_section(
       </section>"""
 
 
+def _stage17k_layer_consistency_state(classification: str) -> str:
+    if classification in {
+        "Governance Gap",
+        "Governance Discontinuity",
+        "Significant Change",
+        "Governance Regression",
+        "Recurring Governance Pattern",
+        "Unsupported",
+        "Unsupported Impact",
+        "Unstable",
+        "Non-Reproducible",
+        "Compromised Integrity",
+    }:
+        return "Inconsistent"
+    if classification in {
+        "Partially Governed",
+        "Partial Continuity",
+        "Limited Change",
+        "Governance Persistence",
+        "Limited Governance Pattern",
+        "Limited Stability",
+        "Limited Reproducibility",
+        "Limited Integrity",
+        "Limited Confidence",
+        "Partial",
+    }:
+        return "Partially Consistent"
+    return "Consistent"
+
+
+def _stage17k_pattern_conflicts_with_governance(
+    governance_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+) -> bool:
+    if pattern_classification == "Recurring Governance Pattern" and governance_classification == "Governed":
+        return True
+    if pattern_classification == "No Governance Pattern" and governance_classification != "Governed":
+        return True
+    if pattern_classification == "No Governance Pattern" and trajectory_classification == "Governance Regression":
+        return True
+    return False
+
+
+def _stage17k_consistency_classification(
+    governance_classification: str,
+    continuity_classification: str,
+    change_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+) -> str:
+    if (
+        governance_classification == "Governance Gap"
+        or continuity_classification == "Governance Discontinuity"
+        or trajectory_classification == "Governance Regression"
+        or _stage17k_pattern_conflicts_with_governance(
+            governance_classification,
+            trajectory_classification,
+            pattern_classification,
+        )
+    ):
+        return "Governance Inconsistency"
+    if (
+        governance_classification == "Governed"
+        and continuity_classification == "Continuous Governance"
+        and trajectory_classification == "Governance Progression"
+        and pattern_classification != "No Governance Pattern"
+        and change_classification in {"No Recorded Change", "Limited Change"}
+    ):
+        return "Consistent Governance"
+    return "Partially Consistent"
+
+
+def _record_stage17k_governance_consistency(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    pattern = _record_stage17j_governance_pattern_detection(
+        evidence_groups,
+        record_outputs,
+    )
+    pattern_summary = pattern["summary"]
+    pattern_record = pattern["record"]
+    consistency_classification = _stage17k_consistency_classification(
+        pattern_record["governance_classification"],
+        pattern_record["continuity_classification"],
+        pattern_record["governance_change_state"],
+        pattern_record["governance_trajectory"],
+        pattern_record["governance_pattern_classification"],
+    )
+    reviews = {
+        "governance": {
+            "classification": pattern_record["governance_classification"],
+            "governance_state": pattern_record["governance_classification"],
+            "consistency_state": _stage17k_layer_consistency_state(
+                pattern_record["governance_classification"]
+            ),
+        },
+        "continuity": {
+            "classification": pattern_record["continuity_classification"],
+            "continuity_state": pattern_record["continuity_classification"],
+            "consistency_state": _stage17k_layer_consistency_state(
+                pattern_record["continuity_classification"]
+            ),
+        },
+        "change": {
+            "classification": pattern_record["governance_change_state"],
+            "change_state": pattern_record["governance_change_state"],
+            "consistency_state": _stage17k_layer_consistency_state(
+                pattern_record["governance_change_state"]
+            ),
+        },
+        "trajectory": {
+            "classification": pattern_record["governance_trajectory"],
+            "trajectory_state": pattern_record["governance_trajectory"],
+            "consistency_state": _stage17k_layer_consistency_state(
+                pattern_record["governance_trajectory"]
+            ),
+        },
+        "pattern": {
+            "classification": pattern_record["governance_pattern_classification"],
+            "pattern_state": pattern_record["governance_pattern_classification"],
+            "consistency_state": _stage17k_layer_consistency_state(
+                pattern_record["governance_pattern_classification"]
+            ),
+        },
+    }
+    consistency_states = [review["consistency_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_governance_layers": len(consistency_states),
+            "consistent_layers": consistency_states.count("Consistent"),
+            "inconsistent_layers": consistency_states.count("Inconsistent"),
+            "governance_classification": pattern_summary["governance_classification"],
+            "continuity_classification": pattern_summary["continuity_classification"],
+            "change_classification": pattern_summary["governance_change_state"],
+            "trajectory_classification": pattern_summary["governance_trajectory"],
+            "pattern_classification": pattern_summary[
+                "governance_pattern_classification"
+            ],
+            "consistency_classification": consistency_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **pattern_record,
+            "consistency_classification": consistency_classification,
+        },
+    }
+
+
+def _render_stage17k_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17k-consistency-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17k_record_consistency(consistency: dict[str, Any]) -> str:
+    record = consistency["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+        ("Consistency Classification", record["consistency_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17k-record-governance-consistency">
+          <h3>Record Governance Consistency</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17k_governance_consistency_content(
+    consistency: dict[str, Any],
+) -> str:
+    summary = consistency["summary"]
+    reviews = consistency["reviews"]
+    summary_rows = (
+        ("Total Governance Layers", summary["total_governance_layers"]),
+        ("Consistent Layers", summary["consistent_layers"]),
+        ("Inconsistent Layers", summary["inconsistent_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Classification", summary["change_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Pattern Classification", summary["pattern_classification"]),
+        ("Consistency Classification", summary["consistency_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Consistency Summary</h3>
+        <table class="stage17k-consistency-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17k_review(
+            "Governance Review",
+            (
+                ("Classification", reviews["governance"]["classification"]),
+                ("Governance State", reviews["governance"]["governance_state"]),
+                ("Consistency State", reviews["governance"]["consistency_state"]),
+            ),
+        )}
+        {_render_stage17k_review(
+            "Continuity Review",
+            (
+                ("Classification", reviews["continuity"]["classification"]),
+                ("Continuity State", reviews["continuity"]["continuity_state"]),
+                ("Consistency State", reviews["continuity"]["consistency_state"]),
+            ),
+        )}
+        {_render_stage17k_review(
+            "Change Review",
+            (
+                ("Classification", reviews["change"]["classification"]),
+                ("Change State", reviews["change"]["change_state"]),
+                ("Consistency State", reviews["change"]["consistency_state"]),
+            ),
+        )}
+        {_render_stage17k_review(
+            "Trajectory Review",
+            (
+                ("Classification", reviews["trajectory"]["classification"]),
+                ("Trajectory State", reviews["trajectory"]["trajectory_state"]),
+                ("Consistency State", reviews["trajectory"]["consistency_state"]),
+            ),
+        )}
+        {_render_stage17k_review(
+            "Pattern Review",
+            (
+                ("Classification", reviews["pattern"]["classification"]),
+                ("Pattern State", reviews["pattern"]["pattern_state"]),
+                ("Consistency State", reviews["pattern"]["consistency_state"]),
+            ),
+        )}
+        {_render_stage17k_record_consistency(consistency)}"""
+
+
+def _render_stage17k_governance_consistency_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    consistency = _record_stage17k_governance_consistency(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17k-governance-consistency">
+        <h2>Governance Consistency</h2>
+        <p class="notice">
+          Governance consistency is derived deterministically from existing
+          governance summary, continuity, change log, trajectory, and pattern
+          outputs only.
+        </p>
+        {_render_stage17k_governance_consistency_content(consistency)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -13863,6 +14153,10 @@ def render_admin_record_evidence_page(
             record_outputs,
         )
     )
+    stage17k_governance_consistency = _render_stage17k_governance_consistency_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -13989,6 +14283,7 @@ def render_admin_record_evidence_page(
             f"{stage17h_record_governance_change_log}"
             f"{stage17i_record_governance_trajectory}"
             f"{stage17j_governance_pattern_detection}"
+            f"{stage17k_governance_consistency}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

@@ -901,6 +901,132 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Integrity Pattern Review</h3>", rendered)
             self.assertIn("<h3>Governance Pattern Review</h3>", rendered)
 
+
+    def test_stage17k_governance_consistency_renders_classification_states(self):
+        def consistency(classification):
+            return {
+                "summary": {
+                    "total_governance_layers": 5,
+                    "consistent_layers": 5 if classification == "Consistent Governance" else 0,
+                    "inconsistent_layers": 5 if classification == "Governance Inconsistency" else 0,
+                    "governance_classification": {
+                        "Consistent Governance": "Governed",
+                        "Partially Consistent": "Partially Governed",
+                        "Governance Inconsistency": "Governance Gap",
+                    }[classification],
+                    "continuity_classification": {
+                        "Consistent Governance": "Continuous Governance",
+                        "Partially Consistent": "Partial Continuity",
+                        "Governance Inconsistency": "Governance Discontinuity",
+                    }[classification],
+                    "change_classification": {
+                        "Consistent Governance": "No Recorded Change",
+                        "Partially Consistent": "Limited Change",
+                        "Governance Inconsistency": "Significant Change",
+                    }[classification],
+                    "trajectory_classification": {
+                        "Consistent Governance": "Governance Progression",
+                        "Partially Consistent": "Governance Persistence",
+                        "Governance Inconsistency": "Governance Regression",
+                    }[classification],
+                    "pattern_classification": {
+                        "Consistent Governance": "Limited Governance Pattern",
+                        "Partially Consistent": "Limited Governance Pattern",
+                        "Governance Inconsistency": "Recurring Governance Pattern",
+                    }[classification],
+                    "consistency_classification": classification,
+                },
+                "reviews": {
+                    "governance": {
+                        "classification": "Governed",
+                        "governance_state": "Governed",
+                        "consistency_state": "Consistent",
+                    },
+                    "continuity": {
+                        "classification": "Continuous Governance",
+                        "continuity_state": "Continuous Governance",
+                        "consistency_state": "Consistent",
+                    },
+                    "change": {
+                        "classification": "No Recorded Change",
+                        "change_state": "No Recorded Change",
+                        "consistency_state": "Consistent",
+                    },
+                    "trajectory": {
+                        "classification": "Governance Progression",
+                        "trajectory_state": "Governance Progression",
+                        "consistency_state": "Consistent",
+                    },
+                    "pattern": {
+                        "classification": "Limited Governance Pattern",
+                        "pattern_state": "Limited Governance Pattern",
+                        "consistency_state": "Consistent",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": "Governed",
+                    "continuity_classification": "Continuous Governance",
+                    "governance_change_state": "No Recorded Change",
+                    "governance_trajectory": "Governance Progression",
+                    "governance_pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17k_consistency_classification
+
+        self.assertEqual(
+            "Governance Inconsistency",
+            classify(
+                "Governance Gap",
+                "Governance Discontinuity",
+                "Significant Change",
+                "Governance Regression",
+                "Recurring Governance Pattern",
+            ),
+        )
+        self.assertEqual(
+            "Consistent Governance",
+            classify(
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+            ),
+        )
+        self.assertEqual(
+            "Partially Consistent",
+            classify(
+                "Partially Governed",
+                "Partial Continuity",
+                "Limited Change",
+                "Governance Persistence",
+                "Limited Governance Pattern",
+            ),
+        )
+
+        for classification in (
+            "Consistent Governance",
+            "Partially Consistent",
+            "Governance Inconsistency",
+        ):
+            rendered = self.admin_session._render_stage17k_governance_consistency_content(
+                consistency(classification)
+            )
+            self.assertIn(
+                f"<td>Consistency Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Governance Review</h3>", rendered)
+            self.assertIn("<h3>Continuity Review</h3>", rendered)
+            self.assertIn("<h3>Change Review</h3>", rendered)
+            self.assertIn("<h3>Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Pattern Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -2369,6 +2495,20 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Pattern Review</h3>", after_content)
         self.assertIn("<h3>Integrity Pattern Review</h3>", after_content)
         self.assertIn("<h3>Governance Pattern Review</h3>", after_content)
+        self.assertIn("Governance Consistency", after_content)
+        self.assertIn("Consistency Summary", after_content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", after_content)
+        self.assertIn("<td>Consistent Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Inconsistent Layers</td><td>5</td>", after_content)
+        self.assertIn(
+            "<td>Consistency Classification</td><td>Governance Inconsistency</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Governance Review</h3>", after_content)
+        self.assertIn("<h3>Continuity Review</h3>", after_content)
+        self.assertIn("<h3>Change Review</h3>", after_content)
+        self.assertIn("<h3>Trajectory Review</h3>", after_content)
+        self.assertIn("<h3>Pattern Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3046,6 +3186,20 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Pattern Review</h3>", content)
         self.assertIn("<h3>Integrity Pattern Review</h3>", content)
         self.assertIn("<h3>Governance Pattern Review</h3>", content)
+        self.assertIn("Governance Consistency", content)
+        self.assertIn("Consistency Summary", content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", content)
+        self.assertIn("<td>Consistent Layers</td><td>0</td>", content)
+        self.assertIn("<td>Inconsistent Layers</td><td>5</td>", content)
+        self.assertIn(
+            "<td>Consistency Classification</td><td>Governance Inconsistency</td>",
+            content,
+        )
+        self.assertIn("<h3>Governance Review</h3>", content)
+        self.assertIn("<h3>Continuity Review</h3>", content)
+        self.assertIn("<h3>Change Review</h3>", content)
+        self.assertIn("<h3>Trajectory Review</h3>", content)
+        self.assertIn("<h3>Pattern Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4011,6 +4165,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Governance Trajectory</h2>"),
             governance_content.index("<h2>Governance Pattern Detection</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Pattern Detection</h2>"),
+            governance_content.index("<h2>Governance Consistency</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -4057,6 +4215,7 @@ class AdminSessionTests(unittest.TestCase):
             "<h2>Governance Pattern Detection</h2>",
             print_governance_content,
         )
+        self.assertIn("<h2>Governance Consistency</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
