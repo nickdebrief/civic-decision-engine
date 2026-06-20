@@ -712,6 +712,195 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Integrity Trajectory</h3>", rendered)
             self.assertIn("<h3>Governance Trajectory Review</h3>", rendered)
 
+
+    def test_stage17j_governance_pattern_detection_renders_classification_states(self):
+        def pattern(classification):
+            return {
+                "summary": {
+                    "total_pattern_layers": 6,
+                    "pattern_matching_layers": 6 if classification == "Recurring Governance Pattern" else 0,
+                    "non_pattern_layers": 6 if classification == "No Governance Pattern" else 0,
+                    "governance_classification": {
+                        "Recurring Governance Pattern": "Governance Gap",
+                        "Limited Governance Pattern": "Partially Governed",
+                        "No Governance Pattern": "Governed",
+                    }[classification],
+                    "continuity_classification": {
+                        "Recurring Governance Pattern": "Governance Discontinuity",
+                        "Limited Governance Pattern": "Partial Continuity",
+                        "No Governance Pattern": "Continuous Governance",
+                    }[classification],
+                    "governance_change_state": {
+                        "Recurring Governance Pattern": "Significant Change",
+                        "Limited Governance Pattern": "Limited Change",
+                        "No Governance Pattern": "No Recorded Change",
+                    }[classification],
+                    "governance_trajectory": {
+                        "Recurring Governance Pattern": "Governance Regression",
+                        "Limited Governance Pattern": "Governance Persistence",
+                        "No Governance Pattern": "Governance Progression",
+                    }[classification],
+                    "governance_pattern_classification": classification,
+                },
+                "reviews": {
+                    "dependency": {
+                        "classification": "Supported",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "pattern_state": "No Pattern",
+                    },
+                    "impact": {
+                        "classification": "Evidence-Supported Impact",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "pattern_state": "No Pattern",
+                    },
+                    "stability": {
+                        "classification": "Stable",
+                        "stable": 5,
+                        "limited_stability": 0,
+                        "unstable": 0,
+                        "pattern_state": "No Pattern",
+                    },
+                    "reproducibility": {
+                        "classification": "Reproducible",
+                        "reproducible": 5,
+                        "limited_reproducibility": 0,
+                        "non_reproducible": 0,
+                        "pattern_state": "No Pattern",
+                    },
+                    "integrity": {
+                        "classification": "High Integrity",
+                        "high_integrity": 5,
+                        "limited_integrity": 0,
+                        "compromised_integrity": 0,
+                        "pattern_state": "No Pattern",
+                    },
+                    "governance": {
+                        "governance_classification": {
+                            "Recurring Governance Pattern": "Governance Gap",
+                            "Limited Governance Pattern": "Partially Governed",
+                            "No Governance Pattern": "Governed",
+                        }[classification],
+                        "continuity_classification": {
+                            "Recurring Governance Pattern": "Governance Discontinuity",
+                            "Limited Governance Pattern": "Partial Continuity",
+                            "No Governance Pattern": "Continuous Governance",
+                        }[classification],
+                        "change_state": {
+                            "Recurring Governance Pattern": "Significant Change",
+                            "Limited Governance Pattern": "Limited Change",
+                            "No Governance Pattern": "No Recorded Change",
+                        }[classification],
+                        "governance_trajectory": {
+                            "Recurring Governance Pattern": "Governance Regression",
+                            "Limited Governance Pattern": "Governance Persistence",
+                            "No Governance Pattern": "Governance Progression",
+                        }[classification],
+                        "pattern_state": {
+                            "Recurring Governance Pattern": "Pattern-Matching",
+                            "Limited Governance Pattern": "Limited Pattern",
+                            "No Governance Pattern": "No Pattern",
+                        }[classification],
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": {
+                        "Recurring Governance Pattern": "Governance Gap",
+                        "Limited Governance Pattern": "Partially Governed",
+                        "No Governance Pattern": "Governed",
+                    }[classification],
+                    "continuity_classification": {
+                        "Recurring Governance Pattern": "Governance Discontinuity",
+                        "Limited Governance Pattern": "Partial Continuity",
+                        "No Governance Pattern": "Continuous Governance",
+                    }[classification],
+                    "governance_change_state": {
+                        "Recurring Governance Pattern": "Significant Change",
+                        "Limited Governance Pattern": "Limited Change",
+                        "No Governance Pattern": "No Recorded Change",
+                    }[classification],
+                    "governance_trajectory": {
+                        "Recurring Governance Pattern": "Governance Regression",
+                        "Limited Governance Pattern": "Governance Persistence",
+                        "No Governance Pattern": "Governance Progression",
+                    }[classification],
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "governance_pattern_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17j_governance_pattern_classification
+
+        self.assertEqual(
+            "Recurring Governance Pattern",
+            classify(
+                "Unsupported",
+                "Unsupported Impact",
+                "Unstable",
+                "Non-Reproducible",
+                "Compromised Integrity",
+                "Governance Gap",
+                "Governance Discontinuity",
+                "Significant Change",
+                "Governance Regression",
+            ),
+        )
+        self.assertEqual(
+            "Limited Governance Pattern",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Limited Stability",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+                "Partial Continuity",
+                "Limited Change",
+                "Governance Persistence",
+            ),
+        )
+        self.assertEqual(
+            "No Governance Pattern",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+            ),
+        )
+
+        for classification in (
+            "Recurring Governance Pattern",
+            "Limited Governance Pattern",
+            "No Governance Pattern",
+        ):
+            rendered = self.admin_session._render_stage17j_governance_pattern_detection_content(
+                pattern(classification)
+            )
+            self.assertIn(
+                f"<td>Governance Pattern Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Dependency Pattern Review</h3>", rendered)
+            self.assertIn("<h3>Impact Pattern Review</h3>", rendered)
+            self.assertIn("<h3>Stability Pattern Review</h3>", rendered)
+            self.assertIn("<h3>Reproducibility Pattern Review</h3>", rendered)
+            self.assertIn("<h3>Integrity Pattern Review</h3>", rendered)
+            self.assertIn("<h3>Governance Pattern Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -2165,6 +2354,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Trajectory</h3>", after_content)
         self.assertIn("<h3>Integrity Trajectory</h3>", after_content)
         self.assertIn("<h3>Governance Trajectory Review</h3>", after_content)
+        self.assertIn("Governance Pattern Detection", after_content)
+        self.assertIn("Pattern Summary", after_content)
+        self.assertIn("<td>Total Pattern Layers</td><td>6</td>", after_content)
+        self.assertIn("<td>Pattern-Matching Layers</td><td>6</td>", after_content)
+        self.assertIn("<td>Non-Pattern Layers</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Governance Pattern Classification</td><td>Recurring Governance Pattern</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Dependency Pattern Review</h3>", after_content)
+        self.assertIn("<h3>Impact Pattern Review</h3>", after_content)
+        self.assertIn("<h3>Stability Pattern Review</h3>", after_content)
+        self.assertIn("<h3>Reproducibility Pattern Review</h3>", after_content)
+        self.assertIn("<h3>Integrity Pattern Review</h3>", after_content)
+        self.assertIn("<h3>Governance Pattern Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2827,6 +3031,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Trajectory</h3>", content)
         self.assertIn("<h3>Integrity Trajectory</h3>", content)
         self.assertIn("<h3>Governance Trajectory Review</h3>", content)
+        self.assertIn("Governance Pattern Detection", content)
+        self.assertIn("Pattern Summary", content)
+        self.assertIn("<td>Total Pattern Layers</td><td>6</td>", content)
+        self.assertIn("<td>Pattern-Matching Layers</td><td>6</td>", content)
+        self.assertIn("<td>Non-Pattern Layers</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Governance Pattern Classification</td><td>Recurring Governance Pattern</td>",
+            content,
+        )
+        self.assertIn("<h3>Dependency Pattern Review</h3>", content)
+        self.assertIn("<h3>Impact Pattern Review</h3>", content)
+        self.assertIn("<h3>Stability Pattern Review</h3>", content)
+        self.assertIn("<h3>Reproducibility Pattern Review</h3>", content)
+        self.assertIn("<h3>Integrity Pattern Review</h3>", content)
+        self.assertIn("<h3>Governance Pattern Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -3788,6 +4007,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Governance Change Log</h2>"),
             governance_content.index("<h2>Record Governance Trajectory</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Governance Trajectory</h2>"),
+            governance_content.index("<h2>Governance Pattern Detection</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3828,6 +4051,10 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<h2>Record Governance Trajectory</h2>",
+            print_governance_content,
+        )
+        self.assertIn(
+            "<h2>Governance Pattern Detection</h2>",
             print_governance_content,
         )
         self.assertIn(
