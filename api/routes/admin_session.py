@@ -12729,6 +12729,314 @@ def _render_stage17g_governance_continuity_section(
       </section>"""
 
 
+def _stage17h_layer_change_state(classification: str) -> str:
+    if classification in {
+        "Unsupported",
+        "Unsupported Impact",
+        "Unstable",
+        "Non-Reproducible",
+        "Compromised Integrity",
+        "Governance Gap",
+        "Governance Discontinuity",
+    }:
+        return "Significant Change"
+    if classification in {
+        "Limited Stability",
+        "Limited Reproducibility",
+        "Limited Integrity",
+        "Limited Confidence",
+        "Partial",
+        "Partially Governed",
+        "Partial Continuity",
+    }:
+        return "Limited Change"
+    return "No Recorded Change"
+
+
+def _stage17h_governance_change_state(
+    dependency_classification: str,
+    impact_classification: str,
+    stability_classification: str,
+    reproducibility_classification: str,
+    integrity_classification: str,
+    governance_classification: str,
+    continuity_classification: str,
+) -> str:
+    layer_states = [
+        _stage17h_layer_change_state(dependency_classification),
+        _stage17h_layer_change_state(impact_classification),
+        _stage17h_layer_change_state(stability_classification),
+        _stage17h_layer_change_state(reproducibility_classification),
+        _stage17h_layer_change_state(integrity_classification),
+        _stage17h_layer_change_state(governance_classification),
+        _stage17h_layer_change_state(continuity_classification),
+    ]
+    if "Significant Change" in layer_states:
+        return "Significant Change"
+    if "Limited Change" in layer_states or len(set(layer_states)) > 1:
+        return "Limited Change"
+    return "No Recorded Change"
+
+
+def _record_stage17h_governance_change_log(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    continuity = _record_stage17g_governance_continuity(
+        evidence_groups,
+        record_outputs,
+    )
+    continuity_summary = continuity["summary"]
+    continuity_reviews = continuity["reviews"]
+    continuity_record = continuity["record"]
+    governance_classification = continuity_summary["governance_classification"]
+    continuity_classification = continuity_summary["continuity_classification"]
+    change_state = _stage17h_governance_change_state(
+        continuity_record["dependency_classification"],
+        continuity_record["impact_classification"],
+        continuity_record["stability_classification"],
+        continuity_record["reproducibility_classification"],
+        continuity_record["integrity_classification"],
+        governance_classification,
+        continuity_classification,
+    )
+    reviews = {
+        "dependency": {
+            **continuity_reviews["dependency"],
+            "change_state": _stage17h_layer_change_state(
+                continuity_record["dependency_classification"]
+            ),
+        },
+        "impact": {
+            **continuity_reviews["impact"],
+            "change_state": _stage17h_layer_change_state(
+                continuity_record["impact_classification"]
+            ),
+        },
+        "stability": {
+            **continuity_reviews["stability"],
+            "change_state": _stage17h_layer_change_state(
+                continuity_record["stability_classification"]
+            ),
+        },
+        "reproducibility": {
+            **continuity_reviews["reproducibility"],
+            "change_state": _stage17h_layer_change_state(
+                continuity_record["reproducibility_classification"]
+            ),
+        },
+        "integrity": {
+            **continuity_reviews["integrity"],
+            "change_state": _stage17h_layer_change_state(
+                continuity_record["integrity_classification"]
+            ),
+        },
+        "governance": {
+            "governance_classification": governance_classification,
+            "continuity_classification": continuity_classification,
+            "change_state": change_state,
+        },
+    }
+    layer_classifications = [
+        continuity_record["dependency_classification"],
+        continuity_record["impact_classification"],
+        continuity_record["stability_classification"],
+        continuity_record["reproducibility_classification"],
+        continuity_record["integrity_classification"],
+    ]
+
+    return {
+        "summary": {
+            "total_governance_layers": len(layer_classifications),
+            "active_governance_layers": sum(
+                1 for value in layer_classifications if value not in (None, "")
+            ),
+            "current_governance_classification": governance_classification,
+            "current_continuity_classification": continuity_classification,
+            "governance_change_state": change_state,
+        },
+        "reviews": reviews,
+        "record": {
+            **continuity_record,
+            "governance_change_state": change_state,
+        },
+    }
+
+
+def _render_stage17h_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17h-change-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17h_record_change_log(change_log: dict[str, Any]) -> str:
+    record = change_log["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Dependency Classification", record["dependency_classification"]),
+        ("Impact Classification", record["impact_classification"]),
+        ("Stability Classification", record["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17h-record-governance-change-log">
+          <h3>Record Governance Change Log</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17h_governance_change_log_content(
+    change_log: dict[str, Any],
+) -> str:
+    summary = change_log["summary"]
+    reviews = change_log["reviews"]
+    summary_rows = (
+        ("Total Governance Layers", summary["total_governance_layers"]),
+        ("Active Governance Layers", summary["active_governance_layers"]),
+        (
+            "Current Governance Classification",
+            summary["current_governance_classification"],
+        ),
+        (
+            "Current Continuity Classification",
+            summary["current_continuity_classification"],
+        ),
+        ("Governance Change State", summary["governance_change_state"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Change Log Summary</h3>
+        <table class="stage17h-change-log-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17h_review(
+            "Dependency Change Review",
+            (
+                ("Classification", reviews["dependency"]["classification"]),
+                ("Evidence Supported", reviews["dependency"]["evidence_supported"]),
+                ("Unsupported", reviews["dependency"]["unsupported"]),
+                ("Change State", reviews["dependency"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_review(
+            "Impact Change Review",
+            (
+                ("Classification", reviews["impact"]["classification"]),
+                ("Evidence Supported", reviews["impact"]["evidence_supported"]),
+                ("Unsupported", reviews["impact"]["unsupported"]),
+                ("Change State", reviews["impact"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_review(
+            "Stability Change Review",
+            (
+                ("Classification", reviews["stability"]["classification"]),
+                ("Stable", reviews["stability"]["stable"]),
+                ("Limited Stability", reviews["stability"]["limited_stability"]),
+                ("Unstable", reviews["stability"]["unstable"]),
+                ("Change State", reviews["stability"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_review(
+            "Reproducibility Change Review",
+            (
+                ("Classification", reviews["reproducibility"]["classification"]),
+                ("Reproducible", reviews["reproducibility"]["reproducible"]),
+                (
+                    "Limited Reproducibility",
+                    reviews["reproducibility"]["limited_reproducibility"],
+                ),
+                (
+                    "Non-Reproducible",
+                    reviews["reproducibility"]["non_reproducible"],
+                ),
+                ("Change State", reviews["reproducibility"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_review(
+            "Integrity Change Review",
+            (
+                ("Classification", reviews["integrity"]["classification"]),
+                ("High Integrity", reviews["integrity"]["high_integrity"]),
+                ("Limited Integrity", reviews["integrity"]["limited_integrity"]),
+                (
+                    "Compromised Integrity",
+                    reviews["integrity"]["compromised_integrity"],
+                ),
+                ("Change State", reviews["integrity"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_review(
+            "Governance Change Review",
+            (
+                (
+                    "Governance Classification",
+                    reviews["governance"]["governance_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["governance"]["continuity_classification"],
+                ),
+                ("Change State", reviews["governance"]["change_state"]),
+            ),
+        )}
+        {_render_stage17h_record_change_log(change_log)}"""
+
+
+def _render_stage17h_governance_change_log_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    change_log = _record_stage17h_governance_change_log(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17h-record-governance-change-log">
+        <h2>Record Governance Change Log</h2>
+        <p class="notice">
+          Record governance change log is derived deterministically from existing
+          governance summary, governance continuity, and record governance
+          outputs only.
+        </p>
+        {_render_stage17h_governance_change_log_content(change_log)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -12879,6 +13187,12 @@ def render_admin_record_evidence_page(
             record_outputs,
         )
     )
+    stage17h_record_governance_change_log = (
+        _render_stage17h_governance_change_log_section(
+            evidence_groups,
+            record_outputs,
+        )
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -13002,6 +13316,7 @@ def render_admin_record_evidence_page(
             f"{stage17e_record_integrity}"
             f"{stage17f_record_governance_summary}"
             f"{stage17g_record_governance_continuity}"
+            f"{stage17h_record_governance_change_log}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

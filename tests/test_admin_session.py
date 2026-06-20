@@ -392,6 +392,154 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Reproducibility Continuity</h3>", rendered)
             self.assertIn("<h3>Integrity Continuity</h3>", rendered)
 
+
+    def test_stage17h_governance_change_log_renders_classification_states(self):
+        def change_log(classification):
+            return {
+                "summary": {
+                    "total_governance_layers": 5,
+                    "active_governance_layers": 5,
+                    "current_governance_classification": {
+                        "No Recorded Change": "Governed",
+                        "Limited Change": "Partially Governed",
+                        "Significant Change": "Governance Gap",
+                    }[classification],
+                    "current_continuity_classification": {
+                        "No Recorded Change": "Continuous Governance",
+                        "Limited Change": "Partial Continuity",
+                        "Significant Change": "Governance Discontinuity",
+                    }[classification],
+                    "governance_change_state": classification,
+                },
+                "reviews": {
+                    "dependency": {
+                        "classification": "Supported",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "change_state": classification,
+                    },
+                    "impact": {
+                        "classification": "Evidence-Supported Impact",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "change_state": classification,
+                    },
+                    "stability": {
+                        "classification": "Stable",
+                        "stable": 5,
+                        "limited_stability": 0,
+                        "unstable": 0,
+                        "change_state": classification,
+                    },
+                    "reproducibility": {
+                        "classification": "Reproducible",
+                        "reproducible": 5,
+                        "limited_reproducibility": 0,
+                        "non_reproducible": 0,
+                        "change_state": classification,
+                    },
+                    "integrity": {
+                        "classification": "High Integrity",
+                        "high_integrity": 5,
+                        "limited_integrity": 0,
+                        "compromised_integrity": 0,
+                        "change_state": classification,
+                    },
+                    "governance": {
+                        "governance_classification": {
+                            "No Recorded Change": "Governed",
+                            "Limited Change": "Partially Governed",
+                            "Significant Change": "Governance Gap",
+                        }[classification],
+                        "continuity_classification": {
+                            "No Recorded Change": "Continuous Governance",
+                            "Limited Change": "Partial Continuity",
+                            "Significant Change": "Governance Discontinuity",
+                        }[classification],
+                        "change_state": classification,
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "governance_classification": {
+                        "No Recorded Change": "Governed",
+                        "Limited Change": "Partially Governed",
+                        "Significant Change": "Governance Gap",
+                    }[classification],
+                    "continuity_classification": {
+                        "No Recorded Change": "Continuous Governance",
+                        "Limited Change": "Partial Continuity",
+                        "Significant Change": "Governance Discontinuity",
+                    }[classification],
+                    "governance_change_state": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17h_governance_change_state
+
+        self.assertEqual(
+            "Significant Change",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Unstable",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+                "Partial Continuity",
+            ),
+        )
+        self.assertEqual(
+            "Limited Change",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Limited Stability",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+                "Partial Continuity",
+            ),
+        )
+        self.assertEqual(
+            "No Recorded Change",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+                "Governed",
+                "Continuous Governance",
+            ),
+        )
+
+        for classification in (
+            "No Recorded Change",
+            "Limited Change",
+            "Significant Change",
+        ):
+            rendered = self.admin_session._render_stage17h_governance_change_log_content(
+                change_log(classification)
+            )
+            self.assertIn(
+                f"<td>Governance Change State</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Dependency Change Review</h3>", rendered)
+            self.assertIn("<h3>Impact Change Review</h3>", rendered)
+            self.assertIn("<h3>Stability Change Review</h3>", rendered)
+            self.assertIn("<h3>Reproducibility Change Review</h3>", rendered)
+            self.assertIn("<h3>Integrity Change Review</h3>", rendered)
+            self.assertIn("<h3>Governance Change Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -1807,6 +1955,28 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Stability Continuity</h3>", after_content)
         self.assertIn("<h3>Reproducibility Continuity</h3>", after_content)
         self.assertIn("<h3>Integrity Continuity</h3>", after_content)
+        self.assertIn("Record Governance Change Log", after_content)
+        self.assertIn("Change Log Summary", after_content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", after_content)
+        self.assertIn("<td>Active Governance Layers</td><td>5</td>", after_content)
+        self.assertIn(
+            "<td>Current Governance Classification</td><td>Governance Gap</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Current Continuity Classification</td><td>Governance Discontinuity</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Governance Change State</td><td>Significant Change</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Dependency Change Review</h3>", after_content)
+        self.assertIn("<h3>Impact Change Review</h3>", after_content)
+        self.assertIn("<h3>Stability Change Review</h3>", after_content)
+        self.assertIn("<h3>Reproducibility Change Review</h3>", after_content)
+        self.assertIn("<h3>Integrity Change Review</h3>", after_content)
+        self.assertIn("<h3>Governance Change Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2439,6 +2609,20 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Stability Continuity</h3>", content)
         self.assertIn("<h3>Reproducibility Continuity</h3>", content)
         self.assertIn("<h3>Integrity Continuity</h3>", content)
+        self.assertIn("Record Governance Change Log", content)
+        self.assertIn("Change Log Summary", content)
+        self.assertIn("<td>Total Governance Layers</td><td>5</td>", content)
+        self.assertIn("<td>Active Governance Layers</td><td>5</td>", content)
+        self.assertIn(
+            "<td>Governance Change State</td><td>Significant Change</td>",
+            content,
+        )
+        self.assertIn("<h3>Dependency Change Review</h3>", content)
+        self.assertIn("<h3>Impact Change Review</h3>", content)
+        self.assertIn("<h3>Stability Change Review</h3>", content)
+        self.assertIn("<h3>Reproducibility Change Review</h3>", content)
+        self.assertIn("<h3>Integrity Change Review</h3>", content)
+        self.assertIn("<h3>Governance Change Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -3392,6 +3576,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Governance Summary</h2>"),
             governance_content.index("<h2>Record Governance Continuity</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Governance Continuity</h2>"),
+            governance_content.index("<h2>Record Governance Change Log</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3424,6 +3612,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Governance Summary</h2>", print_governance_content)
         self.assertIn(
             "<h2>Record Governance Continuity</h2>",
+            print_governance_content,
+        )
+        self.assertIn(
+            "<h2>Record Governance Change Log</h2>",
             print_governance_content,
         )
         self.assertIn(
