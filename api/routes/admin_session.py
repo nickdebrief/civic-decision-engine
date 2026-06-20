@@ -13357,6 +13357,344 @@ def _render_stage17i_governance_trajectory_section(
       </section>"""
 
 
+_STAGE17J_NEGATIVE_STATES = {
+    "Unsupported",
+    "Unsupported Impact",
+    "Unstable",
+    "Non-Reproducible",
+    "Compromised Integrity",
+    "Governance Gap",
+    "Governance Discontinuity",
+    "Significant Change",
+    "Governance Regression",
+}
+
+_STAGE17J_LIMITED_STATES = {
+    "Limited Stability",
+    "Limited Reproducibility",
+    "Limited Integrity",
+    "Limited Confidence",
+    "Partial",
+    "Partial Continuity",
+    "Limited Change",
+    "Governance Persistence",
+}
+
+
+def _stage17j_pattern_state(classification: str) -> str:
+    if classification in _STAGE17J_NEGATIVE_STATES:
+        return "Pattern-Matching"
+    if classification in _STAGE17J_LIMITED_STATES:
+        return "Limited Pattern"
+    return "No Pattern"
+
+
+def _stage17j_governance_pattern_classification(
+    dependency_classification: str,
+    impact_classification: str,
+    stability_classification: str,
+    reproducibility_classification: str,
+    integrity_classification: str,
+    governance_classification: str,
+    continuity_classification: str,
+    governance_change_state: str,
+    governance_trajectory: str,
+) -> str:
+    classifications = [
+        dependency_classification,
+        impact_classification,
+        stability_classification,
+        reproducibility_classification,
+        integrity_classification,
+        governance_classification,
+        continuity_classification,
+        governance_change_state,
+        governance_trajectory,
+    ]
+    negative_count = sum(1 for value in classifications if value in _STAGE17J_NEGATIVE_STATES)
+    limited_count = sum(1 for value in classifications if value in _STAGE17J_LIMITED_STATES)
+    if (
+        governance_classification == "Governance Gap"
+        and continuity_classification == "Governance Discontinuity"
+        and governance_change_state == "Significant Change"
+        and governance_trajectory == "Governance Regression"
+    ) or negative_count >= 3:
+        return "Recurring Governance Pattern"
+    if limited_count > 0:
+        return "Limited Governance Pattern"
+    return "No Governance Pattern"
+
+
+def _record_stage17j_governance_pattern_detection(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    trajectory = _record_stage17i_governance_trajectory(
+        evidence_groups,
+        record_outputs,
+    )
+    trajectory_summary = trajectory["summary"]
+    trajectory_reviews = trajectory["reviews"]
+    trajectory_record = trajectory["record"]
+    governance_pattern_classification = _stage17j_governance_pattern_classification(
+        trajectory_record["dependency_classification"],
+        trajectory_record["impact_classification"],
+        trajectory_record["stability_classification"],
+        trajectory_record["reproducibility_classification"],
+        trajectory_record["integrity_classification"],
+        trajectory_record["governance_classification"],
+        trajectory_record["continuity_classification"],
+        trajectory_record["governance_change_state"],
+        trajectory_record["governance_trajectory"],
+    )
+    reviews = {
+        "dependency": {
+            **trajectory_reviews["dependency"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["dependency_classification"]
+            ),
+        },
+        "impact": {
+            **trajectory_reviews["impact"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["impact_classification"]
+            ),
+        },
+        "stability": {
+            **trajectory_reviews["stability"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["stability_classification"]
+            ),
+        },
+        "reproducibility": {
+            **trajectory_reviews["reproducibility"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["reproducibility_classification"]
+            ),
+        },
+        "integrity": {
+            **trajectory_reviews["integrity"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["integrity_classification"]
+            ),
+        },
+        "governance": {
+            **trajectory_reviews["governance"],
+            "governance_trajectory": trajectory_record["governance_trajectory"],
+            "pattern_state": _stage17j_pattern_state(
+                trajectory_record["governance_trajectory"]
+            ),
+        },
+    }
+    pattern_states = [review["pattern_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_pattern_layers": len(pattern_states),
+            "pattern_matching_layers": pattern_states.count("Pattern-Matching"),
+            "non_pattern_layers": pattern_states.count("No Pattern"),
+            "governance_classification": trajectory_summary[
+                "current_governance_classification"
+            ],
+            "continuity_classification": trajectory_summary[
+                "current_continuity_classification"
+            ],
+            "governance_change_state": trajectory_summary["current_change_state"],
+            "governance_trajectory": trajectory_summary["governance_trajectory"],
+            "governance_pattern_classification": governance_pattern_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **trajectory_record,
+            "governance_pattern_classification": governance_pattern_classification,
+        },
+    }
+
+
+def _render_stage17j_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17j-pattern-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17j_record_pattern_detection(pattern: dict[str, Any]) -> str:
+    record = pattern["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        ("Dependency Classification", record["dependency_classification"]),
+        ("Impact Classification", record["impact_classification"]),
+        ("Stability Classification", record["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Integrity Classification", record["integrity_classification"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17j-record-governance-pattern-detection">
+          <h3>Record Governance Pattern Detection</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17j_governance_pattern_detection_content(
+    pattern: dict[str, Any],
+) -> str:
+    summary = pattern["summary"]
+    reviews = pattern["reviews"]
+    summary_rows = (
+        ("Total Pattern Layers", summary["total_pattern_layers"]),
+        ("Pattern-Matching Layers", summary["pattern_matching_layers"]),
+        ("Non-Pattern Layers", summary["non_pattern_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Governance Change State", summary["governance_change_state"]),
+        ("Governance Trajectory", summary["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            summary["governance_pattern_classification"],
+        ),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Pattern Summary</h3>
+        <table class="stage17j-pattern-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17j_review(
+            "Dependency Pattern Review",
+            (
+                ("Dependency Classification", reviews["dependency"]["classification"]),
+                ("Evidence Supported", reviews["dependency"]["evidence_supported"]),
+                ("Unsupported", reviews["dependency"]["unsupported"]),
+                ("Pattern State", reviews["dependency"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_review(
+            "Impact Pattern Review",
+            (
+                ("Impact Classification", reviews["impact"]["classification"]),
+                ("Evidence Supported", reviews["impact"]["evidence_supported"]),
+                ("Unsupported", reviews["impact"]["unsupported"]),
+                ("Pattern State", reviews["impact"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_review(
+            "Stability Pattern Review",
+            (
+                ("Stability Classification", reviews["stability"]["classification"]),
+                ("Stable", reviews["stability"]["stable"]),
+                ("Limited Stability", reviews["stability"]["limited_stability"]),
+                ("Unstable", reviews["stability"]["unstable"]),
+                ("Pattern State", reviews["stability"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_review(
+            "Reproducibility Pattern Review",
+            (
+                (
+                    "Reproducibility Classification",
+                    reviews["reproducibility"]["classification"],
+                ),
+                ("Reproducible", reviews["reproducibility"]["reproducible"]),
+                (
+                    "Limited Reproducibility",
+                    reviews["reproducibility"]["limited_reproducibility"],
+                ),
+                (
+                    "Non-Reproducible",
+                    reviews["reproducibility"]["non_reproducible"],
+                ),
+                ("Pattern State", reviews["reproducibility"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_review(
+            "Integrity Pattern Review",
+            (
+                ("Integrity Classification", reviews["integrity"]["classification"]),
+                ("High Integrity", reviews["integrity"]["high_integrity"]),
+                ("Limited Integrity", reviews["integrity"]["limited_integrity"]),
+                (
+                    "Compromised Integrity",
+                    reviews["integrity"]["compromised_integrity"],
+                ),
+                ("Pattern State", reviews["integrity"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_review(
+            "Governance Pattern Review",
+            (
+                (
+                    "Governance Classification",
+                    reviews["governance"]["governance_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["governance"]["continuity_classification"],
+                ),
+                ("Governance Change State", reviews["governance"]["change_state"]),
+                ("Governance Trajectory", reviews["governance"]["governance_trajectory"]),
+                ("Pattern State", reviews["governance"]["pattern_state"]),
+            ),
+        )}
+        {_render_stage17j_record_pattern_detection(pattern)}"""
+
+
+def _render_stage17j_governance_pattern_detection_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    pattern = _record_stage17j_governance_pattern_detection(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17j-governance-pattern-detection">
+        <h2>Governance Pattern Detection</h2>
+        <p class="notice">
+          Governance pattern detection is derived deterministically from existing
+          governance trajectory and governance chain outputs only. It reveals
+          repeated states already present and does not predict future states.
+        </p>
+        {_render_stage17j_governance_pattern_detection_content(pattern)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -13519,6 +13857,12 @@ def render_admin_record_evidence_page(
             record_outputs,
         )
     )
+    stage17j_governance_pattern_detection = (
+        _render_stage17j_governance_pattern_detection_section(
+            evidence_groups,
+            record_outputs,
+        )
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -13644,6 +13988,7 @@ def render_admin_record_evidence_page(
             f"{stage17g_record_governance_continuity}"
             f"{stage17h_record_governance_change_log}"
             f"{stage17i_record_governance_trajectory}"
+            f"{stage17j_governance_pattern_detection}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
