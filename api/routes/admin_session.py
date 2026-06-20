@@ -13037,6 +13037,326 @@ def _render_stage17h_governance_change_log_section(
       </section>"""
 
 
+def _stage17i_layer_trajectory_state(classification: str) -> str:
+    if classification in {
+        "Unsupported",
+        "Unsupported Impact",
+        "Unstable",
+        "Non-Reproducible",
+        "Compromised Integrity",
+        "Governance Gap",
+        "Governance Discontinuity",
+        "Significant Change",
+    }:
+        return "Regression"
+    if classification in {
+        "Limited Stability",
+        "Limited Reproducibility",
+        "Limited Integrity",
+        "Limited Confidence",
+        "Partial",
+        "Partially Governed",
+        "Partial Continuity",
+        "Limited Change",
+    }:
+        return "Persistent"
+    return "Progression"
+
+
+def _stage17i_governance_trajectory(
+    dependency_classification: str,
+    impact_classification: str,
+    stability_classification: str,
+    reproducibility_classification: str,
+    integrity_classification: str,
+    governance_classification: str,
+    continuity_classification: str,
+    governance_change_state: str,
+) -> str:
+    if (
+        governance_classification == "Governance Gap"
+        or continuity_classification == "Governance Discontinuity"
+        or governance_change_state == "Significant Change"
+        or integrity_classification == "Compromised Integrity"
+        or reproducibility_classification == "Non-Reproducible"
+        or stability_classification == "Unstable"
+    ):
+        return "Governance Regression"
+    if (
+        governance_classification == "Governed"
+        and continuity_classification == "Continuous Governance"
+        and governance_change_state in {"No Recorded Change", "Limited Change"}
+    ):
+        return "Governance Progression"
+    return "Governance Persistence"
+
+
+def _record_stage17i_governance_trajectory(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    change_log = _record_stage17h_governance_change_log(
+        evidence_groups,
+        record_outputs,
+    )
+    change_summary = change_log["summary"]
+    change_reviews = change_log["reviews"]
+    change_record = change_log["record"]
+    governance_trajectory = _stage17i_governance_trajectory(
+        change_record["dependency_classification"],
+        change_record["impact_classification"],
+        change_record["stability_classification"],
+        change_record["reproducibility_classification"],
+        change_record["integrity_classification"],
+        change_record["governance_classification"],
+        change_record["continuity_classification"],
+        change_record["governance_change_state"],
+    )
+    reviews = {
+        "dependency": {
+            **change_reviews["dependency"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["dependency_classification"]
+            ),
+        },
+        "impact": {
+            **change_reviews["impact"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["impact_classification"]
+            ),
+        },
+        "stability": {
+            **change_reviews["stability"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["stability_classification"]
+            ),
+        },
+        "reproducibility": {
+            **change_reviews["reproducibility"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["reproducibility_classification"]
+            ),
+        },
+        "integrity": {
+            **change_reviews["integrity"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["integrity_classification"]
+            ),
+        },
+        "governance": {
+            **change_reviews["governance"],
+            "trajectory_state": _stage17i_layer_trajectory_state(
+                change_record["governance_change_state"]
+            ),
+        },
+    }
+    trajectory_states = [review["trajectory_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_trajectory_layers": len(trajectory_states),
+            "progression_layers": trajectory_states.count("Progression"),
+            "persistent_layers": trajectory_states.count("Persistent"),
+            "regression_layers": trajectory_states.count("Regression"),
+            "current_governance_classification": change_summary[
+                "current_governance_classification"
+            ],
+            "current_continuity_classification": change_summary[
+                "current_continuity_classification"
+            ],
+            "current_change_state": change_summary["governance_change_state"],
+            "governance_trajectory": governance_trajectory,
+        },
+        "reviews": reviews,
+        "record": {
+            **change_record,
+            "governance_trajectory": governance_trajectory,
+        },
+    }
+
+
+def _render_stage17i_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17i-trajectory-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17i_record_trajectory(trajectory: dict[str, Any]) -> str:
+    record = trajectory["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Dependency Classification", record["dependency_classification"]),
+        ("Impact Classification", record["impact_classification"]),
+        ("Stability Classification", record["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17i-record-governance-trajectory">
+          <h3>Record Governance Trajectory</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17i_governance_trajectory_content(
+    trajectory: dict[str, Any],
+) -> str:
+    summary = trajectory["summary"]
+    reviews = trajectory["reviews"]
+    summary_rows = (
+        ("Total Trajectory Layers", summary["total_trajectory_layers"]),
+        ("Progression Layers", summary["progression_layers"]),
+        ("Persistent Layers", summary["persistent_layers"]),
+        ("Regression Layers", summary["regression_layers"]),
+        (
+            "Current Governance Classification",
+            summary["current_governance_classification"],
+        ),
+        (
+            "Current Continuity Classification",
+            summary["current_continuity_classification"],
+        ),
+        ("Current Change State", summary["current_change_state"]),
+        ("Governance Trajectory", summary["governance_trajectory"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Trajectory Summary</h3>
+        <table class="stage17i-trajectory-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17i_review(
+            "Dependency Trajectory",
+            (
+                ("Dependency Classification", reviews["dependency"]["classification"]),
+                ("Evidence Supported", reviews["dependency"]["evidence_supported"]),
+                ("Unsupported", reviews["dependency"]["unsupported"]),
+                ("Trajectory State", reviews["dependency"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_review(
+            "Impact Trajectory",
+            (
+                ("Impact Classification", reviews["impact"]["classification"]),
+                ("Evidence Supported", reviews["impact"]["evidence_supported"]),
+                ("Unsupported", reviews["impact"]["unsupported"]),
+                ("Trajectory State", reviews["impact"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_review(
+            "Stability Trajectory",
+            (
+                ("Stability Classification", reviews["stability"]["classification"]),
+                ("Stable", reviews["stability"]["stable"]),
+                ("Limited Stability", reviews["stability"]["limited_stability"]),
+                ("Unstable", reviews["stability"]["unstable"]),
+                ("Trajectory State", reviews["stability"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_review(
+            "Reproducibility Trajectory",
+            (
+                (
+                    "Reproducibility Classification",
+                    reviews["reproducibility"]["classification"],
+                ),
+                ("Reproducible", reviews["reproducibility"]["reproducible"]),
+                (
+                    "Limited Reproducibility",
+                    reviews["reproducibility"]["limited_reproducibility"],
+                ),
+                (
+                    "Non-Reproducible",
+                    reviews["reproducibility"]["non_reproducible"],
+                ),
+                ("Trajectory State", reviews["reproducibility"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_review(
+            "Integrity Trajectory",
+            (
+                ("Integrity Classification", reviews["integrity"]["classification"]),
+                ("High Integrity", reviews["integrity"]["high_integrity"]),
+                ("Limited Integrity", reviews["integrity"]["limited_integrity"]),
+                (
+                    "Compromised Integrity",
+                    reviews["integrity"]["compromised_integrity"],
+                ),
+                ("Trajectory State", reviews["integrity"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_review(
+            "Governance Trajectory Review",
+            (
+                (
+                    "Governance Classification",
+                    reviews["governance"]["governance_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["governance"]["continuity_classification"],
+                ),
+                ("Change State", reviews["governance"]["change_state"]),
+                ("Trajectory State", reviews["governance"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage17i_record_trajectory(trajectory)}"""
+
+
+def _render_stage17i_governance_trajectory_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    trajectory = _record_stage17i_governance_trajectory(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17i-record-governance-trajectory">
+        <h2>Record Governance Trajectory</h2>
+        <p class="notice">
+          Record governance trajectory is derived deterministically from existing
+          governance summary, continuity, change log, and record governance
+          outputs only. It does not predict or forecast future governance states.
+        </p>
+        {_render_stage17i_governance_trajectory_content(trajectory)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -13193,6 +13513,12 @@ def render_admin_record_evidence_page(
             record_outputs,
         )
     )
+    stage17i_record_governance_trajectory = (
+        _render_stage17i_governance_trajectory_section(
+            evidence_groups,
+            record_outputs,
+        )
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -13317,6 +13643,7 @@ def render_admin_record_evidence_page(
             f"{stage17f_record_governance_summary}"
             f"{stage17g_record_governance_continuity}"
             f"{stage17h_record_governance_change_log}"
+            f"{stage17i_record_governance_trajectory}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

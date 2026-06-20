@@ -540,6 +540,178 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Integrity Change Review</h3>", rendered)
             self.assertIn("<h3>Governance Change Review</h3>", rendered)
 
+
+    def test_stage17i_governance_trajectory_renders_classification_states(self):
+        def trajectory(classification):
+            return {
+                "summary": {
+                    "total_trajectory_layers": 6,
+                    "progression_layers": 6 if classification == "Governance Progression" else 0,
+                    "persistent_layers": 6 if classification == "Governance Persistence" else 0,
+                    "regression_layers": 6 if classification == "Governance Regression" else 0,
+                    "current_governance_classification": {
+                        "Governance Progression": "Governed",
+                        "Governance Persistence": "Partially Governed",
+                        "Governance Regression": "Governance Gap",
+                    }[classification],
+                    "current_continuity_classification": {
+                        "Governance Progression": "Continuous Governance",
+                        "Governance Persistence": "Partial Continuity",
+                        "Governance Regression": "Governance Discontinuity",
+                    }[classification],
+                    "current_change_state": {
+                        "Governance Progression": "No Recorded Change",
+                        "Governance Persistence": "Limited Change",
+                        "Governance Regression": "Significant Change",
+                    }[classification],
+                    "governance_trajectory": classification,
+                },
+                "reviews": {
+                    "dependency": {
+                        "classification": "Supported",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "trajectory_state": "Progression",
+                    },
+                    "impact": {
+                        "classification": "Evidence-Supported Impact",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "trajectory_state": "Progression",
+                    },
+                    "stability": {
+                        "classification": "Stable",
+                        "stable": 5,
+                        "limited_stability": 0,
+                        "unstable": 0,
+                        "trajectory_state": "Progression",
+                    },
+                    "reproducibility": {
+                        "classification": "Reproducible",
+                        "reproducible": 5,
+                        "limited_reproducibility": 0,
+                        "non_reproducible": 0,
+                        "trajectory_state": "Progression",
+                    },
+                    "integrity": {
+                        "classification": "High Integrity",
+                        "high_integrity": 5,
+                        "limited_integrity": 0,
+                        "compromised_integrity": 0,
+                        "trajectory_state": "Progression",
+                    },
+                    "governance": {
+                        "governance_classification": {
+                            "Governance Progression": "Governed",
+                            "Governance Persistence": "Partially Governed",
+                            "Governance Regression": "Governance Gap",
+                        }[classification],
+                        "continuity_classification": {
+                            "Governance Progression": "Continuous Governance",
+                            "Governance Persistence": "Partial Continuity",
+                            "Governance Regression": "Governance Discontinuity",
+                        }[classification],
+                        "change_state": {
+                            "Governance Progression": "No Recorded Change",
+                            "Governance Persistence": "Limited Change",
+                            "Governance Regression": "Significant Change",
+                        }[classification],
+                        "trajectory_state": {
+                            "Governance Progression": "Progression",
+                            "Governance Persistence": "Persistent",
+                            "Governance Regression": "Regression",
+                        }[classification],
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": {
+                        "Governance Progression": "Governed",
+                        "Governance Persistence": "Partially Governed",
+                        "Governance Regression": "Governance Gap",
+                    }[classification],
+                    "continuity_classification": {
+                        "Governance Progression": "Continuous Governance",
+                        "Governance Persistence": "Partial Continuity",
+                        "Governance Regression": "Governance Discontinuity",
+                    }[classification],
+                    "governance_change_state": {
+                        "Governance Progression": "No Recorded Change",
+                        "Governance Persistence": "Limited Change",
+                        "Governance Regression": "Significant Change",
+                    }[classification],
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "governance_trajectory": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17i_governance_trajectory
+
+        self.assertEqual(
+            "Governance Regression",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Unstable",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+                "Partial Continuity",
+                "Limited Change",
+            ),
+        )
+        self.assertEqual(
+            "Governance Progression",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+            ),
+        )
+        self.assertEqual(
+            "Governance Persistence",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Limited Stability",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+                "Partial Continuity",
+                "Limited Change",
+            ),
+        )
+
+        for classification in (
+            "Governance Progression",
+            "Governance Persistence",
+            "Governance Regression",
+        ):
+            rendered = self.admin_session._render_stage17i_governance_trajectory_content(
+                trajectory(classification)
+            )
+            self.assertIn(
+                f"<td>Governance Trajectory</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Dependency Trajectory</h3>", rendered)
+            self.assertIn("<h3>Impact Trajectory</h3>", rendered)
+            self.assertIn("<h3>Stability Trajectory</h3>", rendered)
+            self.assertIn("<h3>Reproducibility Trajectory</h3>", rendered)
+            self.assertIn("<h3>Integrity Trajectory</h3>", rendered)
+            self.assertIn("<h3>Governance Trajectory Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -1977,6 +2149,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Change Review</h3>", after_content)
         self.assertIn("<h3>Integrity Change Review</h3>", after_content)
         self.assertIn("<h3>Governance Change Review</h3>", after_content)
+        self.assertIn("Record Governance Trajectory", after_content)
+        self.assertIn("Trajectory Summary", after_content)
+        self.assertIn("<td>Total Trajectory Layers</td><td>6</td>", after_content)
+        self.assertIn("<td>Progression Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Persistent Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Regression Layers</td><td>6</td>", after_content)
+        self.assertIn(
+            "<td>Governance Trajectory</td><td>Governance Regression</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Dependency Trajectory</h3>", after_content)
+        self.assertIn("<h3>Impact Trajectory</h3>", after_content)
+        self.assertIn("<h3>Stability Trajectory</h3>", after_content)
+        self.assertIn("<h3>Reproducibility Trajectory</h3>", after_content)
+        self.assertIn("<h3>Integrity Trajectory</h3>", after_content)
+        self.assertIn("<h3>Governance Trajectory Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2623,6 +2811,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Reproducibility Change Review</h3>", content)
         self.assertIn("<h3>Integrity Change Review</h3>", content)
         self.assertIn("<h3>Governance Change Review</h3>", content)
+        self.assertIn("Record Governance Trajectory", content)
+        self.assertIn("Trajectory Summary", content)
+        self.assertIn("<td>Total Trajectory Layers</td><td>6</td>", content)
+        self.assertIn("<td>Progression Layers</td><td>0</td>", content)
+        self.assertIn("<td>Persistent Layers</td><td>0</td>", content)
+        self.assertIn("<td>Regression Layers</td><td>6</td>", content)
+        self.assertIn(
+            "<td>Governance Trajectory</td><td>Governance Regression</td>",
+            content,
+        )
+        self.assertIn("<h3>Dependency Trajectory</h3>", content)
+        self.assertIn("<h3>Impact Trajectory</h3>", content)
+        self.assertIn("<h3>Stability Trajectory</h3>", content)
+        self.assertIn("<h3>Reproducibility Trajectory</h3>", content)
+        self.assertIn("<h3>Integrity Trajectory</h3>", content)
+        self.assertIn("<h3>Governance Trajectory Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -3580,6 +3784,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Governance Continuity</h2>"),
             governance_content.index("<h2>Record Governance Change Log</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Governance Change Log</h2>"),
+            governance_content.index("<h2>Record Governance Trajectory</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3616,6 +3824,10 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<h2>Record Governance Change Log</h2>",
+            print_governance_content,
+        )
+        self.assertIn(
+            "<h2>Record Governance Trajectory</h2>",
             print_governance_content,
         )
         self.assertIn(
