@@ -264,6 +264,134 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Reproducibility Review</h3>", rendered)
             self.assertIn("<h3>Integrity Review</h3>", rendered)
 
+    def test_stage17g_governance_continuity_renders_classification_states(self):
+        def continuity(classification):
+            return {
+                "summary": {
+                    "total_continuity_layers": 5,
+                    "continuous_layers": 5 if classification == "Continuous Governance" else 0,
+                    "partial_continuity_layers": (
+                        5 if classification == "Partial Continuity" else 0
+                    ),
+                    "discontinuous_layers": (
+                        5 if classification == "Governance Discontinuity" else 0
+                    ),
+                    "governance_classification": {
+                        "Continuous Governance": "Governed",
+                        "Partial Continuity": "Partially Governed",
+                        "Governance Discontinuity": "Governance Gap",
+                    }[classification],
+                    "continuity_classification": classification,
+                },
+                "reviews": {
+                    "dependency": {
+                        "classification": "Supported",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "continuity_state": "Continuous",
+                    },
+                    "impact": {
+                        "classification": "Evidence-Supported Impact",
+                        "evidence_supported": 5,
+                        "unsupported": 0,
+                        "continuity_state": "Continuous",
+                    },
+                    "stability": {
+                        "classification": "Stable",
+                        "stable": 5,
+                        "limited_stability": 0,
+                        "unstable": 0,
+                        "continuity_state": "Continuous",
+                    },
+                    "reproducibility": {
+                        "classification": "Reproducible",
+                        "reproducible": 5,
+                        "limited_reproducibility": 0,
+                        "non_reproducible": 0,
+                        "continuity_state": "Continuous",
+                    },
+                    "integrity": {
+                        "classification": "High Integrity",
+                        "high_integrity": 5,
+                        "limited_integrity": 0,
+                        "compromised_integrity": 0,
+                        "continuity_state": "Continuous",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": {
+                        "Continuous Governance": "Governed",
+                        "Partial Continuity": "Partially Governed",
+                        "Governance Discontinuity": "Governance Gap",
+                    }[classification],
+                    "dependency_classification": "Supported",
+                    "impact_classification": "Evidence-Supported Impact",
+                    "stability_classification": "Stable",
+                    "reproducibility_classification": "Reproducible",
+                    "integrity_classification": "High Integrity",
+                    "continuity_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17g_continuity_classification
+
+        self.assertEqual(
+            "Governance Discontinuity",
+            classify(
+                "Unsupported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+                "Partially Governed",
+            ),
+        )
+        self.assertEqual(
+            "Continuous Governance",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Stable",
+                "Reproducible",
+                "High Integrity",
+                "Governed",
+            ),
+        )
+        self.assertEqual(
+            "Partial Continuity",
+            classify(
+                "Supported",
+                "Evidence-Supported Impact",
+                "Limited Stability",
+                "Limited Reproducibility",
+                "Limited Integrity",
+                "Partially Governed",
+            ),
+        )
+
+        for classification in (
+            "Continuous Governance",
+            "Partial Continuity",
+            "Governance Discontinuity",
+        ):
+            rendered = (
+                self.admin_session._render_stage17g_governance_continuity_content(
+                    continuity(classification)
+                )
+            )
+            self.assertIn(
+                f"<td>Continuity Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Dependency Continuity</h3>", rendered)
+            self.assertIn("<h3>Impact Continuity</h3>", rendered)
+            self.assertIn("<h3>Stability Continuity</h3>", rendered)
+            self.assertIn("<h3>Reproducibility Continuity</h3>", rendered)
+            self.assertIn("<h3>Integrity Continuity</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -1664,6 +1792,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Stability Review</h3>", after_content)
         self.assertIn("<h3>Reproducibility Review</h3>", after_content)
         self.assertIn("<h3>Integrity Review</h3>", after_content)
+        self.assertIn("Record Governance Continuity", after_content)
+        self.assertIn("Continuity Summary", after_content)
+        self.assertIn("<td>Total Continuity Layers</td><td>5</td>", after_content)
+        self.assertIn("<td>Continuous Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Partial Continuity Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Discontinuous Layers</td><td>5</td>", after_content)
+        self.assertIn(
+            "<td>Continuity Classification</td><td>Governance Discontinuity</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Dependency Continuity</h3>", after_content)
+        self.assertIn("<h3>Impact Continuity</h3>", after_content)
+        self.assertIn("<h3>Stability Continuity</h3>", after_content)
+        self.assertIn("<h3>Reproducibility Continuity</h3>", after_content)
+        self.assertIn("<h3>Integrity Continuity</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -2281,6 +2424,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Stability Review</h3>", content)
         self.assertIn("<h3>Reproducibility Review</h3>", content)
         self.assertIn("<h3>Integrity Review</h3>", content)
+        self.assertIn("Record Governance Continuity", content)
+        self.assertIn("Continuity Summary", content)
+        self.assertIn("<td>Total Continuity Layers</td><td>5</td>", content)
+        self.assertIn("<td>Continuous Layers</td><td>0</td>", content)
+        self.assertIn("<td>Partial Continuity Layers</td><td>0</td>", content)
+        self.assertIn("<td>Discontinuous Layers</td><td>5</td>", content)
+        self.assertIn(
+            "<td>Continuity Classification</td><td>Governance Discontinuity</td>",
+            content,
+        )
+        self.assertIn("<h3>Dependency Continuity</h3>", content)
+        self.assertIn("<h3>Impact Continuity</h3>", content)
+        self.assertIn("<h3>Stability Continuity</h3>", content)
+        self.assertIn("<h3>Reproducibility Continuity</h3>", content)
+        self.assertIn("<h3>Integrity Continuity</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -3230,6 +3388,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Integrity</h2>"),
             governance_content.index("<h2>Record Governance Summary</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Governance Summary</h2>"),
+            governance_content.index("<h2>Record Governance Continuity</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -3260,6 +3422,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Reproducibility</h2>", print_governance_content)
         self.assertIn("<h2>Record Integrity</h2>", print_governance_content)
         self.assertIn("<h2>Record Governance Summary</h2>", print_governance_content)
+        self.assertIn(
+            "<h2>Record Governance Continuity</h2>",
+            print_governance_content,
+        )
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
