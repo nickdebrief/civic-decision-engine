@@ -14258,6 +14258,306 @@ def _render_stage17l_governance_relationships_section(
       </section>"""
 
 
+def _stage17m_traceability_state(classification: str, upstream_source: str) -> str:
+    if not classification or not upstream_source:
+        return "Untraceable"
+    return "Traceable"
+
+
+def _stage17m_traceability_classification(
+    governance_classification: str,
+    continuity_classification: str,
+    change_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+    consistency_classification: str,
+    relationship_classification: str,
+) -> str:
+    required_outputs = (
+        governance_classification,
+        continuity_classification,
+        change_classification,
+        trajectory_classification,
+        pattern_classification,
+        consistency_classification,
+        relationship_classification,
+    )
+    if not relationship_classification or not governance_classification:
+        return "Untraceable Governance"
+    if all(required_outputs):
+        return "Fully Traceable Governance"
+    if any(required_outputs):
+        return "Partially Traceable Governance"
+    return "Untraceable Governance"
+
+
+def _record_stage17m_governance_traceability(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    relationships = _record_stage17l_governance_relationships(
+        evidence_groups,
+        record_outputs,
+    )
+    relationship_summary = relationships["summary"]
+    relationship_record = relationships["record"]
+    traceability_classification = _stage17m_traceability_classification(
+        relationship_record["governance_classification"],
+        relationship_record["continuity_classification"],
+        relationship_record["governance_change_state"],
+        relationship_record["governance_trajectory"],
+        relationship_record["governance_pattern_classification"],
+        relationship_record["consistency_classification"],
+        relationship_record["relationship_classification"],
+    )
+    reviews = {
+        "governance": {
+            "classification": relationship_record["governance_classification"],
+            "upstream_source": "Governance Summary",
+        },
+        "continuity": {
+            "classification": relationship_record["continuity_classification"],
+            "upstream_source": "Governance Summary",
+        },
+        "change": {
+            "classification": relationship_record["governance_change_state"],
+            "upstream_source": "Governance Continuity",
+        },
+        "trajectory": {
+            "classification": relationship_record["governance_trajectory"],
+            "upstream_source": "Governance Change Log",
+        },
+        "pattern": {
+            "classification": relationship_record["governance_pattern_classification"],
+            "upstream_source": "Governance Trajectory",
+        },
+        "consistency": {
+            "classification": relationship_record["consistency_classification"],
+            "upstream_source": "Governance Pattern Detection",
+        },
+        "relationships": {
+            "classification": relationship_record["relationship_classification"],
+            "upstream_source": "Governance Consistency",
+        },
+    }
+    for review in reviews.values():
+        review["traceability_state"] = _stage17m_traceability_state(
+            review["classification"],
+            review["upstream_source"],
+        )
+    traceability_states = [
+        review["traceability_state"] for review in reviews.values()
+    ]
+
+    return {
+        "summary": {
+            "total_traceability_layers": len(traceability_states),
+            "traceable_layers": traceability_states.count("Traceable"),
+            "untraceable_layers": traceability_states.count("Untraceable"),
+            "governance_classification": relationship_summary[
+                "governance_classification"
+            ],
+            "continuity_classification": relationship_summary[
+                "continuity_classification"
+            ],
+            "change_classification": relationship_summary["change_classification"],
+            "trajectory_classification": relationship_summary[
+                "trajectory_classification"
+            ],
+            "pattern_classification": relationship_summary["pattern_classification"],
+            "consistency_classification": relationship_summary[
+                "consistency_classification"
+            ],
+            "relationship_classification": relationship_summary[
+                "relationship_classification"
+            ],
+            "traceability_classification": traceability_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **relationship_record,
+            "traceability_classification": traceability_classification,
+        },
+    }
+
+
+def _render_stage17m_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17m-traceability-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17m_record_traceability(traceability: dict[str, Any]) -> str:
+    record = traceability["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17m-record-governance-traceability">
+          <h3>Record Governance Traceability</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17m_governance_traceability_content(
+    traceability: dict[str, Any],
+) -> str:
+    summary = traceability["summary"]
+    reviews = traceability["reviews"]
+    summary_rows = (
+        ("Total Traceability Layers", summary["total_traceability_layers"]),
+        ("Traceable Layers", summary["traceable_layers"]),
+        ("Untraceable Layers", summary["untraceable_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Classification", summary["change_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Pattern Classification", summary["pattern_classification"]),
+        ("Consistency Classification", summary["consistency_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Traceability Summary</h3>
+        <table class="stage17m-traceability-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17m_review(
+            "Governance Traceability Review",
+            (
+                ("Classification", reviews["governance"]["classification"]),
+                ("Upstream Source", reviews["governance"]["upstream_source"]),
+                (
+                    "Traceability State",
+                    reviews["governance"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Continuity Traceability Review",
+            (
+                ("Classification", reviews["continuity"]["classification"]),
+                ("Upstream Source", reviews["continuity"]["upstream_source"]),
+                (
+                    "Traceability State",
+                    reviews["continuity"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Change Traceability Review",
+            (
+                ("Classification", reviews["change"]["classification"]),
+                ("Upstream Source", reviews["change"]["upstream_source"]),
+                ("Traceability State", reviews["change"]["traceability_state"]),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Trajectory Traceability Review",
+            (
+                ("Classification", reviews["trajectory"]["classification"]),
+                ("Upstream Source", reviews["trajectory"]["upstream_source"]),
+                (
+                    "Traceability State",
+                    reviews["trajectory"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Pattern Traceability Review",
+            (
+                ("Classification", reviews["pattern"]["classification"]),
+                ("Upstream Source", reviews["pattern"]["upstream_source"]),
+                ("Traceability State", reviews["pattern"]["traceability_state"]),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Consistency Traceability Review",
+            (
+                ("Classification", reviews["consistency"]["classification"]),
+                ("Upstream Source", reviews["consistency"]["upstream_source"]),
+                (
+                    "Traceability State",
+                    reviews["consistency"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage17m_review(
+            "Relationships Traceability Review",
+            (
+                ("Classification", reviews["relationships"]["classification"]),
+                (
+                    "Upstream Source",
+                    reviews["relationships"]["upstream_source"],
+                ),
+                (
+                    "Traceability State",
+                    reviews["relationships"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage17m_record_traceability(traceability)}"""
+
+
+def _render_stage17m_governance_traceability_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    traceability = _record_stage17m_governance_traceability(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17m-governance-traceability">
+        <h2>Governance Traceability</h2>
+        <p class="notice">
+          Governance traceability is derived deterministically from existing
+          governance summary, continuity, change log, trajectory, pattern,
+          consistency, and relationship outputs only.
+        </p>
+        {_render_stage17m_governance_traceability_content(traceability)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -14434,6 +14734,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17m_governance_traceability = _render_stage17m_governance_traceability_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -14562,6 +14866,7 @@ def render_admin_record_evidence_page(
             f"{stage17j_governance_pattern_detection}"
             f"{stage17k_governance_consistency}"
             f"{stage17l_governance_relationships}"
+            f"{stage17m_governance_traceability}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

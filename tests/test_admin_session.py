@@ -1169,6 +1169,141 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Pattern Relationship Review</h3>", rendered)
             self.assertIn("<h3>Consistency Relationship Review</h3>", rendered)
 
+    def test_stage17m_governance_traceability_renders_classification_states(self):
+        def traceability(classification):
+            return {
+                "summary": {
+                    "total_traceability_layers": 7,
+                    "traceable_layers": 7
+                    if classification == "Fully Traceable Governance"
+                    else 3,
+                    "untraceable_layers": 0
+                    if classification == "Fully Traceable Governance"
+                    else 4,
+                    "governance_classification": "Governed"
+                    if classification != "Untraceable Governance"
+                    else "",
+                    "continuity_classification": "Continuous Governance",
+                    "change_classification": "No Recorded Change",
+                    "trajectory_classification": "Governance Progression",
+                    "pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": "Consistent Governance",
+                    "relationship_classification": "Aligned Governance Relationships"
+                    if classification != "Untraceable Governance"
+                    else "",
+                    "traceability_classification": classification,
+                },
+                "reviews": {
+                    "governance": {
+                        "classification": "Governed",
+                        "upstream_source": "Governance Summary",
+                        "traceability_state": "Traceable",
+                    },
+                    "continuity": {
+                        "classification": "Continuous Governance",
+                        "upstream_source": "Governance Summary",
+                        "traceability_state": "Traceable",
+                    },
+                    "change": {
+                        "classification": "No Recorded Change",
+                        "upstream_source": "Governance Continuity",
+                        "traceability_state": "Traceable",
+                    },
+                    "trajectory": {
+                        "classification": "Governance Progression",
+                        "upstream_source": "Governance Change Log",
+                        "traceability_state": "Traceable",
+                    },
+                    "pattern": {
+                        "classification": "Limited Governance Pattern",
+                        "upstream_source": "Governance Trajectory",
+                        "traceability_state": "Traceable",
+                    },
+                    "consistency": {
+                        "classification": "Consistent Governance",
+                        "upstream_source": "Governance Pattern Detection",
+                        "traceability_state": "Traceable",
+                    },
+                    "relationships": {
+                        "classification": "Aligned Governance Relationships",
+                        "upstream_source": "Governance Consistency",
+                        "traceability_state": "Traceable",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": "Governed",
+                    "continuity_classification": "Continuous Governance",
+                    "governance_change_state": "No Recorded Change",
+                    "governance_trajectory": "Governance Progression",
+                    "governance_pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": "Consistent Governance",
+                    "relationship_classification": "Aligned Governance Relationships",
+                    "traceability_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17m_traceability_classification
+
+        self.assertEqual(
+            "Untraceable Governance",
+            classify(
+                "",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+            ),
+        )
+        self.assertEqual(
+            "Fully Traceable Governance",
+            classify(
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+            ),
+        )
+        self.assertEqual(
+            "Partially Traceable Governance",
+            classify(
+                "Governed",
+                "",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+            ),
+        )
+
+        for classification in (
+            "Fully Traceable Governance",
+            "Partially Traceable Governance",
+            "Untraceable Governance",
+        ):
+            rendered = self.admin_session._render_stage17m_governance_traceability_content(
+                traceability(classification)
+            )
+            self.assertIn(
+                f"<td>Traceability Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Governance Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Continuity Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Change Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Trajectory Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Pattern Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Consistency Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Relationships Traceability Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -2667,6 +2802,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Trajectory Relationship Review</h3>", after_content)
         self.assertIn("<h3>Pattern Relationship Review</h3>", after_content)
         self.assertIn("<h3>Consistency Relationship Review</h3>", after_content)
+        self.assertIn("Governance Traceability", after_content)
+        self.assertIn("Traceability Summary", after_content)
+        self.assertIn("<td>Total Traceability Layers</td><td>7</td>", after_content)
+        self.assertIn("<td>Traceable Layers</td><td>7</td>", after_content)
+        self.assertIn("<td>Untraceable Layers</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Traceability Classification</td><td>Fully Traceable Governance</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Governance Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Continuity Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Change Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Trajectory Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Pattern Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Consistency Traceability Review</h3>", after_content)
+        self.assertIn("<h3>Relationships Traceability Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3374,6 +3525,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Trajectory Relationship Review</h3>", content)
         self.assertIn("<h3>Pattern Relationship Review</h3>", content)
         self.assertIn("<h3>Consistency Relationship Review</h3>", content)
+        self.assertIn("Governance Traceability", content)
+        self.assertIn("Traceability Summary", content)
+        self.assertIn("<td>Total Traceability Layers</td><td>7</td>", content)
+        self.assertIn("<td>Traceable Layers</td><td>7</td>", content)
+        self.assertIn("<td>Untraceable Layers</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Traceability Classification</td><td>Fully Traceable Governance</td>",
+            content,
+        )
+        self.assertIn("<h3>Governance Traceability Review</h3>", content)
+        self.assertIn("<h3>Continuity Traceability Review</h3>", content)
+        self.assertIn("<h3>Change Traceability Review</h3>", content)
+        self.assertIn("<h3>Trajectory Traceability Review</h3>", content)
+        self.assertIn("<h3>Pattern Traceability Review</h3>", content)
+        self.assertIn("<h3>Consistency Traceability Review</h3>", content)
+        self.assertIn("<h3>Relationships Traceability Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4347,6 +4514,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Consistency</h2>"),
             governance_content.index("<h2>Governance Relationships</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Relationships</h2>"),
+            governance_content.index("<h2>Governance Traceability</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -4395,6 +4566,7 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<h2>Governance Consistency</h2>", print_governance_content)
         self.assertIn("<h2>Governance Relationships</h2>", print_governance_content)
+        self.assertIn("<h2>Governance Traceability</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
