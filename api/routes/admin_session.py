@@ -12450,6 +12450,285 @@ def _render_stage17f_governance_summary_section(
       </section>"""
 
 
+def _stage17g_continuity_classification(
+    dependency_classification: str,
+    impact_classification: str,
+    stability_classification: str,
+    reproducibility_classification: str,
+    integrity_classification: str,
+    governance_classification: str,
+) -> str:
+    if (
+        governance_classification == "Governance Gap"
+        or dependency_classification == "Unsupported"
+        or impact_classification == "Unsupported Impact"
+        or stability_classification == "Unstable"
+        or reproducibility_classification == "Non-Reproducible"
+        or integrity_classification == "Compromised Integrity"
+    ):
+        return "Governance Discontinuity"
+    if (
+        governance_classification == "Governed"
+        and dependency_classification == "Supported"
+        and impact_classification == "Evidence-Supported Impact"
+        and stability_classification == "Stable"
+        and reproducibility_classification == "Reproducible"
+        and integrity_classification == "High Integrity"
+    ):
+        return "Continuous Governance"
+    return "Partial Continuity"
+
+
+def _stage17g_continuity_state(classification: str) -> str:
+    if classification in {
+        "Unsupported",
+        "Unsupported Impact",
+        "Unstable",
+        "Non-Reproducible",
+        "Compromised Integrity",
+    }:
+        return "Discontinuous"
+    if classification in {
+        "Limited Stability",
+        "Limited Reproducibility",
+        "Limited Integrity",
+    }:
+        return "Partial Continuity"
+    return "Continuous"
+
+
+def _record_stage17g_governance_continuity(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    governance = _record_stage17f_governance_summary(evidence_groups, record_outputs)
+    governance_summary = governance["summary"]
+    governance_reviews = governance["reviews"]
+    continuity_classification = _stage17g_continuity_classification(
+        governance_summary["dependency_classification"],
+        governance_summary["impact_classification"],
+        governance_summary["stability_classification"],
+        governance_summary["reproducibility_classification"],
+        governance_summary["integrity_classification"],
+        governance_summary["governance_classification"],
+    )
+    reviews = {
+        "dependency": {
+            **governance_reviews["dependency"],
+            "continuity_state": _stage17g_continuity_state(
+                governance_summary["dependency_classification"]
+            ),
+        },
+        "impact": {
+            **governance_reviews["impact"],
+            "continuity_state": _stage17g_continuity_state(
+                governance_summary["impact_classification"]
+            ),
+        },
+        "stability": {
+            **governance_reviews["stability"],
+            "continuity_state": _stage17g_continuity_state(
+                governance_summary["stability_classification"]
+            ),
+        },
+        "reproducibility": {
+            **governance_reviews["reproducibility"],
+            "continuity_state": _stage17g_continuity_state(
+                governance_summary["reproducibility_classification"]
+            ),
+        },
+        "integrity": {
+            **governance_reviews["integrity"],
+            "continuity_state": _stage17g_continuity_state(
+                governance_summary["integrity_classification"]
+            ),
+        },
+    }
+    continuity_states = [
+        review["continuity_state"] for review in reviews.values()
+    ]
+
+    return {
+        "summary": {
+            "total_continuity_layers": len(continuity_states),
+            "continuous_layers": continuity_states.count("Continuous"),
+            "partial_continuity_layers": continuity_states.count(
+                "Partial Continuity"
+            ),
+            "discontinuous_layers": continuity_states.count("Discontinuous"),
+            "governance_classification": governance_summary[
+                "governance_classification"
+            ],
+            "continuity_classification": continuity_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **governance["record"],
+            "continuity_classification": continuity_classification,
+        },
+    }
+
+
+def _render_stage17g_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17g-continuity-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17g_record_continuity(continuity: dict[str, Any]) -> str:
+    record = continuity["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Dependency Classification", record["dependency_classification"]),
+        ("Impact Classification", record["impact_classification"]),
+        ("Stability Classification", record["stability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17g-record-governance-continuity">
+          <h3>Record Governance Continuity</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17g_governance_continuity_content(
+    continuity: dict[str, Any],
+) -> str:
+    summary = continuity["summary"]
+    reviews = continuity["reviews"]
+    summary_rows = (
+        ("Total Continuity Layers", summary["total_continuity_layers"]),
+        ("Continuous Layers", summary["continuous_layers"]),
+        ("Partial Continuity Layers", summary["partial_continuity_layers"]),
+        ("Discontinuous Layers", summary["discontinuous_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Continuity Summary</h3>
+        <table class="stage17g-continuity-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17g_review(
+            "Dependency Continuity",
+            (
+                ("Dependency Classification", reviews["dependency"]["classification"]),
+                ("Evidence Supported", reviews["dependency"]["evidence_supported"]),
+                ("Unsupported", reviews["dependency"]["unsupported"]),
+                ("Continuity State", reviews["dependency"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage17g_review(
+            "Impact Continuity",
+            (
+                ("Impact Classification", reviews["impact"]["classification"]),
+                ("Evidence Supported", reviews["impact"]["evidence_supported"]),
+                ("Unsupported", reviews["impact"]["unsupported"]),
+                ("Continuity State", reviews["impact"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage17g_review(
+            "Stability Continuity",
+            (
+                ("Stability Classification", reviews["stability"]["classification"]),
+                ("Stable", reviews["stability"]["stable"]),
+                ("Limited Stability", reviews["stability"]["limited_stability"]),
+                ("Unstable", reviews["stability"]["unstable"]),
+                ("Continuity State", reviews["stability"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage17g_review(
+            "Reproducibility Continuity",
+            (
+                (
+                    "Reproducibility Classification",
+                    reviews["reproducibility"]["classification"],
+                ),
+                ("Reproducible", reviews["reproducibility"]["reproducible"]),
+                (
+                    "Limited Reproducibility",
+                    reviews["reproducibility"]["limited_reproducibility"],
+                ),
+                (
+                    "Non-Reproducible",
+                    reviews["reproducibility"]["non_reproducible"],
+                ),
+                (
+                    "Continuity State",
+                    reviews["reproducibility"]["continuity_state"],
+                ),
+            ),
+        )}
+        {_render_stage17g_review(
+            "Integrity Continuity",
+            (
+                ("Integrity Classification", reviews["integrity"]["classification"]),
+                ("High Integrity", reviews["integrity"]["high_integrity"]),
+                ("Limited Integrity", reviews["integrity"]["limited_integrity"]),
+                (
+                    "Compromised Integrity",
+                    reviews["integrity"]["compromised_integrity"],
+                ),
+                ("Continuity State", reviews["integrity"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage17g_record_continuity(continuity)}"""
+
+
+def _render_stage17g_governance_continuity_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    continuity = _record_stage17g_governance_continuity(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17g-record-governance-continuity">
+        <h2>Record Governance Continuity</h2>
+        <p class="notice">
+          Record governance continuity is derived deterministically from existing
+          dependency, impact, stability, reproducibility, integrity, and
+          governance summary outputs only.
+        </p>
+        {_render_stage17g_governance_continuity_content(continuity)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -12594,6 +12873,12 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17g_record_governance_continuity = (
+        _render_stage17g_governance_continuity_section(
+            evidence_groups,
+            record_outputs,
+        )
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -12716,6 +13001,7 @@ def render_admin_record_evidence_page(
             f"{stage17d_record_reproducibility}"
             f"{stage17e_record_integrity}"
             f"{stage17f_record_governance_summary}"
+            f"{stage17g_record_governance_continuity}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
