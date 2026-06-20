@@ -13985,6 +13985,279 @@ def _render_stage17k_governance_consistency_section(
       </section>"""
 
 
+def _stage17l_relationship_state(classification: str) -> str:
+    if classification in {
+        "Governance Inconsistency",
+        "Governance Gap",
+        "Governance Discontinuity",
+        "Significant Change",
+        "Governance Regression",
+        "Recurring Governance Pattern",
+    }:
+        return "Conflict"
+    if classification in {
+        "Partially Consistent",
+        "Partially Governed",
+        "Partial Continuity",
+        "Limited Change",
+        "Governance Persistence",
+        "Limited Governance Pattern",
+    }:
+        return "Related"
+    return "Aligned"
+
+
+def _stage17l_relationship_classification(
+    governance_classification: str,
+    continuity_classification: str,
+    change_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+    consistency_classification: str,
+) -> str:
+    if consistency_classification == "Governance Inconsistency":
+        return "Governance Relationship Conflict"
+    if consistency_classification == "Consistent Governance":
+        return "Aligned Governance Relationships"
+    return "Related Governance Relationships"
+
+
+def _record_stage17l_governance_relationships(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    consistency = _record_stage17k_governance_consistency(
+        evidence_groups,
+        record_outputs,
+    )
+    consistency_summary = consistency["summary"]
+    consistency_record = consistency["record"]
+    relationship_classification = _stage17l_relationship_classification(
+        consistency_record["governance_classification"],
+        consistency_record["continuity_classification"],
+        consistency_record["governance_change_state"],
+        consistency_record["governance_trajectory"],
+        consistency_record["governance_pattern_classification"],
+        consistency_record["consistency_classification"],
+    )
+    reviews = {
+        "governance": {
+            "classification": consistency_record["governance_classification"],
+            "governance_state": consistency_record["governance_classification"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["governance_classification"]
+            ),
+        },
+        "continuity": {
+            "classification": consistency_record["continuity_classification"],
+            "continuity_state": consistency_record["continuity_classification"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["continuity_classification"]
+            ),
+        },
+        "change": {
+            "classification": consistency_record["governance_change_state"],
+            "change_state": consistency_record["governance_change_state"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["governance_change_state"]
+            ),
+        },
+        "trajectory": {
+            "classification": consistency_record["governance_trajectory"],
+            "trajectory_state": consistency_record["governance_trajectory"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["governance_trajectory"]
+            ),
+        },
+        "pattern": {
+            "classification": consistency_record["governance_pattern_classification"],
+            "pattern_state": consistency_record["governance_pattern_classification"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["governance_pattern_classification"]
+            ),
+        },
+        "consistency": {
+            "classification": consistency_record["consistency_classification"],
+            "consistency_state": consistency_record["consistency_classification"],
+            "relationship_state": _stage17l_relationship_state(
+                consistency_record["consistency_classification"]
+            ),
+        },
+    }
+    relationship_states = [review["relationship_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_governance_layers": len(relationship_states),
+            "related_governance_layers": len(relationship_states),
+            "aligned_relationships": relationship_states.count("Aligned"),
+            "conflicting_relationships": relationship_states.count("Conflict"),
+            "governance_classification": consistency_summary["governance_classification"],
+            "continuity_classification": consistency_summary["continuity_classification"],
+            "change_classification": consistency_summary["change_classification"],
+            "trajectory_classification": consistency_summary["trajectory_classification"],
+            "pattern_classification": consistency_summary["pattern_classification"],
+            "consistency_classification": consistency_summary["consistency_classification"],
+            "relationship_classification": relationship_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **consistency_record,
+            "relationship_classification": relationship_classification,
+        },
+    }
+
+
+def _render_stage17l_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17l-relationship-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17l_record_relationships(relationships: dict[str, Any]) -> str:
+    record = relationships["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17l-record-governance-relationships">
+          <h3>Record Governance Relationships</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17l_governance_relationships_content(
+    relationships: dict[str, Any],
+) -> str:
+    summary = relationships["summary"]
+    reviews = relationships["reviews"]
+    summary_rows = (
+        ("Total Governance Layers", summary["total_governance_layers"]),
+        ("Related Governance Layers", summary["related_governance_layers"]),
+        ("Aligned Relationships", summary["aligned_relationships"]),
+        ("Conflicting Relationships", summary["conflicting_relationships"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Classification", summary["change_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Pattern Classification", summary["pattern_classification"]),
+        ("Consistency Classification", summary["consistency_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Relationship Summary</h3>
+        <table class="stage17l-relationship-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17l_review(
+            "Governance Relationship Review",
+            (
+                ("Classification", reviews["governance"]["classification"]),
+                ("Governance State", reviews["governance"]["governance_state"]),
+                ("Relationship State", reviews["governance"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_review(
+            "Continuity Relationship Review",
+            (
+                ("Classification", reviews["continuity"]["classification"]),
+                ("Continuity State", reviews["continuity"]["continuity_state"]),
+                ("Relationship State", reviews["continuity"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_review(
+            "Change Relationship Review",
+            (
+                ("Classification", reviews["change"]["classification"]),
+                ("Change State", reviews["change"]["change_state"]),
+                ("Relationship State", reviews["change"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_review(
+            "Trajectory Relationship Review",
+            (
+                ("Classification", reviews["trajectory"]["classification"]),
+                ("Trajectory State", reviews["trajectory"]["trajectory_state"]),
+                ("Relationship State", reviews["trajectory"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_review(
+            "Pattern Relationship Review",
+            (
+                ("Classification", reviews["pattern"]["classification"]),
+                ("Pattern State", reviews["pattern"]["pattern_state"]),
+                ("Relationship State", reviews["pattern"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_review(
+            "Consistency Relationship Review",
+            (
+                ("Classification", reviews["consistency"]["classification"]),
+                ("Consistency State", reviews["consistency"]["consistency_state"]),
+                ("Relationship State", reviews["consistency"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage17l_record_relationships(relationships)}"""
+
+
+def _render_stage17l_governance_relationships_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    relationships = _record_stage17l_governance_relationships(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17l-governance-relationships">
+        <h2>Governance Relationships</h2>
+        <p class="notice">
+          Governance relationships are derived deterministically from existing
+          governance summary, continuity, change log, trajectory, pattern, and
+          consistency outputs only.
+        </p>
+        {_render_stage17l_governance_relationships_content(relationships)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -14157,6 +14430,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17l_governance_relationships = _render_stage17l_governance_relationships_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -14284,6 +14561,7 @@ def render_admin_record_evidence_page(
             f"{stage17i_record_governance_trajectory}"
             f"{stage17j_governance_pattern_detection}"
             f"{stage17k_governance_consistency}"
+            f"{stage17l_governance_relationships}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

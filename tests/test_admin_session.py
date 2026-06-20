@@ -1027,6 +1027,148 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Trajectory Review</h3>", rendered)
             self.assertIn("<h3>Pattern Review</h3>", rendered)
 
+
+    def test_stage17l_governance_relationships_renders_classification_states(self):
+        def relationships(classification):
+            return {
+                "summary": {
+                    "total_governance_layers": 6,
+                    "related_governance_layers": 6,
+                    "aligned_relationships": 6 if classification == "Aligned Governance Relationships" else 0,
+                    "conflicting_relationships": 6 if classification == "Governance Relationship Conflict" else 0,
+                    "governance_classification": {
+                        "Aligned Governance Relationships": "Governed",
+                        "Related Governance Relationships": "Partially Governed",
+                        "Governance Relationship Conflict": "Governance Gap",
+                    }[classification],
+                    "continuity_classification": {
+                        "Aligned Governance Relationships": "Continuous Governance",
+                        "Related Governance Relationships": "Partial Continuity",
+                        "Governance Relationship Conflict": "Governance Discontinuity",
+                    }[classification],
+                    "change_classification": {
+                        "Aligned Governance Relationships": "No Recorded Change",
+                        "Related Governance Relationships": "Limited Change",
+                        "Governance Relationship Conflict": "Significant Change",
+                    }[classification],
+                    "trajectory_classification": {
+                        "Aligned Governance Relationships": "Governance Progression",
+                        "Related Governance Relationships": "Governance Persistence",
+                        "Governance Relationship Conflict": "Governance Regression",
+                    }[classification],
+                    "pattern_classification": {
+                        "Aligned Governance Relationships": "Limited Governance Pattern",
+                        "Related Governance Relationships": "Limited Governance Pattern",
+                        "Governance Relationship Conflict": "Recurring Governance Pattern",
+                    }[classification],
+                    "consistency_classification": {
+                        "Aligned Governance Relationships": "Consistent Governance",
+                        "Related Governance Relationships": "Partially Consistent",
+                        "Governance Relationship Conflict": "Governance Inconsistency",
+                    }[classification],
+                    "relationship_classification": classification,
+                },
+                "reviews": {
+                    "governance": {
+                        "classification": "Governed",
+                        "governance_state": "Governed",
+                        "relationship_state": "Aligned",
+                    },
+                    "continuity": {
+                        "classification": "Continuous Governance",
+                        "continuity_state": "Continuous Governance",
+                        "relationship_state": "Aligned",
+                    },
+                    "change": {
+                        "classification": "No Recorded Change",
+                        "change_state": "No Recorded Change",
+                        "relationship_state": "Aligned",
+                    },
+                    "trajectory": {
+                        "classification": "Governance Progression",
+                        "trajectory_state": "Governance Progression",
+                        "relationship_state": "Aligned",
+                    },
+                    "pattern": {
+                        "classification": "Limited Governance Pattern",
+                        "pattern_state": "Limited Governance Pattern",
+                        "relationship_state": "Aligned",
+                    },
+                    "consistency": {
+                        "classification": "Consistent Governance",
+                        "consistency_state": "Consistent Governance",
+                        "relationship_state": "Aligned",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": "Governed",
+                    "continuity_classification": "Continuous Governance",
+                    "governance_change_state": "No Recorded Change",
+                    "governance_trajectory": "Governance Progression",
+                    "governance_pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": "Consistent Governance",
+                    "relationship_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17l_relationship_classification
+
+        self.assertEqual(
+            "Governance Relationship Conflict",
+            classify(
+                "Governance Gap",
+                "Governance Discontinuity",
+                "Significant Change",
+                "Governance Regression",
+                "Recurring Governance Pattern",
+                "Governance Inconsistency",
+            ),
+        )
+        self.assertEqual(
+            "Aligned Governance Relationships",
+            classify(
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+            ),
+        )
+        self.assertEqual(
+            "Related Governance Relationships",
+            classify(
+                "Partially Governed",
+                "Partial Continuity",
+                "Limited Change",
+                "Governance Persistence",
+                "Limited Governance Pattern",
+                "Partially Consistent",
+            ),
+        )
+
+        for classification in (
+            "Aligned Governance Relationships",
+            "Related Governance Relationships",
+            "Governance Relationship Conflict",
+        ):
+            rendered = self.admin_session._render_stage17l_governance_relationships_content(
+                relationships(classification)
+            )
+            self.assertIn(
+                f"<td>Relationship Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Governance Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Continuity Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Change Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Trajectory Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Pattern Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Consistency Relationship Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -2509,6 +2651,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Change Review</h3>", after_content)
         self.assertIn("<h3>Trajectory Review</h3>", after_content)
         self.assertIn("<h3>Pattern Review</h3>", after_content)
+        self.assertIn("Governance Relationships", after_content)
+        self.assertIn("Relationship Summary", after_content)
+        self.assertIn("<td>Total Governance Layers</td><td>6</td>", after_content)
+        self.assertIn("<td>Related Governance Layers</td><td>6</td>", after_content)
+        self.assertIn("<td>Aligned Relationships</td><td>0</td>", after_content)
+        self.assertIn("<td>Conflicting Relationships</td><td>6</td>", after_content)
+        self.assertIn(
+            "<td>Relationship Classification</td><td>Governance Relationship Conflict</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Governance Relationship Review</h3>", after_content)
+        self.assertIn("<h3>Continuity Relationship Review</h3>", after_content)
+        self.assertIn("<h3>Change Relationship Review</h3>", after_content)
+        self.assertIn("<h3>Trajectory Relationship Review</h3>", after_content)
+        self.assertIn("<h3>Pattern Relationship Review</h3>", after_content)
+        self.assertIn("<h3>Consistency Relationship Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3200,6 +3358,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Change Review</h3>", content)
         self.assertIn("<h3>Trajectory Review</h3>", content)
         self.assertIn("<h3>Pattern Review</h3>", content)
+        self.assertIn("Governance Relationships", content)
+        self.assertIn("Relationship Summary", content)
+        self.assertIn("<td>Total Governance Layers</td><td>6</td>", content)
+        self.assertIn("<td>Related Governance Layers</td><td>6</td>", content)
+        self.assertIn("<td>Aligned Relationships</td><td>0</td>", content)
+        self.assertIn("<td>Conflicting Relationships</td><td>6</td>", content)
+        self.assertIn(
+            "<td>Relationship Classification</td><td>Governance Relationship Conflict</td>",
+            content,
+        )
+        self.assertIn("<h3>Governance Relationship Review</h3>", content)
+        self.assertIn("<h3>Continuity Relationship Review</h3>", content)
+        self.assertIn("<h3>Change Relationship Review</h3>", content)
+        self.assertIn("<h3>Trajectory Relationship Review</h3>", content)
+        self.assertIn("<h3>Pattern Relationship Review</h3>", content)
+        self.assertIn("<h3>Consistency Relationship Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4169,6 +4343,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Pattern Detection</h2>"),
             governance_content.index("<h2>Governance Consistency</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Consistency</h2>"),
+            governance_content.index("<h2>Governance Relationships</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -4216,6 +4394,7 @@ class AdminSessionTests(unittest.TestCase):
             print_governance_content,
         )
         self.assertIn("<h2>Governance Consistency</h2>", print_governance_content)
+        self.assertIn("<h2>Governance Relationships</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
