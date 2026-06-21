@@ -15567,6 +15567,416 @@ def _render_stage18a_record_evolution_summary_section(
       </section>"""
 
 
+def _stage18b_version_numbers(
+    version_history: list[dict[str, Any]],
+) -> list[int]:
+    return sorted(
+        {
+            version
+            for version in (
+                _stage18a_int(row.get("version")) for row in version_history
+            )
+            if version is not None
+        }
+    )
+
+
+def _stage18b_version_gap_count(version_history: list[dict[str, Any]]) -> int:
+    versions = _stage18b_version_numbers(version_history)
+    if len(versions) < 2:
+        return 0
+    return sum(
+        max(0, next_version - current_version - 1)
+        for current_version, next_version in zip(versions, versions[1:])
+    )
+
+
+def _stage18b_supersedes_version(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if ":v" in text:
+        return _stage18a_int(text.rsplit(":v", 1)[-1])
+    if text.startswith("v"):
+        return _stage18a_int(text[1:])
+    return _stage18a_int(text)
+
+
+def _stage18b_supersession_counts(
+    version_history: list[dict[str, Any]],
+) -> tuple[int, int]:
+    versions = set(_stage18b_version_numbers(version_history))
+    link_count = 0
+    broken_count = 0
+    for row in version_history:
+        supersedes = row.get("supersedes")
+        supersedes_version = _stage18b_supersedes_version(supersedes)
+        if supersedes in (None, ""):
+            continue
+        link_count += 1
+        row_version = _stage18a_int(row.get("version"))
+        if (
+            supersedes_version is None
+            or supersedes_version not in versions
+            or (row_version is not None and supersedes_version >= row_version)
+        ):
+            broken_count += 1
+    return link_count, broken_count
+
+
+def _stage18b_reference_conflict(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> bool:
+    reference = str(record_metadata.get("reference") or "").strip()
+    if not reference:
+        return False
+    return any(
+        str(row.get("reference") or reference).strip() != reference
+        for row in version_history
+    )
+
+
+def _stage18b_latest_conflict(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> bool:
+    current_version = _stage18a_int(record_metadata.get("version"))
+    if current_version is None:
+        return False
+    later_exists = any(
+        (_stage18a_int(row.get("version")) or 0) > current_version
+        for row in version_history
+    )
+    current_is_latest = record_metadata.get("is_latest") in (
+        True,
+        1,
+        "1",
+        "true",
+        "True",
+    )
+    if current_is_latest and later_exists:
+        return True
+    latest_rows = [
+        row
+        for row in version_history
+        if row.get("is_latest") in (True, 1, "1", "true", "True")
+    ]
+    return len(latest_rows) > 1
+
+
+def _stage18b_continuity_classification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    if not reference or version is None or not version_history:
+        return "Unresolved Evolution Continuity"
+
+    version_gap_count = _stage18b_version_gap_count(version_history)
+    _, broken_links = _stage18b_supersession_counts(version_history)
+    if (
+        version_gap_count
+        or broken_links
+        or _stage18b_reference_conflict(record_metadata, version_history)
+        or _stage18b_latest_conflict(record_metadata, version_history)
+    ):
+        return "Evolution Discontinuity"
+
+    versions = _stage18b_version_numbers(version_history)
+    superseded_by = _stage18a_superseded_by(record_metadata, version_history)
+    current_is_latest = record_metadata.get("is_latest") in (
+        True,
+        1,
+        "1",
+        "true",
+        "True",
+    )
+    if len(versions) > 1 and (current_is_latest or superseded_by):
+        return "Continuous Evolution"
+
+    return "Partial Evolution Continuity"
+
+
+def _stage18b_version_continuity_state(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    if not str(record_metadata.get("reference") or "").strip() or _stage18a_int(
+        record_metadata.get("version")
+    ) is None:
+        return "Unresolved"
+    if _stage18b_version_gap_count(version_history):
+        return "Gap Detected"
+    if len(_stage18b_version_numbers(version_history)) <= 1:
+        return "Limited"
+    return "Continuous"
+
+
+def _stage18b_supersession_continuity_state(
+    version_history: list[dict[str, Any]],
+) -> str:
+    link_count, broken_count = _stage18b_supersession_counts(version_history)
+    if broken_count:
+        return "Broken Link"
+    if link_count:
+        return "Linked"
+    return "No Supersession"
+
+
+def _stage18b_reference_continuity_state(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    if not str(record_metadata.get("reference") or "").strip():
+        return "Unresolved"
+    if _stage18b_reference_conflict(record_metadata, version_history):
+        return "Reference Conflict"
+    if len(_stage18b_version_numbers(version_history)) <= 1:
+        return "Single Reference"
+    return "Continuous Reference"
+
+
+def _record_stage18b_evolution_continuity(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = list(version_history or [])
+    evolution = _record_stage18a_evolution_summary(record_metadata, history)
+    evolution_summary = evolution["summary"]
+    versions = _stage18b_version_numbers(history)
+    supersession_link_count, broken_link_count = _stage18b_supersession_counts(
+        history
+    )
+    version_gap_count = _stage18b_version_gap_count(history)
+    continuity_classification = _stage18b_continuity_classification(
+        record_metadata,
+        history,
+    )
+    superseded_by = evolution_summary["superseded_by"]
+
+    return {
+        "summary": {
+            "record_reference": evolution_summary["record_reference"],
+            "current_version": evolution_summary["current_version"],
+            "is_latest_version": evolution_summary["is_latest_version"],
+            "supersedes": evolution_summary["supersedes"],
+            "superseded_by": superseded_by,
+            "lineage_versions": evolution_summary["lineage_versions"],
+            "earliest_version": min(versions) if versions else None,
+            "latest_version": max(versions) if versions else None,
+            "version_gap_count": version_gap_count,
+            "supersession_link_count": supersession_link_count,
+            "broken_supersession_links": broken_link_count,
+            "evolution_classification": evolution_summary[
+                "evolution_classification"
+            ],
+            "continuity_classification": continuity_classification,
+        },
+        "reviews": {
+            "version": {
+                "record_reference": evolution_summary["record_reference"],
+                "current_version": evolution_summary["current_version"],
+                "earliest_version": min(versions) if versions else None,
+                "latest_version": max(versions) if versions else None,
+                "lineage_versions": evolution_summary["lineage_versions"],
+                "version_gap_count": version_gap_count,
+                "continuity_state": _stage18b_version_continuity_state(
+                    record_metadata,
+                    history,
+                ),
+            },
+            "supersession": {
+                "supersedes": evolution_summary["supersedes"],
+                "superseded_by": superseded_by,
+                "supersession_link_count": supersession_link_count,
+                "broken_supersession_links": broken_link_count,
+                "continuity_state": _stage18b_supersession_continuity_state(
+                    history
+                ),
+            },
+            "reference": {
+                "record_reference": evolution_summary["record_reference"],
+                "same_reference_versions": evolution_summary["lineage_versions"],
+                "reference_continuity_state": _stage18b_reference_continuity_state(
+                    record_metadata,
+                    history,
+                ),
+            },
+            "lineage": {
+                "record_reference": evolution_summary["record_reference"],
+                "current_version": evolution_summary["current_version"],
+                "is_latest": evolution_summary["is_latest_version"],
+                "supersedes": evolution_summary["supersedes"],
+                "superseded_by": superseded_by,
+                "evolution_classification": evolution_summary[
+                    "evolution_classification"
+                ],
+                "continuity_classification": continuity_classification,
+            },
+        },
+        "record": {
+            "record_reference": evolution_summary["record_reference"],
+            "current_version": evolution_summary["current_version"],
+            "is_latest": evolution_summary["is_latest_version"],
+            "supersedes": evolution_summary["supersedes"],
+            "superseded_by": superseded_by,
+            "lineage_versions": evolution_summary["lineage_versions"],
+            "earliest_version": min(versions) if versions else None,
+            "latest_version": max(versions) if versions else None,
+            "version_gap_count": version_gap_count,
+            "supersession_link_count": supersession_link_count,
+            "broken_supersession_links": broken_link_count,
+            "evolution_classification": evolution_summary[
+                "evolution_classification"
+            ],
+            "continuity_classification": continuity_classification,
+        },
+    }
+
+
+def _render_stage18b_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    return f"""
+        <section class="stage18b-continuity-review">
+          <h3>{escape(title)}</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18b_record_continuity(continuity: dict[str, Any]) -> str:
+    record = continuity["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Is Latest", record["is_latest"]),
+        ("Supersedes", record["supersedes"]),
+        ("Superseded By", record["superseded_by"]),
+        ("Lineage Versions", record["lineage_versions"]),
+        ("Earliest Version", record["earliest_version"]),
+        ("Latest Version", record["latest_version"]),
+        ("Version Gap Count", record["version_gap_count"]),
+        ("Supersession Link Count", record["supersession_link_count"]),
+        ("Broken Supersession Links", record["broken_supersession_links"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+    )
+    return f"""
+        <section class="stage18b-record-evolution-continuity">
+          <h3>Record Evolution Continuity</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18b_evolution_continuity_content(
+    continuity: dict[str, Any],
+) -> str:
+    summary = continuity["summary"]
+    reviews = continuity["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Is Latest Version", summary["is_latest_version"]),
+        ("Supersedes", summary["supersedes"]),
+        ("Superseded By", summary["superseded_by"]),
+        ("Lineage Versions", summary["lineage_versions"]),
+        ("Earliest Version", summary["earliest_version"]),
+        ("Latest Version", summary["latest_version"]),
+        ("Version Gap Count", summary["version_gap_count"]),
+        ("Supersession Link Count", summary["supersession_link_count"]),
+        ("Broken Supersession Links", summary["broken_supersession_links"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+    )
+    return f"""
+        <h3>Continuity Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Continuity Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Current Version", reviews["version"]["current_version"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Lineage Versions", reviews["version"]["lineage_versions"]),
+                ("Version Gap Count", reviews["version"]["version_gap_count"]),
+                ("Continuity State", reviews["version"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Continuity Review",
+            (
+                ("Supersedes", reviews["supersession"]["supersedes"]),
+                ("Superseded By", reviews["supersession"]["superseded_by"]),
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                ("Continuity State", reviews["supersession"]["continuity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Reference Continuity Review",
+            (
+                ("Record Reference", reviews["reference"]["record_reference"]),
+                (
+                    "Same Reference Versions",
+                    reviews["reference"]["same_reference_versions"],
+                ),
+                (
+                    "Reference Continuity State",
+                    reviews["reference"]["reference_continuity_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Lineage Continuity Review",
+            (
+                ("Record Reference", reviews["lineage"]["record_reference"]),
+                ("Current Version", reviews["lineage"]["current_version"]),
+                ("Is Latest", reviews["lineage"]["is_latest"]),
+                ("Supersedes", reviews["lineage"]["supersedes"]),
+                ("Superseded By", reviews["lineage"]["superseded_by"]),
+                (
+                    "Evolution Classification",
+                    reviews["lineage"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["lineage"]["continuity_classification"],
+                ),
+            ),
+        )}
+        {_render_stage18b_record_continuity(continuity)}"""
+
+
+def _render_stage18b_record_evolution_continuity_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    continuity = _record_stage18b_evolution_continuity(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18b-record-evolution-continuity">
+        <h2>Record Evolution Continuity</h2>
+        <p class="notice">
+          Record evolution continuity is derived deterministically from existing
+          record metadata, same-reference version history, supersession fields,
+          latest-version state, verification hash, and stored timestamps only.
+        </p>
+        {_render_stage18b_evolution_continuity_content(continuity)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -15761,6 +16171,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18b_record_evolution_continuity = _render_stage18b_record_evolution_continuity_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -15893,6 +16307,7 @@ def render_admin_record_evidence_page(
             f"{stage17n_governance_coverage}"
             f"{stage17o_governance_chain_review}"
             f"{stage18a_record_evolution_summary}"
+            f"{stage18b_record_evolution_continuity}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

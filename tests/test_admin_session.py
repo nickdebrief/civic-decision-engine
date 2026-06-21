@@ -1741,6 +1741,108 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Record Evolution Details</h3>", rendered)
             self.assertIn("Verification Hash", rendered)
 
+    def test_stage18b_record_evolution_continuity_renders_classification_states(self):
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-05T12:00:00Z",
+            "exported_at": "2026-06-05T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Trajectory recorded as Stable.",
+            "verification_hash": "hash-v2",
+        }
+        continuous_history = [
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 1,
+                "is_latest": 0,
+                "supersedes": None,
+                "generated_at": "2026-06-04T12:00:00Z",
+                "verification_hash": "hash-v1",
+            },
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 2,
+                "is_latest": 1,
+                "supersedes": "Strike-LA-20260710-004:v1",
+                "generated_at": "2026-06-05T12:00:00Z",
+                "verification_hash": "hash-v2",
+            },
+        ]
+        partial = {**base, "version": 1, "supersedes": None}
+        partial_history = [
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 1,
+                "is_latest": 1,
+                "supersedes": None,
+                "generated_at": "2026-06-04T12:00:00Z",
+                "verification_hash": "hash-v1",
+            }
+        ]
+        gap_history = [
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 1,
+                "is_latest": 0,
+                "supersedes": None,
+                "generated_at": "2026-06-04T12:00:00Z",
+                "verification_hash": "hash-v1",
+            },
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 3,
+                "is_latest": 1,
+                "supersedes": "Strike-LA-20260710-004:v2",
+                "generated_at": "2026-06-06T12:00:00Z",
+                "verification_hash": "hash-v3",
+            },
+        ]
+
+        classify = self.admin_session._stage18b_continuity_classification
+
+        self.assertEqual("Continuous Evolution", classify(base, continuous_history))
+        self.assertEqual(
+            "Partial Evolution Continuity",
+            classify(partial, partial_history),
+        )
+        self.assertEqual("Evolution Discontinuity", classify(base, gap_history))
+        self.assertEqual("Unresolved Evolution Continuity", classify({}, []))
+        self.assertEqual(1, self.admin_session._stage18b_version_gap_count(gap_history))
+        self.assertEqual(
+            (1, 1),
+            self.admin_session._stage18b_supersession_counts(gap_history),
+        )
+
+        for metadata, lineage, expected in (
+            (base, continuous_history, "Continuous Evolution"),
+            (partial, partial_history, "Partial Evolution Continuity"),
+            (base, gap_history, "Evolution Discontinuity"),
+            ({}, [], "Unresolved Evolution Continuity"),
+        ):
+            rendered = self.admin_session._render_stage18b_evolution_continuity_content(
+                self.admin_session._record_stage18b_evolution_continuity(
+                    metadata,
+                    lineage,
+                )
+            )
+            self.assertIn(
+                f"<td>Continuity Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Continuity Summary</h3>", rendered)
+            self.assertIn("<h3>Version Continuity Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Continuity Review</h3>", rendered)
+            self.assertIn("<h3>Reference Continuity Review</h3>", rendered)
+            self.assertIn("<h3>Lineage Continuity Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Continuity</h3>", rendered)
+            self.assertIn("Version Gap Count", rendered)
+            self.assertIn("Supersession Link Count", rendered)
+            self.assertIn("Broken Supersession Links", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3315,6 +3417,34 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<th>Verification Hash</th>", after_content)
         self.assertIn("<th>Lineage State</th>", after_content)
+        self.assertIn("Record Evolution Continuity", after_content)
+        self.assertIn("Continuity Summary", after_content)
+        self.assertIn("Version Continuity Review", after_content)
+        self.assertIn("Supersession Continuity Review", after_content)
+        self.assertIn("Reference Continuity Review", after_content)
+        self.assertIn("Lineage Continuity Review", after_content)
+        self.assertIn("<td>Version Gap Count</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Supersession Link Count</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Broken Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Continuity Classification</td><td>Partial Evolution Continuity</td>",
+            after_content,
+        )
+        self.assertIn("<td>Continuity State</td><td>Limited</td>", after_content)
+        self.assertIn(
+            "<td>Continuity State</td><td>No Supersession</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reference Continuity State</td><td>Single Reference</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -4095,6 +4225,25 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<th>Verification Hash</th>", content)
         self.assertIn("<th>Lineage State</th>", content)
+        self.assertIn("Record Evolution Continuity", content)
+        self.assertIn("Continuity Summary", content)
+        self.assertIn("Version Continuity Review", content)
+        self.assertIn("Supersession Continuity Review", content)
+        self.assertIn("Reference Continuity Review", content)
+        self.assertIn("Lineage Continuity Review", content)
+        self.assertIn("<td>Version Gap Count</td><td>0</td>", content)
+        self.assertIn("<td>Supersession Link Count</td><td>0</td>", content)
+        self.assertIn("<td>Broken Supersession Links</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Continuity Classification</td><td>Partial Evolution Continuity</td>",
+            content,
+        )
+        self.assertIn("<td>Continuity State</td><td>Limited</td>", content)
+        self.assertIn("<td>Continuity State</td><td>No Supersession</td>", content)
+        self.assertIn(
+            "<td>Reference Continuity State</td><td>Single Reference</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -5084,6 +5233,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Chain Review</h2>"),
             governance_content.index("<h2>Record Evolution Summary</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Summary</h2>"),
+            governance_content.index("<h2>Record Evolution Continuity</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5136,6 +5289,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Governance Coverage</h2>", print_governance_content)
         self.assertIn("<h2>Governance Chain Review</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Summary</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Continuity</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
