@@ -14886,6 +14886,346 @@ def _render_stage17n_governance_coverage_section(
       </section>"""
 
 
+def _stage17o_chain_state(classification: str) -> str:
+    if not classification:
+        return "Missing"
+    if classification in {
+        "Governance Gap",
+        "Governance Relationship Conflict",
+        "Governance Inconsistency",
+        "Untraceable Governance",
+        "No Governance Coverage",
+    }:
+        return "Breakdown"
+    return "Present"
+
+
+def _stage17o_chain_review_classification(
+    governance_classification: str,
+    continuity_classification: str,
+    change_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+    consistency_classification: str,
+    relationship_classification: str,
+    traceability_classification: str,
+    coverage_classification: str,
+) -> str:
+    required_outputs = (
+        governance_classification,
+        continuity_classification,
+        change_classification,
+        trajectory_classification,
+        pattern_classification,
+        consistency_classification,
+        relationship_classification,
+        traceability_classification,
+        coverage_classification,
+    )
+    present_outputs = [value for value in required_outputs if value]
+    missing_outputs = [value for value in required_outputs if not value]
+    if (
+        not present_outputs
+        or traceability_classification == "Untraceable Governance"
+        or coverage_classification == "No Governance Coverage"
+        or relationship_classification == "Governance Relationship Conflict"
+        or consistency_classification == "Governance Inconsistency"
+        or governance_classification == "Governance Gap"
+    ):
+        return "Governance Chain Breakdown"
+    if missing_outputs:
+        return "Partial Governance Chain"
+    return "Complete Governance Chain"
+
+
+def _record_stage17o_governance_chain_review(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    coverage = _record_stage17n_governance_coverage(
+        evidence_groups,
+        record_outputs,
+    )
+    coverage_summary = coverage["summary"]
+    coverage_record = coverage["record"]
+    chain_review_classification = _stage17o_chain_review_classification(
+        coverage_record["governance_classification"],
+        coverage_record["continuity_classification"],
+        coverage_record["governance_change_state"],
+        coverage_record["governance_trajectory"],
+        coverage_record["governance_pattern_classification"],
+        coverage_record["consistency_classification"],
+        coverage_record["relationship_classification"],
+        coverage_record["traceability_classification"],
+        coverage_record["coverage_classification"],
+    )
+    reviews = {
+        "governance": {
+            "classification": coverage_record["governance_classification"],
+            "chain_source": "Governance Summary",
+        },
+        "continuity": {
+            "classification": coverage_record["continuity_classification"],
+            "chain_source": "Governance Continuity",
+        },
+        "change": {
+            "classification": coverage_record["governance_change_state"],
+            "chain_source": "Governance Change Log",
+        },
+        "trajectory": {
+            "classification": coverage_record["governance_trajectory"],
+            "chain_source": "Governance Trajectory",
+        },
+        "pattern": {
+            "classification": coverage_record["governance_pattern_classification"],
+            "chain_source": "Governance Pattern Detection",
+        },
+        "consistency": {
+            "classification": coverage_record["consistency_classification"],
+            "chain_source": "Governance Consistency",
+        },
+        "relationships": {
+            "classification": coverage_record["relationship_classification"],
+            "chain_source": "Governance Relationships",
+        },
+        "traceability": {
+            "classification": coverage_record["traceability_classification"],
+            "chain_source": "Governance Traceability",
+        },
+        "coverage": {
+            "classification": coverage_record["coverage_classification"],
+            "chain_source": "Governance Coverage",
+        },
+    }
+    for review in reviews.values():
+        review["chain_state"] = _stage17o_chain_state(
+            review["classification"],
+        )
+    chain_states = [review["chain_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_governance_chain_layers": len(chain_states),
+            "present_chain_layers": sum(
+                1 for state in chain_states if state in {"Present", "Breakdown"}
+            ),
+            "missing_chain_layers": chain_states.count("Missing"),
+            "traceable_chain_layers": coverage_summary["present_governance_layers"],
+            "covered_chain_layers": coverage_summary["present_governance_layers"],
+            "unsupported_chain_layers": chain_states.count("Breakdown"),
+            "governance_classification": coverage_summary[
+                "governance_classification"
+            ],
+            "continuity_classification": coverage_summary[
+                "continuity_classification"
+            ],
+            "change_classification": coverage_summary["change_classification"],
+            "trajectory_classification": coverage_summary[
+                "trajectory_classification"
+            ],
+            "pattern_classification": coverage_summary["pattern_classification"],
+            "consistency_classification": coverage_summary[
+                "consistency_classification"
+            ],
+            "relationship_classification": coverage_summary[
+                "relationship_classification"
+            ],
+            "traceability_classification": coverage_summary[
+                "traceability_classification"
+            ],
+            "coverage_classification": coverage_summary["coverage_classification"],
+            "chain_review_classification": chain_review_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **coverage_record,
+            "chain_review_classification": chain_review_classification,
+        },
+    }
+
+
+def _render_stage17o_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17o-chain-layer-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17o_record_chain_review(chain_review: dict[str, Any]) -> str:
+    record = chain_review["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Chain Review Classification", record["chain_review_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17o-record-governance-chain-review">
+          <h3>Record Governance Chain Review</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17o_governance_chain_review_content(
+    chain_review: dict[str, Any],
+) -> str:
+    summary = chain_review["summary"]
+    reviews = chain_review["reviews"]
+    summary_rows = (
+        ("Total Governance Chain Layers", summary["total_governance_chain_layers"]),
+        ("Present Chain Layers", summary["present_chain_layers"]),
+        ("Missing Chain Layers", summary["missing_chain_layers"]),
+        ("Traceable Chain Layers", summary["traceable_chain_layers"]),
+        ("Covered Chain Layers", summary["covered_chain_layers"]),
+        ("Unsupported Chain Layers", summary["unsupported_chain_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Classification", summary["change_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Pattern Classification", summary["pattern_classification"]),
+        ("Consistency Classification", summary["consistency_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+        ("Coverage Classification", summary["coverage_classification"]),
+        ("Chain Review Classification", summary["chain_review_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Chain Review Summary</h3>
+        <table class="stage17o-chain-review-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17o_review(
+            "Governance Chain Layer Review",
+            (
+                ("Classification", reviews["governance"]["classification"]),
+                ("Chain Source", reviews["governance"]["chain_source"]),
+                ("Chain State", reviews["governance"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Continuity Chain Layer Review",
+            (
+                ("Classification", reviews["continuity"]["classification"]),
+                ("Chain Source", reviews["continuity"]["chain_source"]),
+                ("Chain State", reviews["continuity"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Change Chain Layer Review",
+            (
+                ("Classification", reviews["change"]["classification"]),
+                ("Chain Source", reviews["change"]["chain_source"]),
+                ("Chain State", reviews["change"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Trajectory Chain Layer Review",
+            (
+                ("Classification", reviews["trajectory"]["classification"]),
+                ("Chain Source", reviews["trajectory"]["chain_source"]),
+                ("Chain State", reviews["trajectory"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Pattern Chain Layer Review",
+            (
+                ("Classification", reviews["pattern"]["classification"]),
+                ("Chain Source", reviews["pattern"]["chain_source"]),
+                ("Chain State", reviews["pattern"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Consistency Chain Layer Review",
+            (
+                ("Classification", reviews["consistency"]["classification"]),
+                ("Chain Source", reviews["consistency"]["chain_source"]),
+                ("Chain State", reviews["consistency"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Relationships Chain Layer Review",
+            (
+                ("Classification", reviews["relationships"]["classification"]),
+                ("Chain Source", reviews["relationships"]["chain_source"]),
+                ("Chain State", reviews["relationships"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Traceability Chain Layer Review",
+            (
+                ("Classification", reviews["traceability"]["classification"]),
+                ("Chain Source", reviews["traceability"]["chain_source"]),
+                ("Chain State", reviews["traceability"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_review(
+            "Coverage Chain Layer Review",
+            (
+                ("Classification", reviews["coverage"]["classification"]),
+                ("Chain Source", reviews["coverage"]["chain_source"]),
+                ("Chain State", reviews["coverage"]["chain_state"]),
+            ),
+        )}
+        {_render_stage17o_record_chain_review(chain_review)}"""
+
+
+def _render_stage17o_governance_chain_review_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    chain_review = _record_stage17o_governance_chain_review(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17o-governance-chain-review">
+        <h2>Governance Chain Review</h2>
+        <p class="notice">
+          Governance chain review is derived deterministically from existing
+          governance summary, continuity, change log, trajectory, pattern,
+          consistency, relationship, traceability, and coverage outputs only.
+        </p>
+        {_render_stage17o_governance_chain_review_content(chain_review)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -15070,6 +15410,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17o_governance_chain_review = _render_stage17o_governance_chain_review_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -15200,6 +15544,7 @@ def render_admin_record_evidence_page(
             f"{stage17l_governance_relationships}"
             f"{stage17m_governance_traceability}"
             f"{stage17n_governance_coverage}"
+            f"{stage17o_governance_chain_review}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

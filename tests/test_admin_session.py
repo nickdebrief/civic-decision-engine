@@ -1477,6 +1477,185 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Relationships Coverage Review</h3>", rendered)
             self.assertIn("<h3>Traceability Coverage Review</h3>", rendered)
 
+    def test_stage17o_governance_chain_review_renders_classification_states(self):
+        def chain_review(classification):
+            breakdown = classification == "Governance Chain Breakdown"
+            return {
+                "summary": {
+                    "total_governance_chain_layers": 9,
+                    "present_chain_layers": 9
+                    if classification != "Partial Governance Chain"
+                    else 8,
+                    "missing_chain_layers": 1
+                    if classification == "Partial Governance Chain"
+                    else 0,
+                    "traceable_chain_layers": 9,
+                    "covered_chain_layers": 9,
+                    "unsupported_chain_layers": 3 if breakdown else 0,
+                    "governance_classification": "Governance Gap"
+                    if breakdown
+                    else "Governed",
+                    "continuity_classification": "Continuous Governance",
+                    "change_classification": "No Recorded Change",
+                    "trajectory_classification": "Governance Progression",
+                    "pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": "Governance Inconsistency"
+                    if breakdown
+                    else "Consistent Governance",
+                    "relationship_classification": "Governance Relationship Conflict"
+                    if breakdown
+                    else "Aligned Governance Relationships",
+                    "traceability_classification": "Fully Traceable Governance",
+                    "coverage_classification": "Full Governance Coverage",
+                    "chain_review_classification": classification,
+                },
+                "reviews": {
+                    "governance": {
+                        "classification": "Governance Gap"
+                        if breakdown
+                        else "Governed",
+                        "chain_source": "Governance Summary",
+                        "chain_state": "Breakdown" if breakdown else "Present",
+                    },
+                    "continuity": {
+                        "classification": "Continuous Governance",
+                        "chain_source": "Governance Continuity",
+                        "chain_state": "Present",
+                    },
+                    "change": {
+                        "classification": "No Recorded Change",
+                        "chain_source": "Governance Change Log",
+                        "chain_state": "Present",
+                    },
+                    "trajectory": {
+                        "classification": "Governance Progression",
+                        "chain_source": "Governance Trajectory",
+                        "chain_state": "Present",
+                    },
+                    "pattern": {
+                        "classification": "Limited Governance Pattern",
+                        "chain_source": "Governance Pattern Detection",
+                        "chain_state": "Present",
+                    },
+                    "consistency": {
+                        "classification": "Governance Inconsistency"
+                        if breakdown
+                        else "Consistent Governance",
+                        "chain_source": "Governance Consistency",
+                        "chain_state": "Breakdown" if breakdown else "Present",
+                    },
+                    "relationships": {
+                        "classification": "Governance Relationship Conflict"
+                        if breakdown
+                        else "Aligned Governance Relationships",
+                        "chain_source": "Governance Relationships",
+                        "chain_state": "Breakdown" if breakdown else "Present",
+                    },
+                    "traceability": {
+                        "classification": "Fully Traceable Governance",
+                        "chain_source": "Governance Traceability",
+                        "chain_state": "Present",
+                    },
+                    "coverage": {
+                        "classification": "Full Governance Coverage",
+                        "chain_source": "Governance Coverage",
+                        "chain_state": "Present",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": "Governance Gap"
+                    if breakdown
+                    else "Governed",
+                    "continuity_classification": "Continuous Governance",
+                    "governance_change_state": "No Recorded Change",
+                    "governance_trajectory": "Governance Progression",
+                    "governance_pattern_classification": "Limited Governance Pattern",
+                    "consistency_classification": "Governance Inconsistency"
+                    if breakdown
+                    else "Consistent Governance",
+                    "relationship_classification": "Governance Relationship Conflict"
+                    if breakdown
+                    else "Aligned Governance Relationships",
+                    "traceability_classification": "Fully Traceable Governance",
+                    "coverage_classification": "Full Governance Coverage",
+                    "chain_review_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17o_chain_review_classification
+
+        self.assertEqual(
+            "Governance Chain Breakdown",
+            classify(
+                "Governance Gap",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+                "Fully Traceable Governance",
+                "Full Governance Coverage",
+            ),
+        )
+        self.assertEqual(
+            "Partial Governance Chain",
+            classify(
+                "Governed",
+                "",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+                "Fully Traceable Governance",
+                "Full Governance Coverage",
+            ),
+        )
+        self.assertEqual(
+            "Complete Governance Chain",
+            classify(
+                "Governed",
+                "Continuous Governance",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+                "Fully Traceable Governance",
+                "Full Governance Coverage",
+            ),
+        )
+        self.assertEqual(
+            "Breakdown",
+            self.admin_session._stage17o_chain_state("Governance Gap"),
+        )
+
+        for classification in (
+            "Complete Governance Chain",
+            "Partial Governance Chain",
+            "Governance Chain Breakdown",
+        ):
+            rendered = self.admin_session._render_stage17o_governance_chain_review_content(
+                chain_review(classification)
+            )
+            self.assertIn(
+                f"<td>Chain Review Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Governance Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Continuity Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Change Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Trajectory Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Pattern Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Consistency Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Relationships Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Traceability Chain Layer Review</h3>", rendered)
+            self.assertIn("<h3>Coverage Chain Layer Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3010,6 +3189,30 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Consistency Coverage Review</h3>", after_content)
         self.assertIn("<h3>Relationships Coverage Review</h3>", after_content)
         self.assertIn("<h3>Traceability Coverage Review</h3>", after_content)
+        self.assertIn("Governance Chain Review", after_content)
+        self.assertIn("Chain Review Summary", after_content)
+        self.assertIn(
+            "<td>Total Governance Chain Layers</td><td>9</td>",
+            after_content,
+        )
+        self.assertIn("<td>Present Chain Layers</td><td>9</td>", after_content)
+        self.assertIn("<td>Missing Chain Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Traceable Chain Layers</td><td>8</td>", after_content)
+        self.assertIn("<td>Covered Chain Layers</td><td>8</td>", after_content)
+        self.assertIn("<td>Unsupported Chain Layers</td><td>3</td>", after_content)
+        self.assertIn(
+            "<td>Chain Review Classification</td><td>Governance Chain Breakdown</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Governance Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Continuity Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Change Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Trajectory Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Pattern Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Consistency Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Relationships Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Traceability Chain Layer Review</h3>", after_content)
+        self.assertIn("<h3>Coverage Chain Layer Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3752,6 +3955,27 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Consistency Coverage Review</h3>", content)
         self.assertIn("<h3>Relationships Coverage Review</h3>", content)
         self.assertIn("<h3>Traceability Coverage Review</h3>", content)
+        self.assertIn("Governance Chain Review", content)
+        self.assertIn("Chain Review Summary", content)
+        self.assertIn("<td>Total Governance Chain Layers</td><td>9</td>", content)
+        self.assertIn("<td>Present Chain Layers</td><td>9</td>", content)
+        self.assertIn("<td>Missing Chain Layers</td><td>0</td>", content)
+        self.assertIn("<td>Traceable Chain Layers</td><td>8</td>", content)
+        self.assertIn("<td>Covered Chain Layers</td><td>8</td>", content)
+        self.assertIn("<td>Unsupported Chain Layers</td><td>3</td>", content)
+        self.assertIn(
+            "<td>Chain Review Classification</td><td>Governance Chain Breakdown</td>",
+            content,
+        )
+        self.assertIn("<h3>Governance Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Continuity Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Change Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Trajectory Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Pattern Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Consistency Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Relationships Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Traceability Chain Layer Review</h3>", content)
+        self.assertIn("<h3>Coverage Chain Layer Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4733,6 +4957,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Traceability</h2>"),
             governance_content.index("<h2>Governance Coverage</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Coverage</h2>"),
+            governance_content.index("<h2>Governance Chain Review</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -4783,6 +5011,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Governance Relationships</h2>", print_governance_content)
         self.assertIn("<h2>Governance Traceability</h2>", print_governance_content)
         self.assertIn("<h2>Governance Coverage</h2>", print_governance_content)
+        self.assertIn("<h2>Governance Chain Review</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
