@@ -17134,6 +17134,482 @@ def _render_stage18e_record_evolution_relationships_section(
       </section>"""
 
 
+def _stage18f_version_traceability_counts(
+    version_history: list[dict[str, Any]],
+) -> tuple[int, int]:
+    history = _stage18c_sorted_history(version_history)
+    traceable = sum(
+        1
+        for row in history
+        if str(row.get("reference") or "").strip()
+        and _stage18a_int(row.get("version")) is not None
+    )
+    return traceable, max(0, len(history) - traceable)
+
+
+def _stage18f_timestamp_counts(
+    version_history: list[dict[str, Any]],
+) -> tuple[int, int, Any, Any]:
+    history = _stage18c_sorted_history(version_history)
+    timestamps = [
+        str(row.get("generated_at")).strip()
+        for row in history
+        if row.get("generated_at") not in (None, "")
+    ]
+    missing = len(history) - len(timestamps)
+    return (
+        len(timestamps),
+        missing,
+        min(timestamps) if timestamps else None,
+        max(timestamps) if timestamps else None,
+    )
+
+
+def _stage18f_version_traceability_state(
+    total_versions: int,
+    traceable_versions: int,
+    untraceable_versions: int,
+) -> str:
+    if not traceable_versions:
+        return "No Version Traceability"
+    if total_versions == 1 and not untraceable_versions:
+        return "Single Version Traceability"
+    if untraceable_versions:
+        return "Partial Version Traceability"
+    return "All Versions Traceable"
+
+
+def _stage18f_supersession_traceability_state(
+    link_count: int,
+    traceable_links: int,
+    broken_links: int,
+) -> str:
+    if not link_count:
+        return "No Supersession Links"
+    if broken_links and traceable_links:
+        return "Partially Traceable Supersession"
+    if broken_links:
+        return "Broken Supersession Traceability"
+    return "Fully Traceable Supersession"
+
+
+def _stage18f_timestamp_traceability_state(
+    total_versions: int,
+    traceable_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if not traceable_timestamps:
+        return "No Timestamp Traceability"
+    if total_versions == 1 and not missing_timestamps:
+        return "Single Timestamp Traceability"
+    if missing_timestamps:
+        return "Partial Timestamp Traceability"
+    return "Complete Timestamp Traceability"
+
+
+def _stage18f_verification_traceability_state(
+    total_versions: int,
+    traceable_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if not traceable_hashes:
+        return "No Verification Traceability"
+    if total_versions == 1 and not missing_hashes:
+        return "Single Verification Traceability"
+    if missing_hashes:
+        return "Partial Verification Traceability"
+    return "Complete Verification Traceability"
+
+
+def _stage18f_evolution_output_traceability_state(
+    relationships: dict[str, Any],
+) -> str:
+    summary = relationships["summary"]
+    classifications = (
+        summary.get("evolution_classification"),
+        summary.get("continuity_classification"),
+        summary.get("change_log_classification"),
+        summary.get("trajectory_classification"),
+        summary.get("relationship_classification"),
+    )
+    if any(not str(value or "").strip() for value in classifications):
+        return "Untraceable Evolution Outputs"
+    limited_values = {
+        "Initial Record State",
+        "Partial Evolution Continuity",
+        "No Recorded Changes",
+        "Initial Evolution Trajectory",
+        "No Evolution Relationships",
+    }
+    if any(value in limited_values for value in classifications):
+        return "Partially Traceable Evolution Outputs"
+    return "Fully Traceable Evolution Outputs"
+
+
+def _stage18f_traceability_classification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+    relationships: dict[str, Any],
+) -> str:
+    history = _stage18c_sorted_history(version_history)
+    traceable_versions, _ = _stage18f_version_traceability_counts(history)
+    traceable_timestamps, missing_timestamps, _, _ = _stage18f_timestamp_counts(
+        history
+    )
+    hash_coverage, traceable_hashes, missing_hashes = (
+        _stage18d_verification_hash_coverage(history)
+    )
+    summary = relationships["record"]
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    total_versions = summary["total_versions"]
+
+    if (
+        not traceable_versions
+        or not reference
+        or version is None
+        or not history
+        or traceable_timestamps == 0
+        or traceable_hashes == 0
+        or hash_coverage == "Unresolved"
+    ):
+        return "Untraceable Evolution"
+
+    if summary["broken_supersession_links"] or summary["version_gap_count"]:
+        return "Broken Evolution Traceability"
+
+    if (
+        total_versions > 1
+        and traceable_versions == total_versions
+        and not missing_timestamps
+        and not missing_hashes
+        and summary["relationship_classification"] != "No Evolution Relationships"
+    ):
+        return "Fully Traceable Evolution"
+
+    return "Partial Evolution Traceability"
+
+
+def _record_stage18f_evolution_traceability(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    relationships = _record_stage18e_evolution_relationships(
+        record_metadata,
+        history,
+    )
+    relationship_record = relationships["record"]
+    relationship_version = relationships["reviews"]["version"]
+    total_versions = relationship_record["total_versions"]
+    traceable_versions, untraceable_versions = _stage18f_version_traceability_counts(
+        history
+    )
+    traceable_timestamps, missing_timestamps, earliest_timestamp, latest_timestamp = (
+        _stage18f_timestamp_counts(history)
+    )
+    _, traceable_hashes, missing_hashes = _stage18d_verification_hash_coverage(
+        history
+    )
+    traceable_supersession_links = max(
+        0,
+        relationship_record["supersession_link_count"]
+        - relationship_record["broken_supersession_links"],
+    )
+    classification = _stage18f_traceability_classification(
+        record_metadata,
+        history,
+        relationships,
+    )
+    summary = {
+        "record_reference": relationship_record["record_reference"],
+        "current_version": relationship_record["current_version"],
+        "total_versions": total_versions,
+        "traceable_versions": traceable_versions,
+        "untraceable_versions": untraceable_versions,
+        "traceable_supersession_links": traceable_supersession_links,
+        "broken_supersession_links": relationship_record[
+            "broken_supersession_links"
+        ],
+        "traceable_timestamps": traceable_timestamps,
+        "missing_timestamps": missing_timestamps,
+        "traceable_verification_hashes": traceable_hashes,
+        "missing_verification_hashes": missing_hashes,
+        "evolution_classification": relationship_record["evolution_classification"],
+        "continuity_classification": relationship_record[
+            "continuity_classification"
+        ],
+        "change_log_classification": relationship_record[
+            "change_log_classification"
+        ],
+        "trajectory_classification": relationship_record[
+            "trajectory_classification"
+        ],
+        "relationship_classification": relationship_record[
+            "relationship_classification"
+        ],
+        "traceability_classification": classification,
+    }
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": relationship_version["earliest_version"],
+                "latest_version": relationship_version["latest_version"],
+                "total_versions": total_versions,
+                "traceable_versions": traceable_versions,
+                "untraceable_versions": untraceable_versions,
+                "traceability_state": _stage18f_version_traceability_state(
+                    total_versions,
+                    traceable_versions,
+                    untraceable_versions,
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": relationship_record[
+                    "supersession_link_count"
+                ],
+                "traceable_supersession_links": traceable_supersession_links,
+                "broken_supersession_links": relationship_record[
+                    "broken_supersession_links"
+                ],
+                "traceability_state": _stage18f_supersession_traceability_state(
+                    relationship_record["supersession_link_count"],
+                    traceable_supersession_links,
+                    relationship_record["broken_supersession_links"],
+                ),
+            },
+            "timestamp": {
+                "traceable_timestamps": traceable_timestamps,
+                "missing_timestamps": missing_timestamps,
+                "earliest_timestamp": earliest_timestamp,
+                "latest_timestamp": latest_timestamp,
+                "traceability_state": _stage18f_timestamp_traceability_state(
+                    total_versions,
+                    traceable_timestamps,
+                    missing_timestamps,
+                ),
+            },
+            "verification": {
+                "traceable_verification_hashes": traceable_hashes,
+                "missing_verification_hashes": missing_hashes,
+                "verification_hash_coverage": relationship_record[
+                    "verification_hash_coverage"
+                ],
+                "traceability_state": _stage18f_verification_traceability_state(
+                    total_versions,
+                    traceable_hashes,
+                    missing_hashes,
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_state": _stage18f_evolution_output_traceability_state(
+                    relationships
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18f_record_traceability(traceability: dict[str, Any]) -> str:
+    record = traceability["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Traceable Versions", record["traceable_versions"]),
+        ("Untraceable Versions", record["untraceable_versions"]),
+        (
+            "Traceable Supersession Links",
+            record["traceable_supersession_links"],
+        ),
+        ("Broken Supersession Links", record["broken_supersession_links"]),
+        ("Traceable Timestamps", record["traceable_timestamps"]),
+        ("Missing Timestamps", record["missing_timestamps"]),
+        (
+            "Traceable Verification Hashes",
+            record["traceable_verification_hashes"],
+        ),
+        ("Missing Verification Hashes", record["missing_verification_hashes"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+    )
+    return f"""
+        <section class="stage18f-record-evolution-traceability">
+          <h3>Record Evolution Traceability</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18f_evolution_traceability_content(
+    traceability: dict[str, Any],
+) -> str:
+    summary = traceability["summary"]
+    reviews = traceability["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Traceable Versions", summary["traceable_versions"]),
+        ("Untraceable Versions", summary["untraceable_versions"]),
+        (
+            "Traceable Supersession Links",
+            summary["traceable_supersession_links"],
+        ),
+        ("Broken Supersession Links", summary["broken_supersession_links"]),
+        ("Traceable Timestamps", summary["traceable_timestamps"]),
+        ("Missing Timestamps", summary["missing_timestamps"]),
+        (
+            "Traceable Verification Hashes",
+            summary["traceable_verification_hashes"],
+        ),
+        ("Missing Verification Hashes", summary["missing_verification_hashes"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+    )
+    return f"""
+        <h3>Traceability Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Traceability Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                (
+                    "Traceable Versions",
+                    reviews["version"]["traceable_versions"],
+                ),
+                (
+                    "Untraceable Versions",
+                    reviews["version"]["untraceable_versions"],
+                ),
+                ("Traceability State", reviews["version"]["traceability_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Traceability Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Traceable Supersession Links",
+                    reviews["supersession"]["traceable_supersession_links"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                (
+                    "Traceability State",
+                    reviews["supersession"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Traceability Review",
+            (
+                (
+                    "Traceable Timestamps",
+                    reviews["timestamp"]["traceable_timestamps"],
+                ),
+                ("Missing Timestamps", reviews["timestamp"]["missing_timestamps"]),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Traceability State", reviews["timestamp"]["traceability_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Traceability Review",
+            (
+                (
+                    "Traceable Verification Hashes",
+                    reviews["verification"]["traceable_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Traceability State",
+                    reviews["verification"]["traceability_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Traceability Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                ("Traceability State", reviews["evolution"]["traceability_state"]),
+            ),
+        )}
+        {_render_stage18f_record_traceability(traceability)}"""
+
+
+def _render_stage18f_record_evolution_traceability_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    traceability = _record_stage18f_evolution_traceability(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18f-record-evolution-traceability">
+        <h2>Record Evolution Traceability</h2>
+        <p class="notice">
+          Record evolution traceability is derived deterministically from existing
+          record metadata, same-reference version history, supersession fields,
+          timestamps, verification hashes, and Stage 18A through Stage 18E
+          evolution outputs only.
+        </p>
+        {_render_stage18f_evolution_traceability_content(traceability)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -17344,6 +17820,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18f_record_evolution_traceability = _render_stage18f_record_evolution_traceability_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -17480,6 +17960,7 @@ def render_admin_record_evidence_page(
             f"{stage18c_record_evolution_change_log}"
             f"{stage18d_record_evolution_trajectory}"
             f"{stage18e_record_evolution_relationships}"
+            f"{stage18f_record_evolution_traceability}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

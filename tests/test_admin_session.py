@@ -2221,6 +2221,147 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Evolution Relationship Review</h3>", rendered)
             self.assertIn("<h3>Record Evolution Relationships</h3>", rendered)
 
+    def test_stage18f_record_evolution_traceability_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        broken_history = [
+            version_row(1),
+            version_row(
+                3,
+                latest=1,
+                supersedes="Strike-LA-20260710-004:v2",
+            ),
+        ]
+        no_timestamp_history = [
+            version_row(1, generated_at=None, hash_value=""),
+            version_row(2, latest=1, generated_at=None, hash_value=""),
+        ]
+
+        def traceability(metadata, lineage):
+            return self.admin_session._record_stage18f_evolution_traceability(
+                metadata,
+                lineage,
+            )
+
+        single = traceability(single_metadata, single_history)
+        full = traceability(base, full_history)
+        broken = traceability({**base, "version": 3}, broken_history)
+        untraceable = traceability(base, no_timestamp_history)
+
+        self.assertEqual(
+            "Partial Evolution Traceability",
+            single["summary"]["traceability_classification"],
+        )
+        self.assertEqual(
+            "Fully Traceable Evolution",
+            full["summary"]["traceability_classification"],
+        )
+        self.assertEqual(
+            "Broken Evolution Traceability",
+            broken["summary"]["traceability_classification"],
+        )
+        self.assertEqual(
+            "Untraceable Evolution",
+            untraceable["summary"]["traceability_classification"],
+        )
+        self.assertEqual(1, single["summary"]["traceable_versions"])
+        self.assertEqual(0, single["summary"]["untraceable_versions"])
+        self.assertEqual(1, single["summary"]["traceable_timestamps"])
+        self.assertEqual(0, single["summary"]["missing_timestamps"])
+        self.assertEqual(1, single["summary"]["traceable_verification_hashes"])
+        self.assertEqual(0, single["summary"]["missing_verification_hashes"])
+        self.assertEqual(
+            "Single Version Traceability",
+            single["reviews"]["version"]["traceability_state"],
+        )
+        self.assertEqual(
+            "No Supersession Links",
+            single["reviews"]["supersession"]["traceability_state"],
+        )
+        self.assertEqual(
+            "Single Timestamp Traceability",
+            single["reviews"]["timestamp"]["traceability_state"],
+        )
+        self.assertEqual(
+            "Single Verification Traceability",
+            single["reviews"]["verification"]["traceability_state"],
+        )
+
+        for traceability_set, expected in (
+            (full, "Fully Traceable Evolution"),
+            (single, "Partial Evolution Traceability"),
+            (untraceable, "Untraceable Evolution"),
+            (broken, "Broken Evolution Traceability"),
+        ):
+            rendered = self.admin_session._render_stage18f_evolution_traceability_content(
+                traceability_set
+            )
+            self.assertIn(
+                f"<td>Traceability Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Traceability Summary</h3>", rendered)
+            self.assertIn("<h3>Version Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Verification Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Traceability</h3>", rendered)
+            self.assertIn("Traceable Versions", rendered)
+            self.assertIn("Untraceable Versions", rendered)
+            self.assertIn("Traceable Timestamps", rendered)
+            self.assertIn("Missing Timestamps", rendered)
+            self.assertIn("Traceable Verification Hashes", rendered)
+            self.assertIn("Missing Verification Hashes", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3890,6 +4031,29 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Relationship Classification</td><td>No Evolution Relationships</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Traceability", after_content)
+        self.assertIn("Traceability Summary", after_content)
+        self.assertIn("Version Traceability Review", after_content)
+        self.assertIn("Supersession Traceability Review", after_content)
+        self.assertIn("Timestamp Traceability Review", after_content)
+        self.assertIn("Verification Traceability Review", after_content)
+        self.assertIn("Evolution Traceability Review", after_content)
+        self.assertIn("<td>Traceable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Untraceable Versions</td><td>0</td>", after_content)
+        self.assertIn("<td>Traceable Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Missing Timestamps</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Traceable Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Missing Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Traceability Classification</td><td>Untraceable Evolution</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -4751,6 +4915,26 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Relationship Classification</td><td>No Evolution Relationships</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Traceability", content)
+        self.assertIn("Traceability Summary", content)
+        self.assertIn("Version Traceability Review", content)
+        self.assertIn("Supersession Traceability Review", content)
+        self.assertIn("Timestamp Traceability Review", content)
+        self.assertIn("Verification Traceability Review", content)
+        self.assertIn("Evolution Traceability Review", content)
+        self.assertIn("<td>Traceable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Untraceable Versions</td><td>0</td>", content)
+        self.assertIn("<td>Traceable Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Missing Timestamps</td><td>1</td>", content)
+        self.assertIn(
+            "<td>Traceable Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Verification Hashes</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Traceability Classification</td><td>Untraceable Evolution</td>",
             content,
         )
         self.assertIn(
@@ -5758,6 +5942,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Trajectory</h2>"),
             governance_content.index("<h2>Record Evolution Relationships</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Relationships</h2>"),
+            governance_content.index("<h2>Record Evolution Traceability</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5814,6 +6002,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Change Log</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Trajectory</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Relationships</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Traceability</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
