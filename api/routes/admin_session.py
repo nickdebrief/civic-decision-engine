@@ -14558,6 +14558,334 @@ def _render_stage17m_governance_traceability_section(
       </section>"""
 
 
+def _stage17n_coverage_state(classification: str) -> str:
+    if not classification:
+        return "Missing"
+    if classification in {
+        "Governance Gap",
+        "Governance Discontinuity",
+        "Significant Change",
+        "Governance Regression",
+        "Recurring Governance Pattern",
+        "Governance Inconsistency",
+        "Governance Relationship Conflict",
+        "Untraceable Governance",
+    }:
+        return "Unsupported"
+    return "Present"
+
+
+def _stage17n_coverage_classification(
+    governance_classification: str,
+    continuity_classification: str,
+    change_classification: str,
+    trajectory_classification: str,
+    pattern_classification: str,
+    consistency_classification: str,
+    relationship_classification: str,
+    traceability_classification: str,
+) -> str:
+    required_outputs = (
+        governance_classification,
+        continuity_classification,
+        change_classification,
+        trajectory_classification,
+        pattern_classification,
+        consistency_classification,
+        relationship_classification,
+        traceability_classification,
+    )
+    present_outputs = [value for value in required_outputs if value]
+    missing_outputs = [value for value in required_outputs if not value]
+    unsupported_outputs = [
+        value
+        for value in required_outputs
+        if _stage17n_coverage_state(value) == "Unsupported"
+    ]
+
+    if not present_outputs:
+        return "No Governance Coverage"
+    if missing_outputs:
+        return "Partial Governance Coverage"
+    if len(present_outputs) == len(required_outputs):
+        return "Full Governance Coverage"
+    if unsupported_outputs:
+        return "Limited Governance Coverage"
+    return "Partial Governance Coverage"
+
+
+def _record_stage17n_governance_coverage(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> dict[str, Any]:
+    traceability = _record_stage17m_governance_traceability(
+        evidence_groups,
+        record_outputs,
+    )
+    traceability_summary = traceability["summary"]
+    traceability_record = traceability["record"]
+    coverage_classification = _stage17n_coverage_classification(
+        traceability_record["governance_classification"],
+        traceability_record["continuity_classification"],
+        traceability_record["governance_change_state"],
+        traceability_record["governance_trajectory"],
+        traceability_record["governance_pattern_classification"],
+        traceability_record["consistency_classification"],
+        traceability_record["relationship_classification"],
+        traceability_record["traceability_classification"],
+    )
+    reviews = {
+        "governance": {
+            "classification": traceability_record["governance_classification"],
+            "coverage_source": "Governance Summary",
+        },
+        "continuity": {
+            "classification": traceability_record["continuity_classification"],
+            "coverage_source": "Governance Continuity",
+        },
+        "change": {
+            "classification": traceability_record["governance_change_state"],
+            "coverage_source": "Governance Change Log",
+        },
+        "trajectory": {
+            "classification": traceability_record["governance_trajectory"],
+            "coverage_source": "Governance Trajectory",
+        },
+        "pattern": {
+            "classification": traceability_record["governance_pattern_classification"],
+            "coverage_source": "Governance Pattern Detection",
+        },
+        "consistency": {
+            "classification": traceability_record["consistency_classification"],
+            "coverage_source": "Governance Consistency",
+        },
+        "relationships": {
+            "classification": traceability_record["relationship_classification"],
+            "coverage_source": "Governance Relationships",
+        },
+        "traceability": {
+            "classification": traceability_record["traceability_classification"],
+            "coverage_source": "Governance Traceability",
+        },
+    }
+    for review in reviews.values():
+        review["coverage_state"] = _stage17n_coverage_state(
+            review["classification"],
+        )
+    coverage_states = [review["coverage_state"] for review in reviews.values()]
+
+    return {
+        "summary": {
+            "total_governance_layers": len(coverage_states),
+            "present_governance_layers": sum(
+                1 for state in coverage_states if state in {"Present", "Unsupported"}
+            ),
+            "missing_governance_layers": coverage_states.count("Missing"),
+            "populated_governance_layers": sum(
+                1 for state in coverage_states if state in {"Present", "Unsupported"}
+            ),
+            "unsupported_governance_layers": coverage_states.count("Unsupported"),
+            "governance_classification": traceability_summary[
+                "governance_classification"
+            ],
+            "continuity_classification": traceability_summary[
+                "continuity_classification"
+            ],
+            "change_classification": traceability_summary["change_classification"],
+            "trajectory_classification": traceability_summary[
+                "trajectory_classification"
+            ],
+            "pattern_classification": traceability_summary["pattern_classification"],
+            "consistency_classification": traceability_summary[
+                "consistency_classification"
+            ],
+            "relationship_classification": traceability_summary[
+                "relationship_classification"
+            ],
+            "traceability_classification": traceability_summary[
+                "traceability_classification"
+            ],
+            "coverage_classification": coverage_classification,
+        },
+        "reviews": reviews,
+        "record": {
+            **traceability_record,
+            "coverage_classification": coverage_classification,
+        },
+    }
+
+
+def _render_stage17n_review(
+    title: str,
+    rows: tuple[tuple[str, Any], ...],
+) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17n-coverage-review">
+          <h3>{escape(title)}</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17n_record_coverage(coverage: dict[str, Any]) -> str:
+    record = coverage["record"]
+    rows = (
+        ("Record Reference", record["reference"]),
+        ("Trajectory", record["trajectory"]),
+        ("Finding", record["finding"]),
+        ("Governance Classification", record["governance_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Governance Change State", record["governance_change_state"]),
+        ("Governance Trajectory", record["governance_trajectory"]),
+        (
+            "Governance Pattern Classification",
+            record["governance_pattern_classification"],
+        ),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"""
+        <section class="stage17n-record-governance-coverage">
+          <h3>Record Governance Coverage</h3>
+          <table><tbody>{table_rows}</tbody></table>
+        </section>"""
+
+
+def _render_stage17n_governance_coverage_content(
+    coverage: dict[str, Any],
+) -> str:
+    summary = coverage["summary"]
+    reviews = coverage["reviews"]
+    summary_rows = (
+        ("Total Governance Layers", summary["total_governance_layers"]),
+        ("Present Governance Layers", summary["present_governance_layers"]),
+        ("Missing Governance Layers", summary["missing_governance_layers"]),
+        ("Populated Governance Layers", summary["populated_governance_layers"]),
+        ("Unsupported Governance Layers", summary["unsupported_governance_layers"]),
+        ("Governance Classification", summary["governance_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Classification", summary["change_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Pattern Classification", summary["pattern_classification"]),
+        ("Consistency Classification", summary["consistency_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+        ("Coverage Classification", summary["coverage_classification"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(str(value))}</td>"
+        "</tr>"
+        for label, value in summary_rows
+    )
+    return f"""
+        <h3>Coverage Summary</h3>
+        <table class="stage17n-coverage-summary">
+          <tbody>{table_rows}</tbody>
+        </table>
+        {_render_stage17n_review(
+            "Governance Coverage Review",
+            (
+                ("Classification", reviews["governance"]["classification"]),
+                ("Coverage Source", reviews["governance"]["coverage_source"]),
+                ("Coverage State", reviews["governance"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Continuity Coverage Review",
+            (
+                ("Classification", reviews["continuity"]["classification"]),
+                ("Coverage Source", reviews["continuity"]["coverage_source"]),
+                ("Coverage State", reviews["continuity"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Change Coverage Review",
+            (
+                ("Classification", reviews["change"]["classification"]),
+                ("Coverage Source", reviews["change"]["coverage_source"]),
+                ("Coverage State", reviews["change"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Trajectory Coverage Review",
+            (
+                ("Classification", reviews["trajectory"]["classification"]),
+                ("Coverage Source", reviews["trajectory"]["coverage_source"]),
+                ("Coverage State", reviews["trajectory"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Pattern Coverage Review",
+            (
+                ("Classification", reviews["pattern"]["classification"]),
+                ("Coverage Source", reviews["pattern"]["coverage_source"]),
+                ("Coverage State", reviews["pattern"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Consistency Coverage Review",
+            (
+                ("Classification", reviews["consistency"]["classification"]),
+                ("Coverage Source", reviews["consistency"]["coverage_source"]),
+                ("Coverage State", reviews["consistency"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Relationships Coverage Review",
+            (
+                ("Classification", reviews["relationships"]["classification"]),
+                ("Coverage Source", reviews["relationships"]["coverage_source"]),
+                ("Coverage State", reviews["relationships"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_review(
+            "Traceability Coverage Review",
+            (
+                ("Classification", reviews["traceability"]["classification"]),
+                ("Coverage Source", reviews["traceability"]["coverage_source"]),
+                ("Coverage State", reviews["traceability"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage17n_record_coverage(coverage)}"""
+
+
+def _render_stage17n_governance_coverage_section(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    record_outputs: dict[str, Any],
+) -> str:
+    coverage = _record_stage17n_governance_coverage(
+        evidence_groups,
+        record_outputs,
+    )
+    return f"""
+      <section class="management-section stage17n-governance-coverage">
+        <h2>Governance Coverage</h2>
+        <p class="notice">
+          Governance coverage is derived deterministically from existing
+          governance summary, continuity, change log, trajectory, pattern,
+          consistency, relationship, and traceability outputs only.
+        </p>
+        {_render_stage17n_governance_coverage_content(coverage)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -14738,6 +15066,10 @@ def render_admin_record_evidence_page(
         evidence_groups,
         record_outputs,
     )
+    stage17n_governance_coverage = _render_stage17n_governance_coverage_section(
+        evidence_groups,
+        record_outputs,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -14867,6 +15199,7 @@ def render_admin_record_evidence_page(
             f"{stage17k_governance_consistency}"
             f"{stage17l_governance_relationships}"
             f"{stage17m_governance_traceability}"
+            f"{stage17n_governance_coverage}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

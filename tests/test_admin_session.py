@@ -1304,6 +1304,179 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Consistency Traceability Review</h3>", rendered)
             self.assertIn("<h3>Relationships Traceability Review</h3>", rendered)
 
+    def test_stage17n_governance_coverage_renders_classification_states(self):
+        def coverage(classification):
+            unsupported = classification == "Full Governance Coverage"
+            return {
+                "summary": {
+                    "total_governance_layers": 8,
+                    "present_governance_layers": 8
+                    if classification != "No Governance Coverage"
+                    else 0,
+                    "missing_governance_layers": 1
+                    if classification == "Partial Governance Coverage"
+                    else 0,
+                    "populated_governance_layers": 8
+                    if classification != "No Governance Coverage"
+                    else 0,
+                    "unsupported_governance_layers": 7 if unsupported else 0,
+                    "governance_classification": "Governance Gap"
+                    if unsupported
+                    else "Governed",
+                    "continuity_classification": "Governance Discontinuity"
+                    if unsupported
+                    else "Continuous Governance",
+                    "change_classification": "Significant Change"
+                    if unsupported
+                    else "No Recorded Change",
+                    "trajectory_classification": "Governance Regression"
+                    if unsupported
+                    else "Governance Progression",
+                    "pattern_classification": "Recurring Governance Pattern"
+                    if unsupported
+                    else "Limited Governance Pattern",
+                    "consistency_classification": "Governance Inconsistency"
+                    if unsupported
+                    else "Consistent Governance",
+                    "relationship_classification": "Governance Relationship Conflict"
+                    if unsupported
+                    else "Aligned Governance Relationships",
+                    "traceability_classification": "Fully Traceable Governance",
+                    "coverage_classification": classification,
+                },
+                "reviews": {
+                    "governance": {
+                        "classification": "Governance Gap"
+                        if unsupported
+                        else "Governed",
+                        "coverage_source": "Governance Summary",
+                        "coverage_state": "Unsupported" if unsupported else "Present",
+                    },
+                    "continuity": {
+                        "classification": "Continuous Governance",
+                        "coverage_source": "Governance Continuity",
+                        "coverage_state": "Present",
+                    },
+                    "change": {
+                        "classification": "No Recorded Change",
+                        "coverage_source": "Governance Change Log",
+                        "coverage_state": "Present",
+                    },
+                    "trajectory": {
+                        "classification": "Governance Progression",
+                        "coverage_source": "Governance Trajectory",
+                        "coverage_state": "Present",
+                    },
+                    "pattern": {
+                        "classification": "Limited Governance Pattern",
+                        "coverage_source": "Governance Pattern Detection",
+                        "coverage_state": "Present",
+                    },
+                    "consistency": {
+                        "classification": "Consistent Governance",
+                        "coverage_source": "Governance Consistency",
+                        "coverage_state": "Present",
+                    },
+                    "relationships": {
+                        "classification": "Aligned Governance Relationships",
+                        "coverage_source": "Governance Relationships",
+                        "coverage_state": "Present",
+                    },
+                    "traceability": {
+                        "classification": "Fully Traceable Governance",
+                        "coverage_source": "Governance Traceability",
+                        "coverage_state": "Present",
+                    },
+                },
+                "record": {
+                    "reference": "Strike-LA-20260710-004",
+                    "trajectory": "Stable",
+                    "finding": "Trajectory recorded as Stable.",
+                    "governance_classification": "Governance Gap"
+                    if unsupported
+                    else "Governed",
+                    "continuity_classification": "Governance Discontinuity"
+                    if unsupported
+                    else "Continuous Governance",
+                    "governance_change_state": "Significant Change"
+                    if unsupported
+                    else "No Recorded Change",
+                    "governance_trajectory": "Governance Regression"
+                    if unsupported
+                    else "Governance Progression",
+                    "governance_pattern_classification": "Recurring Governance Pattern"
+                    if unsupported
+                    else "Limited Governance Pattern",
+                    "consistency_classification": "Governance Inconsistency"
+                    if unsupported
+                    else "Consistent Governance",
+                    "relationship_classification": "Governance Relationship Conflict"
+                    if unsupported
+                    else "Aligned Governance Relationships",
+                    "traceability_classification": "Fully Traceable Governance",
+                    "coverage_classification": classification,
+                },
+            }
+
+        classify = self.admin_session._stage17n_coverage_classification
+
+        self.assertEqual(
+            "No Governance Coverage",
+            classify("", "", "", "", "", "", "", ""),
+        )
+        self.assertEqual(
+            "Partial Governance Coverage",
+            classify(
+                "Governed",
+                "",
+                "No Recorded Change",
+                "Governance Progression",
+                "Limited Governance Pattern",
+                "Consistent Governance",
+                "Aligned Governance Relationships",
+                "Fully Traceable Governance",
+            ),
+        )
+        self.assertEqual(
+            "Full Governance Coverage",
+            classify(
+                "Governance Gap",
+                "Governance Discontinuity",
+                "Significant Change",
+                "Governance Regression",
+                "Recurring Governance Pattern",
+                "Governance Inconsistency",
+                "Governance Relationship Conflict",
+                "Fully Traceable Governance",
+            ),
+        )
+        self.assertEqual(
+            "Unsupported",
+            self.admin_session._stage17n_coverage_state("Governance Gap"),
+        )
+
+        for classification in (
+            "Full Governance Coverage",
+            "Partial Governance Coverage",
+            "Limited Governance Coverage",
+            "No Governance Coverage",
+        ):
+            rendered = self.admin_session._render_stage17n_governance_coverage_content(
+                coverage(classification)
+            )
+            self.assertIn(
+                f"<td>Coverage Classification</td><td>{classification}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Governance Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Continuity Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Change Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Trajectory Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Pattern Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Consistency Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Relationships Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Traceability Coverage Review</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -2818,6 +2991,25 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Pattern Traceability Review</h3>", after_content)
         self.assertIn("<h3>Consistency Traceability Review</h3>", after_content)
         self.assertIn("<h3>Relationships Traceability Review</h3>", after_content)
+        self.assertIn("Governance Coverage", after_content)
+        self.assertIn("Coverage Summary", after_content)
+        self.assertIn("<td>Total Governance Layers</td><td>8</td>", after_content)
+        self.assertIn("<td>Present Governance Layers</td><td>8</td>", after_content)
+        self.assertIn("<td>Missing Governance Layers</td><td>0</td>", after_content)
+        self.assertIn("<td>Populated Governance Layers</td><td>8</td>", after_content)
+        self.assertIn("<td>Unsupported Governance Layers</td><td>7</td>", after_content)
+        self.assertIn(
+            "<td>Coverage Classification</td><td>Full Governance Coverage</td>",
+            after_content,
+        )
+        self.assertIn("<h3>Governance Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Continuity Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Change Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Trajectory Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Pattern Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Consistency Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Relationships Coverage Review</h3>", after_content)
+        self.assertIn("<h3>Traceability Coverage Review</h3>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3541,6 +3733,25 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Pattern Traceability Review</h3>", content)
         self.assertIn("<h3>Consistency Traceability Review</h3>", content)
         self.assertIn("<h3>Relationships Traceability Review</h3>", content)
+        self.assertIn("Governance Coverage", content)
+        self.assertIn("Coverage Summary", content)
+        self.assertIn("<td>Total Governance Layers</td><td>8</td>", content)
+        self.assertIn("<td>Present Governance Layers</td><td>8</td>", content)
+        self.assertIn("<td>Missing Governance Layers</td><td>0</td>", content)
+        self.assertIn("<td>Populated Governance Layers</td><td>8</td>", content)
+        self.assertIn("<td>Unsupported Governance Layers</td><td>7</td>", content)
+        self.assertIn(
+            "<td>Coverage Classification</td><td>Full Governance Coverage</td>",
+            content,
+        )
+        self.assertIn("<h3>Governance Coverage Review</h3>", content)
+        self.assertIn("<h3>Continuity Coverage Review</h3>", content)
+        self.assertIn("<h3>Change Coverage Review</h3>", content)
+        self.assertIn("<h3>Trajectory Coverage Review</h3>", content)
+        self.assertIn("<h3>Pattern Coverage Review</h3>", content)
+        self.assertIn("<h3>Consistency Coverage Review</h3>", content)
+        self.assertIn("<h3>Relationships Coverage Review</h3>", content)
+        self.assertIn("<h3>Traceability Coverage Review</h3>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4518,6 +4729,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Relationships</h2>"),
             governance_content.index("<h2>Governance Traceability</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Traceability</h2>"),
+            governance_content.index("<h2>Governance Coverage</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -4567,6 +4782,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Governance Consistency</h2>", print_governance_content)
         self.assertIn("<h2>Governance Relationships</h2>", print_governance_content)
         self.assertIn("<h2>Governance Traceability</h2>", print_governance_content)
+        self.assertIn("<h2>Governance Coverage</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
