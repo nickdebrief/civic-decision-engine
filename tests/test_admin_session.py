@@ -2073,6 +2073,154 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Timestamp Order State", rendered)
             self.assertIn("Verification Hash Coverage", rendered)
 
+    def test_stage18e_record_evolution_relationships_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            finding="Finding v1",
+            hash_value="shared-hash",
+            generated_at=None,
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": generated_at or f"2026-06-0{version}T12:00:00Z",
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": finding,
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        connected_history = [
+            version_row(1, hash_value="shared-hash"),
+            version_row(2, latest=1, hash_value=""),
+        ]
+        limited_history = [
+            version_row(1),
+            version_row(
+                3,
+                latest=1,
+                supersedes="Strike-LA-20260710-004:v2",
+            ),
+        ]
+        multi_history = [
+            version_row(1),
+            version_row(2),
+            version_row(3, latest=1),
+        ]
+
+        def relationships(metadata, lineage):
+            return self.admin_session._record_stage18e_evolution_relationships(
+                metadata,
+                lineage,
+            )
+
+        single = relationships({**base, "version": 1, "supersedes": None}, single_history)
+        full = relationships(base, full_history)
+        connected = relationships(base, connected_history)
+        limited = relationships({**base, "version": 3}, limited_history)
+        multi = relationships({**base, "version": 3}, multi_history)
+
+        self.assertEqual(
+            "No Evolution Relationships",
+            single["summary"]["relationship_classification"],
+        )
+        self.assertEqual(
+            "Fully Related Evolution Chain",
+            full["summary"]["relationship_classification"],
+        )
+        self.assertEqual(
+            "Connected Evolution Relationships",
+            connected["summary"]["relationship_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Relationships",
+            limited["summary"]["relationship_classification"],
+        )
+        self.assertEqual(
+            "Single Version",
+            single["reviews"]["version"]["version_relationship_state"],
+        )
+        self.assertEqual(
+            "Sequential Versions",
+            full["reviews"]["version"]["version_relationship_state"],
+        )
+        self.assertEqual(
+            "Multi-Version Chain",
+            multi["reviews"]["version"]["version_relationship_state"],
+        )
+        self.assertEqual(
+            "No Relationship",
+            single["reviews"]["supersession"]["relationship_state"],
+        )
+        self.assertEqual(
+            "Connected Relationship",
+            full["reviews"]["supersession"]["relationship_state"],
+        )
+        self.assertEqual(
+            "Complete Relationship",
+            full["reviews"]["verification"]["verification_relationship_state"],
+        )
+        self.assertEqual(
+            "Partial Relationship",
+            connected["reviews"]["verification"]["verification_relationship_state"],
+        )
+        self.assertEqual(
+            "Incomplete Relationship",
+            relationships(
+                base,
+                [version_row(1, hash_value=""), version_row(2, latest=1, hash_value="")],
+            )["reviews"]["verification"]["verification_relationship_state"],
+        )
+
+        for relationship_set, expected in (
+            (single, "No Evolution Relationships"),
+            (full, "Fully Related Evolution Chain"),
+            (connected, "Connected Evolution Relationships"),
+            (limited, "Limited Evolution Relationships"),
+        ):
+            rendered = self.admin_session._render_stage18e_evolution_relationships_content(
+                relationship_set
+            )
+            self.assertIn(
+                f"<td>Relationship Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Relationship Summary</h3>", rendered)
+            self.assertIn("<h3>Version Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Verification Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Relationships</h3>", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3711,6 +3859,37 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Trajectory Classification</td><td>Initial Evolution Trajectory</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Relationships", after_content)
+        self.assertIn("Relationship Summary", after_content)
+        self.assertIn("Version Relationship Review", after_content)
+        self.assertIn("Supersession Relationship Review", after_content)
+        self.assertIn("Timestamp Relationship Review", after_content)
+        self.assertIn("Verification Relationship Review", after_content)
+        self.assertIn("Evolution Relationship Review", after_content)
+        self.assertIn(
+            "Record evolution relationships are derived deterministically from existing record metadata, lineage history, continuity outputs, change log outputs, trajectory outputs, supersession fields, timestamps, and verification hashes only.",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Version Relationships</td><td>Single Version</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Supersession Relationships</td><td>No Relationship</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Timestamp Relationships</td><td>Single Timestamp</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Verification Relationships</td><td>Complete Relationship</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Relationship Classification</td><td>No Evolution Relationships</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -4544,6 +4723,34 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn(
             "<td>Trajectory Classification</td><td>Initial Evolution Trajectory</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Relationships", content)
+        self.assertIn("Relationship Summary", content)
+        self.assertIn("Version Relationship Review", content)
+        self.assertIn("Supersession Relationship Review", content)
+        self.assertIn("Timestamp Relationship Review", content)
+        self.assertIn("Verification Relationship Review", content)
+        self.assertIn("Evolution Relationship Review", content)
+        self.assertIn(
+            "Record evolution relationships are derived deterministically from existing record metadata, lineage history, continuity outputs, change log outputs, trajectory outputs, supersession fields, timestamps, and verification hashes only.",
+            content,
+        )
+        self.assertIn("<td>Version Relationships</td><td>Single Version</td>", content)
+        self.assertIn(
+            "<td>Supersession Relationships</td><td>No Relationship</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Timestamp Relationships</td><td>Single Timestamp</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Verification Relationships</td><td>Complete Relationship</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Relationship Classification</td><td>No Evolution Relationships</td>",
             content,
         )
         self.assertIn(
@@ -5547,6 +5754,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Change Log</h2>"),
             governance_content.index("<h2>Record Evolution Trajectory</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Trajectory</h2>"),
+            governance_content.index("<h2>Record Evolution Relationships</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5602,6 +5813,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Continuity</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Change Log</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Trajectory</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Relationships</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
