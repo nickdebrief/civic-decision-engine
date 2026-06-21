@@ -475,6 +475,12 @@ def _record_version_history(
         "generated_at",
         "exported_at",
         "verification_hash",
+        "trajectory",
+        "system_state",
+        "finding",
+        "conditions_json",
+        "signals_json",
+        "generated_by",
     ):
         if optional_field in columns:
             fields.append(optional_field)
@@ -499,6 +505,20 @@ def _record_version_history(
                 row["verification_hash"]
                 if "verification_hash" in row.keys()
                 else None
+            ),
+            "trajectory": row["trajectory"] if "trajectory" in row.keys() else None,
+            "system_state": (
+                row["system_state"] if "system_state" in row.keys() else None
+            ),
+            "finding": row["finding"] if "finding" in row.keys() else None,
+            "conditions_json": (
+                row["conditions_json"] if "conditions_json" in row.keys() else None
+            ),
+            "signals_json": (
+                row["signals_json"] if "signals_json" in row.keys() else None
+            ),
+            "generated_by": (
+                row["generated_by"] if "generated_by" in row.keys() else None
             ),
         }
         for row in rows
@@ -15977,6 +15997,392 @@ def _render_stage18b_record_evolution_continuity_section(
       </section>"""
 
 
+_STAGE18C_COMPARE_FIELDS = (
+    "trajectory",
+    "system_state",
+    "finding",
+    "conditions_json",
+    "signals_json",
+    "generated_by",
+    "verification_hash",
+)
+
+
+def _stage18c_sorted_history(
+    version_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return sorted(
+        list(version_history or []),
+        key=lambda row: _stage18a_int(row.get("version")) or 0,
+    )
+
+
+def _stage18c_version_change_state(
+    row: dict[str, Any],
+    *,
+    current_version: int | None,
+    total_versions: int,
+) -> str:
+    version = _stage18a_int(row.get("version"))
+    reference = str(row.get("reference") or "").strip()
+    if version is None or not reference:
+        return "Unresolved"
+    if total_versions == 1:
+        return "Single Version"
+    if current_version is None:
+        return "Unresolved"
+    if version == current_version:
+        return "Current Version"
+    if version < current_version:
+        return "Prior Version"
+    return "Later Version"
+
+
+def _stage18c_version_change_rows(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    history = _stage18c_sorted_history(version_history)
+    current_version = _stage18a_int(record_metadata.get("version"))
+    total_versions = len(history)
+    if not history:
+        return [
+            {
+                "reference": record_metadata.get("reference"),
+                "version": record_metadata.get("version"),
+                "is_latest": record_metadata.get("is_latest"),
+                "supersedes": record_metadata.get("supersedes"),
+                "generated_at": record_metadata.get("generated_at"),
+                "verification_hash": record_metadata.get("verification_hash"),
+                "change_state": "Unresolved",
+            }
+        ]
+    return [
+        {
+            "reference": row.get("reference"),
+            "version": row.get("version"),
+            "is_latest": row.get("is_latest"),
+            "supersedes": row.get("supersedes"),
+            "generated_at": row.get("generated_at"),
+            "verification_hash": row.get("verification_hash"),
+            "change_state": _stage18c_version_change_state(
+                row,
+                current_version=current_version,
+                total_versions=total_versions,
+            ),
+        }
+        for row in history
+    ]
+
+
+def _stage18c_transition_rows(
+    version_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    history = _stage18c_sorted_history(version_history)
+    if len(history) < 2:
+        row = history[0] if history else {}
+        version = row.get("version")
+        return [
+            {
+                "from_version": version,
+                "to_version": version,
+                "from_generated_at": row.get("generated_at"),
+                "to_generated_at": row.get("generated_at"),
+                "transition_state": "No Transition"
+                if history
+                else "Unresolved",
+            }
+        ]
+
+    transitions = []
+    for previous, current in zip(history, history[1:]):
+        previous_version = _stage18a_int(previous.get("version"))
+        current_version = _stage18a_int(current.get("version"))
+        if previous_version is None or current_version is None:
+            state = "Unresolved"
+        elif current_version - previous_version > 1:
+            state = "Gap Transition"
+        else:
+            state = "Transition Present"
+        transitions.append(
+            {
+                "from_version": previous.get("version"),
+                "to_version": current.get("version"),
+                "from_generated_at": previous.get("generated_at"),
+                "to_generated_at": current.get("generated_at"),
+                "transition_state": state,
+            }
+        )
+    return transitions
+
+
+def _stage18c_field_change_rows(
+    version_history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    history = _stage18c_sorted_history(version_history)
+    if len(history) < 2:
+        return [
+            {"field_name": field_name, "change_state": "Not Applicable"}
+            for field_name in _STAGE18C_COMPARE_FIELDS
+        ]
+
+    rows = []
+    for field_name in _STAGE18C_COMPARE_FIELDS:
+        values = [row.get(field_name) for row in history]
+        if any(value is None for value in values):
+            state = "Unresolved"
+        elif any(previous != current for previous, current in zip(values, values[1:])):
+            state = "Changed"
+        else:
+            state = "Unchanged"
+        rows.append({"field_name": field_name, "change_state": state})
+    return rows
+
+
+def _stage18c_change_log_classification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    if not reference or version is None or not version_history:
+        return "Unresolved Change Log"
+
+    transitions = _stage18c_transition_rows(version_history)
+    field_rows = _stage18c_field_change_rows(version_history)
+    transition_count = sum(
+        1 for transition in transitions if transition["transition_state"] != "No Transition"
+    )
+    field_change_count = sum(
+        1 for row in field_rows if row["change_state"] == "Changed"
+    )
+    if any(transition["transition_state"] == "Unresolved" for transition in transitions):
+        return "Unresolved Change Log"
+    if transition_count > 1 or field_change_count > 1:
+        return "Extensive Change History"
+    if transition_count and field_change_count:
+        return "Recorded Changes Present"
+    return "No Recorded Changes"
+
+
+def _record_stage18c_evolution_change_log(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    evolution = _record_stage18a_evolution_summary(record_metadata, history)
+    continuity = _record_stage18b_evolution_continuity(record_metadata, history)
+    versions = _stage18b_version_numbers(history)
+    version_rows = _stage18c_version_change_rows(record_metadata, history)
+    transition_rows = _stage18c_transition_rows(history)
+    field_rows = _stage18c_field_change_rows(history)
+    transition_count = sum(
+        1 for row in transition_rows if row["transition_state"] != "No Transition"
+    )
+    changed_field_count = sum(
+        1 for row in field_rows if row["change_state"] == "Changed"
+    )
+    stable_field_count = sum(
+        1 for row in field_rows if row["change_state"] == "Unchanged"
+    )
+    changed_versions = 0
+    if transition_count:
+        for previous, current in zip(history, history[1:]):
+            if any(
+                previous.get(field_name) != current.get(field_name)
+                for field_name in _STAGE18C_COMPARE_FIELDS
+            ):
+                changed_versions += 1
+    unchanged_versions = max(0, len(history) - changed_versions)
+    classification = _stage18c_change_log_classification(
+        record_metadata,
+        history,
+    )
+
+    summary = {
+        "record_reference": evolution["summary"]["record_reference"],
+        "current_version": evolution["summary"]["current_version"],
+        "earliest_version": min(versions) if versions else None,
+        "latest_version": max(versions) if versions else None,
+        "total_versions": len(history),
+        "version_transitions": transition_count,
+        "changed_versions": changed_versions,
+        "unchanged_versions": unchanged_versions,
+        "field_changes": changed_field_count,
+        "stable_fields": stable_field_count,
+        "evolution_classification": evolution["summary"][
+            "evolution_classification"
+        ],
+        "continuity_classification": continuity["summary"][
+            "continuity_classification"
+        ],
+        "change_log_classification": classification,
+    }
+    return {
+        "summary": summary,
+        "version_changes": version_rows,
+        "transitions": transition_rows,
+        "field_changes": field_rows,
+        "record": dict(summary),
+    }
+
+
+def _render_stage18c_version_change_review(change_log: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(row.get('reference')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('version')))}</td>"
+        f"<td>{escape(_stage18a_bool_text(row.get('is_latest')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('supersedes')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('generated_at')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('verification_hash')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('change_state')))}</td>"
+        "</tr>"
+        for row in change_log["version_changes"]
+    )
+    return f"""
+        <section class="stage18c-version-change-review">
+          <h3>Version Change Review</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Record Reference</th>
+                <th>Version</th>
+                <th>Is Latest</th>
+                <th>Supersedes</th>
+                <th>Generated At</th>
+                <th>Verification Hash</th>
+                <th>Change State</th>
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </section>"""
+
+
+def _render_stage18c_transition_review(change_log: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(row.get('from_version')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('to_version')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('from_generated_at')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('to_generated_at')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('transition_state')))}</td>"
+        "</tr>"
+        for row in change_log["transitions"]
+    )
+    return f"""
+        <section class="stage18c-version-transition-review">
+          <h3>Version Transition Review</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>From Version</th>
+                <th>To Version</th>
+                <th>From Generated At</th>
+                <th>To Generated At</th>
+                <th>Transition State</th>
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </section>"""
+
+
+def _render_stage18c_field_change_review(change_log: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(row.get('field_name')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('change_state')))}</td>"
+        "</tr>"
+        for row in change_log["field_changes"]
+    )
+    return f"""
+        <section class="stage18c-field-change-review">
+          <h3>Field Change Review</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Field Name</th>
+                <th>Change State</th>
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </section>"""
+
+
+def _render_stage18c_record_change_log(change_log: dict[str, Any]) -> str:
+    record = change_log["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Earliest Version", record["earliest_version"]),
+        ("Latest Version", record["latest_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Version Transitions", record["version_transitions"]),
+        ("Changed Versions", record["changed_versions"]),
+        ("Unchanged Versions", record["unchanged_versions"]),
+        ("Field Changes", record["field_changes"]),
+        ("Stable Fields", record["stable_fields"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+    )
+    return f"""
+        <section class="stage18c-record-evolution-change-log">
+          <h3>Record Evolution Change Log</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18c_evolution_change_log_content(
+    change_log: dict[str, Any],
+) -> str:
+    summary = change_log["summary"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Earliest Version", summary["earliest_version"]),
+        ("Latest Version", summary["latest_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Version Transitions", summary["version_transitions"]),
+        ("Changed Versions", summary["changed_versions"]),
+        ("Unchanged Versions", summary["unchanged_versions"]),
+        ("Field Changes", summary["field_changes"]),
+        ("Stable Fields", summary["stable_fields"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+    )
+    return f"""
+        <h3>Change Log Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18c_version_change_review(change_log)}
+        {_render_stage18c_transition_review(change_log)}
+        {_render_stage18c_field_change_review(change_log)}
+        {_render_stage18c_record_change_log(change_log)}"""
+
+
+def _render_stage18c_record_evolution_change_log_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    change_log = _record_stage18c_evolution_change_log(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18c-record-evolution-change-log">
+        <h2>Record Evolution Change Log</h2>
+        <p class="notice">
+          Record evolution change log is derived deterministically from existing
+          record metadata and same-reference version history only.
+        </p>
+        {_render_stage18c_evolution_change_log_content(change_log)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -16175,6 +16581,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18c_record_evolution_change_log = _render_stage18c_record_evolution_change_log_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -16308,6 +16718,7 @@ def render_admin_record_evidence_page(
             f"{stage17o_governance_chain_review}"
             f"{stage18a_record_evolution_summary}"
             f"{stage18b_record_evolution_continuity}"
+            f"{stage18c_record_evolution_change_log}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

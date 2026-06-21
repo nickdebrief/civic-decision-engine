@@ -1843,6 +1843,101 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Supersession Link Count", rendered)
             self.assertIn("Broken Supersession Links", rendered)
 
+    def test_stage18c_record_evolution_change_log_renders_classification_states(self):
+        def version_row(version, *, latest=0, finding="Finding v1", hash_value=None):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": None
+                if version == 1
+                else f"Strike-LA-20260710-004:v{version - 1}",
+                "generated_at": f"2026-06-0{version}T12:00:00Z",
+                "verification_hash": hash_value or f"hash-v{version}",
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": finding,
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v2",
+            "verification_hash": "hash-v2",
+        }
+        single_history = [version_row(1, latest=1)]
+        recorded_history = [
+            version_row(1, hash_value="shared-hash"),
+            version_row(2, latest=1, finding="Finding v2", hash_value="shared-hash"),
+        ]
+        extensive_history = [
+            version_row(1),
+            version_row(2, finding="Finding v2"),
+            version_row(3, latest=1, finding="Finding v3"),
+        ]
+
+        classify = self.admin_session._stage18c_change_log_classification
+
+        self.assertEqual(
+            "No Recorded Changes",
+            classify({**base, "version": 1, "supersedes": None}, single_history),
+        )
+        self.assertEqual(
+            "Recorded Changes Present",
+            classify(base, recorded_history),
+        )
+        self.assertEqual(
+            "Extensive Change History",
+            classify({**base, "version": 3}, extensive_history),
+        )
+        self.assertEqual("Unresolved Change Log", classify({}, []))
+
+        for metadata, lineage, expected in (
+            ({**base, "version": 1, "supersedes": None}, single_history, "No Recorded Changes"),
+            (base, recorded_history, "Recorded Changes Present"),
+            ({**base, "version": 3}, extensive_history, "Extensive Change History"),
+            ({}, [], "Unresolved Change Log"),
+        ):
+            rendered = self.admin_session._render_stage18c_evolution_change_log_content(
+                self.admin_session._record_stage18c_evolution_change_log(
+                    metadata,
+                    lineage,
+                )
+            )
+            self.assertIn(
+                f"<td>Change Log Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Change Log Summary</h3>", rendered)
+            self.assertIn("<h3>Version Change Review</h3>", rendered)
+            self.assertIn("<h3>Version Transition Review</h3>", rendered)
+            self.assertIn("<h3>Field Change Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Change Log</h3>", rendered)
+            self.assertIn("Version Transitions", rendered)
+            self.assertIn("Changed Versions", rendered)
+            self.assertIn("Unchanged Versions", rendered)
+            self.assertIn("Field Changes", rendered)
+            self.assertIn("Stable Fields", rendered)
+
+        single_rendered = self.admin_session._render_stage18c_evolution_change_log_content(
+            self.admin_session._record_stage18c_evolution_change_log(
+                {**base, "version": 1, "supersedes": None},
+                single_history,
+            )
+        )
+        self.assertIn("<th>Transition State</th>", single_rendered)
+        self.assertIn("<td>No Transition</td>", single_rendered)
+        self.assertIn("<td>Not Applicable</td>", single_rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3445,6 +3540,23 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reference Continuity State</td><td>Single Reference</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Change Log", after_content)
+        self.assertIn("Change Log Summary", after_content)
+        self.assertIn("Version Change Review", after_content)
+        self.assertIn("Version Transition Review", after_content)
+        self.assertIn("Field Change Review", after_content)
+        self.assertIn("<td>Total Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Version Transitions</td><td>0</td>", after_content)
+        self.assertIn("<td>Changed Versions</td><td>0</td>", after_content)
+        self.assertIn("<td>Unchanged Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Field Changes</td><td>0</td>", after_content)
+        self.assertIn("<td>Stable Fields</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Change Log Classification</td><td>No Recorded Changes</td>",
+            after_content,
+        )
+        self.assertIn("<td>No Transition</td>", after_content)
+        self.assertIn("<td>Not Applicable</td>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -4244,6 +4356,23 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reference Continuity State</td><td>Single Reference</td>",
             content,
         )
+        self.assertIn("Record Evolution Change Log", content)
+        self.assertIn("Change Log Summary", content)
+        self.assertIn("Version Change Review", content)
+        self.assertIn("Version Transition Review", content)
+        self.assertIn("Field Change Review", content)
+        self.assertIn("<td>Total Versions</td><td>1</td>", content)
+        self.assertIn("<td>Version Transitions</td><td>0</td>", content)
+        self.assertIn("<td>Changed Versions</td><td>0</td>", content)
+        self.assertIn("<td>Unchanged Versions</td><td>1</td>", content)
+        self.assertIn("<td>Field Changes</td><td>0</td>", content)
+        self.assertIn("<td>Stable Fields</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Change Log Classification</td><td>No Recorded Changes</td>",
+            content,
+        )
+        self.assertIn("<td>No Transition</td>", content)
+        self.assertIn("<td>Not Applicable</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -5237,6 +5366,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Summary</h2>"),
             governance_content.index("<h2>Record Evolution Continuity</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Continuity</h2>"),
+            governance_content.index("<h2>Record Evolution Change Log</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5290,6 +5423,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Governance Chain Review</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Summary</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Continuity</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Change Log</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
