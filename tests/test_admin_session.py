@@ -1938,6 +1938,141 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>No Transition</td>", single_rendered)
         self.assertIn("<td>Not Applicable</td>", single_rendered)
 
+    def test_stage18d_record_evolution_trajectory_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            finding="Finding v1",
+            hash_value="shared-hash",
+            generated_at=None,
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": generated_at or f"2026-06-0{version}T12:00:00Z",
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": finding,
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        initial_metadata = {**base, "version": 1, "supersedes": None}
+        initial_history = [version_row(1, latest=1)]
+        stable_history = [
+            version_row(1),
+            version_row(2, latest=1),
+        ]
+        active_history = [
+            version_row(1, hash_value="stable-hash"),
+            version_row(
+                2,
+                latest=1,
+                finding="Finding v2",
+                hash_value="stable-hash",
+            ),
+        ]
+        fragmented_history = [
+            version_row(1),
+            version_row(
+                3,
+                latest=1,
+                supersedes="Strike-LA-20260710-004:v2",
+            ),
+        ]
+
+        classify = self.admin_session._stage18d_trajectory_classification
+
+        self.assertEqual(
+            "Initial Evolution Trajectory",
+            classify(initial_metadata, initial_history),
+        )
+        self.assertEqual("Stable Evolution Trajectory", classify(base, stable_history))
+        self.assertEqual("Active Evolution Trajectory", classify(base, active_history))
+        self.assertEqual(
+            "Fragmented Evolution Trajectory",
+            classify({**base, "version": 3}, fragmented_history),
+        )
+        self.assertEqual("Unresolved Evolution Trajectory", classify({}, []))
+        self.assertEqual(
+            "Single Timestamp",
+            self.admin_session._stage18d_timestamp_order_state(initial_history),
+        )
+        self.assertEqual(
+            "Ordered",
+            self.admin_session._stage18d_timestamp_order_state(stable_history),
+        )
+        self.assertEqual(
+            "Out Of Order",
+            self.admin_session._stage18d_timestamp_order_state(
+                [
+                    version_row(1, generated_at="2026-06-02T12:00:00Z"),
+                    version_row(2, generated_at="2026-06-01T12:00:00Z"),
+                ]
+            ),
+        )
+        self.assertEqual(
+            ("Complete", 2, 0),
+            self.admin_session._stage18d_verification_hash_coverage(
+                stable_history
+            ),
+        )
+
+        for metadata, lineage, expected in (
+            (initial_metadata, initial_history, "Initial Evolution Trajectory"),
+            (base, stable_history, "Stable Evolution Trajectory"),
+            (base, active_history, "Active Evolution Trajectory"),
+            (
+                {**base, "version": 3},
+                fragmented_history,
+                "Fragmented Evolution Trajectory",
+            ),
+            ({}, [], "Unresolved Evolution Trajectory"),
+        ):
+            rendered = self.admin_session._render_stage18d_evolution_trajectory_content(
+                self.admin_session._record_stage18d_evolution_trajectory(
+                    metadata,
+                    lineage,
+                )
+            )
+            self.assertIn(
+                f"<td>Trajectory Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Trajectory Summary</h3>", rendered)
+            self.assertIn("<h3>Version Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Lineage Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Verification Hash Trajectory Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Trajectory</h3>", rendered)
+            self.assertIn("Timestamp Order State", rendered)
+            self.assertIn("Verification Hash Coverage", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3557,6 +3692,25 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<td>No Transition</td>", after_content)
         self.assertIn("<td>Not Applicable</td>", after_content)
+        self.assertIn("Record Evolution Trajectory", after_content)
+        self.assertIn("Trajectory Summary", after_content)
+        self.assertIn("Version Trajectory Review", after_content)
+        self.assertIn("Supersession Trajectory Review", after_content)
+        self.assertIn("Lineage Trajectory Review", after_content)
+        self.assertIn("Timestamp Trajectory Review", after_content)
+        self.assertIn("Verification Hash Trajectory Review", after_content)
+        self.assertIn(
+            "<td>Timestamp Order State</td><td>Missing Timestamp</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Verification Hash Coverage</td><td>Complete</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Trajectory Classification</td><td>Initial Evolution Trajectory</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -4373,6 +4527,25 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<td>No Transition</td>", content)
         self.assertIn("<td>Not Applicable</td>", content)
+        self.assertIn("Record Evolution Trajectory", content)
+        self.assertIn("Trajectory Summary", content)
+        self.assertIn("Version Trajectory Review", content)
+        self.assertIn("Supersession Trajectory Review", content)
+        self.assertIn("Lineage Trajectory Review", content)
+        self.assertIn("Timestamp Trajectory Review", content)
+        self.assertIn("Verification Hash Trajectory Review", content)
+        self.assertIn(
+            "<td>Timestamp Order State</td><td>Missing Timestamp</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Verification Hash Coverage</td><td>Complete</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Trajectory Classification</td><td>Initial Evolution Trajectory</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -5370,6 +5543,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Continuity</h2>"),
             governance_content.index("<h2>Record Evolution Change Log</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Change Log</h2>"),
+            governance_content.index("<h2>Record Evolution Trajectory</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5424,6 +5601,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Summary</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Continuity</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Change Log</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Trajectory</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,

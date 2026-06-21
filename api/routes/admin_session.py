@@ -16383,6 +16383,397 @@ def _render_stage18c_record_evolution_change_log_section(
       </section>"""
 
 
+def _stage18d_timestamp_order_state(version_history: list[dict[str, Any]]) -> str:
+    history = _stage18c_sorted_history(version_history)
+    if not history:
+        return "Unresolved"
+    timestamps = [row.get("generated_at") for row in history]
+    if any(timestamp in (None, "") for timestamp in timestamps):
+        return "Missing Timestamp"
+    if len(history) == 1:
+        return "Single Timestamp"
+    timestamp_text = [str(timestamp) for timestamp in timestamps]
+    if any(not timestamp.strip() for timestamp in timestamp_text):
+        return "Unresolved"
+    if any(
+        previous > current
+        for previous, current in zip(timestamp_text, timestamp_text[1:])
+    ):
+        return "Out Of Order"
+    return "Ordered"
+
+
+def _stage18d_verification_hash_coverage(
+    version_history: list[dict[str, Any]],
+) -> tuple[str, int, int]:
+    history = _stage18c_sorted_history(version_history)
+    if not history:
+        return ("Unresolved", 0, 0)
+    hash_values = [row.get("verification_hash") for row in history]
+    if any(value is not None and not isinstance(value, str) for value in hash_values):
+        return ("Unresolved", 0, len(history))
+    with_hash = sum(1 for value in hash_values if str(value or "").strip())
+    missing_hash = len(history) - with_hash
+    if with_hash == len(history):
+        return ("Complete", with_hash, missing_hash)
+    if with_hash:
+        return ("Partial", with_hash, missing_hash)
+    return ("Missing", with_hash, missing_hash)
+
+
+def _stage18d_version_trajectory_state(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    if not str(record_metadata.get("reference") or "").strip() or _stage18a_int(
+        record_metadata.get("version")
+    ) is None:
+        return "Unresolved"
+    if _stage18b_version_gap_count(version_history):
+        return "Fragmented"
+    if len(_stage18b_version_numbers(version_history)) <= 1:
+        return "Initial"
+    return "Progressing"
+
+
+def _stage18d_supersession_state(version_history: list[dict[str, Any]]) -> str:
+    link_count, broken_count = _stage18b_supersession_counts(version_history)
+    if broken_count:
+        return "Broken"
+    if link_count:
+        return "Linked"
+    return "No Supersession"
+
+
+def _stage18d_trajectory_classification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    history = _stage18c_sorted_history(version_history)
+    evolution = _record_stage18a_evolution_summary(record_metadata, history)
+    continuity = _record_stage18b_evolution_continuity(record_metadata, history)
+    change_log = _record_stage18c_evolution_change_log(record_metadata, history)
+    summary = change_log["summary"]
+    continuity_summary = continuity["summary"]
+    timestamp_order_state = _stage18d_timestamp_order_state(history)
+    hash_coverage, _, _ = _stage18d_verification_hash_coverage(history)
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+
+    if (
+        not reference
+        or version is None
+        or not history
+        or timestamp_order_state == "Unresolved"
+        or hash_coverage == "Unresolved"
+    ):
+        return "Unresolved Evolution Trajectory"
+
+    if (
+        continuity_summary["version_gap_count"]
+        or continuity_summary["broken_supersession_links"]
+        or timestamp_order_state == "Out Of Order"
+        or continuity["summary"]["continuity_classification"]
+        == "Evolution Discontinuity"
+    ):
+        return "Fragmented Evolution Trajectory"
+
+    if (
+        summary["total_versions"] == 1
+        and summary["version_transitions"] == 0
+        and summary["change_log_classification"] == "No Recorded Changes"
+        and evolution["summary"]["evolution_classification"]
+        == "Initial Record State"
+    ):
+        return "Initial Evolution Trajectory"
+
+    if (
+        summary["total_versions"] > 1
+        and summary["version_transitions"] > 0
+        and summary["change_log_classification"]
+        in ("Recorded Changes Present", "Extensive Change History")
+        and summary["latest_version"] is not None
+    ):
+        return "Active Evolution Trajectory"
+
+    return "Stable Evolution Trajectory"
+
+
+def _record_stage18d_evolution_trajectory(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    evolution = _record_stage18a_evolution_summary(record_metadata, history)
+    continuity = _record_stage18b_evolution_continuity(record_metadata, history)
+    change_log = _record_stage18c_evolution_change_log(record_metadata, history)
+    change_summary = change_log["summary"]
+    timestamp_order_state = _stage18d_timestamp_order_state(history)
+    hash_coverage, versions_with_hash, versions_missing_hash = (
+        _stage18d_verification_hash_coverage(history)
+    )
+    classification = _stage18d_trajectory_classification(
+        record_metadata,
+        history,
+    )
+    supersession = continuity["reviews"]["supersession"]
+
+    summary = {
+        "record_reference": change_summary["record_reference"],
+        "current_version": change_summary["current_version"],
+        "earliest_version": change_summary["earliest_version"],
+        "latest_version": change_summary["latest_version"],
+        "total_versions": change_summary["total_versions"],
+        "version_transitions": change_summary["version_transitions"],
+        "changed_versions": change_summary["changed_versions"],
+        "unchanged_versions": change_summary["unchanged_versions"],
+        "version_gap_count": continuity["summary"]["version_gap_count"],
+        "supersession_link_count": continuity["summary"][
+            "supersession_link_count"
+        ],
+        "broken_supersession_links": continuity["summary"][
+            "broken_supersession_links"
+        ],
+        "timestamp_order_state": timestamp_order_state,
+        "verification_hash_coverage": hash_coverage,
+        "evolution_classification": evolution["summary"][
+            "evolution_classification"
+        ],
+        "continuity_classification": continuity["summary"][
+            "continuity_classification"
+        ],
+        "change_log_classification": change_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": classification,
+    }
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "current_version": summary["current_version"],
+                "earliest_version": summary["earliest_version"],
+                "latest_version": summary["latest_version"],
+                "total_versions": summary["total_versions"],
+                "version_transitions": summary["version_transitions"],
+                "version_gap_count": summary["version_gap_count"],
+                "trajectory_state": _stage18d_version_trajectory_state(
+                    record_metadata,
+                    history,
+                ),
+            },
+            "supersession": {
+                "supersedes": supersession["supersedes"],
+                "superseded_by": supersession["superseded_by"],
+                "supersession_link_count": summary["supersession_link_count"],
+                "broken_supersession_links": summary[
+                    "broken_supersession_links"
+                ],
+                "supersession_state": _stage18d_supersession_state(history),
+            },
+            "lineage": {
+                "record_reference": summary["record_reference"],
+                "total_versions": summary["total_versions"],
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary[
+                    "continuity_classification"
+                ],
+                "change_log_classification": summary[
+                    "change_log_classification"
+                ],
+                "trajectory_classification": classification,
+            },
+            "timestamp": {
+                "earliest_version": summary["earliest_version"],
+                "latest_version": summary["latest_version"],
+                "timestamp_order_state": timestamp_order_state,
+                "generated_at": record_metadata.get("generated_at"),
+                "exported_at": record_metadata.get("exported_at"),
+            },
+            "verification_hash": {
+                "verification_hash_coverage": hash_coverage,
+                "verification_hash": record_metadata.get("verification_hash"),
+                "total_versions": summary["total_versions"],
+                "versions_with_hash": versions_with_hash,
+                "versions_missing_hash": versions_missing_hash,
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18d_record_trajectory(trajectory: dict[str, Any]) -> str:
+    record = trajectory["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Earliest Version", record["earliest_version"]),
+        ("Latest Version", record["latest_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Version Transitions", record["version_transitions"]),
+        ("Changed Versions", record["changed_versions"]),
+        ("Unchanged Versions", record["unchanged_versions"]),
+        ("Version Gap Count", record["version_gap_count"]),
+        ("Supersession Link Count", record["supersession_link_count"]),
+        ("Broken Supersession Links", record["broken_supersession_links"]),
+        ("Timestamp Order State", record["timestamp_order_state"]),
+        ("Verification Hash Coverage", record["verification_hash_coverage"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+    )
+    return f"""
+        <section class="stage18d-record-evolution-trajectory">
+          <h3>Record Evolution Trajectory</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18d_evolution_trajectory_content(
+    trajectory: dict[str, Any],
+) -> str:
+    summary = trajectory["summary"]
+    reviews = trajectory["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Earliest Version", summary["earliest_version"]),
+        ("Latest Version", summary["latest_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Version Transitions", summary["version_transitions"]),
+        ("Changed Versions", summary["changed_versions"]),
+        ("Unchanged Versions", summary["unchanged_versions"]),
+        ("Version Gap Count", summary["version_gap_count"]),
+        ("Supersession Link Count", summary["supersession_link_count"]),
+        ("Broken Supersession Links", summary["broken_supersession_links"]),
+        ("Timestamp Order State", summary["timestamp_order_state"]),
+        ("Verification Hash Coverage", summary["verification_hash_coverage"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+    )
+    return f"""
+        <h3>Trajectory Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Trajectory Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Current Version", reviews["version"]["current_version"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                (
+                    "Version Transitions",
+                    reviews["version"]["version_transitions"],
+                ),
+                ("Version Gap Count", reviews["version"]["version_gap_count"]),
+                ("Trajectory State", reviews["version"]["trajectory_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Trajectory Review",
+            (
+                ("Supersedes", reviews["supersession"]["supersedes"]),
+                ("Superseded By", reviews["supersession"]["superseded_by"]),
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                (
+                    "Supersession State",
+                    reviews["supersession"]["supersession_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Lineage Trajectory Review",
+            (
+                ("Record Reference", reviews["lineage"]["record_reference"]),
+                ("Total Versions", reviews["lineage"]["total_versions"]),
+                (
+                    "Evolution Classification",
+                    reviews["lineage"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["lineage"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["lineage"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["lineage"]["trajectory_classification"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Trajectory Review",
+            (
+                ("Earliest Version", reviews["timestamp"]["earliest_version"]),
+                ("Latest Version", reviews["timestamp"]["latest_version"]),
+                (
+                    "Timestamp Order State",
+                    reviews["timestamp"]["timestamp_order_state"],
+                ),
+                ("Generated At", reviews["timestamp"]["generated_at"]),
+                ("Exported At", reviews["timestamp"]["exported_at"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Hash Trajectory Review",
+            (
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification_hash"]["verification_hash_coverage"],
+                ),
+                (
+                    "Verification Hash",
+                    reviews["verification_hash"]["verification_hash"],
+                ),
+                ("Total Versions", reviews["verification_hash"]["total_versions"]),
+                (
+                    "Versions With Hash",
+                    reviews["verification_hash"]["versions_with_hash"],
+                ),
+                (
+                    "Versions Missing Hash",
+                    reviews["verification_hash"]["versions_missing_hash"],
+                ),
+            ),
+        )}
+        {_render_stage18d_record_trajectory(trajectory)}"""
+
+
+def _render_stage18d_record_evolution_trajectory_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trajectory = _record_stage18d_evolution_trajectory(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18d-record-evolution-trajectory">
+        <h2>Record Evolution Trajectory</h2>
+        <p class="notice">
+          Record evolution trajectory is derived deterministically from existing
+          record metadata, same-reference version history, supersession fields,
+          stored timestamps, and verification hashes only.
+        </p>
+        {_render_stage18d_evolution_trajectory_content(trajectory)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -16585,6 +16976,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18d_record_evolution_trajectory = _render_stage18d_record_evolution_trajectory_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -16719,6 +17114,7 @@ def render_admin_record_evidence_page(
             f"{stage18a_record_evolution_summary}"
             f"{stage18b_record_evolution_continuity}"
             f"{stage18c_record_evolution_change_log}"
+            f"{stage18d_record_evolution_trajectory}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
