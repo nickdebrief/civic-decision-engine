@@ -432,6 +432,79 @@ def _record_outputs_from_record(record: sqlite3.Row) -> dict[str, str]:
     }
 
 
+def _record_metadata_from_record(record: sqlite3.Row) -> dict[str, Any]:
+    keys = set(record.keys())
+    return {
+        "reference": str(record["reference"]) if "reference" in keys else "",
+        "version": record["version"] if "version" in keys else None,
+        "supersedes": record["supersedes"] if "supersedes" in keys else None,
+        "generated_at": record["generated_at"] if "generated_at" in keys else None,
+        "exported_at": record["exported_at"] if "exported_at" in keys else None,
+        "is_latest": record["is_latest"] if "is_latest" in keys else None,
+        "trajectory": (
+            str(record["trajectory"]).strip()
+            if "trajectory" in keys and record["trajectory"]
+            else ""
+        ),
+        "system_state": (
+            str(record["system_state"]).strip()
+            if "system_state" in keys and record["system_state"]
+            else ""
+        ),
+        "finding": (
+            str(record["finding"]).strip()
+            if "finding" in keys and record["finding"]
+            else ""
+        ),
+        "verification_hash": (
+            record["verification_hash"] if "verification_hash" in keys else None
+        ),
+    }
+
+
+def _record_version_history(
+    conn: sqlite3.Connection,
+    *,
+    reference: str,
+) -> list[dict[str, Any]]:
+    columns = _record_table_columns(conn)
+    fields = ["reference", "version"]
+    for optional_field in (
+        "is_latest",
+        "supersedes",
+        "generated_at",
+        "exported_at",
+        "verification_hash",
+    ):
+        if optional_field in columns:
+            fields.append(optional_field)
+    rows = conn.execute(
+        f"SELECT {', '.join(fields)} FROM records "
+        "WHERE reference = ? ORDER BY version ASC",
+        (reference,),
+    ).fetchall()
+    return [
+        {
+            "reference": row["reference"] if "reference" in row.keys() else reference,
+            "version": row["version"] if "version" in row.keys() else None,
+            "is_latest": row["is_latest"] if "is_latest" in row.keys() else None,
+            "supersedes": row["supersedes"] if "supersedes" in row.keys() else None,
+            "generated_at": (
+                row["generated_at"] if "generated_at" in row.keys() else None
+            ),
+            "exported_at": (
+                row["exported_at"] if "exported_at" in row.keys() else None
+            ),
+            "verification_hash": (
+                row["verification_hash"]
+                if "verification_hash" in row.keys()
+                else None
+            ),
+        }
+        for row in rows
+    ]
+
+
 def _resolve_record_target_key(
     record: sqlite3.Row, target_type: str, target_label: str
 ) -> str:
@@ -15226,6 +15299,274 @@ def _render_stage17o_governance_chain_review_section(
       </section>"""
 
 
+def _stage18a_bool_text(value: Any) -> str:
+    if value in (True, 1, "1", "true", "True"):
+        return "true"
+    if value in (False, 0, "0", "false", "False"):
+        return "false"
+    return "None"
+
+
+def _stage18a_display_value(value: Any) -> str:
+    if value in (None, ""):
+        return "None"
+    return str(value)
+
+
+def _stage18a_int(value: Any) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _stage18a_superseded_by(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> Any:
+    current_version = _stage18a_int(record_metadata.get("version"))
+    if current_version is None:
+        return None
+    later_versions = [
+        row
+        for row in version_history
+        if (_stage18a_int(row.get("version")) or 0) > current_version
+    ]
+    if not later_versions:
+        return None
+    superseding = sorted(
+        later_versions,
+        key=lambda row: _stage18a_int(row.get("version")) or 0,
+    )[0]
+    version = _stage18a_int(superseding.get("version"))
+    reference = superseding.get("reference") or record_metadata.get("reference")
+    return f"{reference}:v{version}" if version is not None else reference
+
+
+def _stage18a_evolution_classification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    if not reference or version is None or not version_history:
+        return "Unresolved Evolution State"
+
+    superseded_by = _stage18a_superseded_by(record_metadata, version_history)
+    is_latest = record_metadata.get("is_latest")
+    if is_latest in (False, 0, "0", "false", "False") or superseded_by:
+        return "Superseded Record State"
+
+    supersedes = record_metadata.get("supersedes")
+    if version > 1 or supersedes not in (None, "") or len(version_history) > 1:
+        return "Evolved Record State"
+
+    return "Initial Record State"
+
+
+def _stage18a_lineage_state(
+    row: dict[str, Any],
+    *,
+    current_version: int | None,
+    current_is_latest: Any,
+) -> str:
+    version = _stage18a_int(row.get("version"))
+    if version is None:
+        return "No Lineage Available"
+    if version == current_version and current_is_latest in (True, 1, "1", "true", "True"):
+        return "Current Version"
+    if version == current_version:
+        return "Prior Version"
+    if current_version is not None and version > current_version:
+        return "Superseding Version"
+    return "Prior Version"
+
+
+def _record_stage18a_evolution_summary(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = list(version_history or [])
+    version_numbers = [
+        _stage18a_int(row.get("version"))
+        for row in history
+        if _stage18a_int(row.get("version")) is not None
+    ]
+    current_version = _stage18a_int(record_metadata.get("version"))
+    superseded_by = _stage18a_superseded_by(record_metadata, history)
+    classification = _stage18a_evolution_classification(record_metadata, history)
+    lineage_rows = []
+    for row in history:
+        lineage_rows.append(
+            {
+                "reference": row.get("reference")
+                or record_metadata.get("reference")
+                or "",
+                "version": row.get("version"),
+                "is_latest": row.get("is_latest"),
+                "supersedes": row.get("supersedes"),
+                "generated_at": row.get("generated_at"),
+                "verification_hash": row.get("verification_hash"),
+                "lineage_state": _stage18a_lineage_state(
+                    row,
+                    current_version=current_version,
+                    current_is_latest=record_metadata.get("is_latest"),
+                ),
+            }
+        )
+    if not lineage_rows:
+        lineage_rows.append(
+            {
+                "reference": record_metadata.get("reference") or "",
+                "version": record_metadata.get("version"),
+                "is_latest": record_metadata.get("is_latest"),
+                "supersedes": record_metadata.get("supersedes"),
+                "generated_at": record_metadata.get("generated_at"),
+                "verification_hash": record_metadata.get("verification_hash"),
+                "lineage_state": "No Lineage Available",
+            }
+        )
+
+    return {
+        "summary": {
+            "record_reference": record_metadata.get("reference"),
+            "current_version": record_metadata.get("version"),
+            "is_latest_version": _stage18a_bool_text(
+                record_metadata.get("is_latest")
+            ),
+            "supersedes": record_metadata.get("supersedes"),
+            "superseded_by": superseded_by,
+            "lineage_versions": len(history),
+            "earliest_version": min(version_numbers) if version_numbers else None,
+            "latest_version": max(version_numbers) if version_numbers else None,
+            "generated_at": record_metadata.get("generated_at"),
+            "exported_at": record_metadata.get("exported_at"),
+            "evolution_classification": classification,
+        },
+        "lineage": lineage_rows,
+        "details": {
+            "record_reference": record_metadata.get("reference"),
+            "version": record_metadata.get("version"),
+            "is_latest": _stage18a_bool_text(record_metadata.get("is_latest")),
+            "supersedes": record_metadata.get("supersedes"),
+            "superseded_by": superseded_by,
+            "trajectory": record_metadata.get("trajectory"),
+            "system_state": record_metadata.get("system_state"),
+            "finding": record_metadata.get("finding"),
+            "verification_hash": record_metadata.get("verification_hash"),
+            "evolution_classification": classification,
+        },
+    }
+
+
+def _render_stage18a_table(rows: tuple[tuple[str, Any], ...]) -> str:
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(label))}</td>"
+        f"<td>{escape(_stage18a_display_value(value))}</td>"
+        "</tr>"
+        for label, value in rows
+    )
+    return f"<table><tbody>{table_rows}</tbody></table>"
+
+
+def _render_stage18a_version_lineage_review(
+    evolution: dict[str, Any],
+) -> str:
+    lineage_rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(row.get('reference')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('version')))}</td>"
+        f"<td>{escape(_stage18a_bool_text(row.get('is_latest')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('supersedes')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('generated_at')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('verification_hash')))}</td>"
+        f"<td>{escape(_stage18a_display_value(row.get('lineage_state')))}</td>"
+        "</tr>"
+        for row in evolution["lineage"]
+    )
+    return f"""
+        <section class="stage18a-version-lineage-review">
+          <h3>Version Lineage Review</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Record Reference</th>
+                <th>Version</th>
+                <th>Is Latest</th>
+                <th>Supersedes</th>
+                <th>Generated At</th>
+                <th>Verification Hash</th>
+                <th>Lineage State</th>
+              </tr>
+            </thead>
+            <tbody>{lineage_rows}</tbody>
+          </table>
+        </section>"""
+
+
+def _render_stage18a_evolution_summary_content(
+    evolution: dict[str, Any],
+) -> str:
+    summary = evolution["summary"]
+    details = evolution["details"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Is Latest Version", summary["is_latest_version"]),
+        ("Supersedes", summary["supersedes"]),
+        ("Superseded By", summary["superseded_by"]),
+        ("Lineage Versions", summary["lineage_versions"]),
+        ("Earliest Version", summary["earliest_version"]),
+        ("Latest Version", summary["latest_version"]),
+        ("Generated At", summary["generated_at"]),
+        ("Exported At", summary["exported_at"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+    )
+    detail_rows = (
+        ("Record Reference", details["record_reference"]),
+        ("Version", details["version"]),
+        ("Is Latest", details["is_latest"]),
+        ("Supersedes", details["supersedes"]),
+        ("Superseded By", details["superseded_by"]),
+        ("Trajectory", details["trajectory"]),
+        ("System State", details["system_state"]),
+        ("Finding", details["finding"]),
+        ("Verification Hash", details["verification_hash"]),
+        ("Evolution Classification", details["evolution_classification"]),
+    )
+    return f"""
+        <h3>Evolution Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18a_version_lineage_review(evolution)}
+        <section class="stage18a-record-evolution-details">
+          <h3>Record Evolution Details</h3>
+          {_render_stage18a_table(detail_rows)}
+        </section>"""
+
+
+def _render_stage18a_record_evolution_summary_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    evolution = _record_stage18a_evolution_summary(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18a-record-evolution-summary">
+        <h2>Record Evolution Summary</h2>
+        <p class="notice">
+          Record evolution summary is derived deterministically from existing
+          record metadata, same-reference version history, supersession fields,
+          verification hash, and stored timestamps only.
+        </p>
+        {_render_stage18a_evolution_summary_content(evolution)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -15320,6 +15661,8 @@ def render_admin_record_evidence_page(
     record_version: int,
     evidence_groups: dict[str, list[dict[str, Any]]],
     record_outputs: dict[str, Any],
+    record_metadata: dict[str, Any] | None = None,
+    version_history: list[dict[str, Any]] | None = None,
 ) -> str:
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
@@ -15413,6 +15756,10 @@ def render_admin_record_evidence_page(
     stage17o_governance_chain_review = _render_stage17o_governance_chain_review_section(
         evidence_groups,
         record_outputs,
+    )
+    stage18a_record_evolution_summary = _render_stage18a_record_evolution_summary_section(
+        record_metadata,
+        version_history,
     )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
@@ -15545,6 +15892,7 @@ def render_admin_record_evidence_page(
             f"{stage17m_governance_traceability}"
             f"{stage17n_governance_coverage}"
             f"{stage17o_governance_chain_review}"
+            f"{stage18a_record_evolution_summary}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -16991,7 +17339,15 @@ def _record_table_columns(conn: sqlite3.Connection) -> set[str]:
 def _admin_record_select_fields(conn: sqlite3.Connection) -> str:
     columns = _record_table_columns(conn)
     fields = ["reference", "version", "conditions_json", "signals_json", "finding"]
-    for optional_field in ("trajectory", "system_state"):
+    for optional_field in (
+        "trajectory",
+        "system_state",
+        "supersedes",
+        "generated_at",
+        "exported_at",
+        "is_latest",
+        "verification_hash",
+    ):
         if optional_field in columns:
             fields.append(optional_field)
     return ", ".join(fields)
@@ -17770,6 +18126,11 @@ def admin_record_evidence_page(reference: str, request: Request):
                 record_version=record["version"],
                 evidence_groups=_record_evidence_groups(record, attachments),
                 record_outputs=_record_outputs_from_record(record),
+                record_metadata=_record_metadata_from_record(record),
+                version_history=_record_version_history(
+                    conn,
+                    reference=record["reference"],
+                ),
             )
         )
     finally:

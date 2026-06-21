@@ -1656,6 +1656,91 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("<h3>Traceability Chain Layer Review</h3>", rendered)
             self.assertIn("<h3>Coverage Chain Layer Review</h3>", rendered)
 
+    def test_stage18a_record_evolution_summary_renders_classification_states(self):
+        initial = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 1,
+            "supersedes": None,
+            "generated_at": "2026-06-04T12:00:00Z",
+            "exported_at": "2026-06-04T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Trajectory recorded as Stable.",
+            "verification_hash": "hash-v1",
+        }
+        evolved = {
+            **initial,
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "verification_hash": "hash-v2",
+        }
+        superseded = {
+            **initial,
+            "is_latest": 0,
+        }
+        history = [
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 1,
+                "is_latest": 0,
+                "supersedes": None,
+                "generated_at": "2026-06-04T12:00:00Z",
+                "verification_hash": "hash-v1",
+            },
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 2,
+                "is_latest": 1,
+                "supersedes": "Strike-LA-20260710-004:v1",
+                "generated_at": "2026-06-05T12:00:00Z",
+                "verification_hash": "hash-v2",
+            },
+        ]
+        initial_history = [
+            {
+                "reference": "Strike-LA-20260710-004",
+                "version": 1,
+                "is_latest": 1,
+                "supersedes": None,
+                "generated_at": "2026-06-04T12:00:00Z",
+                "verification_hash": "hash-v1",
+            }
+        ]
+
+        classify = self.admin_session._stage18a_evolution_classification
+
+        self.assertEqual("Initial Record State", classify(initial, initial_history))
+        self.assertEqual("Evolved Record State", classify(evolved, history))
+        self.assertEqual("Superseded Record State", classify(superseded, history))
+        self.assertEqual("Unresolved Evolution State", classify({}, []))
+
+        self.assertEqual(
+            "Strike-LA-20260710-004:v2",
+            self.admin_session._stage18a_superseded_by(superseded, history),
+        )
+
+        for metadata, lineage, expected in (
+            (initial, initial_history, "Initial Record State"),
+            (evolved, history, "Evolved Record State"),
+            (superseded, history, "Superseded Record State"),
+            ({}, [], "Unresolved Evolution State"),
+        ):
+            rendered = self.admin_session._render_stage18a_evolution_summary_content(
+                self.admin_session._record_stage18a_evolution_summary(
+                    metadata,
+                    lineage,
+                )
+            )
+            self.assertIn(
+                f"<td>Evolution Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Evolution Summary</h3>", rendered)
+            self.assertIn("<h3>Version Lineage Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Details</h3>", rendered)
+            self.assertIn("Verification Hash", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -3213,6 +3298,23 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Relationships Chain Layer Review</h3>", after_content)
         self.assertIn("<h3>Traceability Chain Layer Review</h3>", after_content)
         self.assertIn("<h3>Coverage Chain Layer Review</h3>", after_content)
+        self.assertIn("Record Evolution Summary", after_content)
+        self.assertIn("Evolution Summary", after_content)
+        self.assertIn("Version Lineage Review", after_content)
+        self.assertIn("Record Evolution Details", after_content)
+        self.assertIn("<td>Current Version</td><td>1</td>", after_content)
+        self.assertIn("<td>Is Latest Version</td><td>true</td>", after_content)
+        self.assertIn("<td>Supersedes</td><td>None</td>", after_content)
+        self.assertIn("<td>Superseded By</td><td>None</td>", after_content)
+        self.assertIn("<td>Lineage Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Earliest Version</td><td>1</td>", after_content)
+        self.assertIn("<td>Latest Version</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Evolution Classification</td><td>Initial Record State</td>",
+            after_content,
+        )
+        self.assertIn("<th>Verification Hash</th>", after_content)
+        self.assertIn("<th>Lineage State</th>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -3976,6 +4078,23 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Relationships Chain Layer Review</h3>", content)
         self.assertIn("<h3>Traceability Chain Layer Review</h3>", content)
         self.assertIn("<h3>Coverage Chain Layer Review</h3>", content)
+        self.assertIn("Record Evolution Summary", content)
+        self.assertIn("Evolution Summary", content)
+        self.assertIn("Version Lineage Review", content)
+        self.assertIn("Record Evolution Details", content)
+        self.assertIn("<td>Current Version</td><td>1</td>", content)
+        self.assertIn("<td>Is Latest Version</td><td>true</td>", content)
+        self.assertIn("<td>Supersedes</td><td>None</td>", content)
+        self.assertIn("<td>Superseded By</td><td>None</td>", content)
+        self.assertIn("<td>Lineage Versions</td><td>1</td>", content)
+        self.assertIn("<td>Earliest Version</td><td>1</td>", content)
+        self.assertIn("<td>Latest Version</td><td>1</td>", content)
+        self.assertIn(
+            "<td>Evolution Classification</td><td>Initial Record State</td>",
+            content,
+        )
+        self.assertIn("<th>Verification Hash</th>", content)
+        self.assertIn("<th>Lineage State</th>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -4961,6 +5080,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Governance Coverage</h2>"),
             governance_content.index("<h2>Governance Chain Review</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Governance Chain Review</h2>"),
+            governance_content.index("<h2>Record Evolution Summary</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -5012,6 +5135,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Governance Traceability</h2>", print_governance_content)
         self.assertIn("<h2>Governance Coverage</h2>", print_governance_content)
         self.assertIn("<h2>Governance Chain Review</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Summary</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
