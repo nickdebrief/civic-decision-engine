@@ -16774,6 +16774,366 @@ def _render_stage18d_record_evolution_trajectory_section(
       </section>"""
 
 
+def _stage18e_version_relationship_state(trajectory: dict[str, Any]) -> str:
+    summary = trajectory["summary"]
+    total_versions = summary["total_versions"]
+    if total_versions <= 1:
+        return "Single Version"
+    if summary["version_gap_count"] == 0 and total_versions == 2:
+        return "Sequential Versions"
+    return "Multi-Version Chain"
+
+
+def _stage18e_supersession_relationship_state(trajectory: dict[str, Any]) -> str:
+    summary = trajectory["summary"]
+    link_count = summary["supersession_link_count"]
+    broken_count = summary["broken_supersession_links"]
+    total_versions = summary["total_versions"]
+    expected_links = max(0, total_versions - 1)
+    if not link_count:
+        return "No Relationship"
+    if broken_count or link_count < expected_links:
+        return "Partial Relationship"
+    return "Connected Relationship"
+
+
+def _stage18e_timestamp_relationship_state(trajectory: dict[str, Any]) -> str:
+    summary = trajectory["summary"]
+    timestamp_state = summary["timestamp_order_state"]
+    if summary["total_versions"] <= 1:
+        return "Single Timestamp"
+    if timestamp_state == "Ordered" and summary["version_gap_count"] == 0:
+        return "Continuous Relationship"
+    return "Ordered Relationship" if timestamp_state == "Ordered" else "Single Timestamp"
+
+
+def _stage18e_verification_relationship_state(trajectory: dict[str, Any]) -> str:
+    coverage = trajectory["summary"]["verification_hash_coverage"]
+    if coverage == "Complete":
+        return "Complete Relationship"
+    if coverage == "Partial":
+        return "Partial Relationship"
+    return "Incomplete Relationship"
+
+
+def _stage18e_evolution_relationship_state(
+    trajectory: dict[str, Any],
+    relationship_classification: str,
+) -> str:
+    if relationship_classification == "No Evolution Relationships":
+        return "Unrelated"
+    if relationship_classification == "Fully Related Evolution Chain":
+        return "Fully Related"
+    return "Partially Related"
+
+
+def _stage18e_relationship_classification(
+    trajectory: dict[str, Any],
+) -> str:
+    summary = trajectory["summary"]
+    total_versions = summary["total_versions"]
+    version_transitions = summary["version_transitions"]
+    supersession_links = summary["supersession_link_count"]
+    version_gaps = summary["version_gap_count"]
+    broken_links = summary["broken_supersession_links"]
+    timestamp_state = summary["timestamp_order_state"]
+    hash_coverage = summary["verification_hash_coverage"]
+    trajectory_classification = summary["trajectory_classification"]
+
+    if total_versions <= 1 and not version_transitions and not supersession_links:
+        return "No Evolution Relationships"
+
+    if (
+        total_versions > 1
+        and version_gaps == 0
+        and broken_links == 0
+        and supersession_links >= max(0, total_versions - 1)
+        and timestamp_state == "Ordered"
+        and hash_coverage == "Complete"
+        and trajectory_classification
+        not in ("Fragmented Evolution Trajectory", "Unresolved Evolution Trajectory")
+    ):
+        return "Fully Related Evolution Chain"
+
+    if (
+        total_versions > 1
+        and (version_transitions or supersession_links)
+        and not broken_links
+        and trajectory_classification != "Unresolved Evolution Trajectory"
+    ):
+        return "Connected Evolution Relationships"
+
+    return "Limited Evolution Relationships"
+
+
+def _record_stage18e_evolution_relationships(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    trajectory = _record_stage18d_evolution_trajectory(
+        record_metadata,
+        version_history,
+    )
+    summary = trajectory["summary"]
+    verification = trajectory["reviews"]["verification_hash"]
+    relationship_classification = _stage18e_relationship_classification(
+        trajectory
+    )
+    version_relationship_state = _stage18e_version_relationship_state(
+        trajectory
+    )
+    supersession_relationship_state = (
+        _stage18e_supersession_relationship_state(trajectory)
+    )
+    timestamp_relationship_state = _stage18e_timestamp_relationship_state(
+        trajectory
+    )
+    verification_relationship_state = (
+        _stage18e_verification_relationship_state(trajectory)
+    )
+    evolution_relationship_state = _stage18e_evolution_relationship_state(
+        trajectory,
+        relationship_classification,
+    )
+
+    relationship_summary = {
+        "record_reference": summary["record_reference"],
+        "current_version": summary["current_version"],
+        "total_versions": summary["total_versions"],
+        "version_relationships": version_relationship_state,
+        "supersession_relationships": supersession_relationship_state,
+        "timestamp_relationships": timestamp_relationship_state,
+        "verification_relationships": verification_relationship_state,
+        "evolution_classification": summary["evolution_classification"],
+        "continuity_classification": summary["continuity_classification"],
+        "change_log_classification": summary["change_log_classification"],
+        "trajectory_classification": summary["trajectory_classification"],
+        "relationship_classification": relationship_classification,
+    }
+    return {
+        "summary": relationship_summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "current_version": summary["current_version"],
+                "earliest_version": summary["earliest_version"],
+                "latest_version": summary["latest_version"],
+                "total_versions": summary["total_versions"],
+                "version_relationship_state": version_relationship_state,
+            },
+            "supersession": {
+                "supersedes": trajectory["reviews"]["supersession"]["supersedes"],
+                "superseded_by": trajectory["reviews"]["supersession"][
+                    "superseded_by"
+                ],
+                "supersession_link_count": summary["supersession_link_count"],
+                "broken_supersession_links": summary[
+                    "broken_supersession_links"
+                ],
+                "relationship_state": supersession_relationship_state,
+            },
+            "timestamp": {
+                "generated_at": trajectory["reviews"]["timestamp"]["generated_at"],
+                "exported_at": trajectory["reviews"]["timestamp"]["exported_at"],
+                "earliest_version": summary["earliest_version"],
+                "latest_version": summary["latest_version"],
+                "timestamp_order_state": summary["timestamp_order_state"],
+                "relationship_state": timestamp_relationship_state,
+            },
+            "verification": {
+                "verification_hash_coverage": summary[
+                    "verification_hash_coverage"
+                ],
+                "versions_with_hash": verification["versions_with_hash"],
+                "versions_missing_hash": verification["versions_missing_hash"],
+                "verification_relationship_state": verification_relationship_state,
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_state": evolution_relationship_state,
+            },
+        },
+        "record": {
+            "record_reference": summary["record_reference"],
+            "current_version": summary["current_version"],
+            "total_versions": summary["total_versions"],
+            "version_transitions": summary["version_transitions"],
+            "changed_versions": summary["changed_versions"],
+            "unchanged_versions": summary["unchanged_versions"],
+            "version_gap_count": summary["version_gap_count"],
+            "supersession_link_count": summary["supersession_link_count"],
+            "broken_supersession_links": summary["broken_supersession_links"],
+            "timestamp_order_state": summary["timestamp_order_state"],
+            "verification_hash_coverage": summary["verification_hash_coverage"],
+            "evolution_classification": summary["evolution_classification"],
+            "continuity_classification": summary["continuity_classification"],
+            "change_log_classification": summary["change_log_classification"],
+            "trajectory_classification": summary["trajectory_classification"],
+            "relationship_classification": relationship_classification,
+        },
+    }
+
+
+def _render_stage18e_record_relationships(relationships: dict[str, Any]) -> str:
+    record = relationships["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Version Transitions", record["version_transitions"]),
+        ("Changed Versions", record["changed_versions"]),
+        ("Unchanged Versions", record["unchanged_versions"]),
+        ("Version Gap Count", record["version_gap_count"]),
+        ("Supersession Link Count", record["supersession_link_count"]),
+        ("Broken Supersession Links", record["broken_supersession_links"]),
+        ("Timestamp Order State", record["timestamp_order_state"]),
+        ("Verification Hash Coverage", record["verification_hash_coverage"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+    )
+    return f"""
+        <section class="stage18e-record-evolution-relationships">
+          <h3>Record Evolution Relationships</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18e_evolution_relationships_content(
+    relationships: dict[str, Any],
+) -> str:
+    summary = relationships["summary"]
+    reviews = relationships["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Version Relationships", summary["version_relationships"]),
+        ("Supersession Relationships", summary["supersession_relationships"]),
+        ("Timestamp Relationships", summary["timestamp_relationships"]),
+        ("Verification Relationships", summary["verification_relationships"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+    )
+    return f"""
+        <h3>Relationship Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Relationship Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Current Version", reviews["version"]["current_version"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                (
+                    "Version Relationship State",
+                    reviews["version"]["version_relationship_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Relationship Review",
+            (
+                ("Supersedes", reviews["supersession"]["supersedes"]),
+                ("Superseded By", reviews["supersession"]["superseded_by"]),
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                ("Relationship State", reviews["supersession"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Relationship Review",
+            (
+                ("Generated At", reviews["timestamp"]["generated_at"]),
+                ("Exported At", reviews["timestamp"]["exported_at"]),
+                ("Earliest Version", reviews["timestamp"]["earliest_version"]),
+                ("Latest Version", reviews["timestamp"]["latest_version"]),
+                (
+                    "Timestamp Order State",
+                    reviews["timestamp"]["timestamp_order_state"],
+                ),
+                ("Relationship State", reviews["timestamp"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Relationship Review",
+            (
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Versions With Hash",
+                    reviews["verification"]["versions_with_hash"],
+                ),
+                (
+                    "Versions Missing Hash",
+                    reviews["verification"]["versions_missing_hash"],
+                ),
+                (
+                    "Verification Relationship State",
+                    reviews["verification"]["verification_relationship_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Relationship Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                ("Relationship State", reviews["evolution"]["relationship_state"]),
+            ),
+        )}
+        {_render_stage18e_record_relationships(relationships)}"""
+
+
+def _render_stage18e_record_evolution_relationships_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    relationships = _record_stage18e_evolution_relationships(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18e-record-evolution-relationships">
+        <h2>Record Evolution Relationships</h2>
+        <p class="notice">
+          Record evolution relationships are derived deterministically from existing record metadata, lineage history, continuity outputs, change log outputs, trajectory outputs, supersession fields, timestamps, and verification hashes only.
+        </p>
+        {_render_stage18e_evolution_relationships_content(relationships)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -16980,6 +17340,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18e_record_evolution_relationships = _render_stage18e_record_evolution_relationships_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -17115,6 +17479,7 @@ def render_admin_record_evidence_page(
             f"{stage18b_record_evolution_continuity}"
             f"{stage18c_record_evolution_change_log}"
             f"{stage18d_record_evolution_trajectory}"
+            f"{stage18e_record_evolution_relationships}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
