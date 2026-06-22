@@ -2442,6 +2442,18 @@ class AdminSessionTests(unittest.TestCase):
             single["summary"]["coverage_classification"],
         )
         self.assertEqual(
+            "No Evolution Relationships",
+            single["summary"]["relationship_classification"],
+        )
+        self.assertEqual(
+            "Partial Evolution Traceability",
+            single["summary"]["traceability_classification"],
+        )
+        self.assertEqual(0, single["summary"]["missing_versions"])
+        self.assertEqual(0, single["summary"]["missing_timestamps"])
+        self.assertEqual(0, single["summary"]["missing_verification_hashes"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
             "Full Evolution Coverage",
             full["summary"]["coverage_classification"],
         )

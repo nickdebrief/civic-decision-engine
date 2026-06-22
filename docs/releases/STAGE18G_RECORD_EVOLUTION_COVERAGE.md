@@ -152,13 +152,19 @@ exist, traceability is Fully Traceable Evolution, and no missing versions,
 timestamps, or verification hashes exist.
 
 Partial Evolution Coverage is rendered when at least one version exists, at
-least one Stage 18A through Stage 18F output exists, and coverage is limited by
-a single-version lineage, absent supersession links, Partial Evolution
-Traceability, or otherwise limited but present evolution outputs.
+least one Stage 18A through Stage 18F output exists, and all required coverage
+components that are available for the current lineage are present, but the
+lineage is still limited by structure such as a single-version record, absent
+supersession links, Partial Evolution Traceability, or other degraded-but-present
+evolution states.
 
-Limited Evolution Coverage is rendered when at least one version exists and
-one or more timestamps, verification hashes, Stage 18 outputs, or lineage
-components are present but incomplete.
+Limited Evolution Coverage is rendered only when one or more required coverage
+components are missing or incomplete. Required coverage components are version
+metadata, generated_at timestamps, verification hashes, and the Stage 18A
+through Stage 18F classifications.
+
+Coverage measures presence and availability, not quality. Degraded but present
+evolution states do not by themselves produce Limited Evolution Coverage.
 
 No Evolution Coverage is rendered when no version metadata exists, no Stage
 18A through Stage 18F outputs exist, no timestamps exist, and no verification
