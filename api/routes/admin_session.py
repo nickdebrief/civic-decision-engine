@@ -17610,6 +17610,462 @@ def _render_stage18f_record_evolution_traceability_section(
       </section>"""
 
 
+def _stage18g_evolution_output_counts(traceability: dict[str, Any]) -> tuple[int, int]:
+    summary = traceability["summary"]
+    if summary.get("total_versions") == 0:
+        return 0, 6
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+    )
+    covered = sum(1 for key in output_keys if str(summary.get(key) or "").strip())
+    return covered, len(output_keys) - covered
+
+
+def _stage18g_version_coverage_state(
+    total_versions: int,
+    covered_versions: int,
+    missing_versions: int,
+) -> str:
+    if not covered_versions:
+        return "No Version Coverage"
+    if total_versions == 1 and not missing_versions:
+        return "Single Version Coverage"
+    if missing_versions:
+        return "Partial Version Coverage"
+    return "Full Version Coverage"
+
+
+def _stage18g_supersession_coverage_state(
+    link_count: int,
+    covered_links: int,
+    missing_links: int,
+    broken_links: int,
+) -> str:
+    if not link_count:
+        return "No Supersession Coverage"
+    if missing_links or broken_links or covered_links < link_count:
+        return "Partial Supersession Coverage"
+    return "Full Supersession Coverage"
+
+
+def _stage18g_timestamp_coverage_state(
+    total_versions: int,
+    covered_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if not covered_timestamps:
+        return "No Timestamp Coverage"
+    if total_versions == 1 and not missing_timestamps:
+        return "Single Timestamp Coverage"
+    if missing_timestamps:
+        return "Partial Timestamp Coverage"
+    return "Full Timestamp Coverage"
+
+
+def _stage18g_verification_coverage_state(
+    total_versions: int,
+    covered_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if not covered_hashes:
+        return "No Verification Coverage"
+    if total_versions == 1 and not missing_hashes:
+        return "Single Verification Coverage"
+    if missing_hashes:
+        return "Partial Verification Coverage"
+    return "Full Verification Coverage"
+
+
+def _stage18g_evolution_output_coverage_state(
+    covered_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if not covered_outputs:
+        return "No Evolution Output Coverage"
+    if missing_outputs:
+        return "Partial Evolution Output Coverage"
+    return "Full Evolution Output Coverage"
+
+
+def _stage18g_coverage_classification(
+    *,
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+    traceability: dict[str, Any],
+    covered_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = traceability["summary"]
+
+    if not reference or version is None or version_history is None:
+        return "Unresolved Evolution Coverage"
+
+    if (
+        summary["total_versions"] == 0
+        and not covered_outputs
+        and not summary["covered_timestamps"]
+        and not summary["covered_verification_hashes"]
+    ):
+        return "No Evolution Coverage"
+
+    if (
+        summary["missing_timestamps"]
+        or summary["missing_verification_hashes"]
+        or missing_outputs
+        or summary["missing_versions"]
+    ):
+        return "Limited Evolution Coverage"
+
+    if (
+        summary["total_versions"] > 1
+        and not summary["missing_versions"]
+        and not summary["missing_timestamps"]
+        and not summary["missing_verification_hashes"]
+        and not missing_outputs
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Full Evolution Coverage"
+
+    return "Partial Evolution Coverage"
+
+
+def _record_stage18g_evolution_coverage(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    traceability = _record_stage18f_evolution_traceability(
+        record_metadata,
+        history,
+    )
+    trace_summary = traceability["summary"]
+    relationship_record = _record_stage18e_evolution_relationships(
+        record_metadata,
+        history,
+    )["record"]
+    covered_outputs, missing_outputs = _stage18g_evolution_output_counts(
+        traceability
+    )
+    covered_supersession_links = trace_summary["traceable_supersession_links"]
+    missing_supersession_links = max(
+        0,
+        relationship_record["supersession_link_count"]
+        - covered_supersession_links,
+    )
+    summary = {
+        "record_reference": trace_summary["record_reference"],
+        "current_version": trace_summary["current_version"],
+        "total_versions": trace_summary["total_versions"],
+        "covered_versions": trace_summary["traceable_versions"],
+        "missing_versions": trace_summary["untraceable_versions"],
+        "covered_supersession_links": covered_supersession_links,
+        "missing_supersession_links": missing_supersession_links,
+        "covered_timestamps": trace_summary["traceable_timestamps"],
+        "missing_timestamps": trace_summary["missing_timestamps"],
+        "covered_verification_hashes": trace_summary[
+            "traceable_verification_hashes"
+        ],
+        "missing_verification_hashes": trace_summary[
+            "missing_verification_hashes"
+        ],
+        "covered_evolution_outputs": covered_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": trace_summary["evolution_classification"],
+        "continuity_classification": trace_summary["continuity_classification"],
+        "change_log_classification": trace_summary["change_log_classification"],
+        "trajectory_classification": trace_summary["trajectory_classification"],
+        "relationship_classification": trace_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": trace_summary[
+            "traceability_classification"
+        ],
+    }
+    summary["coverage_classification"] = _stage18g_coverage_classification(
+        record_metadata=record_metadata,
+        version_history=history,
+        traceability={"summary": summary},
+        covered_outputs=covered_outputs,
+        missing_outputs=missing_outputs,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": relationship_record.get("earliest_version"),
+                "latest_version": relationship_record.get("latest_version"),
+                "total_versions": summary["total_versions"],
+                "covered_versions": summary["covered_versions"],
+                "missing_versions": summary["missing_versions"],
+                "coverage_state": _stage18g_version_coverage_state(
+                    summary["total_versions"],
+                    summary["covered_versions"],
+                    summary["missing_versions"],
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": relationship_record[
+                    "supersession_link_count"
+                ],
+                "covered_supersession_links": covered_supersession_links,
+                "missing_supersession_links": missing_supersession_links,
+                "broken_supersession_links": relationship_record[
+                    "broken_supersession_links"
+                ],
+                "coverage_state": _stage18g_supersession_coverage_state(
+                    relationship_record["supersession_link_count"],
+                    covered_supersession_links,
+                    missing_supersession_links,
+                    relationship_record["broken_supersession_links"],
+                ),
+            },
+            "timestamp": {
+                "covered_timestamps": summary["covered_timestamps"],
+                "missing_timestamps": summary["missing_timestamps"],
+                "earliest_timestamp": traceability["reviews"]["timestamp"][
+                    "earliest_timestamp"
+                ],
+                "latest_timestamp": traceability["reviews"]["timestamp"][
+                    "latest_timestamp"
+                ],
+                "coverage_state": _stage18g_timestamp_coverage_state(
+                    summary["total_versions"],
+                    summary["covered_timestamps"],
+                    summary["missing_timestamps"],
+                ),
+            },
+            "verification": {
+                "covered_verification_hashes": summary[
+                    "covered_verification_hashes"
+                ],
+                "missing_verification_hashes": summary[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": relationship_record[
+                    "verification_hash_coverage"
+                ],
+                "coverage_state": _stage18g_verification_coverage_state(
+                    summary["total_versions"],
+                    summary["covered_verification_hashes"],
+                    summary["missing_verification_hashes"],
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "covered_evolution_outputs": covered_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "coverage_state": _stage18g_evolution_output_coverage_state(
+                    covered_outputs,
+                    missing_outputs,
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18g_record_coverage(coverage: dict[str, Any]) -> str:
+    record = coverage["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Covered Versions", record["covered_versions"]),
+        ("Missing Versions", record["missing_versions"]),
+        ("Covered Supersession Links", record["covered_supersession_links"]),
+        ("Missing Supersession Links", record["missing_supersession_links"]),
+        ("Covered Timestamps", record["covered_timestamps"]),
+        ("Missing Timestamps", record["missing_timestamps"]),
+        ("Covered Verification Hashes", record["covered_verification_hashes"]),
+        ("Missing Verification Hashes", record["missing_verification_hashes"]),
+        ("Covered Evolution Outputs", record["covered_evolution_outputs"]),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+    )
+    return f"""
+        <section class="stage18g-record-evolution-coverage">
+          <h3>Record Evolution Coverage</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18g_evolution_coverage_content(
+    coverage: dict[str, Any],
+) -> str:
+    summary = coverage["summary"]
+    reviews = coverage["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Covered Versions", summary["covered_versions"]),
+        ("Missing Versions", summary["missing_versions"]),
+        ("Covered Supersession Links", summary["covered_supersession_links"]),
+        ("Missing Supersession Links", summary["missing_supersession_links"]),
+        ("Covered Timestamps", summary["covered_timestamps"]),
+        ("Missing Timestamps", summary["missing_timestamps"]),
+        ("Covered Verification Hashes", summary["covered_verification_hashes"]),
+        ("Missing Verification Hashes", summary["missing_verification_hashes"]),
+        ("Covered Evolution Outputs", summary["covered_evolution_outputs"]),
+        ("Missing Evolution Outputs", summary["missing_evolution_outputs"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+        ("Coverage Classification", summary["coverage_classification"]),
+    )
+    return f"""
+        <h3>Coverage Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Coverage Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                ("Covered Versions", reviews["version"]["covered_versions"]),
+                ("Missing Versions", reviews["version"]["missing_versions"]),
+                ("Coverage State", reviews["version"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Coverage Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Covered Supersession Links",
+                    reviews["supersession"]["covered_supersession_links"],
+                ),
+                (
+                    "Missing Supersession Links",
+                    reviews["supersession"]["missing_supersession_links"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                ("Coverage State", reviews["supersession"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Coverage Review",
+            (
+                ("Covered Timestamps", reviews["timestamp"]["covered_timestamps"]),
+                ("Missing Timestamps", reviews["timestamp"]["missing_timestamps"]),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Coverage State", reviews["timestamp"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Coverage Review",
+            (
+                (
+                    "Covered Verification Hashes",
+                    reviews["verification"]["covered_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                ("Coverage State", reviews["verification"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Coverage Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Covered Evolution Outputs",
+                    reviews["evolution"]["covered_evolution_outputs"],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution"]["missing_evolution_outputs"],
+                ),
+                ("Coverage State", reviews["evolution"]["coverage_state"]),
+            ),
+        )}
+        {_render_stage18g_record_coverage(coverage)}"""
+
+
+def _render_stage18g_record_evolution_coverage_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    coverage = _record_stage18g_evolution_coverage(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18g-record-evolution-coverage">
+        <h2>Record Evolution Coverage</h2>
+        <p class="notice">
+          Record evolution coverage is derived deterministically from existing
+          record metadata, same-reference version history, supersession fields,
+          timestamps, verification hashes, and Stage 18A through Stage 18F
+          evolution outputs only.
+        </p>
+        {_render_stage18g_evolution_coverage_content(coverage)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -17824,6 +18280,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18g_record_evolution_coverage = _render_stage18g_record_evolution_coverage_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -17961,6 +18421,7 @@ def render_admin_record_evidence_page(
             f"{stage18d_record_evolution_trajectory}"
             f"{stage18e_record_evolution_relationships}"
             f"{stage18f_record_evolution_traceability}"
+            f"{stage18g_record_evolution_coverage}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
