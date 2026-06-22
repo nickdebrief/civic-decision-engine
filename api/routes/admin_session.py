@@ -18641,6 +18641,546 @@ def _render_stage18h_record_evolution_review_section(
       </section>"""
 
 
+_STAGE18I_LIMITED_EVOLUTION_STATES = {
+    "Initial Record State",
+    "Partial Evolution Continuity",
+    "No Recorded Changes",
+    "Initial Evolution Trajectory",
+    "No Evolution Relationships",
+    "Partial Evolution Traceability",
+    "Partial Evolution Coverage",
+    "Partial Evolution Review",
+    "Limited Evolution Relationships",
+    "Limited Evolution Coverage",
+    "Limited Evolution Review",
+}
+
+
+def _stage18i_evolution_output_counts(
+    review: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = review["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+    )
+    values = [str(summary.get(key) or "").strip() for key in output_keys]
+    ready = sum(1 for value in values if value)
+    missing = len(output_keys) - ready
+    limited = sum(
+        1 for value in values if value in _STAGE18I_LIMITED_EVOLUTION_STATES
+    )
+    return ready, missing, limited
+
+
+def _stage18i_version_readiness_state(
+    *,
+    record_reference: Any,
+    current_version: Any,
+    total_versions: int,
+    reviewable_versions: int,
+    traceable_versions: int,
+    covered_versions: int,
+) -> str:
+    if not str(record_reference or "").strip() or current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Readiness"
+    if (
+        reviewable_versions < total_versions
+        or traceable_versions < total_versions
+        or covered_versions < total_versions
+    ):
+        return "Limited Version Readiness"
+    if total_versions > 1:
+        return "Fully Version Ready"
+    return "Partially Version Ready"
+
+
+def _stage18i_coverage_readiness_state(
+    coverage_classification: str,
+) -> str:
+    return {
+        "Full Evolution Coverage": "Fully Coverage Ready",
+        "Partial Evolution Coverage": "Partially Coverage Ready",
+        "Limited Evolution Coverage": "Limited Coverage Readiness",
+        "No Evolution Coverage": "No Coverage Readiness",
+        "Unresolved Evolution Coverage": "Unresolved",
+    }.get(coverage_classification, "Unresolved")
+
+
+def _stage18i_traceability_readiness_state(
+    traceability_classification: str,
+) -> str:
+    return {
+        "Fully Traceable Evolution": "Fully Traceability Ready",
+        "Partial Evolution Traceability": "Partially Traceability Ready",
+        "Broken Evolution Traceability": "Broken Traceability Readiness",
+        "Untraceable Evolution": "No Traceability Readiness",
+    }.get(traceability_classification, "No Traceability Readiness")
+
+
+def _stage18i_review_readiness_state(review_classification: str) -> str:
+    return {
+        "Complete Evolution Review": "Fully Review Ready",
+        "Partial Evolution Review": "Partially Review Ready",
+        "Limited Evolution Review": "Limited Review Readiness",
+        "No Evolution Review": "No Review Readiness",
+        "Unresolved Evolution Review": "Unresolved",
+    }.get(review_classification, "Unresolved")
+
+
+def _stage18i_evolution_readiness_state(
+    readiness_classification: str,
+) -> str:
+    return {
+        "Fully Evolution Ready": "Fully Ready Evolution Chain",
+        "Partially Evolution Ready": "Partially Ready Evolution Chain",
+        "Limited Evolution Readiness": "Limited Evolution Chain Readiness",
+        "No Evolution Readiness": "No Evolution Chain Readiness",
+        "Unresolved Evolution Readiness": "Unresolved Evolution Chain Readiness",
+    }.get(readiness_classification, "Unresolved Evolution Chain Readiness")
+
+
+def _stage18i_readiness_classification(
+    *,
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+    review: dict[str, Any],
+    missing_outputs: int,
+    missing_coverage_components: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = review["summary"]
+    traceability = review["reviews"]["traceability"]
+    coverage = review["reviews"]["coverage"]
+
+    if (
+        not reference
+        or version is None
+        or version_history is None
+        or summary["coverage_classification"] == "Unresolved Evolution Coverage"
+        or (
+            summary["total_versions"] > 0
+            and summary["traceability_classification"] == "Untraceable Evolution"
+        )
+        or summary["review_classification"] == "Unresolved Evolution Review"
+    ):
+        return "Unresolved Evolution Readiness"
+
+    if (
+        summary["total_versions"] == 0
+        and summary["review_classification"] == "No Evolution Review"
+        and not traceability["traceable_timestamps"]
+        and not traceability["traceable_verification_hashes"]
+    ):
+        return "No Evolution Readiness"
+
+    if (
+        summary["total_versions"] > 0
+        and (
+            missing_outputs
+            or summary["coverage_classification"] == "Limited Evolution Coverage"
+            or summary["review_classification"] == "Limited Evolution Review"
+            or missing_coverage_components
+            or summary["unreviewable_versions"]
+        )
+    ):
+        return "Limited Evolution Readiness"
+
+    if (
+        summary["total_versions"] > 1
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+        and summary["review_classification"] == "Complete Evolution Review"
+        and summary["relationship_classification"] != "No Evolution Relationships"
+        and not missing_outputs
+        and not missing_coverage_components
+        and not coverage["missing_timestamps"]
+        and not coverage["missing_verification_hashes"]
+        and not summary["unreviewable_versions"]
+    ):
+        return "Fully Evolution Ready"
+
+    return "Partially Evolution Ready"
+
+
+def _record_stage18i_evolution_readiness(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    review = _record_stage18h_evolution_review(record_metadata, history)
+    review_summary = review["summary"]
+    traceability_review = review["reviews"]["traceability"]
+    coverage_review = review["reviews"]["coverage"]
+    version_review = review["reviews"]["version"]
+    ready_outputs, missing_outputs, limited_outputs = (
+        _stage18i_evolution_output_counts(review)
+    )
+    missing_coverage_components = review_summary["missing_coverage_components"]
+    summary = {
+        "record_reference": review_summary["record_reference"],
+        "current_version": review_summary["current_version"],
+        "total_versions": review_summary["total_versions"],
+        "reviewable_versions": review_summary["reviewable_versions"],
+        "traceable_versions": traceability_review["traceable_versions"],
+        "covered_versions": coverage_review["covered_versions"],
+        "reviewable_evolution_outputs": ready_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "limited_evolution_outputs": limited_outputs,
+        "missing_coverage_components": missing_coverage_components,
+        "evolution_classification": review_summary["evolution_classification"],
+        "continuity_classification": review_summary["continuity_classification"],
+        "change_log_classification": review_summary["change_log_classification"],
+        "trajectory_classification": review_summary["trajectory_classification"],
+        "relationship_classification": review_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": review_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": review_summary["coverage_classification"],
+        "review_classification": review_summary["review_classification"],
+    }
+    summary["readiness_classification"] = _stage18i_readiness_classification(
+        record_metadata=record_metadata,
+        version_history=history,
+        review=review,
+        missing_outputs=missing_outputs,
+        missing_coverage_components=missing_coverage_components,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "reviewable_versions": summary["reviewable_versions"],
+                "traceable_versions": summary["traceable_versions"],
+                "covered_versions": summary["covered_versions"],
+                "readiness_state": _stage18i_version_readiness_state(
+                    record_reference=summary["record_reference"],
+                    current_version=summary["current_version"],
+                    total_versions=summary["total_versions"],
+                    reviewable_versions=summary["reviewable_versions"],
+                    traceable_versions=summary["traceable_versions"],
+                    covered_versions=summary["covered_versions"],
+                ),
+            },
+            "coverage": {
+                "coverage_classification": summary["coverage_classification"],
+                "covered_evolution_outputs": coverage_review[
+                    "covered_evolution_outputs"
+                ],
+                "missing_evolution_outputs": missing_outputs,
+                "missing_coverage_components": missing_coverage_components,
+                "covered_versions": coverage_review["covered_versions"],
+                "missing_versions": coverage_review["missing_versions"],
+                "covered_timestamps": coverage_review["covered_timestamps"],
+                "missing_timestamps": coverage_review["missing_timestamps"],
+                "covered_verification_hashes": coverage_review[
+                    "covered_verification_hashes"
+                ],
+                "missing_verification_hashes": coverage_review[
+                    "missing_verification_hashes"
+                ],
+                "readiness_state": _stage18i_coverage_readiness_state(
+                    summary["coverage_classification"]
+                ),
+            },
+            "traceability": {
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "traceable_versions": traceability_review["traceable_versions"],
+                "untraceable_versions": traceability_review[
+                    "untraceable_versions"
+                ],
+                "traceable_timestamps": traceability_review[
+                    "traceable_timestamps"
+                ],
+                "missing_timestamps": traceability_review["missing_timestamps"],
+                "traceable_verification_hashes": traceability_review[
+                    "traceable_verification_hashes"
+                ],
+                "missing_verification_hashes": traceability_review[
+                    "missing_verification_hashes"
+                ],
+                "readiness_state": _stage18i_traceability_readiness_state(
+                    summary["traceability_classification"]
+                ),
+            },
+            "review": {
+                "review_classification": summary["review_classification"],
+                "reviewable_versions": summary["reviewable_versions"],
+                "unreviewable_versions": review_summary["unreviewable_versions"],
+                "reviewable_evolution_outputs": ready_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "limited_evolution_outputs": limited_outputs,
+                "readiness_state": _stage18i_review_readiness_state(
+                    summary["review_classification"]
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_state": _stage18i_evolution_readiness_state(
+                    summary["readiness_classification"]
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18i_record_readiness(readiness: dict[str, Any]) -> str:
+    record = readiness["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Reviewable Versions", record["reviewable_versions"]),
+        ("Traceable Versions", record["traceable_versions"]),
+        ("Covered Versions", record["covered_versions"]),
+        ("Reviewable Evolution Outputs", record["reviewable_evolution_outputs"]),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Limited Evolution Outputs", record["limited_evolution_outputs"]),
+        ("Missing Coverage Components", record["missing_coverage_components"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+    )
+    return f"""
+        <section class="stage18i-record-evolution-readiness">
+          <h3>Record Evolution Readiness</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18i_evolution_readiness_content(
+    readiness: dict[str, Any],
+) -> str:
+    summary = readiness["summary"]
+    reviews = readiness["reviews"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Current Version", summary["current_version"]),
+        ("Total Versions", summary["total_versions"]),
+        ("Reviewable Versions", summary["reviewable_versions"]),
+        ("Traceable Versions", summary["traceable_versions"]),
+        ("Covered Versions", summary["covered_versions"]),
+        ("Reviewable Evolution Outputs", summary["reviewable_evolution_outputs"]),
+        ("Missing Evolution Outputs", summary["missing_evolution_outputs"]),
+        ("Limited Evolution Outputs", summary["limited_evolution_outputs"]),
+        ("Missing Coverage Components", summary["missing_coverage_components"]),
+        ("Evolution Classification", summary["evolution_classification"]),
+        ("Continuity Classification", summary["continuity_classification"]),
+        ("Change Log Classification", summary["change_log_classification"]),
+        ("Trajectory Classification", summary["trajectory_classification"]),
+        ("Relationship Classification", summary["relationship_classification"]),
+        ("Traceability Classification", summary["traceability_classification"]),
+        ("Coverage Classification", summary["coverage_classification"]),
+        ("Review Classification", summary["review_classification"]),
+        ("Readiness Classification", summary["readiness_classification"]),
+    )
+    return f"""
+        <h3>Readiness Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Readiness Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                ("Reviewable Versions", reviews["version"]["reviewable_versions"]),
+                ("Traceable Versions", reviews["version"]["traceable_versions"]),
+                ("Covered Versions", reviews["version"]["covered_versions"]),
+                ("Readiness State", reviews["version"]["readiness_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Coverage Readiness Review",
+            (
+                (
+                    "Coverage Classification",
+                    reviews["coverage"]["coverage_classification"],
+                ),
+                (
+                    "Covered Evolution Outputs",
+                    reviews["coverage"]["covered_evolution_outputs"],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["coverage"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Missing Coverage Components",
+                    reviews["coverage"]["missing_coverage_components"],
+                ),
+                ("Covered Versions", reviews["coverage"]["covered_versions"]),
+                ("Missing Versions", reviews["coverage"]["missing_versions"]),
+                ("Covered Timestamps", reviews["coverage"]["covered_timestamps"]),
+                ("Missing Timestamps", reviews["coverage"]["missing_timestamps"]),
+                (
+                    "Covered Verification Hashes",
+                    reviews["coverage"]["covered_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["coverage"]["missing_verification_hashes"],
+                ),
+                ("Readiness State", reviews["coverage"]["readiness_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Traceability Readiness Review",
+            (
+                (
+                    "Traceability Classification",
+                    reviews["traceability"]["traceability_classification"],
+                ),
+                (
+                    "Traceable Versions",
+                    reviews["traceability"]["traceable_versions"],
+                ),
+                (
+                    "Untraceable Versions",
+                    reviews["traceability"]["untraceable_versions"],
+                ),
+                (
+                    "Traceable Timestamps",
+                    reviews["traceability"]["traceable_timestamps"],
+                ),
+                (
+                    "Missing Timestamps",
+                    reviews["traceability"]["missing_timestamps"],
+                ),
+                (
+                    "Traceable Verification Hashes",
+                    reviews["traceability"]["traceable_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["traceability"]["missing_verification_hashes"],
+                ),
+                ("Readiness State", reviews["traceability"]["readiness_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Review Readiness Review",
+            (
+                (
+                    "Review Classification",
+                    reviews["review"]["review_classification"],
+                ),
+                ("Reviewable Versions", reviews["review"]["reviewable_versions"]),
+                (
+                    "Unreviewable Versions",
+                    reviews["review"]["unreviewable_versions"],
+                ),
+                (
+                    "Reviewable Evolution Outputs",
+                    reviews["review"]["reviewable_evolution_outputs"],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["review"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Limited Evolution Outputs",
+                    reviews["review"]["limited_evolution_outputs"],
+                ),
+                ("Readiness State", reviews["review"]["readiness_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Readiness Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution"]["review_classification"],
+                ),
+                ("Readiness State", reviews["evolution"]["readiness_state"]),
+            ),
+        )}
+        {_render_stage18i_record_readiness(readiness)}"""
+
+
+def _render_stage18i_record_evolution_readiness_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    readiness = _record_stage18i_evolution_readiness(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18i-record-evolution-readiness">
+        <h2>Record Evolution Readiness</h2>
+        <p class="notice">
+          Record evolution readiness is derived deterministically from existing
+          record metadata, same-reference version history, and Stage 18A
+          through Stage 18H evolution outputs only.
+        </p>
+        {_render_stage18i_evolution_readiness_content(readiness)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -18863,6 +19403,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18i_record_evolution_readiness = _render_stage18i_record_evolution_readiness_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -19002,6 +19546,7 @@ def render_admin_record_evidence_page(
             f"{stage18f_record_evolution_traceability}"
             f"{stage18g_record_evolution_coverage}"
             f"{stage18h_record_evolution_review}"
+            f"{stage18i_record_evolution_readiness}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
