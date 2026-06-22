@@ -2524,6 +2524,155 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Covered Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18h_record_evolution_review_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        no_review_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def review(metadata, lineage):
+            return self.admin_session._record_stage18h_evolution_review(
+                metadata,
+                lineage,
+            )
+
+        single = review(single_metadata, single_history)
+        full = review(base, full_history)
+        limited = review(base, limited_history)
+        no_review = review(no_review_metadata, [])
+        unresolved = review({}, [])
+
+        self.assertEqual(
+            "Partial Evolution Review",
+            single["summary"]["review_classification"],
+        )
+        self.assertEqual(1, single["summary"]["reviewable_versions"])
+        self.assertEqual(0, single["summary"]["unreviewable_versions"])
+        self.assertEqual(7, single["summary"]["reviewable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_coverage_components"])
+        self.assertEqual(
+            "Single Reviewable Version",
+            single["reviews"]["version"]["review_state"],
+        )
+        self.assertEqual(
+            "Partially Reviewable Evolution Outputs",
+            single["reviews"]["evolution_output"]["review_state"],
+        )
+        self.assertEqual(
+            "Partially Covered Review",
+            single["reviews"]["coverage"]["review_state"],
+        )
+        self.assertEqual(
+            "Partially Traceable Review",
+            single["reviews"]["traceability"]["review_state"],
+        )
+        self.assertEqual(
+            "No Relationship Review",
+            single["reviews"]["relationship"]["review_state"],
+        )
+        self.assertEqual(
+            "Complete Evolution Review",
+            full["summary"]["review_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Review",
+            limited["summary"]["review_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Review",
+            no_review["summary"]["review_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Review",
+            unresolved["summary"]["review_classification"],
+        )
+
+        for review_set, expected in (
+            (full, "Complete Evolution Review"),
+            (single, "Partial Evolution Review"),
+            (limited, "Limited Evolution Review"),
+            (no_review, "No Evolution Review"),
+            (unresolved, "Unresolved Evolution Review"),
+        ):
+            rendered = self.admin_session._render_stage18h_evolution_review_content(
+                review_set
+            )
+            self.assertIn(
+                f"<td>Review Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Review Summary</h3>", rendered)
+            self.assertIn("<h3>Version Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Review</h3>", rendered)
+            self.assertIn("<h3>Coverage Review</h3>", rendered)
+            self.assertIn("<h3>Traceability Review</h3>", rendered)
+            self.assertIn("<h3>Relationship Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Review</h3>", rendered)
+            self.assertIn("Reviewable Versions", rendered)
+            self.assertIn("Unreviewable Versions", rendered)
+            self.assertIn("Reviewable Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+            self.assertIn("Limited Evolution Outputs", rendered)
+            self.assertIn("Missing Coverage Components", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -4243,6 +4392,24 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Coverage Classification</td><td>Limited Evolution Coverage</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Review", after_content)
+        self.assertIn("Review Summary", after_content)
+        self.assertIn("Version Review", after_content)
+        self.assertIn("Evolution Output Review", after_content)
+        self.assertIn("Coverage Review", after_content)
+        self.assertIn("Traceability Review", after_content)
+        self.assertIn("Relationship Review", after_content)
+        self.assertIn("<td>Reviewable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Unreviewable Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reviewable Evolution Outputs</td><td>7</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Review Classification</td><td>Unresolved Evolution Review</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -5145,6 +5312,21 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
         self.assertIn(
             "<td>Coverage Classification</td><td>Limited Evolution Coverage</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Review", content)
+        self.assertIn("Review Summary", content)
+        self.assertIn("Version Review", content)
+        self.assertIn("Evolution Output Review", content)
+        self.assertIn("Coverage Review", content)
+        self.assertIn("Traceability Review", content)
+        self.assertIn("Relationship Review", content)
+        self.assertIn("<td>Reviewable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Unreviewable Versions</td><td>0</td>", content)
+        self.assertIn("<td>Reviewable Evolution Outputs</td><td>7</td>", content)
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Review Classification</td><td>Unresolved Evolution Review</td>",
             content,
         )
         self.assertIn(
@@ -6160,6 +6342,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Traceability</h2>"),
             governance_content.index("<h2>Record Evolution Coverage</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Coverage</h2>"),
+            governance_content.index("<h2>Record Evolution Review</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -6218,6 +6404,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Relationships</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Traceability</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Coverage</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Review</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
