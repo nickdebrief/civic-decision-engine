@@ -2988,6 +2988,174 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Complete Readiness Components", rendered)
             self.assertIn("Missing Readiness Components", rendered)
 
+    def test_stage18k_record_evolution_sufficiency_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        no_information_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def sufficiency(metadata, lineage):
+            return self.admin_session._record_stage18k_evolution_sufficiency(
+                metadata,
+                lineage,
+            )
+
+        single = sufficiency(single_metadata, single_history)
+        full = sufficiency(base, full_history)
+        limited = sufficiency(base, limited_history)
+        no_information = sufficiency(no_information_metadata, [])
+        unresolved = sufficiency({}, [])
+
+        self.assertEqual(
+            "Partially Sufficient Evolution Information",
+            single["summary"]["sufficiency_classification"],
+        )
+        self.assertEqual(1, single["summary"]["sufficient_versions"])
+        self.assertEqual(0, single["summary"]["insufficient_versions"])
+        self.assertEqual(10, single["summary"]["sufficient_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(4, single["summary"]["sufficient_coverage_components"])
+        self.assertEqual(0, single["summary"]["missing_coverage_components"])
+        self.assertEqual(4, single["summary"]["sufficient_readiness_components"])
+        self.assertEqual(0, single["summary"]["missing_readiness_components"])
+        self.assertEqual(5, single["summary"]["sufficient_completeness_components"])
+        self.assertEqual(0, single["summary"]["missing_completeness_components"])
+        self.assertEqual(
+            "Partially Sufficient Version Chain",
+            single["reviews"]["version"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Sufficient Evolution Outputs",
+            single["reviews"]["evolution_output"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Partially Sufficient Coverage Components",
+            single["reviews"]["coverage"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Partially Sufficient Review Components",
+            single["reviews"]["review"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Partially Sufficient Readiness Components",
+            single["reviews"]["readiness"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Partially Sufficient Completeness Components",
+            single["reviews"]["completeness"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Partially Sufficient Evolution Information",
+            single["reviews"]["evolution"]["sufficiency_state"],
+        )
+        self.assertEqual(
+            "Sufficient Evolution Information",
+            full["summary"]["sufficiency_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Information",
+            limited["summary"]["sufficiency_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Information",
+            no_information["summary"]["sufficiency_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Information",
+            unresolved["summary"]["sufficiency_classification"],
+        )
+
+        for sufficiency_set, expected in (
+            (full, "Sufficient Evolution Information"),
+            (single, "Partially Sufficient Evolution Information"),
+            (limited, "Limited Evolution Information"),
+            (no_information, "No Evolution Information"),
+            (unresolved, "Unresolved Evolution Information"),
+        ):
+            rendered = self.admin_session._render_stage18k_evolution_sufficiency_content(
+                sufficiency_set
+            )
+            self.assertIn(
+                f"<td>Sufficiency Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Sufficiency Summary</h3>", rendered)
+            self.assertIn("<h3>Version Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Coverage Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Review Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Readiness Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Completeness Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Sufficiency Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Sufficiency</h3>", rendered)
+            self.assertIn("Sufficient Versions", rendered)
+            self.assertIn("Insufficient Versions", rendered)
+            self.assertIn("Sufficient Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+            self.assertIn("Sufficient Coverage Components", rendered)
+            self.assertIn("Missing Coverage Components", rendered)
+            self.assertIn("Sufficient Readiness Components", rendered)
+            self.assertIn("Missing Readiness Components", rendered)
+            self.assertIn("Sufficient Completeness Components", rendered)
+            self.assertIn("Missing Completeness Components", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -4763,6 +4931,26 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Completeness Classification</td><td>Unresolved Evolution Completeness</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Sufficiency", after_content)
+        self.assertIn("Sufficiency Summary", after_content)
+        self.assertIn("Version Sufficiency Review", after_content)
+        self.assertIn("Evolution Output Sufficiency Review", after_content)
+        self.assertIn("Coverage Sufficiency Review", after_content)
+        self.assertIn("Review Sufficiency Review", after_content)
+        self.assertIn("Readiness Sufficiency Review", after_content)
+        self.assertIn("Completeness Sufficiency Review", after_content)
+        self.assertIn("Evolution Sufficiency Review", after_content)
+        self.assertIn("<td>Sufficient Versions</td><td>0</td>", after_content)
+        self.assertIn("<td>Insufficient Versions</td><td>1</td>", after_content)
+        self.assertIn(
+            "<td>Sufficient Evolution Outputs</td><td>10</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Sufficiency Classification</td><td>Unresolved Evolution Information</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -5712,6 +5900,23 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
         self.assertIn(
             "<td>Completeness Classification</td><td>Unresolved Evolution Completeness</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Sufficiency", content)
+        self.assertIn("Sufficiency Summary", content)
+        self.assertIn("Version Sufficiency Review", content)
+        self.assertIn("Evolution Output Sufficiency Review", content)
+        self.assertIn("Coverage Sufficiency Review", content)
+        self.assertIn("Review Sufficiency Review", content)
+        self.assertIn("Readiness Sufficiency Review", content)
+        self.assertIn("Completeness Sufficiency Review", content)
+        self.assertIn("Evolution Sufficiency Review", content)
+        self.assertIn("<td>Sufficient Versions</td><td>0</td>", content)
+        self.assertIn("<td>Insufficient Versions</td><td>1</td>", content)
+        self.assertIn("<td>Sufficient Evolution Outputs</td><td>10</td>", content)
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Sufficiency Classification</td><td>Unresolved Evolution Information</td>",
             content,
         )
         self.assertIn(
@@ -6739,6 +6944,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Readiness</h2>"),
             governance_content.index("<h2>Record Evolution Completeness</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Completeness</h2>"),
+            governance_content.index("<h2>Record Evolution Sufficiency</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -6800,6 +7009,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Review</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Readiness</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Completeness</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Sufficiency</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
