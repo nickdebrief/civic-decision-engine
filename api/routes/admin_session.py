@@ -21501,6 +21501,730 @@ def _render_stage18l_record_evolution_consistency_section(
       </section>"""
 
 
+_STAGE18M_PARTIAL_OUTPUT_STATES = {
+    "Initial Record State",
+    "Partial Evolution Continuity",
+    "No Recorded Changes",
+    "Initial Evolution Trajectory",
+    "No Evolution Relationships",
+    "Partial Evolution Traceability",
+    "Partial Evolution Coverage",
+    "Partial Evolution Review",
+    "Partially Evolution Ready",
+    "Partially Complete Evolution Chain",
+    "Partially Sufficient Evolution Information",
+    "Partially Consistent Evolution Chain",
+}
+
+
+def _stage18m_output_conflict_count(summary: dict[str, Any]) -> int:
+    conflicts = _stage18l_output_conflict_count(summary)
+    if (
+        summary.get("consistency_classification") == "Consistent Evolution Chain"
+        and summary.get("sufficiency_classification")
+        != "Sufficient Evolution Information"
+    ):
+        conflicts += 1
+    return conflicts
+
+
+def _stage18m_evolution_output_counts(
+    consistency: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = consistency["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+        "readiness_classification",
+        "completeness_classification",
+        "sufficiency_classification",
+        "consistency_classification",
+    )
+    missing = sum(1 for key in output_keys if not str(summary.get(key) or "").strip())
+    broken = _stage18m_output_conflict_count(summary)
+    intact = max(0, len(output_keys) - missing - broken)
+    return intact, broken, missing
+
+
+def _stage18m_version_integrity_state(
+    *,
+    record_reference: Any,
+    current_version: Any,
+    total_versions: int,
+    intact_versions: int,
+    broken_versions: int,
+) -> str:
+    if not str(record_reference or "").strip() or current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Integrity"
+    if broken_versions:
+        return "Broken Version Chain"
+    if intact_versions < total_versions:
+        return "Limited Version Integrity"
+    if total_versions > 1:
+        return "Intact Version Chain"
+    return "Partially Intact Version Chain"
+
+
+def _stage18m_supersession_integrity_state(
+    total_versions: int,
+    link_count: int,
+    broken_links: int,
+) -> str:
+    if broken_links:
+        return "Broken Supersession Chain"
+    if link_count:
+        return "Intact Supersession Chain"
+    if total_versions == 1:
+        return "Partially Intact Supersession Chain"
+    if total_versions > 1:
+        return "Limited Supersession Integrity"
+    return "No Supersession Integrity"
+
+
+def _stage18m_timestamp_integrity_state(
+    total_versions: int,
+    intact_timestamps: int,
+    broken_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if broken_timestamps:
+        return "Broken Timestamp Chain"
+    if not intact_timestamps:
+        return "No Timestamp Integrity"
+    if missing_timestamps:
+        return "Limited Timestamp Integrity"
+    if total_versions > 1:
+        return "Intact Timestamp Chain"
+    return "Partially Intact Timestamp Chain"
+
+
+def _stage18m_verification_integrity_state(
+    total_versions: int,
+    intact_hashes: int,
+    broken_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if broken_hashes:
+        return "Broken Verification Chain"
+    if not intact_hashes:
+        return "No Verification Integrity"
+    if missing_hashes:
+        return "Limited Verification Integrity"
+    if total_versions > 1:
+        return "Intact Verification Chain"
+    return "Partially Intact Verification Chain"
+
+
+def _stage18m_evolution_output_integrity_state(
+    summary: dict[str, Any],
+    intact_outputs: int,
+    broken_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if broken_outputs:
+        return "Broken Evolution Outputs"
+    if not intact_outputs:
+        return "No Evolution Output Integrity"
+    if missing_outputs:
+        return "Limited Evolution Output Integrity"
+    if any(
+        summary.get(key) in _STAGE18M_PARTIAL_OUTPUT_STATES
+        for key in (
+            "evolution_classification",
+            "continuity_classification",
+            "change_log_classification",
+            "trajectory_classification",
+            "relationship_classification",
+            "traceability_classification",
+            "coverage_classification",
+            "review_classification",
+            "readiness_classification",
+            "completeness_classification",
+            "sufficiency_classification",
+            "consistency_classification",
+        )
+    ):
+        return "Partially Intact Evolution Outputs"
+    return "Intact Evolution Outputs"
+
+
+def _stage18m_evolution_integrity_state(integrity_classification: str) -> str:
+    return {
+        "Full Evolution Integrity": "Full Evolution Integrity",
+        "Partial Evolution Integrity": "Partial Evolution Integrity",
+        "Limited Evolution Integrity": "Limited Evolution Chain Integrity",
+        "Broken Evolution Integrity": "Broken Evolution Chain Integrity",
+        "No Evolution Integrity": "No Evolution Chain Integrity",
+        "Unresolved Evolution Integrity": "Unresolved Evolution Chain Integrity",
+    }.get(integrity_classification, "Unresolved Evolution Chain Integrity")
+
+
+def _stage18m_integrity_classification(
+    *,
+    record_metadata: dict[str, Any],
+    consistency: dict[str, Any],
+    broken_versions: int,
+    broken_supersession_links: int,
+    broken_timestamps: int,
+    broken_hashes: int,
+    broken_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = consistency["summary"]
+    verification = consistency["reviews"]["verification"]
+
+    if (
+        not reference
+        or version is None
+        or summary["coverage_classification"] == "Unresolved Evolution Coverage"
+        or summary["review_classification"] == "Unresolved Evolution Review"
+        or summary["readiness_classification"] == "Unresolved Evolution Readiness"
+        or summary["completeness_classification"]
+        == "Unresolved Evolution Completeness"
+        or summary["sufficiency_classification"]
+        == "Unresolved Evolution Information"
+        or summary["consistency_classification"]
+        == "Unresolved Evolution Consistency"
+        or (
+            summary["total_versions"] > 0
+            and summary["traceability_classification"] == "Untraceable Evolution"
+        )
+    ):
+        return "Unresolved Evolution Integrity"
+
+    if (
+        summary["total_versions"] == 0
+        and summary["consistency_classification"] == "No Evolution Consistency"
+        and not summary["consistent_timestamps"]
+        and not summary["consistent_verification_hashes"]
+    ):
+        return "No Evolution Integrity"
+
+    if (
+        broken_versions
+        or broken_supersession_links
+        or broken_timestamps
+        or broken_hashes
+        or broken_outputs
+        or summary["consistency_classification"] == "Inconsistent Evolution Chain"
+    ):
+        return "Broken Evolution Integrity"
+
+    if (
+        summary["total_versions"] > 0
+        and (
+            missing_outputs
+            or verification["missing_verification_hashes"]
+            or summary["consistency_classification"]
+            == "Limited Evolution Consistency"
+            or summary["coverage_classification"] == "Limited Evolution Coverage"
+            or summary["review_classification"] == "Limited Evolution Review"
+            or summary["readiness_classification"]
+            == "Limited Evolution Readiness"
+            or summary["completeness_classification"]
+            == "Limited Evolution Completeness"
+            or summary["sufficiency_classification"]
+            == "Limited Evolution Information"
+        )
+    ):
+        return "Limited Evolution Integrity"
+
+    if (
+        summary["total_versions"] > 1
+        and not missing_outputs
+        and summary["consistency_classification"] == "Consistent Evolution Chain"
+        and summary["sufficiency_classification"]
+        == "Sufficient Evolution Information"
+        and summary["completeness_classification"] == "Complete Evolution Chain"
+        and summary["readiness_classification"] == "Fully Evolution Ready"
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Full Evolution Integrity"
+
+    return "Partial Evolution Integrity"
+
+
+def _record_stage18m_evolution_integrity(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    consistency = _record_stage18l_evolution_consistency(record_metadata, history)
+    consistency_summary = consistency["summary"]
+    version_review = consistency["reviews"]["version"]
+    supersession_review = consistency["reviews"]["supersession"]
+    timestamp_review = consistency["reviews"]["timestamp"]
+    verification_review = consistency["reviews"]["verification"]
+    intact_versions = int(consistency_summary["consistent_versions"] or 0)
+    broken_versions = int(consistency_summary["inconsistent_versions"] or 0)
+    intact_supersession_links = int(
+        consistency_summary["consistent_supersession_links"] or 0
+    )
+    broken_supersession_links = int(
+        consistency_summary["inconsistent_supersession_links"] or 0
+    )
+    intact_timestamps = int(consistency_summary["consistent_timestamps"] or 0)
+    broken_timestamps = int(consistency_summary["inconsistent_timestamps"] or 0)
+    intact_hashes = int(consistency_summary["consistent_verification_hashes"] or 0)
+    broken_hashes = int(
+        consistency_summary["inconsistent_verification_hashes"] or 0
+    )
+    intact_outputs, broken_outputs, missing_outputs = (
+        _stage18m_evolution_output_counts(consistency)
+    )
+    summary = {
+        "record_reference": consistency_summary["record_reference"],
+        "current_version": consistency_summary["current_version"],
+        "total_versions": consistency_summary["total_versions"],
+        "intact_versions": intact_versions,
+        "broken_versions": broken_versions,
+        "intact_supersession_links": intact_supersession_links,
+        "broken_supersession_links": broken_supersession_links,
+        "intact_timestamps": intact_timestamps,
+        "broken_timestamps": broken_timestamps,
+        "intact_verification_hashes": intact_hashes,
+        "broken_verification_hashes": broken_hashes,
+        "intact_evolution_outputs": intact_outputs,
+        "broken_evolution_outputs": broken_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": consistency_summary["evolution_classification"],
+        "continuity_classification": consistency_summary[
+            "continuity_classification"
+        ],
+        "change_log_classification": consistency_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": consistency_summary[
+            "trajectory_classification"
+        ],
+        "relationship_classification": consistency_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": consistency_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": consistency_summary["coverage_classification"],
+        "review_classification": consistency_summary["review_classification"],
+        "readiness_classification": consistency_summary[
+            "readiness_classification"
+        ],
+        "completeness_classification": consistency_summary[
+            "completeness_classification"
+        ],
+        "sufficiency_classification": consistency_summary[
+            "sufficiency_classification"
+        ],
+        "consistency_classification": consistency_summary[
+            "consistency_classification"
+        ],
+    }
+    summary["integrity_classification"] = _stage18m_integrity_classification(
+        record_metadata=record_metadata,
+        consistency=consistency,
+        broken_versions=broken_versions,
+        broken_supersession_links=broken_supersession_links,
+        broken_timestamps=broken_timestamps,
+        broken_hashes=broken_hashes,
+        broken_outputs=broken_outputs,
+        missing_outputs=missing_outputs,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "intact_versions": intact_versions,
+                "broken_versions": broken_versions,
+                "integrity_state": _stage18m_version_integrity_state(
+                    record_reference=summary["record_reference"],
+                    current_version=summary["current_version"],
+                    total_versions=summary["total_versions"],
+                    intact_versions=intact_versions,
+                    broken_versions=broken_versions,
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": supersession_review[
+                    "supersession_link_count"
+                ],
+                "intact_supersession_links": intact_supersession_links,
+                "broken_supersession_links": broken_supersession_links,
+                "integrity_state": _stage18m_supersession_integrity_state(
+                    summary["total_versions"],
+                    supersession_review["supersession_link_count"],
+                    broken_supersession_links,
+                ),
+            },
+            "timestamp": {
+                "intact_timestamps": intact_timestamps,
+                "broken_timestamps": broken_timestamps,
+                "earliest_timestamp": timestamp_review["earliest_timestamp"],
+                "latest_timestamp": timestamp_review["latest_timestamp"],
+                "integrity_state": _stage18m_timestamp_integrity_state(
+                    summary["total_versions"],
+                    intact_timestamps,
+                    broken_timestamps,
+                    0
+                    if timestamp_review["consistency_state"]
+                    not in {"Limited Timestamp Consistency"}
+                    else 1,
+                ),
+            },
+            "verification": {
+                "intact_verification_hashes": intact_hashes,
+                "broken_verification_hashes": broken_hashes,
+                "missing_verification_hashes": verification_review[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": verification_review[
+                    "verification_hash_coverage"
+                ],
+                "integrity_state": _stage18m_verification_integrity_state(
+                    summary["total_versions"],
+                    intact_hashes,
+                    broken_hashes,
+                    verification_review["missing_verification_hashes"],
+                ),
+            },
+            "evolution_output": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "intact_evolution_outputs": intact_outputs,
+                "broken_evolution_outputs": broken_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "integrity_state": _stage18m_evolution_output_integrity_state(
+                    summary,
+                    intact_outputs,
+                    broken_outputs,
+                    missing_outputs,
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "integrity_state": _stage18m_evolution_integrity_state(
+                    summary["integrity_classification"]
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18m_record_integrity(integrity: dict[str, Any]) -> str:
+    record = integrity["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Intact Versions", record["intact_versions"]),
+        ("Broken Versions", record["broken_versions"]),
+        ("Intact Supersession Links", record["intact_supersession_links"]),
+        ("Broken Supersession Links", record["broken_supersession_links"]),
+        ("Intact Timestamps", record["intact_timestamps"]),
+        ("Broken Timestamps", record["broken_timestamps"]),
+        ("Intact Verification Hashes", record["intact_verification_hashes"]),
+        ("Broken Verification Hashes", record["broken_verification_hashes"]),
+        ("Intact Evolution Outputs", record["intact_evolution_outputs"]),
+        ("Broken Evolution Outputs", record["broken_evolution_outputs"]),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+        ("Completeness Classification", record["completeness_classification"]),
+        ("Sufficiency Classification", record["sufficiency_classification"]),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Integrity Classification", record["integrity_classification"]),
+    )
+    return f"""
+        <section class="stage18m-record-evolution-integrity">
+          <h3>Record Evolution Integrity</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18m_evolution_integrity_content(
+    integrity: dict[str, Any],
+) -> str:
+    summary = integrity["summary"]
+    reviews = integrity["reviews"]
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <h3>Integrity Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Integrity Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                ("Intact Versions", reviews["version"]["intact_versions"]),
+                ("Broken Versions", reviews["version"]["broken_versions"]),
+                ("Integrity State", reviews["version"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Integrity Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Intact Supersession Links",
+                    reviews["supersession"]["intact_supersession_links"],
+                ),
+                (
+                    "Broken Supersession Links",
+                    reviews["supersession"]["broken_supersession_links"],
+                ),
+                ("Integrity State", reviews["supersession"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Integrity Review",
+            (
+                ("Intact Timestamps", reviews["timestamp"]["intact_timestamps"]),
+                ("Broken Timestamps", reviews["timestamp"]["broken_timestamps"]),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Integrity State", reviews["timestamp"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Integrity Review",
+            (
+                (
+                    "Intact Verification Hashes",
+                    reviews["verification"]["intact_verification_hashes"],
+                ),
+                (
+                    "Broken Verification Hashes",
+                    reviews["verification"]["broken_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                ("Integrity State", reviews["verification"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Integrity Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution_output"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution_output"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution_output"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution_output"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution_output"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution_output"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution_output"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution_output"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution_output"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution_output"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution_output"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution_output"]["consistency_classification"],
+                ),
+                (
+                    "Intact Evolution Outputs",
+                    reviews["evolution_output"]["intact_evolution_outputs"],
+                ),
+                (
+                    "Broken Evolution Outputs",
+                    reviews["evolution_output"]["broken_evolution_outputs"],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution_output"]["missing_evolution_outputs"],
+                ),
+                ("Integrity State", reviews["evolution_output"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Integrity Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution"]["integrity_classification"],
+                ),
+                ("Integrity State", reviews["evolution"]["integrity_state"]),
+            ),
+        )}
+        {_render_stage18m_record_integrity(integrity)}"""
+
+
+def _render_stage18m_record_evolution_integrity_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    integrity = _record_stage18m_evolution_integrity(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18m-record-evolution-integrity">
+        <h2>Record Evolution Integrity</h2>
+        <p class="notice">
+          Record evolution integrity is derived deterministically from existing
+          record metadata, same-reference version history, and Stage 18A
+          through Stage 18L evolution outputs only.
+        </p>
+        {_render_stage18m_evolution_integrity_content(integrity)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -21739,6 +22463,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18m_record_evolution_integrity = _render_stage18m_record_evolution_integrity_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -21882,6 +22610,7 @@ def render_admin_record_evidence_page(
             f"{stage18j_record_evolution_completeness}"
             f"{stage18k_record_evolution_sufficiency}"
             f"{stage18l_record_evolution_consistency}"
+            f"{stage18m_record_evolution_integrity}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
