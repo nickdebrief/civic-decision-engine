@@ -3669,6 +3669,177 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Unreliable Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18o_record_evolution_certification_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        non_certifiable_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+        no_certification_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def certification(metadata, lineage):
+            return self.admin_session._record_stage18o_evolution_certification(
+                metadata,
+                lineage,
+            )
+
+        single = certification(single_metadata, single_history)
+        full = certification(base, full_history)
+        limited = certification(base, limited_history)
+        non_certifiable = certification(base, non_certifiable_history)
+        no_certification = certification(no_certification_metadata, [])
+        unresolved = certification({}, [])
+
+        self.assertEqual(
+            "Partial Evolution Certification",
+            single["summary"]["certification_classification"],
+        )
+        self.assertEqual(1, single["summary"]["certifiable_versions"])
+        self.assertEqual(0, single["summary"]["non_certifiable_versions"])
+        self.assertEqual(0, single["summary"]["certifiable_supersession_links"])
+        self.assertEqual(0, single["summary"]["non_certifiable_supersession_links"])
+        self.assertEqual(1, single["summary"]["certifiable_timestamps"])
+        self.assertEqual(0, single["summary"]["non_certifiable_timestamps"])
+        self.assertEqual(1, single["summary"]["certifiable_verification_hashes"])
+        self.assertEqual(0, single["summary"]["non_certifiable_verification_hashes"])
+        self.assertEqual(14, single["summary"]["certifiable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["non_certifiable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Certifiable Version Chain",
+            single["reviews"]["version"]["certification_state"],
+        )
+        self.assertEqual(
+            "Partially Certifiable Supersession Chain",
+            single["reviews"]["supersession"]["certification_state"],
+        )
+        self.assertEqual(
+            "Partially Certifiable Timestamp Chain",
+            single["reviews"]["timestamp"]["certification_state"],
+        )
+        self.assertEqual(
+            "Partially Certifiable Verification Chain",
+            single["reviews"]["verification"]["certification_state"],
+        )
+        self.assertEqual(
+            "Partially Certifiable Evolution Outputs",
+            single["reviews"]["evolution_output"]["certification_state"],
+        )
+        self.assertEqual(
+            "Certified Evolution Chain",
+            full["summary"]["certification_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Certification",
+            limited["summary"]["certification_classification"],
+        )
+        self.assertEqual(
+            "Non-Certifiable Evolution Chain",
+            non_certifiable["summary"]["certification_classification"],
+        )
+        self.assertEqual(
+            "No Certification Available",
+            no_certification["summary"]["certification_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Certification",
+            unresolved["summary"]["certification_classification"],
+        )
+
+        for certification_set, expected in (
+            (full, "Certified Evolution Chain"),
+            (single, "Partial Evolution Certification"),
+            (limited, "Limited Evolution Certification"),
+            (non_certifiable, "Non-Certifiable Evolution Chain"),
+            (no_certification, "No Certification Available"),
+            (unresolved, "Unresolved Evolution Certification"),
+        ):
+            rendered = self.admin_session._render_stage18o_evolution_certification_content(
+                certification_set
+            )
+            self.assertIn(
+                f"<td>Certification Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Certification Summary</h3>", rendered)
+            self.assertIn("<h3>Version Certification Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Certification Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Certification Review</h3>", rendered)
+            self.assertIn("<h3>Verification Certification Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Certification Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Certification Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Certification</h3>", rendered)
+            self.assertIn("Certifiable Versions", rendered)
+            self.assertIn("Non-Certifiable Versions", rendered)
+            self.assertIn("Certifiable Supersession Links", rendered)
+            self.assertIn("Non-Certifiable Supersession Links", rendered)
+            self.assertIn("Certifiable Timestamps", rendered)
+            self.assertIn("Non-Certifiable Timestamps", rendered)
+            self.assertIn("Certifiable Verification Hashes", rendered)
+            self.assertIn("Non-Certifiable Verification Hashes", rendered)
+            self.assertIn("Certifiable Evolution Outputs", rendered)
+            self.assertIn("Non-Certifiable Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -5587,6 +5758,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reliability Classification</td><td>Unresolved Evolution Reliability</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Certification", after_content)
+        self.assertIn("Certification Summary", after_content)
+        self.assertIn("Version Certification Review", after_content)
+        self.assertIn("Supersession Certification Review", after_content)
+        self.assertIn("Timestamp Certification Review", after_content)
+        self.assertIn("Verification Certification Review", after_content)
+        self.assertIn("Evolution Output Certification Review", after_content)
+        self.assertIn("Evolution Certification Review", after_content)
+        self.assertIn("<td>Certifiable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Non-Certifiable Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Certifiable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Certifiable Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Non-Certifiable Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Certifiable Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Certifiable Evolution Outputs</td><td>14</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Certification Classification</td><td>Unresolved Evolution Certification</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -6678,6 +6890,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reliability Classification</td><td>Unresolved Evolution Reliability</td>",
             content,
         )
+        self.assertIn("Record Evolution Certification", content)
+        self.assertIn("Certification Summary", content)
+        self.assertIn("Version Certification Review", content)
+        self.assertIn("Supersession Certification Review", content)
+        self.assertIn("Timestamp Certification Review", content)
+        self.assertIn("Verification Certification Review", content)
+        self.assertIn("Evolution Output Certification Review", content)
+        self.assertIn("Evolution Certification Review", content)
+        self.assertIn("<td>Certifiable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Non-Certifiable Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Certifiable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Certifiable Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Non-Certifiable Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Certifiable Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Certifiable Evolution Outputs</td><td>14</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Certifiable Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Certification Classification</td><td>Unresolved Evolution Certification</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -7719,6 +7972,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Integrity</h2>"),
             governance_content.index("<h2>Record Evolution Reliability</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Reliability</h2>"),
+            governance_content.index("<h2>Record Evolution Certification</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -7784,6 +8041,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Consistency</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Integrity</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Reliability</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Certification</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
