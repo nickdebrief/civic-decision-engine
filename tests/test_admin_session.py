@@ -3498,6 +3498,177 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Broken Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18n_record_evolution_reliability_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        unreliable_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+        no_reliability_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def reliability(metadata, lineage):
+            return self.admin_session._record_stage18n_evolution_reliability(
+                metadata,
+                lineage,
+            )
+
+        single = reliability(single_metadata, single_history)
+        full = reliability(base, full_history)
+        limited = reliability(base, limited_history)
+        unreliable = reliability(base, unreliable_history)
+        no_reliability = reliability(no_reliability_metadata, [])
+        unresolved = reliability({}, [])
+
+        self.assertEqual(
+            "Partially Reliable Evolution Chain",
+            single["summary"]["reliability_classification"],
+        )
+        self.assertEqual(1, single["summary"]["reliable_versions"])
+        self.assertEqual(0, single["summary"]["unreliable_versions"])
+        self.assertEqual(0, single["summary"]["reliable_supersession_links"])
+        self.assertEqual(0, single["summary"]["unreliable_supersession_links"])
+        self.assertEqual(1, single["summary"]["reliable_timestamps"])
+        self.assertEqual(0, single["summary"]["unreliable_timestamps"])
+        self.assertEqual(1, single["summary"]["reliable_verification_hashes"])
+        self.assertEqual(0, single["summary"]["unreliable_verification_hashes"])
+        self.assertEqual(13, single["summary"]["reliable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["unreliable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Reliable Version Chain",
+            single["reviews"]["version"]["reliability_state"],
+        )
+        self.assertEqual(
+            "Partially Reliable Supersession Chain",
+            single["reviews"]["supersession"]["reliability_state"],
+        )
+        self.assertEqual(
+            "Partially Reliable Timestamp Chain",
+            single["reviews"]["timestamp"]["reliability_state"],
+        )
+        self.assertEqual(
+            "Partially Reliable Verification Chain",
+            single["reviews"]["verification"]["reliability_state"],
+        )
+        self.assertEqual(
+            "Partially Reliable Evolution Outputs",
+            single["reviews"]["evolution_output"]["reliability_state"],
+        )
+        self.assertEqual(
+            "Reliable Evolution Chain",
+            full["summary"]["reliability_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Reliability",
+            limited["summary"]["reliability_classification"],
+        )
+        self.assertEqual(
+            "Unreliable Evolution Chain",
+            unreliable["summary"]["reliability_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Reliability",
+            no_reliability["summary"]["reliability_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Reliability",
+            unresolved["summary"]["reliability_classification"],
+        )
+
+        for reliability_set, expected in (
+            (full, "Reliable Evolution Chain"),
+            (single, "Partially Reliable Evolution Chain"),
+            (limited, "Limited Evolution Reliability"),
+            (unreliable, "Unreliable Evolution Chain"),
+            (no_reliability, "No Evolution Reliability"),
+            (unresolved, "Unresolved Evolution Reliability"),
+        ):
+            rendered = self.admin_session._render_stage18n_evolution_reliability_content(
+                reliability_set
+            )
+            self.assertIn(
+                f"<td>Reliability Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Reliability Summary</h3>", rendered)
+            self.assertIn("<h3>Version Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Verification Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Reliability Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Reliability</h3>", rendered)
+            self.assertIn("Reliable Versions", rendered)
+            self.assertIn("Unreliable Versions", rendered)
+            self.assertIn("Reliable Supersession Links", rendered)
+            self.assertIn("Unreliable Supersession Links", rendered)
+            self.assertIn("Reliable Timestamps", rendered)
+            self.assertIn("Unreliable Timestamps", rendered)
+            self.assertIn("Reliable Verification Hashes", rendered)
+            self.assertIn("Unreliable Verification Hashes", rendered)
+            self.assertIn("Reliable Evolution Outputs", rendered)
+            self.assertIn("Unreliable Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -5375,6 +5546,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Integrity Classification</td><td>Unresolved Evolution Integrity</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Reliability", after_content)
+        self.assertIn("Reliability Summary", after_content)
+        self.assertIn("Version Reliability Review", after_content)
+        self.assertIn("Supersession Reliability Review", after_content)
+        self.assertIn("Timestamp Reliability Review", after_content)
+        self.assertIn("Verification Reliability Review", after_content)
+        self.assertIn("Evolution Output Reliability Review", after_content)
+        self.assertIn("Evolution Reliability Review", after_content)
+        self.assertIn("<td>Reliable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Unreliable Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reliable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Unreliable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Reliable Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Unreliable Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reliable Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Unreliable Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reliable Evolution Outputs</td><td>13</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Unreliable Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reliability Classification</td><td>Unresolved Evolution Reliability</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -6425,6 +6637,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Integrity Classification</td><td>Unresolved Evolution Integrity</td>",
             content,
         )
+        self.assertIn("Record Evolution Reliability", content)
+        self.assertIn("Reliability Summary", content)
+        self.assertIn("Version Reliability Review", content)
+        self.assertIn("Supersession Reliability Review", content)
+        self.assertIn("Timestamp Reliability Review", content)
+        self.assertIn("Verification Reliability Review", content)
+        self.assertIn("Evolution Output Reliability Review", content)
+        self.assertIn("Evolution Reliability Review", content)
+        self.assertIn("<td>Reliable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Unreliable Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reliable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Unreliable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Reliable Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Unreliable Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reliable Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Unreliable Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Reliable Evolution Outputs</td><td>13</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Unreliable Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reliability Classification</td><td>Unresolved Evolution Reliability</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -7462,6 +7715,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Consistency</h2>"),
             governance_content.index("<h2>Record Evolution Integrity</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Integrity</h2>"),
+            governance_content.index("<h2>Record Evolution Reliability</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -7526,6 +7783,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Sufficiency</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Consistency</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Integrity</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Reliability</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
