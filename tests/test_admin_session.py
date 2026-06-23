@@ -3327,6 +3327,177 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Inconsistent Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18m_record_evolution_integrity_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        broken_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+        no_integrity_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def integrity(metadata, lineage):
+            return self.admin_session._record_stage18m_evolution_integrity(
+                metadata,
+                lineage,
+            )
+
+        single = integrity(single_metadata, single_history)
+        full = integrity(base, full_history)
+        limited = integrity(base, limited_history)
+        broken = integrity(base, broken_history)
+        no_integrity = integrity(no_integrity_metadata, [])
+        unresolved = integrity({}, [])
+
+        self.assertEqual(
+            "Partial Evolution Integrity",
+            single["summary"]["integrity_classification"],
+        )
+        self.assertEqual(1, single["summary"]["intact_versions"])
+        self.assertEqual(0, single["summary"]["broken_versions"])
+        self.assertEqual(0, single["summary"]["intact_supersession_links"])
+        self.assertEqual(0, single["summary"]["broken_supersession_links"])
+        self.assertEqual(1, single["summary"]["intact_timestamps"])
+        self.assertEqual(0, single["summary"]["broken_timestamps"])
+        self.assertEqual(1, single["summary"]["intact_verification_hashes"])
+        self.assertEqual(0, single["summary"]["broken_verification_hashes"])
+        self.assertEqual(12, single["summary"]["intact_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["broken_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Intact Version Chain",
+            single["reviews"]["version"]["integrity_state"],
+        )
+        self.assertEqual(
+            "Partially Intact Supersession Chain",
+            single["reviews"]["supersession"]["integrity_state"],
+        )
+        self.assertEqual(
+            "Partially Intact Timestamp Chain",
+            single["reviews"]["timestamp"]["integrity_state"],
+        )
+        self.assertEqual(
+            "Partially Intact Verification Chain",
+            single["reviews"]["verification"]["integrity_state"],
+        )
+        self.assertEqual(
+            "Partially Intact Evolution Outputs",
+            single["reviews"]["evolution_output"]["integrity_state"],
+        )
+        self.assertEqual(
+            "Full Evolution Integrity",
+            full["summary"]["integrity_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Integrity",
+            limited["summary"]["integrity_classification"],
+        )
+        self.assertEqual(
+            "Broken Evolution Integrity",
+            broken["summary"]["integrity_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Integrity",
+            no_integrity["summary"]["integrity_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Integrity",
+            unresolved["summary"]["integrity_classification"],
+        )
+
+        for integrity_set, expected in (
+            (full, "Full Evolution Integrity"),
+            (single, "Partial Evolution Integrity"),
+            (limited, "Limited Evolution Integrity"),
+            (broken, "Broken Evolution Integrity"),
+            (no_integrity, "No Evolution Integrity"),
+            (unresolved, "Unresolved Evolution Integrity"),
+        ):
+            rendered = self.admin_session._render_stage18m_evolution_integrity_content(
+                integrity_set
+            )
+            self.assertIn(
+                f"<td>Integrity Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Integrity Summary</h3>", rendered)
+            self.assertIn("<h3>Version Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Verification Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Integrity Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Integrity</h3>", rendered)
+            self.assertIn("Intact Versions", rendered)
+            self.assertIn("Broken Versions", rendered)
+            self.assertIn("Intact Supersession Links", rendered)
+            self.assertIn("Broken Supersession Links", rendered)
+            self.assertIn("Intact Timestamps", rendered)
+            self.assertIn("Broken Timestamps", rendered)
+            self.assertIn("Intact Verification Hashes", rendered)
+            self.assertIn("Broken Verification Hashes", rendered)
+            self.assertIn("Intact Evolution Outputs", rendered)
+            self.assertIn("Broken Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -5163,6 +5334,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Consistency Classification</td><td>Unresolved Evolution Consistency</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Integrity", after_content)
+        self.assertIn("Integrity Summary", after_content)
+        self.assertIn("Version Integrity Review", after_content)
+        self.assertIn("Supersession Integrity Review", after_content)
+        self.assertIn("Timestamp Integrity Review", after_content)
+        self.assertIn("Verification Integrity Review", after_content)
+        self.assertIn("Evolution Output Integrity Review", after_content)
+        self.assertIn("Evolution Integrity Review", after_content)
+        self.assertIn("<td>Intact Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Broken Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Intact Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Broken Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Intact Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Broken Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Intact Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Broken Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Intact Evolution Outputs</td><td>12</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Broken Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Unresolved Evolution Integrity</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -6170,6 +6382,47 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
         self.assertIn(
             "<td>Consistency Classification</td><td>Unresolved Evolution Consistency</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Integrity", content)
+        self.assertIn("Integrity Summary", content)
+        self.assertIn("Version Integrity Review", content)
+        self.assertIn("Supersession Integrity Review", content)
+        self.assertIn("Timestamp Integrity Review", content)
+        self.assertIn("Verification Integrity Review", content)
+        self.assertIn("Evolution Output Integrity Review", content)
+        self.assertIn("Evolution Integrity Review", content)
+        self.assertIn("<td>Intact Versions</td><td>1</td>", content)
+        self.assertIn("<td>Broken Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Intact Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Broken Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Intact Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Broken Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Intact Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Broken Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Intact Evolution Outputs</td><td>12</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Broken Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Integrity Classification</td><td>Unresolved Evolution Integrity</td>",
             content,
         )
         self.assertIn(
@@ -7205,6 +7458,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Sufficiency</h2>"),
             governance_content.index("<h2>Record Evolution Consistency</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Consistency</h2>"),
+            governance_content.index("<h2>Record Evolution Integrity</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -7268,6 +7525,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Completeness</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Sufficiency</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Consistency</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Integrity</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
