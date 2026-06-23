@@ -3156,6 +3156,177 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Sufficient Completeness Components", rendered)
             self.assertIn("Missing Completeness Components", rendered)
 
+    def test_stage18l_record_evolution_consistency_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        inconsistent_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+        no_consistency_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def consistency(metadata, lineage):
+            return self.admin_session._record_stage18l_evolution_consistency(
+                metadata,
+                lineage,
+            )
+
+        single = consistency(single_metadata, single_history)
+        full = consistency(base, full_history)
+        limited = consistency(base, limited_history)
+        inconsistent = consistency(base, inconsistent_history)
+        no_consistency = consistency(no_consistency_metadata, [])
+        unresolved = consistency({}, [])
+
+        self.assertEqual(
+            "Partially Consistent Evolution Chain",
+            single["summary"]["consistency_classification"],
+        )
+        self.assertEqual(1, single["summary"]["consistent_versions"])
+        self.assertEqual(0, single["summary"]["inconsistent_versions"])
+        self.assertEqual(0, single["summary"]["consistent_supersession_links"])
+        self.assertEqual(0, single["summary"]["inconsistent_supersession_links"])
+        self.assertEqual(1, single["summary"]["consistent_timestamps"])
+        self.assertEqual(0, single["summary"]["inconsistent_timestamps"])
+        self.assertEqual(1, single["summary"]["consistent_verification_hashes"])
+        self.assertEqual(0, single["summary"]["inconsistent_verification_hashes"])
+        self.assertEqual(11, single["summary"]["consistent_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["inconsistent_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Consistent Version Chain",
+            single["reviews"]["version"]["consistency_state"],
+        )
+        self.assertEqual(
+            "Partially Consistent Supersession Chain",
+            single["reviews"]["supersession"]["consistency_state"],
+        )
+        self.assertEqual(
+            "Partially Consistent Timestamp Chain",
+            single["reviews"]["timestamp"]["consistency_state"],
+        )
+        self.assertEqual(
+            "Partially Consistent Verification Chain",
+            single["reviews"]["verification"]["consistency_state"],
+        )
+        self.assertEqual(
+            "Partially Consistent Evolution Outputs",
+            single["reviews"]["evolution_output"]["consistency_state"],
+        )
+        self.assertEqual(
+            "Consistent Evolution Chain",
+            full["summary"]["consistency_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Consistency",
+            limited["summary"]["consistency_classification"],
+        )
+        self.assertEqual(
+            "Inconsistent Evolution Chain",
+            inconsistent["summary"]["consistency_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Consistency",
+            no_consistency["summary"]["consistency_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Consistency",
+            unresolved["summary"]["consistency_classification"],
+        )
+
+        for consistency_set, expected in (
+            (full, "Consistent Evolution Chain"),
+            (single, "Partially Consistent Evolution Chain"),
+            (limited, "Limited Evolution Consistency"),
+            (inconsistent, "Inconsistent Evolution Chain"),
+            (no_consistency, "No Evolution Consistency"),
+            (unresolved, "Unresolved Evolution Consistency"),
+        ):
+            rendered = self.admin_session._render_stage18l_evolution_consistency_content(
+                consistency_set
+            )
+            self.assertIn(
+                f"<td>Consistency Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Consistency Summary</h3>", rendered)
+            self.assertIn("<h3>Version Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Verification Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Consistency Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Consistency</h3>", rendered)
+            self.assertIn("Consistent Versions", rendered)
+            self.assertIn("Inconsistent Versions", rendered)
+            self.assertIn("Consistent Supersession Links", rendered)
+            self.assertIn("Inconsistent Supersession Links", rendered)
+            self.assertIn("Consistent Timestamps", rendered)
+            self.assertIn("Inconsistent Timestamps", rendered)
+            self.assertIn("Consistent Verification Hashes", rendered)
+            self.assertIn("Inconsistent Verification Hashes", rendered)
+            self.assertIn("Consistent Evolution Outputs", rendered)
+            self.assertIn("Inconsistent Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -4951,6 +5122,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Sufficiency Classification</td><td>Unresolved Evolution Information</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Consistency", after_content)
+        self.assertIn("Consistency Summary", after_content)
+        self.assertIn("Version Consistency Review", after_content)
+        self.assertIn("Supersession Consistency Review", after_content)
+        self.assertIn("Timestamp Consistency Review", after_content)
+        self.assertIn("Verification Consistency Review", after_content)
+        self.assertIn("Evolution Output Consistency Review", after_content)
+        self.assertIn("Evolution Consistency Review", after_content)
+        self.assertIn("<td>Consistent Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Inconsistent Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Consistent Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Consistent Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Inconsistent Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Consistent Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Consistent Evolution Outputs</td><td>11</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Consistency Classification</td><td>Unresolved Evolution Consistency</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -5917,6 +6129,47 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
         self.assertIn(
             "<td>Sufficiency Classification</td><td>Unresolved Evolution Information</td>",
+            content,
+        )
+        self.assertIn("Record Evolution Consistency", content)
+        self.assertIn("Consistency Summary", content)
+        self.assertIn("Version Consistency Review", content)
+        self.assertIn("Supersession Consistency Review", content)
+        self.assertIn("Timestamp Consistency Review", content)
+        self.assertIn("Verification Consistency Review", content)
+        self.assertIn("Evolution Output Consistency Review", content)
+        self.assertIn("Evolution Consistency Review", content)
+        self.assertIn("<td>Consistent Versions</td><td>1</td>", content)
+        self.assertIn("<td>Inconsistent Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Consistent Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Consistent Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Inconsistent Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Consistent Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Consistent Evolution Outputs</td><td>11</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Inconsistent Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Consistency Classification</td><td>Unresolved Evolution Consistency</td>",
             content,
         )
         self.assertIn(
@@ -6948,6 +7201,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Completeness</h2>"),
             governance_content.index("<h2>Record Evolution Sufficiency</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Sufficiency</h2>"),
+            governance_content.index("<h2>Record Evolution Consistency</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -7010,6 +7267,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Readiness</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Completeness</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Sufficiency</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Consistency</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
