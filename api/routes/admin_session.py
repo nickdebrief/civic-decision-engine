@@ -22996,6 +22996,825 @@ def _render_stage18n_record_evolution_reliability_section(
       </section>"""
 
 
+_STAGE18O_PARTIAL_OUTPUT_STATES = {
+    "Initial Record State",
+    "Partial Evolution Continuity",
+    "No Recorded Changes",
+    "Initial Evolution Trajectory",
+    "No Evolution Relationships",
+    "Partial Evolution Traceability",
+    "Partial Evolution Coverage",
+    "Partial Evolution Review",
+    "Partially Evolution Ready",
+    "Partially Complete Evolution Chain",
+    "Partially Sufficient Evolution Information",
+    "Partially Consistent Evolution Chain",
+    "Partial Evolution Integrity",
+    "Partially Reliable Evolution Chain",
+}
+
+
+def _stage18o_output_conflict_count(summary: dict[str, Any]) -> int:
+    conflicts = _stage18n_output_conflict_count(summary)
+    if (
+        summary.get("reliability_classification") == "Reliable Evolution Chain"
+        and summary.get("integrity_classification") != "Full Evolution Integrity"
+    ):
+        conflicts += 1
+    return conflicts
+
+
+def _stage18o_evolution_output_counts(
+    reliability: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = reliability["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+        "readiness_classification",
+        "completeness_classification",
+        "sufficiency_classification",
+        "consistency_classification",
+        "integrity_classification",
+        "reliability_classification",
+    )
+    missing = sum(1 for key in output_keys if not str(summary.get(key) or "").strip())
+    non_certifiable = _stage18o_output_conflict_count(summary)
+    certifiable = max(0, len(output_keys) - missing - non_certifiable)
+    return certifiable, non_certifiable, missing
+
+
+def _stage18o_version_certification_state(
+    *,
+    current_version: Any,
+    total_versions: int,
+    certifiable_versions: int,
+    non_certifiable_versions: int,
+) -> str:
+    if current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Certification"
+    if non_certifiable_versions:
+        return "Non-Certifiable Version Chain"
+    if certifiable_versions < total_versions:
+        return "Limited Version Certification"
+    if total_versions > 1:
+        return "Certifiable Version Chain"
+    return "Partially Certifiable Version Chain"
+
+
+def _stage18o_supersession_certification_state(
+    total_versions: int,
+    link_count: int,
+    non_certifiable_links: int,
+) -> str:
+    if non_certifiable_links:
+        return "Non-Certifiable Supersession Chain"
+    if link_count:
+        return "Certifiable Supersession Chain"
+    if total_versions == 1:
+        return "Partially Certifiable Supersession Chain"
+    if total_versions > 1:
+        return "Limited Supersession Certification"
+    return "No Supersession Certification"
+
+
+def _stage18o_timestamp_certification_state(
+    total_versions: int,
+    certifiable_timestamps: int,
+    non_certifiable_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if non_certifiable_timestamps:
+        return "Non-Certifiable Timestamp Chain"
+    if not certifiable_timestamps:
+        return "No Timestamp Certification"
+    if missing_timestamps:
+        return "Limited Timestamp Certification"
+    if total_versions > 1:
+        return "Certifiable Timestamp Chain"
+    return "Partially Certifiable Timestamp Chain"
+
+
+def _stage18o_verification_certification_state(
+    total_versions: int,
+    certifiable_hashes: int,
+    non_certifiable_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if non_certifiable_hashes:
+        return "Non-Certifiable Verification Chain"
+    if not certifiable_hashes:
+        return "No Verification Certification"
+    if missing_hashes:
+        return "Limited Verification Certification"
+    if total_versions > 1:
+        return "Certifiable Verification Chain"
+    return "Partially Certifiable Verification Chain"
+
+
+def _stage18o_evolution_output_certification_state(
+    summary: dict[str, Any],
+    certifiable_outputs: int,
+    non_certifiable_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if non_certifiable_outputs:
+        return "Non-Certifiable Evolution Outputs"
+    if not certifiable_outputs:
+        return "No Evolution Output Certification"
+    if missing_outputs:
+        return "Limited Evolution Output Certification"
+    if any(
+        summary.get(key) in _STAGE18O_PARTIAL_OUTPUT_STATES
+        for key in (
+            "evolution_classification",
+            "continuity_classification",
+            "change_log_classification",
+            "trajectory_classification",
+            "relationship_classification",
+            "traceability_classification",
+            "coverage_classification",
+            "review_classification",
+            "readiness_classification",
+            "completeness_classification",
+            "sufficiency_classification",
+            "consistency_classification",
+            "integrity_classification",
+            "reliability_classification",
+        )
+    ):
+        return "Partially Certifiable Evolution Outputs"
+    return "Certifiable Evolution Outputs"
+
+
+def _stage18o_evolution_certification_state(
+    certification_classification: str,
+) -> str:
+    return {
+        "Certified Evolution Chain": "Certified Evolution Chain",
+        "Partial Evolution Certification": "Partial Evolution Certification",
+        "Limited Evolution Certification": "Limited Evolution Chain Certification",
+        "Non-Certifiable Evolution Chain": "Non-Certifiable Evolution Chain",
+        "No Certification Available": "No Evolution Chain Certification",
+        "Unresolved Evolution Certification": (
+            "Unresolved Evolution Chain Certification"
+        ),
+    }.get(certification_classification, "Unresolved Evolution Chain Certification")
+
+
+def _stage18o_certification_classification(
+    *,
+    record_metadata: dict[str, Any],
+    reliability: dict[str, Any],
+    non_certifiable_versions: int,
+    non_certifiable_supersession_links: int,
+    non_certifiable_timestamps: int,
+    non_certifiable_hashes: int,
+    non_certifiable_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = reliability["summary"]
+    verification = reliability["reviews"]["verification"]
+
+    if (
+        not reference
+        or version is None
+        or summary["coverage_classification"] == "Unresolved Evolution Coverage"
+        or summary["review_classification"] == "Unresolved Evolution Review"
+        or summary["readiness_classification"] == "Unresolved Evolution Readiness"
+        or summary["completeness_classification"]
+        == "Unresolved Evolution Completeness"
+        or summary["sufficiency_classification"]
+        == "Unresolved Evolution Information"
+        or summary["consistency_classification"]
+        == "Unresolved Evolution Consistency"
+        or summary["integrity_classification"] == "Unresolved Evolution Integrity"
+        or summary["reliability_classification"]
+        == "Unresolved Evolution Reliability"
+        or (
+            summary["total_versions"] > 0
+            and summary["traceability_classification"] == "Untraceable Evolution"
+        )
+    ):
+        return "Unresolved Evolution Certification"
+
+    if (
+        summary["total_versions"] == 0
+        and summary["reliability_classification"] == "No Evolution Reliability"
+        and not summary["reliable_timestamps"]
+        and not summary["reliable_verification_hashes"]
+    ):
+        return "No Certification Available"
+
+    if (
+        non_certifiable_versions
+        or non_certifiable_supersession_links
+        or non_certifiable_timestamps
+        or non_certifiable_hashes
+        or non_certifiable_outputs
+        or summary["reliability_classification"] == "Unreliable Evolution Chain"
+        or summary["integrity_classification"] == "Broken Evolution Integrity"
+        or summary["consistency_classification"] == "Inconsistent Evolution Chain"
+    ):
+        return "Non-Certifiable Evolution Chain"
+
+    if (
+        summary["total_versions"] > 0
+        and (
+            missing_outputs
+            or verification["missing_verification_hashes"]
+            or summary["reliability_classification"]
+            == "Limited Evolution Reliability"
+            or summary["integrity_classification"] == "Limited Evolution Integrity"
+            or summary["consistency_classification"]
+            == "Limited Evolution Consistency"
+            or summary["coverage_classification"] == "Limited Evolution Coverage"
+            or summary["review_classification"] == "Limited Evolution Review"
+            or summary["readiness_classification"]
+            == "Limited Evolution Readiness"
+            or summary["completeness_classification"]
+            == "Limited Evolution Completeness"
+            or summary["sufficiency_classification"]
+            == "Limited Evolution Information"
+        )
+    ):
+        return "Limited Evolution Certification"
+
+    if (
+        summary["total_versions"] > 1
+        and not missing_outputs
+        and summary["reliability_classification"] == "Reliable Evolution Chain"
+        and summary["integrity_classification"] == "Full Evolution Integrity"
+        and summary["consistency_classification"] == "Consistent Evolution Chain"
+        and summary["sufficiency_classification"]
+        == "Sufficient Evolution Information"
+        and summary["completeness_classification"] == "Complete Evolution Chain"
+        and summary["readiness_classification"] == "Fully Evolution Ready"
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Certified Evolution Chain"
+
+    return "Partial Evolution Certification"
+
+
+def _record_stage18o_evolution_certification(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    reliability = _record_stage18n_evolution_reliability(record_metadata, history)
+    reliability_summary = reliability["summary"]
+    version_review = reliability["reviews"]["version"]
+    supersession_review = reliability["reviews"]["supersession"]
+    timestamp_review = reliability["reviews"]["timestamp"]
+    verification_review = reliability["reviews"]["verification"]
+    certifiable_versions = int(reliability_summary["reliable_versions"] or 0)
+    non_certifiable_versions = int(reliability_summary["unreliable_versions"] or 0)
+    certifiable_supersession_links = int(
+        reliability_summary["reliable_supersession_links"] or 0
+    )
+    non_certifiable_supersession_links = int(
+        reliability_summary["unreliable_supersession_links"] or 0
+    )
+    certifiable_timestamps = int(reliability_summary["reliable_timestamps"] or 0)
+    non_certifiable_timestamps = int(
+        reliability_summary["unreliable_timestamps"] or 0
+    )
+    certifiable_hashes = int(
+        reliability_summary["reliable_verification_hashes"] or 0
+    )
+    non_certifiable_hashes = int(
+        reliability_summary["unreliable_verification_hashes"] or 0
+    )
+    certifiable_outputs, non_certifiable_outputs, missing_outputs = (
+        _stage18o_evolution_output_counts(reliability)
+    )
+    summary = {
+        "record_reference": reliability_summary["record_reference"],
+        "current_version": reliability_summary["current_version"],
+        "total_versions": reliability_summary["total_versions"],
+        "certifiable_versions": certifiable_versions,
+        "non_certifiable_versions": non_certifiable_versions,
+        "certifiable_supersession_links": certifiable_supersession_links,
+        "non_certifiable_supersession_links": non_certifiable_supersession_links,
+        "certifiable_timestamps": certifiable_timestamps,
+        "non_certifiable_timestamps": non_certifiable_timestamps,
+        "certifiable_verification_hashes": certifiable_hashes,
+        "non_certifiable_verification_hashes": non_certifiable_hashes,
+        "certifiable_evolution_outputs": certifiable_outputs,
+        "non_certifiable_evolution_outputs": non_certifiable_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": reliability_summary["evolution_classification"],
+        "continuity_classification": reliability_summary[
+            "continuity_classification"
+        ],
+        "change_log_classification": reliability_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": reliability_summary[
+            "trajectory_classification"
+        ],
+        "relationship_classification": reliability_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": reliability_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": reliability_summary["coverage_classification"],
+        "review_classification": reliability_summary["review_classification"],
+        "readiness_classification": reliability_summary[
+            "readiness_classification"
+        ],
+        "completeness_classification": reliability_summary[
+            "completeness_classification"
+        ],
+        "sufficiency_classification": reliability_summary[
+            "sufficiency_classification"
+        ],
+        "consistency_classification": reliability_summary[
+            "consistency_classification"
+        ],
+        "integrity_classification": reliability_summary["integrity_classification"],
+        "reliability_classification": reliability_summary[
+            "reliability_classification"
+        ],
+    }
+    summary["certification_classification"] = _stage18o_certification_classification(
+        record_metadata=record_metadata,
+        reliability=reliability,
+        non_certifiable_versions=non_certifiable_versions,
+        non_certifiable_supersession_links=non_certifiable_supersession_links,
+        non_certifiable_timestamps=non_certifiable_timestamps,
+        non_certifiable_hashes=non_certifiable_hashes,
+        non_certifiable_outputs=non_certifiable_outputs,
+        missing_outputs=missing_outputs,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "certifiable_versions": certifiable_versions,
+                "non_certifiable_versions": non_certifiable_versions,
+                "certification_state": _stage18o_version_certification_state(
+                    current_version=summary["current_version"],
+                    total_versions=summary["total_versions"],
+                    certifiable_versions=certifiable_versions,
+                    non_certifiable_versions=non_certifiable_versions,
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": supersession_review[
+                    "supersession_link_count"
+                ],
+                "certifiable_supersession_links": certifiable_supersession_links,
+                "non_certifiable_supersession_links": (
+                    non_certifiable_supersession_links
+                ),
+                "certification_state": _stage18o_supersession_certification_state(
+                    summary["total_versions"],
+                    supersession_review["supersession_link_count"],
+                    non_certifiable_supersession_links,
+                ),
+            },
+            "timestamp": {
+                "certifiable_timestamps": certifiable_timestamps,
+                "non_certifiable_timestamps": non_certifiable_timestamps,
+                "earliest_timestamp": timestamp_review["earliest_timestamp"],
+                "latest_timestamp": timestamp_review["latest_timestamp"],
+                "certification_state": _stage18o_timestamp_certification_state(
+                    summary["total_versions"],
+                    certifiable_timestamps,
+                    non_certifiable_timestamps,
+                    0
+                    if timestamp_review["reliability_state"]
+                    not in {"Limited Timestamp Reliability"}
+                    else 1,
+                ),
+            },
+            "verification": {
+                "certifiable_verification_hashes": certifiable_hashes,
+                "non_certifiable_verification_hashes": non_certifiable_hashes,
+                "missing_verification_hashes": verification_review[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": verification_review[
+                    "verification_hash_coverage"
+                ],
+                "certification_state": _stage18o_verification_certification_state(
+                    summary["total_versions"],
+                    certifiable_hashes,
+                    non_certifiable_hashes,
+                    verification_review["missing_verification_hashes"],
+                ),
+            },
+            "evolution_output": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certifiable_evolution_outputs": certifiable_outputs,
+                "non_certifiable_evolution_outputs": non_certifiable_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "certification_state": (
+                    _stage18o_evolution_output_certification_state(
+                        summary,
+                        certifiable_outputs,
+                        non_certifiable_outputs,
+                        missing_outputs,
+                    )
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "certification_state": _stage18o_evolution_certification_state(
+                    summary["certification_classification"]
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18o_record_certification(certification: dict[str, Any]) -> str:
+    record = certification["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Certifiable Versions", record["certifiable_versions"]),
+        ("Non-Certifiable Versions", record["non_certifiable_versions"]),
+        (
+            "Certifiable Supersession Links",
+            record["certifiable_supersession_links"],
+        ),
+        (
+            "Non-Certifiable Supersession Links",
+            record["non_certifiable_supersession_links"],
+        ),
+        ("Certifiable Timestamps", record["certifiable_timestamps"]),
+        ("Non-Certifiable Timestamps", record["non_certifiable_timestamps"]),
+        (
+            "Certifiable Verification Hashes",
+            record["certifiable_verification_hashes"],
+        ),
+        (
+            "Non-Certifiable Verification Hashes",
+            record["non_certifiable_verification_hashes"],
+        ),
+        ("Certifiable Evolution Outputs", record["certifiable_evolution_outputs"]),
+        (
+            "Non-Certifiable Evolution Outputs",
+            record["non_certifiable_evolution_outputs"],
+        ),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+        ("Completeness Classification", record["completeness_classification"]),
+        ("Sufficiency Classification", record["sufficiency_classification"]),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Reliability Classification", record["reliability_classification"]),
+        ("Certification Classification", record["certification_classification"]),
+    )
+    return f"""
+        <section class="stage18o-record-evolution-certification">
+          <h3>Record Evolution Certification</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18o_evolution_certification_content(
+    certification: dict[str, Any],
+) -> str:
+    summary = certification["summary"]
+    reviews = certification["reviews"]
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <h3>Certification Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Certification Review",
+            (
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                (
+                    "Certifiable Versions",
+                    reviews["version"]["certifiable_versions"],
+                ),
+                (
+                    "Non-Certifiable Versions",
+                    reviews["version"]["non_certifiable_versions"],
+                ),
+                ("Certification State", reviews["version"]["certification_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Certification Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Certifiable Supersession Links",
+                    reviews["supersession"]["certifiable_supersession_links"],
+                ),
+                (
+                    "Non-Certifiable Supersession Links",
+                    reviews["supersession"]["non_certifiable_supersession_links"],
+                ),
+                (
+                    "Certification State",
+                    reviews["supersession"]["certification_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Certification Review",
+            (
+                (
+                    "Certifiable Timestamps",
+                    reviews["timestamp"]["certifiable_timestamps"],
+                ),
+                (
+                    "Non-Certifiable Timestamps",
+                    reviews["timestamp"]["non_certifiable_timestamps"],
+                ),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Certification State", reviews["timestamp"]["certification_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Certification Review",
+            (
+                (
+                    "Certifiable Verification Hashes",
+                    reviews["verification"]["certifiable_verification_hashes"],
+                ),
+                (
+                    "Non-Certifiable Verification Hashes",
+                    reviews["verification"]["non_certifiable_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Certification State",
+                    reviews["verification"]["certification_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Certification Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution_output"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution_output"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution_output"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution_output"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution_output"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution_output"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution_output"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution_output"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution_output"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution_output"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution_output"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution_output"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution_output"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution_output"]["reliability_classification"],
+                ),
+                (
+                    "Certifiable Evolution Outputs",
+                    reviews["evolution_output"]["certifiable_evolution_outputs"],
+                ),
+                (
+                    "Non-Certifiable Evolution Outputs",
+                    reviews["evolution_output"][
+                        "non_certifiable_evolution_outputs"
+                    ],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution_output"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Certification State",
+                    reviews["evolution_output"]["certification_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Certification Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution"]["reliability_classification"],
+                ),
+                (
+                    "Certification Classification",
+                    reviews["evolution"]["certification_classification"],
+                ),
+                ("Certification State", reviews["evolution"]["certification_state"]),
+            ),
+        )}
+        {_render_stage18o_record_certification(certification)}"""
+
+
+def _render_stage18o_record_evolution_certification_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    certification = _record_stage18o_evolution_certification(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18o-record-evolution-certification">
+        <h2>Record Evolution Certification</h2>
+        <p class="notice">
+          Record evolution certification is derived deterministically from
+          existing record metadata, same-reference version history, and Stage
+          18A through Stage 18N evolution outputs only. It certifies only the
+          visible evolution chain state and does not approve records or assess
+          truthfulness.
+        </p>
+        {_render_stage18o_evolution_certification_content(certification)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -23242,6 +24061,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18o_record_evolution_certification = _render_stage18o_record_evolution_certification_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -23387,6 +24210,7 @@ def render_admin_record_evidence_page(
             f"{stage18l_record_evolution_consistency}"
             f"{stage18m_record_evolution_integrity}"
             f"{stage18n_record_evolution_reliability}"
+            f"{stage18o_record_evolution_certification}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
