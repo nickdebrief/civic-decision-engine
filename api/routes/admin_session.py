@@ -24681,6 +24681,894 @@ def _render_stage18p_record_evolution_accreditation_section(
       </section>"""
 
 
+_STAGE18Q_PARTIAL_OUTPUT_STATES = {
+    "Initial Record State",
+    "Partial Evolution Continuity",
+    "No Recorded Changes",
+    "Initial Evolution Trajectory",
+    "No Evolution Relationships",
+    "Partial Evolution Traceability",
+    "Partial Evolution Coverage",
+    "Partial Evolution Review",
+    "Partially Evolution Ready",
+    "Partially Complete Evolution Chain",
+    "Partially Sufficient Evolution Information",
+    "Partially Consistent Evolution Chain",
+    "Partial Evolution Integrity",
+    "Partially Reliable Evolution Chain",
+    "Partial Evolution Certification",
+    "Partially Accredited Evolution Chain",
+}
+
+
+def _stage18q_output_conflict_count(summary: dict[str, Any]) -> int:
+    conflicts = _stage18p_output_conflict_count(summary)
+    if (
+        summary.get("accreditation_classification")
+        == "Fully Accredited Evolution Chain"
+        and summary.get("certification_classification") != "Certified Evolution Chain"
+    ):
+        conflicts += 1
+    return conflicts
+
+
+def _stage18q_evolution_output_counts(
+    accreditation: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = accreditation["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+        "readiness_classification",
+        "completeness_classification",
+        "sufficiency_classification",
+        "consistency_classification",
+        "integrity_classification",
+        "reliability_classification",
+        "certification_classification",
+        "accreditation_classification",
+    )
+    missing = sum(1 for key in output_keys if not str(summary.get(key) or "").strip())
+    non_auditable = _stage18q_output_conflict_count(summary)
+    auditable = max(0, len(output_keys) - missing - non_auditable)
+    return auditable, non_auditable, missing
+
+
+def _stage18q_version_auditability_state(
+    *,
+    current_version: Any,
+    total_versions: int,
+    auditable_versions: int,
+    non_auditable_versions: int,
+) -> str:
+    if current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Auditability"
+    if non_auditable_versions:
+        return "Non-Auditable Version Chain"
+    if auditable_versions < total_versions:
+        return "Limited Version Auditability"
+    if total_versions > 1:
+        return "Auditable Version Chain"
+    return "Partially Auditable Version Chain"
+
+
+def _stage18q_supersession_auditability_state(
+    total_versions: int,
+    link_count: int,
+    non_auditable_links: int,
+) -> str:
+    if non_auditable_links:
+        return "Non-Auditable Supersession Chain"
+    if link_count:
+        return "Auditable Supersession Chain"
+    if total_versions == 1:
+        return "Partially Auditable Supersession Chain"
+    if total_versions > 1:
+        return "Limited Supersession Auditability"
+    return "No Supersession Auditability"
+
+
+def _stage18q_timestamp_auditability_state(
+    total_versions: int,
+    auditable_timestamps: int,
+    non_auditable_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if non_auditable_timestamps:
+        return "Non-Auditable Timestamp Chain"
+    if not auditable_timestamps:
+        return "No Timestamp Auditability"
+    if missing_timestamps:
+        return "Limited Timestamp Auditability"
+    if total_versions > 1:
+        return "Auditable Timestamp Chain"
+    return "Partially Auditable Timestamp Chain"
+
+
+def _stage18q_verification_auditability_state(
+    total_versions: int,
+    auditable_hashes: int,
+    non_auditable_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if non_auditable_hashes:
+        return "Non-Auditable Verification Chain"
+    if not auditable_hashes:
+        return "No Verification Auditability"
+    if missing_hashes:
+        return "Limited Verification Auditability"
+    if total_versions > 1:
+        return "Auditable Verification Chain"
+    return "Partially Auditable Verification Chain"
+
+
+def _stage18q_evolution_output_auditability_state(
+    summary: dict[str, Any],
+    auditable_outputs: int,
+    non_auditable_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if non_auditable_outputs:
+        return "Non-Auditable Evolution Outputs"
+    if not auditable_outputs:
+        return "No Evolution Output Auditability"
+    if missing_outputs:
+        return "Limited Evolution Output Auditability"
+    if any(
+        summary.get(key) in _STAGE18Q_PARTIAL_OUTPUT_STATES
+        for key in (
+            "evolution_classification",
+            "continuity_classification",
+            "change_log_classification",
+            "trajectory_classification",
+            "relationship_classification",
+            "traceability_classification",
+            "coverage_classification",
+            "review_classification",
+            "readiness_classification",
+            "completeness_classification",
+            "sufficiency_classification",
+            "consistency_classification",
+            "integrity_classification",
+            "reliability_classification",
+            "certification_classification",
+            "accreditation_classification",
+        )
+    ):
+        return "Partially Auditable Evolution Outputs"
+    return "Auditable Evolution Outputs"
+
+
+def _stage18q_evolution_auditability_state(
+    auditability_classification: str,
+) -> str:
+    return {
+        "Fully Auditable Evolution Chain": "Fully Auditable Evolution Chain",
+        "Partially Auditable Evolution Chain": (
+            "Partially Auditable Evolution Chain"
+        ),
+        "Limited Evolution Auditability": (
+            "Limited Evolution Chain Auditability"
+        ),
+        "Not Auditable Evolution Chain": "Not Auditable Evolution Chain",
+        "No Evolution Auditability": "No Evolution Chain Auditability",
+        "Unresolved Evolution Auditability": (
+            "Unresolved Evolution Chain Auditability"
+        ),
+    }.get(auditability_classification, "Unresolved Evolution Chain Auditability")
+
+
+def _stage18q_auditability_classification(
+    *,
+    record_metadata: dict[str, Any],
+    accreditation: dict[str, Any],
+    non_auditable_versions: int,
+    non_auditable_supersession_links: int,
+    non_auditable_timestamps: int,
+    non_auditable_hashes: int,
+    non_auditable_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = accreditation["summary"]
+    verification = accreditation["reviews"]["verification"]
+
+    if (
+        not reference
+        or version is None
+        or summary["coverage_classification"] == "Unresolved Evolution Coverage"
+        or summary["review_classification"] == "Unresolved Evolution Review"
+        or summary["readiness_classification"] == "Unresolved Evolution Readiness"
+        or summary["completeness_classification"]
+        == "Unresolved Evolution Completeness"
+        or summary["sufficiency_classification"]
+        == "Unresolved Evolution Information"
+        or summary["consistency_classification"]
+        == "Unresolved Evolution Consistency"
+        or summary["integrity_classification"] == "Unresolved Evolution Integrity"
+        or summary["reliability_classification"]
+        == "Unresolved Evolution Reliability"
+        or summary["certification_classification"]
+        == "Unresolved Evolution Certification"
+        or summary["accreditation_classification"]
+        == "Unresolved Evolution Accreditation"
+        or (
+            summary["total_versions"] > 0
+            and summary["traceability_classification"] == "Untraceable Evolution"
+        )
+    ):
+        return "Unresolved Evolution Auditability"
+
+    if (
+        summary["total_versions"] == 0
+        and summary["accreditation_classification"] == "No Evolution Accreditation"
+        and not summary["accreditable_timestamps"]
+        and not summary["accreditable_verification_hashes"]
+    ):
+        return "No Evolution Auditability"
+
+    if (
+        non_auditable_versions
+        or non_auditable_supersession_links
+        or non_auditable_timestamps
+        or non_auditable_hashes
+        or non_auditable_outputs
+        or summary["accreditation_classification"]
+        == "Not Accredited Evolution Chain"
+        or summary["certification_classification"]
+        == "Non-Certifiable Evolution Chain"
+        or summary["reliability_classification"] == "Unreliable Evolution Chain"
+        or summary["integrity_classification"] == "Broken Evolution Integrity"
+        or summary["consistency_classification"] == "Inconsistent Evolution Chain"
+    ):
+        return "Not Auditable Evolution Chain"
+
+    if (
+        summary["total_versions"] > 0
+        and (
+            missing_outputs
+            or verification["missing_verification_hashes"]
+            or summary["accreditation_classification"]
+            == "Limited Evolution Accreditation"
+            or summary["certification_classification"]
+            == "Limited Evolution Certification"
+            or summary["reliability_classification"]
+            == "Limited Evolution Reliability"
+            or summary["integrity_classification"] == "Limited Evolution Integrity"
+            or summary["consistency_classification"]
+            == "Limited Evolution Consistency"
+            or summary["coverage_classification"] == "Limited Evolution Coverage"
+            or summary["review_classification"] == "Limited Evolution Review"
+            or summary["readiness_classification"]
+            == "Limited Evolution Readiness"
+            or summary["completeness_classification"]
+            == "Limited Evolution Completeness"
+            or summary["sufficiency_classification"]
+            == "Limited Evolution Information"
+        )
+    ):
+        return "Limited Evolution Auditability"
+
+    if (
+        summary["total_versions"] > 1
+        and not missing_outputs
+        and summary["accreditation_classification"]
+        == "Fully Accredited Evolution Chain"
+        and summary["certification_classification"] == "Certified Evolution Chain"
+        and summary["reliability_classification"] == "Reliable Evolution Chain"
+        and summary["integrity_classification"] == "Full Evolution Integrity"
+        and summary["consistency_classification"] == "Consistent Evolution Chain"
+        and summary["sufficiency_classification"]
+        == "Sufficient Evolution Information"
+        and summary["completeness_classification"] == "Complete Evolution Chain"
+        and summary["readiness_classification"] == "Fully Evolution Ready"
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Fully Auditable Evolution Chain"
+
+    return "Partially Auditable Evolution Chain"
+
+
+def _record_stage18q_evolution_auditability(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    accreditation = _record_stage18p_evolution_accreditation(
+        record_metadata,
+        history,
+    )
+    accreditation_summary = accreditation["summary"]
+    version_review = accreditation["reviews"]["version"]
+    supersession_review = accreditation["reviews"]["supersession"]
+    timestamp_review = accreditation["reviews"]["timestamp"]
+    verification_review = accreditation["reviews"]["verification"]
+    auditable_versions = int(accreditation_summary["accreditable_versions"] or 0)
+    non_auditable_versions = int(
+        accreditation_summary["non_accreditable_versions"] or 0
+    )
+    auditable_supersession_links = int(
+        accreditation_summary["accreditable_supersession_links"] or 0
+    )
+    non_auditable_supersession_links = int(
+        accreditation_summary["non_accreditable_supersession_links"] or 0
+    )
+    auditable_timestamps = int(
+        accreditation_summary["accreditable_timestamps"] or 0
+    )
+    non_auditable_timestamps = int(
+        accreditation_summary["non_accreditable_timestamps"] or 0
+    )
+    auditable_hashes = int(
+        accreditation_summary["accreditable_verification_hashes"] or 0
+    )
+    non_auditable_hashes = int(
+        accreditation_summary["non_accreditable_verification_hashes"] or 0
+    )
+    auditable_outputs, non_auditable_outputs, missing_outputs = (
+        _stage18q_evolution_output_counts(accreditation)
+    )
+    summary = {
+        "record_reference": accreditation_summary["record_reference"],
+        "current_version": accreditation_summary["current_version"],
+        "total_versions": accreditation_summary["total_versions"],
+        "auditable_versions": auditable_versions,
+        "non_auditable_versions": non_auditable_versions,
+        "auditable_supersession_links": auditable_supersession_links,
+        "non_auditable_supersession_links": non_auditable_supersession_links,
+        "auditable_timestamps": auditable_timestamps,
+        "non_auditable_timestamps": non_auditable_timestamps,
+        "auditable_verification_hashes": auditable_hashes,
+        "non_auditable_verification_hashes": non_auditable_hashes,
+        "auditable_evolution_outputs": auditable_outputs,
+        "non_auditable_evolution_outputs": non_auditable_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": accreditation_summary[
+            "evolution_classification"
+        ],
+        "continuity_classification": accreditation_summary[
+            "continuity_classification"
+        ],
+        "change_log_classification": accreditation_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": accreditation_summary[
+            "trajectory_classification"
+        ],
+        "relationship_classification": accreditation_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": accreditation_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": accreditation_summary["coverage_classification"],
+        "review_classification": accreditation_summary["review_classification"],
+        "readiness_classification": accreditation_summary[
+            "readiness_classification"
+        ],
+        "completeness_classification": accreditation_summary[
+            "completeness_classification"
+        ],
+        "sufficiency_classification": accreditation_summary[
+            "sufficiency_classification"
+        ],
+        "consistency_classification": accreditation_summary[
+            "consistency_classification"
+        ],
+        "integrity_classification": accreditation_summary[
+            "integrity_classification"
+        ],
+        "reliability_classification": accreditation_summary[
+            "reliability_classification"
+        ],
+        "certification_classification": accreditation_summary[
+            "certification_classification"
+        ],
+        "accreditation_classification": accreditation_summary[
+            "accreditation_classification"
+        ],
+    }
+    summary["auditability_classification"] = _stage18q_auditability_classification(
+        record_metadata=record_metadata,
+        accreditation=accreditation,
+        non_auditable_versions=non_auditable_versions,
+        non_auditable_supersession_links=non_auditable_supersession_links,
+        non_auditable_timestamps=non_auditable_timestamps,
+        non_auditable_hashes=non_auditable_hashes,
+        non_auditable_outputs=non_auditable_outputs,
+        missing_outputs=missing_outputs,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "auditable_versions": auditable_versions,
+                "non_auditable_versions": non_auditable_versions,
+                "auditability_state": _stage18q_version_auditability_state(
+                    current_version=summary["current_version"],
+                    total_versions=summary["total_versions"],
+                    auditable_versions=auditable_versions,
+                    non_auditable_versions=non_auditable_versions,
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": supersession_review[
+                    "supersession_link_count"
+                ],
+                "auditable_supersession_links": auditable_supersession_links,
+                "non_auditable_supersession_links": (
+                    non_auditable_supersession_links
+                ),
+                "auditability_state": _stage18q_supersession_auditability_state(
+                    summary["total_versions"],
+                    supersession_review["supersession_link_count"],
+                    non_auditable_supersession_links,
+                ),
+            },
+            "timestamp": {
+                "auditable_timestamps": auditable_timestamps,
+                "non_auditable_timestamps": non_auditable_timestamps,
+                "earliest_timestamp": timestamp_review["earliest_timestamp"],
+                "latest_timestamp": timestamp_review["latest_timestamp"],
+                "auditability_state": _stage18q_timestamp_auditability_state(
+                    summary["total_versions"],
+                    auditable_timestamps,
+                    non_auditable_timestamps,
+                    0
+                    if timestamp_review["accreditation_state"]
+                    not in {"Limited Timestamp Accreditation"}
+                    else 1,
+                ),
+            },
+            "verification": {
+                "auditable_verification_hashes": auditable_hashes,
+                "non_auditable_verification_hashes": non_auditable_hashes,
+                "missing_verification_hashes": verification_review[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": verification_review[
+                    "verification_hash_coverage"
+                ],
+                "auditability_state": _stage18q_verification_auditability_state(
+                    summary["total_versions"],
+                    auditable_hashes,
+                    non_auditable_hashes,
+                    verification_review["missing_verification_hashes"],
+                ),
+            },
+            "evolution_output": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditable_evolution_outputs": auditable_outputs,
+                "non_auditable_evolution_outputs": non_auditable_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "auditability_state": (
+                    _stage18q_evolution_output_auditability_state(
+                        summary,
+                        auditable_outputs,
+                        non_auditable_outputs,
+                        missing_outputs,
+                    )
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditability_classification": summary[
+                    "auditability_classification"
+                ],
+                "auditability_state": _stage18q_evolution_auditability_state(
+                    summary["auditability_classification"]
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18q_record_auditability(auditability: dict[str, Any]) -> str:
+    record = auditability["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Auditable Versions", record["auditable_versions"]),
+        ("Non-Auditable Versions", record["non_auditable_versions"]),
+        ("Auditable Supersession Links", record["auditable_supersession_links"]),
+        (
+            "Non-Auditable Supersession Links",
+            record["non_auditable_supersession_links"],
+        ),
+        ("Auditable Timestamps", record["auditable_timestamps"]),
+        ("Non-Auditable Timestamps", record["non_auditable_timestamps"]),
+        (
+            "Auditable Verification Hashes",
+            record["auditable_verification_hashes"],
+        ),
+        (
+            "Non-Auditable Verification Hashes",
+            record["non_auditable_verification_hashes"],
+        ),
+        ("Auditable Evolution Outputs", record["auditable_evolution_outputs"]),
+        (
+            "Non-Auditable Evolution Outputs",
+            record["non_auditable_evolution_outputs"],
+        ),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+        ("Completeness Classification", record["completeness_classification"]),
+        ("Sufficiency Classification", record["sufficiency_classification"]),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Reliability Classification", record["reliability_classification"]),
+        ("Certification Classification", record["certification_classification"]),
+        ("Accreditation Classification", record["accreditation_classification"]),
+        ("Auditability Classification", record["auditability_classification"]),
+    )
+    return f"""
+        <section class="stage18q-record-evolution-auditability">
+          <h3>Record Evolution Auditability</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18q_evolution_auditability_content(
+    auditability: dict[str, Any],
+) -> str:
+    summary = auditability["summary"]
+    reviews = auditability["reviews"]
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <h3>Auditability Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Auditability Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                ("Auditable Versions", reviews["version"]["auditable_versions"]),
+                (
+                    "Non-Auditable Versions",
+                    reviews["version"]["non_auditable_versions"],
+                ),
+                ("Auditability State", reviews["version"]["auditability_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Auditability Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Auditable Supersession Links",
+                    reviews["supersession"]["auditable_supersession_links"],
+                ),
+                (
+                    "Non-Auditable Supersession Links",
+                    reviews["supersession"]["non_auditable_supersession_links"],
+                ),
+                (
+                    "Auditability State",
+                    reviews["supersession"]["auditability_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Auditability Review",
+            (
+                (
+                    "Auditable Timestamps",
+                    reviews["timestamp"]["auditable_timestamps"],
+                ),
+                (
+                    "Non-Auditable Timestamps",
+                    reviews["timestamp"]["non_auditable_timestamps"],
+                ),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Auditability State", reviews["timestamp"]["auditability_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Auditability Review",
+            (
+                (
+                    "Auditable Verification Hashes",
+                    reviews["verification"]["auditable_verification_hashes"],
+                ),
+                (
+                    "Non-Auditable Verification Hashes",
+                    reviews["verification"]["non_auditable_verification_hashes"],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Auditability State",
+                    reviews["verification"]["auditability_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Auditability Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution_output"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution_output"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution_output"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution_output"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution_output"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution_output"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution_output"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution_output"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution_output"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution_output"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution_output"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution_output"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution_output"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution_output"]["reliability_classification"],
+                ),
+                (
+                    "Certification Classification",
+                    reviews["evolution_output"]["certification_classification"],
+                ),
+                (
+                    "Accreditation Classification",
+                    reviews["evolution_output"]["accreditation_classification"],
+                ),
+                (
+                    "Auditable Evolution Outputs",
+                    reviews["evolution_output"]["auditable_evolution_outputs"],
+                ),
+                (
+                    "Non-Auditable Evolution Outputs",
+                    reviews["evolution_output"]["non_auditable_evolution_outputs"],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution_output"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Auditability State",
+                    reviews["evolution_output"]["auditability_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Auditability Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution"]["reliability_classification"],
+                ),
+                (
+                    "Certification Classification",
+                    reviews["evolution"]["certification_classification"],
+                ),
+                (
+                    "Accreditation Classification",
+                    reviews["evolution"]["accreditation_classification"],
+                ),
+                (
+                    "Auditability Classification",
+                    reviews["evolution"]["auditability_classification"],
+                ),
+                ("Auditability State", reviews["evolution"]["auditability_state"]),
+            ),
+        )}
+        {_render_stage18q_record_auditability(auditability)}"""
+
+
+def _render_stage18q_record_evolution_auditability_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    auditability = _record_stage18q_evolution_auditability(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18q-record-evolution-auditability">
+        <h2>Record Evolution Auditability</h2>
+        <p class="notice">
+          Record evolution auditability is derived deterministically from
+          existing record metadata, same-reference version history, and Stage
+          18A through Stage 18P evolution outputs only. Auditability is
+          internal deterministic reviewability by another observer using the
+          visible record chain and does not imply legal audit, external audit
+          approval, institutional audit, evidential validation, truth
+          certification, or external assurance.
+        </p>
+        {_render_stage18q_evolution_auditability_content(auditability)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -24935,6 +25823,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18q_record_evolution_auditability = _render_stage18q_record_evolution_auditability_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -25082,6 +25974,7 @@ def render_admin_record_evidence_page(
             f"{stage18n_record_evolution_reliability}"
             f"{stage18o_record_evolution_certification}"
             f"{stage18p_record_evolution_accreditation}"
+            f"{stage18q_record_evolution_auditability}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
