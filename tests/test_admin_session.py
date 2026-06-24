@@ -4503,6 +4503,183 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Non-Transparent Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18t_record_evolution_accountability_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            generated_by="civic-decision-engine",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": generated_by,
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+            "generated_by": "civic-decision-engine",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        partial_history = [
+            version_row(1, generated_by=None),
+            version_row(2, latest=1),
+        ]
+        non_accountable_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+
+        def accountability(metadata, lineage):
+            return self.admin_session._record_stage18t_evolution_accountability(
+                metadata,
+                lineage,
+            )
+
+        single = accountability(single_metadata, single_history)
+        full = accountability(base, full_history)
+        partial = accountability(base, partial_history)
+        non_accountable = accountability(base, non_accountable_history)
+        unresolved = accountability({}, [])
+
+        self.assertEqual(
+            "Partially Accountable Evolution Chain",
+            single["summary"]["accountability_classification"],
+        )
+        self.assertEqual(1, single["summary"]["accountable_versions"])
+        self.assertEqual(0, single["summary"]["non_accountable_versions"])
+        self.assertEqual(0, single["summary"]["accountable_supersession_links"])
+        self.assertEqual(0, single["summary"]["non_accountable_supersession_links"])
+        self.assertEqual(1, single["summary"]["accountable_timestamps"])
+        self.assertEqual(0, single["summary"]["non_accountable_timestamps"])
+        self.assertEqual(1, single["summary"]["accountable_verification_hashes"])
+        self.assertEqual(0, single["summary"]["non_accountable_verification_hashes"])
+        self.assertEqual(1, single["summary"]["accountable_generated_by_values"])
+        self.assertEqual(0, single["summary"]["non_accountable_generated_by_values"])
+        self.assertEqual(0, single["summary"]["missing_generated_by_values"])
+        self.assertEqual(19, single["summary"]["accountable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["non_accountable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Accountable Version Chain",
+            single["reviews"]["version"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Partially Accountable Supersession Chain",
+            single["reviews"]["supersession"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Partially Accountable Timestamp Chain",
+            single["reviews"]["timestamp"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Partially Accountable Verification Chain",
+            single["reviews"]["verification"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Partially Accountable Generated-By Chain",
+            single["reviews"]["generated_by"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Partially Accountable Evolution Outputs",
+            single["reviews"]["evolution_output"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Accountable Evolution Chain",
+            full["summary"]["accountability_classification"],
+        )
+        self.assertEqual(
+            "Partially Accountable Evolution Chain",
+            partial["summary"]["accountability_classification"],
+        )
+        self.assertEqual(1, partial["summary"]["missing_generated_by_values"])
+        self.assertEqual(
+            "Limited Generated-By Accountability",
+            partial["reviews"]["generated_by"]["accountability_state"],
+        )
+        self.assertEqual(
+            "Non-Accountable Evolution Chain",
+            non_accountable["summary"]["accountability_classification"],
+        )
+        self.assertEqual(
+            "Non-Accountable Evolution Chain",
+            unresolved["summary"]["accountability_classification"],
+        )
+        self.assertEqual(single, accountability(single_metadata, single_history))
+
+        for accountability_set, expected in (
+            (full, "Accountable Evolution Chain"),
+            (single, "Partially Accountable Evolution Chain"),
+            (partial, "Partially Accountable Evolution Chain"),
+            (non_accountable, "Non-Accountable Evolution Chain"),
+            (unresolved, "Non-Accountable Evolution Chain"),
+        ):
+            rendered = self.admin_session._render_stage18t_evolution_accountability_content(
+                accountability_set
+            )
+            self.assertIn(
+                f"<td>Accountability Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Accountability Summary</h3>", rendered)
+            self.assertIn("<h3>Version Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Verification Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Generated-By Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Accountability Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Accountability</h3>", rendered)
+            self.assertIn("Accountable Versions", rendered)
+            self.assertIn("Non-Accountable Versions", rendered)
+            self.assertIn("Accountable Supersession Links", rendered)
+            self.assertIn("Non-Accountable Supersession Links", rendered)
+            self.assertIn("Accountable Timestamps", rendered)
+            self.assertIn("Non-Accountable Timestamps", rendered)
+            self.assertIn("Accountable Verification Hashes", rendered)
+            self.assertIn("Non-Accountable Verification Hashes", rendered)
+            self.assertIn("Accountable Generated-By Values", rendered)
+            self.assertIn("Non-Accountable Generated-By Values", rendered)
+            self.assertIn("Missing Generated-By Values", rendered)
+            self.assertIn("Accountable Evolution Outputs", rendered)
+            self.assertIn("Non-Accountable Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -6632,6 +6809,63 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Transparency Classification</td><td>Non-Transparent Evolution Chain</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Accountability", after_content)
+        self.assertIn("Accountability Summary", after_content)
+        self.assertIn("Version Accountability Review", after_content)
+        self.assertIn("Supersession Accountability Review", after_content)
+        self.assertIn("Timestamp Accountability Review", after_content)
+        self.assertIn("Verification Accountability Review", after_content)
+        self.assertIn("Generated-By Accountability Review", after_content)
+        self.assertIn("Evolution Output Accountability Review", after_content)
+        self.assertIn("Evolution Accountability Review", after_content)
+        self.assertIn("<td>Accountable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Non-Accountable Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Accountable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Accountable Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Non-Accountable Timestamps</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Accountable Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Accountable Generated-By Values</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Generated-By Values</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Missing Generated-By Values</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Accountable Evolution Outputs</td><td>17</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Evolution Outputs</td><td>2</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Accountability Classification</td><td>Non-Accountable Evolution Chain</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -7928,6 +8162,57 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Transparency Classification</td><td>Non-Transparent Evolution Chain</td>",
             content,
         )
+        self.assertIn("Record Evolution Accountability", content)
+        self.assertIn("Accountability Summary", content)
+        self.assertIn("Version Accountability Review", content)
+        self.assertIn("Supersession Accountability Review", content)
+        self.assertIn("Timestamp Accountability Review", content)
+        self.assertIn("Verification Accountability Review", content)
+        self.assertIn("Generated-By Accountability Review", content)
+        self.assertIn("Evolution Output Accountability Review", content)
+        self.assertIn("Evolution Accountability Review", content)
+        self.assertIn("<td>Accountable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Non-Accountable Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accountable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Accountable Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Non-Accountable Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accountable Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Accountable Generated-By Values</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Generated-By Values</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Generated-By Values</td><td>1</td>", content)
+        self.assertIn(
+            "<td>Accountable Evolution Outputs</td><td>17</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accountable Evolution Outputs</td><td>2</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accountability Classification</td><td>Non-Accountable Evolution Chain</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -8989,6 +9274,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Reproducibility</h2>"),
             governance_content.index("<h2>Record Evolution Transparency</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Transparency</h2>"),
+            governance_content.index("<h2>Record Evolution Accountability</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -9059,6 +9348,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Auditability</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Reproducibility</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Transparency</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Accountability</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
