@@ -3840,6 +3840,177 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Non-Certifiable Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18p_record_evolution_accreditation_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        not_accredited_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+        no_accreditation_metadata = {
+            **base,
+            "version": 1,
+            "supersedes": None,
+            "generated_at": None,
+            "verification_hash": None,
+        }
+
+        def accreditation(metadata, lineage):
+            return self.admin_session._record_stage18p_evolution_accreditation(
+                metadata,
+                lineage,
+            )
+
+        single = accreditation(single_metadata, single_history)
+        full = accreditation(base, full_history)
+        limited = accreditation(base, limited_history)
+        not_accredited = accreditation(base, not_accredited_history)
+        no_accreditation = accreditation(no_accreditation_metadata, [])
+        unresolved = accreditation({}, [])
+
+        self.assertEqual(
+            "Partially Accredited Evolution Chain",
+            single["summary"]["accreditation_classification"],
+        )
+        self.assertEqual(1, single["summary"]["accreditable_versions"])
+        self.assertEqual(0, single["summary"]["non_accreditable_versions"])
+        self.assertEqual(0, single["summary"]["accreditable_supersession_links"])
+        self.assertEqual(0, single["summary"]["non_accreditable_supersession_links"])
+        self.assertEqual(1, single["summary"]["accreditable_timestamps"])
+        self.assertEqual(0, single["summary"]["non_accreditable_timestamps"])
+        self.assertEqual(1, single["summary"]["accreditable_verification_hashes"])
+        self.assertEqual(0, single["summary"]["non_accreditable_verification_hashes"])
+        self.assertEqual(15, single["summary"]["accreditable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["non_accreditable_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Accredited Version Chain",
+            single["reviews"]["version"]["accreditation_state"],
+        )
+        self.assertEqual(
+            "Partially Accredited Supersession Chain",
+            single["reviews"]["supersession"]["accreditation_state"],
+        )
+        self.assertEqual(
+            "Partially Accredited Timestamp Chain",
+            single["reviews"]["timestamp"]["accreditation_state"],
+        )
+        self.assertEqual(
+            "Partially Accredited Verification Chain",
+            single["reviews"]["verification"]["accreditation_state"],
+        )
+        self.assertEqual(
+            "Partially Accredited Evolution Outputs",
+            single["reviews"]["evolution_output"]["accreditation_state"],
+        )
+        self.assertEqual(
+            "Fully Accredited Evolution Chain",
+            full["summary"]["accreditation_classification"],
+        )
+        self.assertEqual(
+            "Limited Evolution Accreditation",
+            limited["summary"]["accreditation_classification"],
+        )
+        self.assertEqual(
+            "Not Accredited Evolution Chain",
+            not_accredited["summary"]["accreditation_classification"],
+        )
+        self.assertEqual(
+            "No Evolution Accreditation",
+            no_accreditation["summary"]["accreditation_classification"],
+        )
+        self.assertEqual(
+            "Unresolved Evolution Accreditation",
+            unresolved["summary"]["accreditation_classification"],
+        )
+
+        for accreditation_set, expected in (
+            (full, "Fully Accredited Evolution Chain"),
+            (single, "Partially Accredited Evolution Chain"),
+            (limited, "Limited Evolution Accreditation"),
+            (not_accredited, "Not Accredited Evolution Chain"),
+            (no_accreditation, "No Evolution Accreditation"),
+            (unresolved, "Unresolved Evolution Accreditation"),
+        ):
+            rendered = self.admin_session._render_stage18p_evolution_accreditation_content(
+                accreditation_set
+            )
+            self.assertIn(
+                f"<td>Accreditation Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Accreditation Summary</h3>", rendered)
+            self.assertIn("<h3>Version Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Verification Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Accreditation Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Accreditation</h3>", rendered)
+            self.assertIn("Accreditable Versions", rendered)
+            self.assertIn("Non-Accreditable Versions", rendered)
+            self.assertIn("Accreditable Supersession Links", rendered)
+            self.assertIn("Non-Accreditable Supersession Links", rendered)
+            self.assertIn("Accreditable Timestamps", rendered)
+            self.assertIn("Non-Accreditable Timestamps", rendered)
+            self.assertIn("Accreditable Verification Hashes", rendered)
+            self.assertIn("Non-Accreditable Verification Hashes", rendered)
+            self.assertIn("Accreditable Evolution Outputs", rendered)
+            self.assertIn("Non-Accreditable Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -5799,6 +5970,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Certification Classification</td><td>Unresolved Evolution Certification</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Accreditation", after_content)
+        self.assertIn("Accreditation Summary", after_content)
+        self.assertIn("Version Accreditation Review", after_content)
+        self.assertIn("Supersession Accreditation Review", after_content)
+        self.assertIn("Timestamp Accreditation Review", after_content)
+        self.assertIn("Verification Accreditation Review", after_content)
+        self.assertIn("Evolution Output Accreditation Review", after_content)
+        self.assertIn("Evolution Accreditation Review", after_content)
+        self.assertIn("<td>Accreditable Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Non-Accreditable Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Accreditable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Accreditable Timestamps</td><td>0</td>", after_content)
+        self.assertIn("<td>Non-Accreditable Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Accreditable Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Accreditable Evolution Outputs</td><td>15</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Accreditation Classification</td><td>Unresolved Evolution Accreditation</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -6931,6 +7143,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Certification Classification</td><td>Unresolved Evolution Certification</td>",
             content,
         )
+        self.assertIn("Record Evolution Accreditation", content)
+        self.assertIn("Accreditation Summary", content)
+        self.assertIn("Version Accreditation Review", content)
+        self.assertIn("Supersession Accreditation Review", content)
+        self.assertIn("Timestamp Accreditation Review", content)
+        self.assertIn("Verification Accreditation Review", content)
+        self.assertIn("Evolution Output Accreditation Review", content)
+        self.assertIn("Evolution Accreditation Review", content)
+        self.assertIn("<td>Accreditable Versions</td><td>1</td>", content)
+        self.assertIn("<td>Non-Accreditable Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accreditable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Accreditable Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Non-Accreditable Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accreditable Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Accreditable Evolution Outputs</td><td>15</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Accreditable Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Accreditation Classification</td><td>Unresolved Evolution Accreditation</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -7976,6 +8229,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Reliability</h2>"),
             governance_content.index("<h2>Record Evolution Certification</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Certification</h2>"),
+            governance_content.index("<h2>Record Evolution Accreditation</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -8042,6 +8299,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Integrity</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Reliability</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Certification</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Accreditation</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
