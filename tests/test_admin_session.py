@@ -4344,6 +4344,165 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Non-Reproducible Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18s_record_evolution_transparency_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        non_transparent_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+
+        def transparency(metadata, lineage):
+            return self.admin_session._record_stage18s_evolution_transparency(
+                metadata,
+                lineage,
+            )
+
+        single = transparency(single_metadata, single_history)
+        full = transparency(base, full_history)
+        limited = transparency(base, limited_history)
+        non_transparent = transparency(base, non_transparent_history)
+        unresolved = transparency({}, [])
+
+        self.assertEqual(
+            "Partially Transparent Evolution Chain",
+            single["summary"]["transparency_classification"],
+        )
+        self.assertEqual(1, single["summary"]["transparent_versions"])
+        self.assertEqual(0, single["summary"]["non_transparent_versions"])
+        self.assertEqual(0, single["summary"]["transparent_supersession_links"])
+        self.assertEqual(0, single["summary"]["non_transparent_supersession_links"])
+        self.assertEqual(1, single["summary"]["transparent_timestamps"])
+        self.assertEqual(0, single["summary"]["non_transparent_timestamps"])
+        self.assertEqual(1, single["summary"]["transparent_verification_hashes"])
+        self.assertEqual(0, single["summary"]["non_transparent_verification_hashes"])
+        self.assertEqual(18, single["summary"]["transparent_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["non_transparent_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Transparent Version Chain",
+            single["reviews"]["version"]["transparency_state"],
+        )
+        self.assertEqual(
+            "Partially Transparent Supersession Chain",
+            single["reviews"]["supersession"]["transparency_state"],
+        )
+        self.assertEqual(
+            "Partially Transparent Timestamp Chain",
+            single["reviews"]["timestamp"]["transparency_state"],
+        )
+        self.assertEqual(
+            "Partially Transparent Verification Chain",
+            single["reviews"]["verification"]["transparency_state"],
+        )
+        self.assertEqual(
+            "Partially Transparent Evolution Outputs",
+            single["reviews"]["evolution_output"]["transparency_state"],
+        )
+        self.assertEqual(
+            "Transparent Evolution Chain",
+            full["summary"]["transparency_classification"],
+        )
+        self.assertEqual(
+            "Partially Transparent Evolution Chain",
+            limited["summary"]["transparency_classification"],
+        )
+        self.assertEqual(
+            "Non-Transparent Evolution Chain",
+            non_transparent["summary"]["transparency_classification"],
+        )
+        self.assertEqual(
+            "Non-Transparent Evolution Chain",
+            unresolved["summary"]["transparency_classification"],
+        )
+        self.assertEqual(single, transparency(single_metadata, single_history))
+
+        for transparency_set, expected in (
+            (full, "Transparent Evolution Chain"),
+            (single, "Partially Transparent Evolution Chain"),
+            (limited, "Partially Transparent Evolution Chain"),
+            (non_transparent, "Non-Transparent Evolution Chain"),
+            (unresolved, "Non-Transparent Evolution Chain"),
+        ):
+            rendered = self.admin_session._render_stage18s_evolution_transparency_content(
+                transparency_set
+            )
+            self.assertIn(
+                f"<td>Transparency Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Transparency Summary</h3>", rendered)
+            self.assertIn("<h3>Version Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Verification Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Output Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Evolution Transparency Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Transparency</h3>", rendered)
+            self.assertIn("Transparent Versions", rendered)
+            self.assertIn("Non-Transparent Versions", rendered)
+            self.assertIn("Transparent Supersession Links", rendered)
+            self.assertIn("Non-Transparent Supersession Links", rendered)
+            self.assertIn("Transparent Timestamps", rendered)
+            self.assertIn("Non-Transparent Timestamps", rendered)
+            self.assertIn("Transparent Verification Hashes", rendered)
+            self.assertIn("Non-Transparent Verification Hashes", rendered)
+            self.assertIn("Transparent Evolution Outputs", rendered)
+            self.assertIn("Non-Transparent Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -6429,6 +6588,50 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reproducibility Classification</td><td>Non-Reproducible Evolution Chain</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Transparency", after_content)
+        self.assertIn("Transparency Summary", after_content)
+        self.assertIn("Version Transparency Review", after_content)
+        self.assertIn("Supersession Transparency Review", after_content)
+        self.assertIn("Timestamp Transparency Review", after_content)
+        self.assertIn("Verification Transparency Review", after_content)
+        self.assertIn("Evolution Output Transparency Review", after_content)
+        self.assertIn("Evolution Transparency Review", after_content)
+        self.assertIn("<td>Transparent Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Non-Transparent Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Transparent Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Transparent Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Non-Transparent Timestamps</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Transparent Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Transparent Evolution Outputs</td><td>17</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Evolution Outputs</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Transparency Classification</td><td>Non-Transparent Evolution Chain</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -7684,6 +7887,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Reproducibility Classification</td><td>Non-Reproducible Evolution Chain</td>",
             content,
         )
+        self.assertIn("Record Evolution Transparency", content)
+        self.assertIn("Transparency Summary", content)
+        self.assertIn("Version Transparency Review", content)
+        self.assertIn("Supersession Transparency Review", content)
+        self.assertIn("Timestamp Transparency Review", content)
+        self.assertIn("Verification Transparency Review", content)
+        self.assertIn("Evolution Output Transparency Review", content)
+        self.assertIn("Evolution Transparency Review", content)
+        self.assertIn("<td>Transparent Versions</td><td>1</td>", content)
+        self.assertIn("<td>Non-Transparent Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Transparent Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Transparent Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Non-Transparent Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Transparent Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Transparent Evolution Outputs</td><td>17</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Transparent Evolution Outputs</td><td>1</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Transparency Classification</td><td>Non-Transparent Evolution Chain</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -8741,6 +8985,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Auditability</h2>"),
             governance_content.index("<h2>Record Evolution Reproducibility</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Reproducibility</h2>"),
+            governance_content.index("<h2>Record Evolution Transparency</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -8810,6 +9058,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Accreditation</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Auditability</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Reproducibility</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Transparency</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,

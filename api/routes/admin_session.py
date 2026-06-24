@@ -26459,6 +26459,778 @@ def _render_stage18r_record_evolution_reproducibility_section(
       </section>"""
 
 
+_STAGE18S_PARTIAL_OUTPUT_STATES = _STAGE18R_PARTIAL_OUTPUT_STATES | {
+    "Partially Reproducible Evolution Chain",
+}
+
+
+def _stage18s_output_conflict_count(summary: dict[str, Any]) -> int:
+    conflicts = _stage18r_output_conflict_count(summary)
+    if (
+        summary.get("reproducibility_classification")
+        == "Reproducible Evolution Chain"
+        and summary.get("auditability_classification")
+        != "Fully Auditable Evolution Chain"
+    ):
+        conflicts += 1
+    if (
+        summary.get("reproducibility_classification")
+        == "Non-Reproducible Evolution Chain"
+    ):
+        conflicts += 1
+    return conflicts
+
+
+def _stage18s_evolution_output_counts(
+    reproducibility: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = reproducibility["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+        "readiness_classification",
+        "completeness_classification",
+        "sufficiency_classification",
+        "consistency_classification",
+        "integrity_classification",
+        "reliability_classification",
+        "certification_classification",
+        "accreditation_classification",
+        "auditability_classification",
+        "reproducibility_classification",
+    )
+    missing = sum(1 for key in output_keys if not str(summary.get(key) or "").strip())
+    non_transparent = _stage18s_output_conflict_count(summary)
+    transparent = max(0, len(output_keys) - missing - non_transparent)
+    return transparent, non_transparent, missing
+
+
+def _stage18s_version_transparency_state(
+    *,
+    current_version: Any,
+    total_versions: int,
+    transparent_versions: int,
+    non_transparent_versions: int,
+) -> str:
+    if current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Transparency"
+    if non_transparent_versions:
+        return "Non-Transparent Version Chain"
+    if transparent_versions < total_versions:
+        return "Limited Version Transparency"
+    if total_versions > 1:
+        return "Transparent Version Chain"
+    return "Partially Transparent Version Chain"
+
+
+def _stage18s_supersession_transparency_state(
+    total_versions: int,
+    link_count: int,
+    non_transparent_links: int,
+) -> str:
+    if non_transparent_links:
+        return "Non-Transparent Supersession Chain"
+    if link_count:
+        return "Transparent Supersession Chain"
+    if total_versions == 1:
+        return "Partially Transparent Supersession Chain"
+    if total_versions > 1:
+        return "Limited Supersession Transparency"
+    return "No Supersession Transparency"
+
+
+def _stage18s_timestamp_transparency_state(
+    total_versions: int,
+    transparent_timestamps: int,
+    non_transparent_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if non_transparent_timestamps:
+        return "Non-Transparent Timestamp Chain"
+    if not transparent_timestamps:
+        return "No Timestamp Transparency"
+    if missing_timestamps:
+        return "Limited Timestamp Transparency"
+    if total_versions > 1:
+        return "Transparent Timestamp Chain"
+    return "Partially Transparent Timestamp Chain"
+
+
+def _stage18s_verification_transparency_state(
+    total_versions: int,
+    transparent_hashes: int,
+    non_transparent_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if non_transparent_hashes:
+        return "Non-Transparent Verification Chain"
+    if not transparent_hashes:
+        return "No Verification Transparency"
+    if missing_hashes:
+        return "Limited Verification Transparency"
+    if total_versions > 1:
+        return "Transparent Verification Chain"
+    return "Partially Transparent Verification Chain"
+
+
+def _stage18s_evolution_output_transparency_state(
+    summary: dict[str, Any],
+    transparent_outputs: int,
+    non_transparent_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if non_transparent_outputs:
+        return "Non-Transparent Evolution Outputs"
+    if not transparent_outputs:
+        return "No Evolution Output Transparency"
+    if missing_outputs:
+        return "Limited Evolution Output Transparency"
+    if any(
+        summary.get(key) in _STAGE18S_PARTIAL_OUTPUT_STATES
+        for key in (
+            "evolution_classification",
+            "continuity_classification",
+            "change_log_classification",
+            "trajectory_classification",
+            "relationship_classification",
+            "traceability_classification",
+            "coverage_classification",
+            "review_classification",
+            "readiness_classification",
+            "completeness_classification",
+            "sufficiency_classification",
+            "consistency_classification",
+            "integrity_classification",
+            "reliability_classification",
+            "certification_classification",
+            "accreditation_classification",
+            "auditability_classification",
+            "reproducibility_classification",
+        )
+    ):
+        return "Partially Transparent Evolution Outputs"
+    return "Transparent Evolution Outputs"
+
+
+def _stage18s_evolution_transparency_state(
+    transparency_classification: str,
+) -> str:
+    return {
+        "Transparent Evolution Chain": "Transparent Evolution Chain",
+        "Partially Transparent Evolution Chain": (
+            "Partially Transparent Evolution Chain"
+        ),
+        "Non-Transparent Evolution Chain": "Non-Transparent Evolution Chain",
+    }.get(transparency_classification, "Non-Transparent Evolution Chain")
+
+
+def classify_record_evolution_transparency(
+    *,
+    record_metadata: dict[str, Any],
+    reproducibility: dict[str, Any],
+    non_transparent_versions: int,
+    non_transparent_supersession_links: int,
+    non_transparent_timestamps: int,
+    non_transparent_hashes: int,
+    non_transparent_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = reproducibility["summary"]
+
+    if (
+        not reference
+        or version is None
+        or summary["total_versions"] == 0
+        or summary["reproducibility_classification"]
+        == "Non-Reproducible Evolution Chain"
+    ):
+        return "Non-Transparent Evolution Chain"
+
+    if (
+        non_transparent_versions
+        or non_transparent_supersession_links
+        or non_transparent_timestamps
+        or non_transparent_hashes
+        or non_transparent_outputs
+    ):
+        return "Non-Transparent Evolution Chain"
+
+    if (
+        summary["total_versions"] > 1
+        and not missing_outputs
+        and summary["reproducibility_classification"]
+        == "Reproducible Evolution Chain"
+        and summary["auditability_classification"]
+        == "Fully Auditable Evolution Chain"
+        and summary["accreditation_classification"]
+        == "Fully Accredited Evolution Chain"
+        and summary["certification_classification"] == "Certified Evolution Chain"
+        and summary["reliability_classification"] == "Reliable Evolution Chain"
+        and summary["integrity_classification"] == "Full Evolution Integrity"
+        and summary["consistency_classification"] == "Consistent Evolution Chain"
+        and summary["sufficiency_classification"]
+        == "Sufficient Evolution Information"
+        and summary["completeness_classification"] == "Complete Evolution Chain"
+        and summary["readiness_classification"] == "Fully Evolution Ready"
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Transparent Evolution Chain"
+
+    return "Partially Transparent Evolution Chain"
+
+
+def _record_stage18s_evolution_transparency(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    reproducibility = _record_stage18r_evolution_reproducibility(
+        record_metadata,
+        history,
+    )
+    reproducibility_summary = reproducibility["summary"]
+    version_review = reproducibility["reviews"]["version"]
+    supersession_review = reproducibility["reviews"]["supersession"]
+    timestamp_review = reproducibility["reviews"]["timestamp"]
+    verification_review = reproducibility["reviews"]["verification"]
+    transparent_versions = int(
+        reproducibility_summary["reproducible_versions"] or 0
+    )
+    non_transparent_versions = int(
+        reproducibility_summary["non_reproducible_versions"] or 0
+    )
+    transparent_supersession_links = int(
+        reproducibility_summary["reproducible_supersession_links"] or 0
+    )
+    non_transparent_supersession_links = int(
+        reproducibility_summary["non_reproducible_supersession_links"] or 0
+    )
+    transparent_timestamps = int(
+        reproducibility_summary["reproducible_timestamps"] or 0
+    )
+    non_transparent_timestamps = int(
+        reproducibility_summary["non_reproducible_timestamps"] or 0
+    )
+    transparent_hashes = int(
+        reproducibility_summary["reproducible_verification_hashes"] or 0
+    )
+    non_transparent_hashes = int(
+        reproducibility_summary["non_reproducible_verification_hashes"] or 0
+    )
+    transparent_outputs, non_transparent_outputs, missing_outputs = (
+        _stage18s_evolution_output_counts(reproducibility)
+    )
+    summary = {
+        "record_reference": reproducibility_summary["record_reference"],
+        "current_version": reproducibility_summary["current_version"],
+        "total_versions": reproducibility_summary["total_versions"],
+        "transparent_versions": transparent_versions,
+        "non_transparent_versions": non_transparent_versions,
+        "transparent_supersession_links": transparent_supersession_links,
+        "non_transparent_supersession_links": (
+            non_transparent_supersession_links
+        ),
+        "transparent_timestamps": transparent_timestamps,
+        "non_transparent_timestamps": non_transparent_timestamps,
+        "transparent_verification_hashes": transparent_hashes,
+        "non_transparent_verification_hashes": non_transparent_hashes,
+        "transparent_evolution_outputs": transparent_outputs,
+        "non_transparent_evolution_outputs": non_transparent_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": reproducibility_summary[
+            "evolution_classification"
+        ],
+        "continuity_classification": reproducibility_summary[
+            "continuity_classification"
+        ],
+        "change_log_classification": reproducibility_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": reproducibility_summary[
+            "trajectory_classification"
+        ],
+        "relationship_classification": reproducibility_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": reproducibility_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": reproducibility_summary[
+            "coverage_classification"
+        ],
+        "review_classification": reproducibility_summary["review_classification"],
+        "readiness_classification": reproducibility_summary[
+            "readiness_classification"
+        ],
+        "completeness_classification": reproducibility_summary[
+            "completeness_classification"
+        ],
+        "sufficiency_classification": reproducibility_summary[
+            "sufficiency_classification"
+        ],
+        "consistency_classification": reproducibility_summary[
+            "consistency_classification"
+        ],
+        "integrity_classification": reproducibility_summary[
+            "integrity_classification"
+        ],
+        "reliability_classification": reproducibility_summary[
+            "reliability_classification"
+        ],
+        "certification_classification": reproducibility_summary[
+            "certification_classification"
+        ],
+        "accreditation_classification": reproducibility_summary[
+            "accreditation_classification"
+        ],
+        "auditability_classification": reproducibility_summary[
+            "auditability_classification"
+        ],
+        "reproducibility_classification": reproducibility_summary[
+            "reproducibility_classification"
+        ],
+    }
+    summary["transparency_classification"] = classify_record_evolution_transparency(
+        record_metadata=record_metadata,
+        reproducibility=reproducibility,
+        non_transparent_versions=non_transparent_versions,
+        non_transparent_supersession_links=non_transparent_supersession_links,
+        non_transparent_timestamps=non_transparent_timestamps,
+        non_transparent_hashes=non_transparent_hashes,
+        non_transparent_outputs=non_transparent_outputs,
+        missing_outputs=missing_outputs,
+    )
+    missing_timestamps = max(
+        0,
+        int(summary["total_versions"] or 0)
+        - transparent_timestamps
+        - non_transparent_timestamps,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "transparent_versions": transparent_versions,
+                "non_transparent_versions": non_transparent_versions,
+                "transparency_state": _stage18s_version_transparency_state(
+                    current_version=summary["current_version"],
+                    total_versions=summary["total_versions"],
+                    transparent_versions=transparent_versions,
+                    non_transparent_versions=non_transparent_versions,
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": supersession_review[
+                    "supersession_link_count"
+                ],
+                "transparent_supersession_links": transparent_supersession_links,
+                "non_transparent_supersession_links": (
+                    non_transparent_supersession_links
+                ),
+                "transparency_state": _stage18s_supersession_transparency_state(
+                    summary["total_versions"],
+                    supersession_review["supersession_link_count"],
+                    non_transparent_supersession_links,
+                ),
+            },
+            "timestamp": {
+                "transparent_timestamps": transparent_timestamps,
+                "non_transparent_timestamps": non_transparent_timestamps,
+                "earliest_timestamp": timestamp_review["earliest_timestamp"],
+                "latest_timestamp": timestamp_review["latest_timestamp"],
+                "transparency_state": _stage18s_timestamp_transparency_state(
+                    summary["total_versions"],
+                    transparent_timestamps,
+                    non_transparent_timestamps,
+                    missing_timestamps,
+                ),
+            },
+            "verification": {
+                "transparent_verification_hashes": transparent_hashes,
+                "non_transparent_verification_hashes": non_transparent_hashes,
+                "missing_verification_hashes": verification_review[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": verification_review[
+                    "verification_hash_coverage"
+                ],
+                "transparency_state": _stage18s_verification_transparency_state(
+                    summary["total_versions"],
+                    transparent_hashes,
+                    non_transparent_hashes,
+                    verification_review["missing_verification_hashes"],
+                ),
+            },
+            "evolution_output": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditability_classification": summary[
+                    "auditability_classification"
+                ],
+                "reproducibility_classification": summary[
+                    "reproducibility_classification"
+                ],
+                "transparent_evolution_outputs": transparent_outputs,
+                "non_transparent_evolution_outputs": non_transparent_outputs,
+                "missing_evolution_outputs": missing_outputs,
+                "transparency_state": _stage18s_evolution_output_transparency_state(
+                    summary,
+                    transparent_outputs,
+                    non_transparent_outputs,
+                    missing_outputs,
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditability_classification": summary[
+                    "auditability_classification"
+                ],
+                "reproducibility_classification": summary[
+                    "reproducibility_classification"
+                ],
+                "transparency_classification": summary[
+                    "transparency_classification"
+                ],
+                "transparency_state": _stage18s_evolution_transparency_state(
+                    summary["transparency_classification"]
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18s_record_transparency(transparency: dict[str, Any]) -> str:
+    record = transparency["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Transparent Versions", record["transparent_versions"]),
+        ("Non-Transparent Versions", record["non_transparent_versions"]),
+        (
+            "Transparent Supersession Links",
+            record["transparent_supersession_links"],
+        ),
+        (
+            "Non-Transparent Supersession Links",
+            record["non_transparent_supersession_links"],
+        ),
+        ("Transparent Timestamps", record["transparent_timestamps"]),
+        ("Non-Transparent Timestamps", record["non_transparent_timestamps"]),
+        (
+            "Transparent Verification Hashes",
+            record["transparent_verification_hashes"],
+        ),
+        (
+            "Non-Transparent Verification Hashes",
+            record["non_transparent_verification_hashes"],
+        ),
+        ("Transparent Evolution Outputs", record["transparent_evolution_outputs"]),
+        (
+            "Non-Transparent Evolution Outputs",
+            record["non_transparent_evolution_outputs"],
+        ),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+        ("Completeness Classification", record["completeness_classification"]),
+        ("Sufficiency Classification", record["sufficiency_classification"]),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Reliability Classification", record["reliability_classification"]),
+        ("Certification Classification", record["certification_classification"]),
+        ("Accreditation Classification", record["accreditation_classification"]),
+        ("Auditability Classification", record["auditability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+        ("Transparency Classification", record["transparency_classification"]),
+    )
+    return f"""
+        <section class="stage18s-record-evolution-transparency">
+          <h3>Record Evolution Transparency</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _stage18s_classification_review_rows(
+    section: dict[str, Any],
+    *,
+    include_transparency: bool,
+) -> tuple[tuple[str, Any], ...]:
+    rows: list[tuple[str, Any]] = [
+        ("Evolution Classification", section["evolution_classification"]),
+        ("Continuity Classification", section["continuity_classification"]),
+        ("Change Log Classification", section["change_log_classification"]),
+        ("Trajectory Classification", section["trajectory_classification"]),
+        ("Relationship Classification", section["relationship_classification"]),
+        ("Traceability Classification", section["traceability_classification"]),
+        ("Coverage Classification", section["coverage_classification"]),
+        ("Review Classification", section["review_classification"]),
+        ("Readiness Classification", section["readiness_classification"]),
+        ("Completeness Classification", section["completeness_classification"]),
+        ("Sufficiency Classification", section["sufficiency_classification"]),
+        ("Consistency Classification", section["consistency_classification"]),
+        ("Integrity Classification", section["integrity_classification"]),
+        ("Reliability Classification", section["reliability_classification"]),
+        ("Certification Classification", section["certification_classification"]),
+        ("Accreditation Classification", section["accreditation_classification"]),
+        ("Auditability Classification", section["auditability_classification"]),
+        (
+            "Reproducibility Classification",
+            section["reproducibility_classification"],
+        ),
+    ]
+    if include_transparency:
+        rows.append(("Transparency Classification", section["transparency_classification"]))
+    return tuple(rows)
+
+
+def _render_stage18s_evolution_transparency_content(
+    transparency: dict[str, Any],
+) -> str:
+    summary = transparency["summary"]
+    reviews = transparency["reviews"]
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <h3>Transparency Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Transparency Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                ("Transparent Versions", reviews["version"]["transparent_versions"]),
+                (
+                    "Non-Transparent Versions",
+                    reviews["version"]["non_transparent_versions"],
+                ),
+                ("Transparency State", reviews["version"]["transparency_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Transparency Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Transparent Supersession Links",
+                    reviews["supersession"]["transparent_supersession_links"],
+                ),
+                (
+                    "Non-Transparent Supersession Links",
+                    reviews["supersession"][
+                        "non_transparent_supersession_links"
+                    ],
+                ),
+                (
+                    "Transparency State",
+                    reviews["supersession"]["transparency_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Transparency Review",
+            (
+                (
+                    "Transparent Timestamps",
+                    reviews["timestamp"]["transparent_timestamps"],
+                ),
+                (
+                    "Non-Transparent Timestamps",
+                    reviews["timestamp"]["non_transparent_timestamps"],
+                ),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                ("Transparency State", reviews["timestamp"]["transparency_state"]),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Transparency Review",
+            (
+                (
+                    "Transparent Verification Hashes",
+                    reviews["verification"]["transparent_verification_hashes"],
+                ),
+                (
+                    "Non-Transparent Verification Hashes",
+                    reviews["verification"][
+                        "non_transparent_verification_hashes"
+                    ],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Transparency State",
+                    reviews["verification"]["transparency_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Transparency Review",
+            _stage18s_classification_review_rows(
+                reviews["evolution_output"],
+                include_transparency=False,
+            )
+            + (
+                (
+                    "Transparent Evolution Outputs",
+                    reviews["evolution_output"]["transparent_evolution_outputs"],
+                ),
+                (
+                    "Non-Transparent Evolution Outputs",
+                    reviews["evolution_output"][
+                        "non_transparent_evolution_outputs"
+                    ],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution_output"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Transparency State",
+                    reviews["evolution_output"]["transparency_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Transparency Review",
+            _stage18s_classification_review_rows(
+                reviews["evolution"],
+                include_transparency=True,
+            )
+            + (
+                (
+                    "Transparency State",
+                    reviews["evolution"]["transparency_state"],
+                ),
+            ),
+        )}
+        {_render_stage18s_record_transparency(transparency)}"""
+
+
+def _render_stage18s_record_evolution_transparency_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    transparency = _record_stage18s_evolution_transparency(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18s-record-evolution-transparency">
+        <h2>Record Evolution Transparency</h2>
+        <p class="notice">
+          Record evolution transparency is derived deterministically from
+          existing record metadata, same-reference version history, and Stage
+          18A through Stage 18R evolution outputs only. Transparency evaluates
+          whether the visible evolution chain is inspectable and understandable
+          from the same visible information and does not publish records, alter
+          access, validate truthfulness, certify evidence, or imply
+          institutional approval.
+        </p>
+        {_render_stage18s_evolution_transparency_content(transparency)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -26721,6 +27493,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18s_record_evolution_transparency = _render_stage18s_record_evolution_transparency_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -26870,6 +27646,7 @@ def render_admin_record_evidence_page(
             f"{stage18p_record_evolution_accreditation}"
             f"{stage18q_record_evolution_auditability}"
             f"{stage18r_record_evolution_reproducibility}"
+            f"{stage18s_record_evolution_transparency}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
