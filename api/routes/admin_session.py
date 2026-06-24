@@ -25569,6 +25569,896 @@ def _render_stage18q_record_evolution_auditability_section(
       </section>"""
 
 
+_STAGE18R_PARTIAL_OUTPUT_STATES = _STAGE18Q_PARTIAL_OUTPUT_STATES | {
+    "Partially Auditable Evolution Chain",
+}
+
+
+def _stage18r_output_conflict_count(summary: dict[str, Any]) -> int:
+    conflicts = _stage18q_output_conflict_count(summary)
+    if (
+        summary.get("auditability_classification")
+        == "Fully Auditable Evolution Chain"
+        and summary.get("accreditation_classification")
+        != "Fully Accredited Evolution Chain"
+    ):
+        conflicts += 1
+    if summary.get("auditability_classification") == "Not Auditable Evolution Chain":
+        conflicts += 1
+    return conflicts
+
+
+def _stage18r_evolution_output_counts(
+    auditability: dict[str, Any],
+) -> tuple[int, int, int]:
+    summary = auditability["summary"]
+    output_keys = (
+        "evolution_classification",
+        "continuity_classification",
+        "change_log_classification",
+        "trajectory_classification",
+        "relationship_classification",
+        "traceability_classification",
+        "coverage_classification",
+        "review_classification",
+        "readiness_classification",
+        "completeness_classification",
+        "sufficiency_classification",
+        "consistency_classification",
+        "integrity_classification",
+        "reliability_classification",
+        "certification_classification",
+        "accreditation_classification",
+        "auditability_classification",
+    )
+    missing = sum(1 for key in output_keys if not str(summary.get(key) or "").strip())
+    non_reproducible = _stage18r_output_conflict_count(summary)
+    reproducible = max(0, len(output_keys) - missing - non_reproducible)
+    return reproducible, non_reproducible, missing
+
+
+def _stage18r_version_reproducibility_state(
+    *,
+    current_version: Any,
+    total_versions: int,
+    reproducible_versions: int,
+    non_reproducible_versions: int,
+) -> str:
+    if current_version in (None, ""):
+        return "Unresolved"
+    if not total_versions:
+        return "No Version Reproducibility"
+    if non_reproducible_versions:
+        return "Non-Reproducible Version Chain"
+    if reproducible_versions < total_versions:
+        return "Limited Version Reproducibility"
+    if total_versions > 1:
+        return "Reproducible Version Chain"
+    return "Partially Reproducible Version Chain"
+
+
+def _stage18r_supersession_reproducibility_state(
+    total_versions: int,
+    link_count: int,
+    non_reproducible_links: int,
+) -> str:
+    if non_reproducible_links:
+        return "Non-Reproducible Supersession Chain"
+    if link_count:
+        return "Reproducible Supersession Chain"
+    if total_versions == 1:
+        return "Partially Reproducible Supersession Chain"
+    if total_versions > 1:
+        return "Limited Supersession Reproducibility"
+    return "No Supersession Reproducibility"
+
+
+def _stage18r_timestamp_reproducibility_state(
+    total_versions: int,
+    reproducible_timestamps: int,
+    non_reproducible_timestamps: int,
+    missing_timestamps: int,
+) -> str:
+    if non_reproducible_timestamps:
+        return "Non-Reproducible Timestamp Chain"
+    if not reproducible_timestamps:
+        return "No Timestamp Reproducibility"
+    if missing_timestamps:
+        return "Limited Timestamp Reproducibility"
+    if total_versions > 1:
+        return "Reproducible Timestamp Chain"
+    return "Partially Reproducible Timestamp Chain"
+
+
+def _stage18r_verification_reproducibility_state(
+    total_versions: int,
+    reproducible_hashes: int,
+    non_reproducible_hashes: int,
+    missing_hashes: int,
+) -> str:
+    if non_reproducible_hashes:
+        return "Non-Reproducible Verification Chain"
+    if not reproducible_hashes:
+        return "No Verification Reproducibility"
+    if missing_hashes:
+        return "Limited Verification Reproducibility"
+    if total_versions > 1:
+        return "Reproducible Verification Chain"
+    return "Partially Reproducible Verification Chain"
+
+
+def _stage18r_evolution_output_reproducibility_state(
+    summary: dict[str, Any],
+    reproducible_outputs: int,
+    non_reproducible_outputs: int,
+    missing_outputs: int,
+) -> str:
+    if non_reproducible_outputs:
+        return "Non-Reproducible Evolution Outputs"
+    if not reproducible_outputs:
+        return "No Evolution Output Reproducibility"
+    if missing_outputs:
+        return "Limited Evolution Output Reproducibility"
+    if any(
+        summary.get(key) in _STAGE18R_PARTIAL_OUTPUT_STATES
+        for key in (
+            "evolution_classification",
+            "continuity_classification",
+            "change_log_classification",
+            "trajectory_classification",
+            "relationship_classification",
+            "traceability_classification",
+            "coverage_classification",
+            "review_classification",
+            "readiness_classification",
+            "completeness_classification",
+            "sufficiency_classification",
+            "consistency_classification",
+            "integrity_classification",
+            "reliability_classification",
+            "certification_classification",
+            "accreditation_classification",
+            "auditability_classification",
+        )
+    ):
+        return "Partially Reproducible Evolution Outputs"
+    return "Reproducible Evolution Outputs"
+
+
+def _stage18r_evolution_reproducibility_state(
+    reproducibility_classification: str,
+) -> str:
+    return {
+        "Reproducible Evolution Chain": "Reproducible Evolution Chain",
+        "Partially Reproducible Evolution Chain": (
+            "Partially Reproducible Evolution Chain"
+        ),
+        "Non-Reproducible Evolution Chain": (
+            "Non-Reproducible Evolution Chain"
+        ),
+    }.get(reproducibility_classification, "Non-Reproducible Evolution Chain")
+
+
+def classify_record_evolution_reproducibility(
+    *,
+    record_metadata: dict[str, Any],
+    auditability: dict[str, Any],
+    non_reproducible_versions: int,
+    non_reproducible_supersession_links: int,
+    non_reproducible_timestamps: int,
+    non_reproducible_hashes: int,
+    non_reproducible_outputs: int,
+    missing_outputs: int,
+) -> str:
+    reference = str(record_metadata.get("reference") or "").strip()
+    version = _stage18a_int(record_metadata.get("version"))
+    summary = auditability["summary"]
+
+    if (
+        not reference
+        or version is None
+        or summary["total_versions"] == 0
+        or summary["auditability_classification"]
+        in {
+            "No Evolution Auditability",
+            "Unresolved Evolution Auditability",
+            "Not Auditable Evolution Chain",
+        }
+    ):
+        return "Non-Reproducible Evolution Chain"
+
+    if (
+        non_reproducible_versions
+        or non_reproducible_supersession_links
+        or non_reproducible_timestamps
+        or non_reproducible_hashes
+        or non_reproducible_outputs
+    ):
+        return "Non-Reproducible Evolution Chain"
+
+    if (
+        summary["total_versions"] > 1
+        and not missing_outputs
+        and summary["auditability_classification"]
+        == "Fully Auditable Evolution Chain"
+        and summary["accreditation_classification"]
+        == "Fully Accredited Evolution Chain"
+        and summary["certification_classification"] == "Certified Evolution Chain"
+        and summary["reliability_classification"] == "Reliable Evolution Chain"
+        and summary["integrity_classification"] == "Full Evolution Integrity"
+        and summary["consistency_classification"] == "Consistent Evolution Chain"
+        and summary["sufficiency_classification"]
+        == "Sufficient Evolution Information"
+        and summary["completeness_classification"] == "Complete Evolution Chain"
+        and summary["readiness_classification"] == "Fully Evolution Ready"
+        and summary["coverage_classification"] == "Full Evolution Coverage"
+        and summary["traceability_classification"] == "Fully Traceable Evolution"
+    ):
+        return "Reproducible Evolution Chain"
+
+    return "Partially Reproducible Evolution Chain"
+
+
+def _record_stage18r_evolution_reproducibility(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    history = _stage18c_sorted_history(version_history)
+    auditability = _record_stage18q_evolution_auditability(
+        record_metadata,
+        history,
+    )
+    auditability_summary = auditability["summary"]
+    version_review = auditability["reviews"]["version"]
+    supersession_review = auditability["reviews"]["supersession"]
+    timestamp_review = auditability["reviews"]["timestamp"]
+    verification_review = auditability["reviews"]["verification"]
+    reproducible_versions = int(auditability_summary["auditable_versions"] or 0)
+    non_reproducible_versions = int(
+        auditability_summary["non_auditable_versions"] or 0
+    )
+    reproducible_supersession_links = int(
+        auditability_summary["auditable_supersession_links"] or 0
+    )
+    non_reproducible_supersession_links = int(
+        auditability_summary["non_auditable_supersession_links"] or 0
+    )
+    reproducible_timestamps = int(
+        auditability_summary["auditable_timestamps"] or 0
+    )
+    non_reproducible_timestamps = int(
+        auditability_summary["non_auditable_timestamps"] or 0
+    )
+    reproducible_hashes = int(
+        auditability_summary["auditable_verification_hashes"] or 0
+    )
+    non_reproducible_hashes = int(
+        auditability_summary["non_auditable_verification_hashes"] or 0
+    )
+    reproducible_outputs, non_reproducible_outputs, missing_outputs = (
+        _stage18r_evolution_output_counts(auditability)
+    )
+    summary = {
+        "record_reference": auditability_summary["record_reference"],
+        "current_version": auditability_summary["current_version"],
+        "total_versions": auditability_summary["total_versions"],
+        "reproducible_versions": reproducible_versions,
+        "non_reproducible_versions": non_reproducible_versions,
+        "reproducible_supersession_links": reproducible_supersession_links,
+        "non_reproducible_supersession_links": (
+            non_reproducible_supersession_links
+        ),
+        "reproducible_timestamps": reproducible_timestamps,
+        "non_reproducible_timestamps": non_reproducible_timestamps,
+        "reproducible_verification_hashes": reproducible_hashes,
+        "non_reproducible_verification_hashes": non_reproducible_hashes,
+        "reproducible_evolution_outputs": reproducible_outputs,
+        "non_reproducible_evolution_outputs": non_reproducible_outputs,
+        "missing_evolution_outputs": missing_outputs,
+        "evolution_classification": auditability_summary[
+            "evolution_classification"
+        ],
+        "continuity_classification": auditability_summary[
+            "continuity_classification"
+        ],
+        "change_log_classification": auditability_summary[
+            "change_log_classification"
+        ],
+        "trajectory_classification": auditability_summary[
+            "trajectory_classification"
+        ],
+        "relationship_classification": auditability_summary[
+            "relationship_classification"
+        ],
+        "traceability_classification": auditability_summary[
+            "traceability_classification"
+        ],
+        "coverage_classification": auditability_summary["coverage_classification"],
+        "review_classification": auditability_summary["review_classification"],
+        "readiness_classification": auditability_summary[
+            "readiness_classification"
+        ],
+        "completeness_classification": auditability_summary[
+            "completeness_classification"
+        ],
+        "sufficiency_classification": auditability_summary[
+            "sufficiency_classification"
+        ],
+        "consistency_classification": auditability_summary[
+            "consistency_classification"
+        ],
+        "integrity_classification": auditability_summary[
+            "integrity_classification"
+        ],
+        "reliability_classification": auditability_summary[
+            "reliability_classification"
+        ],
+        "certification_classification": auditability_summary[
+            "certification_classification"
+        ],
+        "accreditation_classification": auditability_summary[
+            "accreditation_classification"
+        ],
+        "auditability_classification": auditability_summary[
+            "auditability_classification"
+        ],
+    }
+    summary["reproducibility_classification"] = (
+        classify_record_evolution_reproducibility(
+            record_metadata=record_metadata,
+            auditability=auditability,
+            non_reproducible_versions=non_reproducible_versions,
+            non_reproducible_supersession_links=(
+                non_reproducible_supersession_links
+            ),
+            non_reproducible_timestamps=non_reproducible_timestamps,
+            non_reproducible_hashes=non_reproducible_hashes,
+            non_reproducible_outputs=non_reproducible_outputs,
+            missing_outputs=missing_outputs,
+        )
+    )
+    missing_timestamps = max(
+        0,
+        int(summary["total_versions"] or 0)
+        - reproducible_timestamps
+        - non_reproducible_timestamps,
+    )
+    return {
+        "summary": summary,
+        "reviews": {
+            "version": {
+                "record_reference": summary["record_reference"],
+                "earliest_version": version_review["earliest_version"],
+                "latest_version": version_review["latest_version"],
+                "total_versions": summary["total_versions"],
+                "reproducible_versions": reproducible_versions,
+                "non_reproducible_versions": non_reproducible_versions,
+                "reproducibility_state": (
+                    _stage18r_version_reproducibility_state(
+                        current_version=summary["current_version"],
+                        total_versions=summary["total_versions"],
+                        reproducible_versions=reproducible_versions,
+                        non_reproducible_versions=non_reproducible_versions,
+                    )
+                ),
+            },
+            "supersession": {
+                "supersession_link_count": supersession_review[
+                    "supersession_link_count"
+                ],
+                "reproducible_supersession_links": (
+                    reproducible_supersession_links
+                ),
+                "non_reproducible_supersession_links": (
+                    non_reproducible_supersession_links
+                ),
+                "reproducibility_state": (
+                    _stage18r_supersession_reproducibility_state(
+                        summary["total_versions"],
+                        supersession_review["supersession_link_count"],
+                        non_reproducible_supersession_links,
+                    )
+                ),
+            },
+            "timestamp": {
+                "reproducible_timestamps": reproducible_timestamps,
+                "non_reproducible_timestamps": non_reproducible_timestamps,
+                "earliest_timestamp": timestamp_review["earliest_timestamp"],
+                "latest_timestamp": timestamp_review["latest_timestamp"],
+                "reproducibility_state": (
+                    _stage18r_timestamp_reproducibility_state(
+                        summary["total_versions"],
+                        reproducible_timestamps,
+                        non_reproducible_timestamps,
+                        missing_timestamps,
+                    )
+                ),
+            },
+            "verification": {
+                "reproducible_verification_hashes": reproducible_hashes,
+                "non_reproducible_verification_hashes": non_reproducible_hashes,
+                "missing_verification_hashes": verification_review[
+                    "missing_verification_hashes"
+                ],
+                "verification_hash_coverage": verification_review[
+                    "verification_hash_coverage"
+                ],
+                "reproducibility_state": (
+                    _stage18r_verification_reproducibility_state(
+                        summary["total_versions"],
+                        reproducible_hashes,
+                        non_reproducible_hashes,
+                        verification_review["missing_verification_hashes"],
+                    )
+                ),
+            },
+            "evolution_output": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditability_classification": summary[
+                    "auditability_classification"
+                ],
+                "reproducible_evolution_outputs": reproducible_outputs,
+                "non_reproducible_evolution_outputs": (
+                    non_reproducible_outputs
+                ),
+                "missing_evolution_outputs": missing_outputs,
+                "reproducibility_state": (
+                    _stage18r_evolution_output_reproducibility_state(
+                        summary,
+                        reproducible_outputs,
+                        non_reproducible_outputs,
+                        missing_outputs,
+                    )
+                ),
+            },
+            "evolution": {
+                "evolution_classification": summary["evolution_classification"],
+                "continuity_classification": summary["continuity_classification"],
+                "change_log_classification": summary["change_log_classification"],
+                "trajectory_classification": summary["trajectory_classification"],
+                "relationship_classification": summary[
+                    "relationship_classification"
+                ],
+                "traceability_classification": summary[
+                    "traceability_classification"
+                ],
+                "coverage_classification": summary["coverage_classification"],
+                "review_classification": summary["review_classification"],
+                "readiness_classification": summary["readiness_classification"],
+                "completeness_classification": summary[
+                    "completeness_classification"
+                ],
+                "sufficiency_classification": summary[
+                    "sufficiency_classification"
+                ],
+                "consistency_classification": summary[
+                    "consistency_classification"
+                ],
+                "integrity_classification": summary["integrity_classification"],
+                "reliability_classification": summary[
+                    "reliability_classification"
+                ],
+                "certification_classification": summary[
+                    "certification_classification"
+                ],
+                "accreditation_classification": summary[
+                    "accreditation_classification"
+                ],
+                "auditability_classification": summary[
+                    "auditability_classification"
+                ],
+                "reproducibility_classification": summary[
+                    "reproducibility_classification"
+                ],
+                "reproducibility_state": (
+                    _stage18r_evolution_reproducibility_state(
+                        summary["reproducibility_classification"]
+                    )
+                ),
+            },
+        },
+        "record": dict(summary),
+    }
+
+
+def _render_stage18r_record_reproducibility(
+    reproducibility: dict[str, Any],
+) -> str:
+    record = reproducibility["record"]
+    rows = (
+        ("Record Reference", record["record_reference"]),
+        ("Current Version", record["current_version"]),
+        ("Total Versions", record["total_versions"]),
+        ("Reproducible Versions", record["reproducible_versions"]),
+        ("Non-Reproducible Versions", record["non_reproducible_versions"]),
+        (
+            "Reproducible Supersession Links",
+            record["reproducible_supersession_links"],
+        ),
+        (
+            "Non-Reproducible Supersession Links",
+            record["non_reproducible_supersession_links"],
+        ),
+        ("Reproducible Timestamps", record["reproducible_timestamps"]),
+        ("Non-Reproducible Timestamps", record["non_reproducible_timestamps"]),
+        (
+            "Reproducible Verification Hashes",
+            record["reproducible_verification_hashes"],
+        ),
+        (
+            "Non-Reproducible Verification Hashes",
+            record["non_reproducible_verification_hashes"],
+        ),
+        (
+            "Reproducible Evolution Outputs",
+            record["reproducible_evolution_outputs"],
+        ),
+        (
+            "Non-Reproducible Evolution Outputs",
+            record["non_reproducible_evolution_outputs"],
+        ),
+        ("Missing Evolution Outputs", record["missing_evolution_outputs"]),
+        ("Evolution Classification", record["evolution_classification"]),
+        ("Continuity Classification", record["continuity_classification"]),
+        ("Change Log Classification", record["change_log_classification"]),
+        ("Trajectory Classification", record["trajectory_classification"]),
+        ("Relationship Classification", record["relationship_classification"]),
+        ("Traceability Classification", record["traceability_classification"]),
+        ("Coverage Classification", record["coverage_classification"]),
+        ("Review Classification", record["review_classification"]),
+        ("Readiness Classification", record["readiness_classification"]),
+        ("Completeness Classification", record["completeness_classification"]),
+        ("Sufficiency Classification", record["sufficiency_classification"]),
+        ("Consistency Classification", record["consistency_classification"]),
+        ("Integrity Classification", record["integrity_classification"]),
+        ("Reliability Classification", record["reliability_classification"]),
+        ("Certification Classification", record["certification_classification"]),
+        ("Accreditation Classification", record["accreditation_classification"]),
+        ("Auditability Classification", record["auditability_classification"]),
+        (
+            "Reproducibility Classification",
+            record["reproducibility_classification"],
+        ),
+    )
+    return f"""
+        <section class="stage18r-record-evolution-reproducibility">
+          <h3>Record Evolution Reproducibility</h3>
+          {_render_stage18a_table(rows)}
+        </section>"""
+
+
+def _render_stage18r_evolution_reproducibility_content(
+    reproducibility: dict[str, Any],
+) -> str:
+    summary = reproducibility["summary"]
+    reviews = reproducibility["reviews"]
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <h3>Reproducibility Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        {_render_stage18b_review(
+            "Version Reproducibility Review",
+            (
+                ("Record Reference", reviews["version"]["record_reference"]),
+                ("Earliest Version", reviews["version"]["earliest_version"]),
+                ("Latest Version", reviews["version"]["latest_version"]),
+                ("Total Versions", reviews["version"]["total_versions"]),
+                (
+                    "Reproducible Versions",
+                    reviews["version"]["reproducible_versions"],
+                ),
+                (
+                    "Non-Reproducible Versions",
+                    reviews["version"]["non_reproducible_versions"],
+                ),
+                (
+                    "Reproducibility State",
+                    reviews["version"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Supersession Reproducibility Review",
+            (
+                (
+                    "Supersession Link Count",
+                    reviews["supersession"]["supersession_link_count"],
+                ),
+                (
+                    "Reproducible Supersession Links",
+                    reviews["supersession"]["reproducible_supersession_links"],
+                ),
+                (
+                    "Non-Reproducible Supersession Links",
+                    reviews["supersession"][
+                        "non_reproducible_supersession_links"
+                    ],
+                ),
+                (
+                    "Reproducibility State",
+                    reviews["supersession"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Timestamp Reproducibility Review",
+            (
+                (
+                    "Reproducible Timestamps",
+                    reviews["timestamp"]["reproducible_timestamps"],
+                ),
+                (
+                    "Non-Reproducible Timestamps",
+                    reviews["timestamp"]["non_reproducible_timestamps"],
+                ),
+                ("Earliest Timestamp", reviews["timestamp"]["earliest_timestamp"]),
+                ("Latest Timestamp", reviews["timestamp"]["latest_timestamp"]),
+                (
+                    "Reproducibility State",
+                    reviews["timestamp"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Verification Reproducibility Review",
+            (
+                (
+                    "Reproducible Verification Hashes",
+                    reviews["verification"]["reproducible_verification_hashes"],
+                ),
+                (
+                    "Non-Reproducible Verification Hashes",
+                    reviews["verification"][
+                        "non_reproducible_verification_hashes"
+                    ],
+                ),
+                (
+                    "Missing Verification Hashes",
+                    reviews["verification"]["missing_verification_hashes"],
+                ),
+                (
+                    "Verification Hash Coverage",
+                    reviews["verification"]["verification_hash_coverage"],
+                ),
+                (
+                    "Reproducibility State",
+                    reviews["verification"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Output Reproducibility Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution_output"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution_output"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution_output"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution_output"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution_output"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution_output"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution_output"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution_output"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution_output"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution_output"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution_output"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution_output"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution_output"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution_output"]["reliability_classification"],
+                ),
+                (
+                    "Certification Classification",
+                    reviews["evolution_output"]["certification_classification"],
+                ),
+                (
+                    "Accreditation Classification",
+                    reviews["evolution_output"]["accreditation_classification"],
+                ),
+                (
+                    "Auditability Classification",
+                    reviews["evolution_output"]["auditability_classification"],
+                ),
+                (
+                    "Reproducible Evolution Outputs",
+                    reviews["evolution_output"]["reproducible_evolution_outputs"],
+                ),
+                (
+                    "Non-Reproducible Evolution Outputs",
+                    reviews["evolution_output"][
+                        "non_reproducible_evolution_outputs"
+                    ],
+                ),
+                (
+                    "Missing Evolution Outputs",
+                    reviews["evolution_output"]["missing_evolution_outputs"],
+                ),
+                (
+                    "Reproducibility State",
+                    reviews["evolution_output"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18b_review(
+            "Evolution Reproducibility Review",
+            (
+                (
+                    "Evolution Classification",
+                    reviews["evolution"]["evolution_classification"],
+                ),
+                (
+                    "Continuity Classification",
+                    reviews["evolution"]["continuity_classification"],
+                ),
+                (
+                    "Change Log Classification",
+                    reviews["evolution"]["change_log_classification"],
+                ),
+                (
+                    "Trajectory Classification",
+                    reviews["evolution"]["trajectory_classification"],
+                ),
+                (
+                    "Relationship Classification",
+                    reviews["evolution"]["relationship_classification"],
+                ),
+                (
+                    "Traceability Classification",
+                    reviews["evolution"]["traceability_classification"],
+                ),
+                (
+                    "Coverage Classification",
+                    reviews["evolution"]["coverage_classification"],
+                ),
+                (
+                    "Review Classification",
+                    reviews["evolution"]["review_classification"],
+                ),
+                (
+                    "Readiness Classification",
+                    reviews["evolution"]["readiness_classification"],
+                ),
+                (
+                    "Completeness Classification",
+                    reviews["evolution"]["completeness_classification"],
+                ),
+                (
+                    "Sufficiency Classification",
+                    reviews["evolution"]["sufficiency_classification"],
+                ),
+                (
+                    "Consistency Classification",
+                    reviews["evolution"]["consistency_classification"],
+                ),
+                (
+                    "Integrity Classification",
+                    reviews["evolution"]["integrity_classification"],
+                ),
+                (
+                    "Reliability Classification",
+                    reviews["evolution"]["reliability_classification"],
+                ),
+                (
+                    "Certification Classification",
+                    reviews["evolution"]["certification_classification"],
+                ),
+                (
+                    "Accreditation Classification",
+                    reviews["evolution"]["accreditation_classification"],
+                ),
+                (
+                    "Auditability Classification",
+                    reviews["evolution"]["auditability_classification"],
+                ),
+                (
+                    "Reproducibility Classification",
+                    reviews["evolution"]["reproducibility_classification"],
+                ),
+                (
+                    "Reproducibility State",
+                    reviews["evolution"]["reproducibility_state"],
+                ),
+            ),
+        )}
+        {_render_stage18r_record_reproducibility(reproducibility)}"""
+
+
+def _render_stage18r_record_evolution_reproducibility_section(
+    record_metadata: dict[str, Any] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    reproducibility = _record_stage18r_evolution_reproducibility(
+        record_metadata or {},
+        version_history or [],
+    )
+    return f"""
+      <section class="management-section stage18r-record-evolution-reproducibility">
+        <h2>Record Evolution Reproducibility</h2>
+        <p class="notice">
+          Record evolution reproducibility is derived deterministically from
+          existing record metadata, same-reference version history, and Stage
+          18A through Stage 18Q evolution outputs only. Reproducibility
+          evaluates whether another observer could derive the same visible
+          evolution chain from the same visible information and does not
+          recreate events, validate truthfulness, certify evidence, or imply
+          institutional approval.
+        </p>
+        {_render_stage18r_evolution_reproducibility_content(reproducibility)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -25827,6 +26717,10 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage18r_record_evolution_reproducibility = _render_stage18r_record_evolution_reproducibility_section(
+        record_metadata,
+        version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -25975,6 +26869,7 @@ def render_admin_record_evidence_page(
             f"{stage18o_record_evolution_certification}"
             f"{stage18p_record_evolution_accreditation}"
             f"{stage18q_record_evolution_auditability}"
+            f"{stage18r_record_evolution_reproducibility}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

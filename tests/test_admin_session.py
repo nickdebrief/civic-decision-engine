@@ -4182,6 +4182,168 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Non-Auditable Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage18r_record_evolution_reproducibility_renders_classification_states(self):
+        def version_row(
+            version,
+            *,
+            latest=0,
+            hash_value="shared-hash",
+            generated_at="default",
+            supersedes=None,
+        ):
+            return {
+                "reference": "Strike-LA-20260710-004",
+                "version": version,
+                "is_latest": latest,
+                "supersedes": supersedes
+                if supersedes is not None
+                else (
+                    None
+                    if version == 1
+                    else f"Strike-LA-20260710-004:v{version - 1}"
+                ),
+                "generated_at": None
+                if generated_at is None
+                else (
+                    f"2026-06-0{version}T12:00:00Z"
+                    if generated_at == "default"
+                    else generated_at
+                ),
+                "verification_hash": hash_value,
+                "trajectory": "Stable",
+                "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+                "finding": "Finding v1",
+                "conditions_json": "[\"Escalation Without Response\"]",
+                "signals_json": "[\"No Recurring Transition\"]",
+                "generated_by": "civic-decision-engine",
+            }
+
+        base = {
+            "reference": "Strike-LA-20260710-004",
+            "version": 2,
+            "supersedes": "Strike-LA-20260710-004:v1",
+            "generated_at": "2026-06-02T12:00:00Z",
+            "exported_at": "2026-06-02T12:05:00Z",
+            "is_latest": 1,
+            "trajectory": "Stable",
+            "system_state": "PERSISTENT_RESISTANCE_WITHOUT_ADAPTATION",
+            "finding": "Finding v1",
+            "verification_hash": "shared-hash",
+        }
+        single_metadata = {**base, "version": 1, "supersedes": None}
+        single_history = [version_row(1, latest=1)]
+        full_history = [version_row(1), version_row(2, latest=1)]
+        limited_history = [
+            version_row(1, generated_at=None),
+            version_row(2, latest=1),
+        ]
+        non_reproducible_history = [
+            version_row(1, generated_at="2026-06-03T12:00:00Z"),
+            version_row(2, latest=1, generated_at="2026-06-02T12:00:00Z"),
+        ]
+
+        def reproducibility(metadata, lineage):
+            return self.admin_session._record_stage18r_evolution_reproducibility(
+                metadata,
+                lineage,
+            )
+
+        single = reproducibility(single_metadata, single_history)
+        full = reproducibility(base, full_history)
+        limited = reproducibility(base, limited_history)
+        non_reproducible = reproducibility(base, non_reproducible_history)
+        unresolved = reproducibility({}, [])
+
+        self.assertEqual(
+            "Partially Reproducible Evolution Chain",
+            single["summary"]["reproducibility_classification"],
+        )
+        self.assertEqual(1, single["summary"]["reproducible_versions"])
+        self.assertEqual(0, single["summary"]["non_reproducible_versions"])
+        self.assertEqual(0, single["summary"]["reproducible_supersession_links"])
+        self.assertEqual(0, single["summary"]["non_reproducible_supersession_links"])
+        self.assertEqual(1, single["summary"]["reproducible_timestamps"])
+        self.assertEqual(0, single["summary"]["non_reproducible_timestamps"])
+        self.assertEqual(1, single["summary"]["reproducible_verification_hashes"])
+        self.assertEqual(0, single["summary"]["non_reproducible_verification_hashes"])
+        self.assertEqual(17, single["summary"]["reproducible_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["non_reproducible_evolution_outputs"])
+        self.assertEqual(0, single["summary"]["missing_evolution_outputs"])
+        self.assertEqual(
+            "Partially Reproducible Version Chain",
+            single["reviews"]["version"]["reproducibility_state"],
+        )
+        self.assertEqual(
+            "Partially Reproducible Supersession Chain",
+            single["reviews"]["supersession"]["reproducibility_state"],
+        )
+        self.assertEqual(
+            "Partially Reproducible Timestamp Chain",
+            single["reviews"]["timestamp"]["reproducibility_state"],
+        )
+        self.assertEqual(
+            "Partially Reproducible Verification Chain",
+            single["reviews"]["verification"]["reproducibility_state"],
+        )
+        self.assertEqual(
+            "Partially Reproducible Evolution Outputs",
+            single["reviews"]["evolution_output"]["reproducibility_state"],
+        )
+        self.assertEqual(
+            "Reproducible Evolution Chain",
+            full["summary"]["reproducibility_classification"],
+        )
+        self.assertEqual(
+            "Partially Reproducible Evolution Chain",
+            limited["summary"]["reproducibility_classification"],
+        )
+        self.assertEqual(
+            "Non-Reproducible Evolution Chain",
+            non_reproducible["summary"]["reproducibility_classification"],
+        )
+        self.assertEqual(
+            "Non-Reproducible Evolution Chain",
+            unresolved["summary"]["reproducibility_classification"],
+        )
+        self.assertEqual(single, reproducibility(single_metadata, single_history))
+
+        for reproducibility_set, expected in (
+            (full, "Reproducible Evolution Chain"),
+            (single, "Partially Reproducible Evolution Chain"),
+            (limited, "Partially Reproducible Evolution Chain"),
+            (non_reproducible, "Non-Reproducible Evolution Chain"),
+            (unresolved, "Non-Reproducible Evolution Chain"),
+        ):
+            rendered = self.admin_session._render_stage18r_evolution_reproducibility_content(
+                reproducibility_set
+            )
+            self.assertIn(
+                f"<td>Reproducibility Classification</td><td>{expected}</td>",
+                rendered,
+            )
+            self.assertIn("<h3>Reproducibility Summary</h3>", rendered)
+            self.assertIn("<h3>Version Reproducibility Review</h3>", rendered)
+            self.assertIn("<h3>Supersession Reproducibility Review</h3>", rendered)
+            self.assertIn("<h3>Timestamp Reproducibility Review</h3>", rendered)
+            self.assertIn("<h3>Verification Reproducibility Review</h3>", rendered)
+            self.assertIn(
+                "<h3>Evolution Output Reproducibility Review</h3>",
+                rendered,
+            )
+            self.assertIn("<h3>Evolution Reproducibility Review</h3>", rendered)
+            self.assertIn("<h3>Record Evolution Reproducibility</h3>", rendered)
+            self.assertIn("Reproducible Versions", rendered)
+            self.assertIn("Non-Reproducible Versions", rendered)
+            self.assertIn("Reproducible Supersession Links", rendered)
+            self.assertIn("Non-Reproducible Supersession Links", rendered)
+            self.assertIn("Reproducible Timestamps", rendered)
+            self.assertIn("Non-Reproducible Timestamps", rendered)
+            self.assertIn("Reproducible Verification Hashes", rendered)
+            self.assertIn("Non-Reproducible Verification Hashes", rendered)
+            self.assertIn("Reproducible Evolution Outputs", rendered)
+            self.assertIn("Non-Reproducible Evolution Outputs", rendered)
+            self.assertIn("Missing Evolution Outputs", rendered)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -6223,6 +6385,50 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Auditability Classification</td><td>Unresolved Evolution Auditability</td>",
             after_content,
         )
+        self.assertIn("Record Evolution Reproducibility", after_content)
+        self.assertIn("Reproducibility Summary", after_content)
+        self.assertIn("Version Reproducibility Review", after_content)
+        self.assertIn("Supersession Reproducibility Review", after_content)
+        self.assertIn("Timestamp Reproducibility Review", after_content)
+        self.assertIn("Verification Reproducibility Review", after_content)
+        self.assertIn("Evolution Output Reproducibility Review", after_content)
+        self.assertIn("Evolution Reproducibility Review", after_content)
+        self.assertIn("<td>Reproducible Versions</td><td>1</td>", after_content)
+        self.assertIn("<td>Non-Reproducible Versions</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reproducible Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Supersession Links</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Reproducible Timestamps</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Non-Reproducible Timestamps</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reproducible Verification Hashes</td><td>1</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Verification Hashes</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Reproducible Evolution Outputs</td><td>17</td>",
+            after_content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Evolution Outputs</td><td>0</td>",
+            after_content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", after_content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible Evolution Chain</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -7437,6 +7643,47 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Auditability Classification</td><td>Unresolved Evolution Auditability</td>",
             content,
         )
+        self.assertIn("Record Evolution Reproducibility", content)
+        self.assertIn("Reproducibility Summary", content)
+        self.assertIn("Version Reproducibility Review", content)
+        self.assertIn("Supersession Reproducibility Review", content)
+        self.assertIn("Timestamp Reproducibility Review", content)
+        self.assertIn("Verification Reproducibility Review", content)
+        self.assertIn("Evolution Output Reproducibility Review", content)
+        self.assertIn("Evolution Reproducibility Review", content)
+        self.assertIn("<td>Reproducible Versions</td><td>1</td>", content)
+        self.assertIn("<td>Non-Reproducible Versions</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reproducible Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Supersession Links</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Reproducible Timestamps</td><td>0</td>", content)
+        self.assertIn("<td>Non-Reproducible Timestamps</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reproducible Verification Hashes</td><td>1</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Verification Hashes</td><td>0</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Reproducible Evolution Outputs</td><td>17</td>",
+            content,
+        )
+        self.assertIn(
+            "<td>Non-Reproducible Evolution Outputs</td><td>0</td>",
+            content,
+        )
+        self.assertIn("<td>Missing Evolution Outputs</td><td>0</td>", content)
+        self.assertIn(
+            "<td>Reproducibility Classification</td><td>Non-Reproducible Evolution Chain</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -8490,6 +8737,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Accreditation</h2>"),
             governance_content.index("<h2>Record Evolution Auditability</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Auditability</h2>"),
+            governance_content.index("<h2>Record Evolution Reproducibility</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -8558,6 +8809,7 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Certification</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Accreditation</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Auditability</h2>", print_governance_content)
+        self.assertIn("<h2>Record Evolution Reproducibility</h2>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
