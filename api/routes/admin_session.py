@@ -29710,7 +29710,7 @@ def _render_stage19c_evidence_sources(
         f"<td>{escape(_stage18a_display_value(source.get('evidence_id')))}</td>"
         f"<td>{escape(_stage18a_display_value(source.get('evidence_label')))}</td>"
         f"<td>{escape(_stage18a_display_value(source.get('evidence_type')))}</td>"
-        f"<td>{escape(_stage18a_display_value(source.get('source_field')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(source.get('source_field')))}</code></td>"
         f"<td>{escape(_stage18a_display_value(source.get('source_value')))}</td>"
         f"<td>{escape(_stage18a_display_value(source.get('visibility_state')))}</td>"
         f"<td>{escape(_stage18a_display_value('; '.join(source.get('limitations') or [])))}</td>"
@@ -30683,6 +30683,51 @@ def render_admin_record_evidence_page(
     .stage19b-citation-path th:nth-child(4),
     .stage19b-citation-path td:nth-child(4) {{
       width: 36%;
+    }}
+    .stage19c-evidence-sources table {{
+      table-layout: auto;
+    }}
+    .stage19c-evidence-sources th,
+    .stage19c-evidence-sources td {{
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19c-evidence-sources code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19c-evidence-sources th:nth-child(1),
+    .stage19c-evidence-sources td:nth-child(1) {{
+      width: 10%;
+    }}
+    .stage19c-evidence-sources th:nth-child(2),
+    .stage19c-evidence-sources td:nth-child(2) {{
+      width: 18%;
+    }}
+    .stage19c-evidence-sources th:nth-child(3),
+    .stage19c-evidence-sources td:nth-child(3) {{
+      width: 12%;
+    }}
+    .stage19c-evidence-sources th:nth-child(4),
+    .stage19c-evidence-sources td:nth-child(4) {{
+      width: 18%;
+    }}
+    .stage19c-evidence-sources th:nth-child(5),
+    .stage19c-evidence-sources td:nth-child(5) {{
+      width: 20%;
+    }}
+    .stage19c-evidence-sources th:nth-child(6),
+    .stage19c-evidence-sources td:nth-child(6) {{
+      width: 10%;
+    }}
+    .stage19c-evidence-sources th:nth-child(7),
+    .stage19c-evidence-sources td:nth-child(7) {{
+      width: 22%;
     }}
     .stage19c-attribution-path table {{
       table-layout: auto;
