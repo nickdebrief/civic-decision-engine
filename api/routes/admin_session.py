@@ -28093,6 +28093,483 @@ def _render_stage18t_record_evolution_accountability_section(
       </section>"""
 
 
+STAGE19A_LIMITATIONS = (
+    "Stage 19A does not determine truth.",
+    "Stage 19A does not determine liability.",
+    "Stage 19A does not infer intent.",
+    "Stage 19A does not assign blame.",
+    "Stage 19A does not validate evidence.",
+    "Stage 19A does not modify the record.",
+    "Stage 19A evaluates only visible record-derived analysis pathways.",
+)
+
+
+def _stage19a_present_mapping(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in values.items()
+        if value not in (None, "", [], {})
+    }
+
+
+def _stage19a_first_present(*values: Any) -> Any:
+    for value in values:
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def _stage19a_list_values(value: Any) -> list[Any]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        return [item for item in value if item not in (None, "")]
+    if isinstance(value, tuple):
+        return [item for item in value if item not in (None, "")]
+    if isinstance(value, set):
+        return sorted(item for item in value if item not in (None, ""))
+    return [value]
+
+
+def _stage19a_evidence_targets(
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    target_type: str,
+) -> list[str]:
+    targets = []
+    for target in (evidence_groups or {}).get(target_type) or []:
+        label = str(target.get("target_label") or "").strip()
+        if label:
+            targets.append(label)
+    return targets
+
+
+def _stage19a_stage18_outputs(
+    record_metadata: dict[str, Any],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not record_metadata.get("reference") and not version_history:
+        return {}
+    accountability = _record_stage18t_evolution_accountability(
+        record_metadata,
+        version_history,
+    )
+    summary = accountability.get("summary") or {}
+    return _stage19a_present_mapping(
+        {
+            "Evolution Classification": summary.get("evolution_classification"),
+            "Continuity Classification": summary.get("continuity_classification"),
+            "Change Log Classification": summary.get("change_log_classification"),
+            "Trajectory Classification": summary.get("trajectory_classification"),
+            "Relationship Classification": summary.get("relationship_classification"),
+            "Traceability Classification": summary.get("traceability_classification"),
+            "Coverage Classification": summary.get("coverage_classification"),
+            "Review Classification": summary.get("review_classification"),
+            "Readiness Classification": summary.get("readiness_classification"),
+            "Completeness Classification": summary.get("completeness_classification"),
+            "Sufficiency Classification": summary.get("sufficiency_classification"),
+            "Consistency Classification": summary.get("consistency_classification"),
+            "Integrity Classification": summary.get("integrity_classification"),
+            "Reliability Classification": summary.get("reliability_classification"),
+            "Certification Classification": summary.get("certification_classification"),
+            "Accreditation Classification": summary.get("accreditation_classification"),
+            "Auditability Classification": summary.get("auditability_classification"),
+            "Reproducibility Classification": summary.get(
+                "reproducibility_classification"
+            ),
+            "Transparency Classification": summary.get("transparency_classification"),
+            "Accountability Classification": summary.get(
+                "accountability_classification"
+            ),
+        }
+    )
+
+
+def _stage19a_administrative_outputs(
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+) -> dict[str, Any]:
+    if not evidence_groups:
+        return {}
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status_summary = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )
+    return _stage19a_present_mapping(
+        {
+            "Evidence Readiness": readiness,
+            "Administrative Action": action,
+            "Workflow State": workflow_state,
+            "Administrative Disposition": disposition,
+            "Review Eligibility": eligibility,
+            "Administrative Status": status_summary.get("status"),
+        }
+    )
+
+
+def _stage19a_determination(
+    *,
+    conditions: list[Any],
+    trajectory: dict[str, Any],
+    administrative_outputs: dict[str, Any],
+    stage18_outputs: dict[str, Any],
+) -> str:
+    if stage18_outputs:
+        return "Determination derived from visible record evolution"
+    if administrative_outputs:
+        return "Determination derived from visible administrative evaluation"
+    if conditions and trajectory:
+        return "Determination derived from visible conditions and trajectory"
+    if conditions:
+        return "Determination derived from visible record structure"
+    return "No determination available"
+
+
+def build_determination_trace(
+    *,
+    record_metadata: dict[str, Any] | None = None,
+    record_outputs: dict[str, Any] | None = None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None = None,
+    version_history: list[dict[str, Any]] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    stage18_outputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    metadata = dict(record_metadata or {})
+    outputs = dict(record_outputs or {})
+    lifecycle = outputs.get("case_lifecycle") or metadata.get("case_lifecycle") or {}
+    if not isinstance(lifecycle, dict):
+        lifecycle = {}
+
+    record_reference = _stage19a_first_present(
+        outputs.get("record_reference"),
+        outputs.get("reference"),
+        metadata.get("record_reference"),
+        metadata.get("reference"),
+    )
+    case_title = _stage19a_first_present(
+        outputs.get("case_title"),
+        metadata.get("case_title"),
+    )
+    institutions = _stage19a_list_values(
+        _stage19a_first_present(
+            outputs.get("institutions"),
+            metadata.get("institutions"),
+        )
+    )
+    conditions = _stage19a_list_values(outputs.get("conditions")) or (
+        _stage19a_evidence_targets(evidence_groups, "condition")
+    )
+    signals = _stage19a_list_values(outputs.get("signals")) or (
+        _stage19a_evidence_targets(evidence_groups, "signal")
+    )
+    trajectory = _stage19a_present_mapping(
+        {
+            "trajectory": _stage19a_first_present(
+                outputs.get("trajectory"),
+                metadata.get("trajectory"),
+            ),
+            "system_state": _stage19a_first_present(
+                outputs.get("system_state"),
+                metadata.get("system_state"),
+            ),
+            "moment_of_change": _stage19a_first_present(
+                outputs.get("moment_of_change"),
+                metadata.get("moment_of_change"),
+            ),
+            "pattern_interpretation": _stage19a_first_present(
+                outputs.get("pattern_interpretation"),
+                metadata.get("pattern_interpretation"),
+            ),
+            "signals": signals,
+        }
+    )
+    admin_outputs = (
+        _stage19a_present_mapping(dict(administrative_outputs))
+        if administrative_outputs is not None
+        else _stage19a_administrative_outputs(evidence_groups)
+    )
+    evolution_outputs = (
+        _stage19a_present_mapping(dict(stage18_outputs))
+        if stage18_outputs is not None
+        else _stage19a_stage18_outputs(metadata, list(version_history or []))
+    )
+    visible_record = _stage19a_present_mapping(
+        {
+            "record_reference": record_reference,
+            "case_title": case_title,
+            "civic_domain": _stage19a_first_present(
+                outputs.get("civic_domain"),
+                metadata.get("civic_domain"),
+            ),
+            "institutions": institutions,
+            "current_stage": _stage19a_first_present(
+                lifecycle.get("current_stage"),
+                outputs.get("current_stage"),
+                metadata.get("current_stage"),
+            ),
+            "status": _stage19a_first_present(
+                lifecycle.get("status"),
+                outputs.get("status"),
+                metadata.get("status"),
+            ),
+            "days_open": _stage19a_first_present(
+                lifecycle.get("days_open"),
+                outputs.get("days_open"),
+                metadata.get("days_open"),
+            ),
+            "urgency": _stage19a_first_present(
+                outputs.get("urgency"),
+                metadata.get("urgency"),
+            ),
+        }
+    )
+    observed_evidence = []
+    for label, value in (
+        (
+            "Decision Trigger",
+            _stage19a_first_present(
+                outputs.get("decision_trigger"),
+                metadata.get("decision_trigger"),
+            ),
+        ),
+        ("Lifecycle Status", visible_record.get("status")),
+        ("Current Stage", visible_record.get("current_stage")),
+        (
+            "Stalled State",
+            _stage19a_first_present(
+                lifecycle.get("stalled"),
+                outputs.get("stalled"),
+                metadata.get("stalled"),
+            ),
+        ),
+        ("Days Open", visible_record.get("days_open")),
+        ("Identified Conditions", conditions),
+        ("Trajectory Signals", signals),
+        ("Moment Of Change", trajectory.get("moment_of_change")),
+        (
+            "Finding",
+            _stage19a_first_present(
+                outputs.get("finding"),
+                metadata.get("finding"),
+            ),
+        ),
+        ("Pattern Interpretation", trajectory.get("pattern_interpretation")),
+        ("Administrative Outputs", admin_outputs),
+        ("Record Evolution Outputs", evolution_outputs),
+    ):
+        if value not in (None, "", [], {}):
+            observed_evidence.append({"label": label, "value": value})
+
+    applied_rules = []
+    if conditions:
+        applied_rules.append("Conditions Layer")
+    if any(
+        value not in (None, "", [], {})
+        for value in (
+            outputs.get("decision_trigger"),
+            metadata.get("decision_trigger"),
+            lifecycle,
+            visible_record.get("current_stage"),
+            visible_record.get("status"),
+            visible_record.get("days_open"),
+        )
+    ):
+        applied_rules.append("Timeline Analysis")
+    if signals or trajectory.get("moment_of_change") or trajectory.get(
+        "pattern_interpretation"
+    ):
+        applied_rules.append("Pattern Interpretation")
+    if trajectory:
+        applied_rules.append("Trajectory Classification")
+    if admin_outputs:
+        applied_rules.append("Administrative Evaluation Layer")
+    if evolution_outputs:
+        applied_rules.append("Record Evolution Analysis")
+
+    determination = _stage19a_determination(
+        conditions=conditions,
+        trajectory=trajectory,
+        administrative_outputs=admin_outputs,
+        stage18_outputs=evolution_outputs,
+    )
+    trace_path = [
+        {
+            "step": 1,
+            "label": "Visible Record",
+            "input": list(visible_record.keys()),
+            "output": "Record context identified"
+            if visible_record
+            else "No visible record context available",
+        },
+        {
+            "step": 2,
+            "label": "Observed Evidence",
+            "input": [item["label"] for item in observed_evidence],
+            "output": "Visible evidence extracted"
+            if observed_evidence
+            else "No visible evidence extracted",
+        },
+        {
+            "step": 3,
+            "label": "Applied Rules",
+            "input": applied_rules,
+            "output": "Visible rule families identified"
+            if applied_rules
+            else "No rule families available",
+        },
+        {
+            "step": 4,
+            "label": "Conditions",
+            "input": conditions,
+            "output": "Existing conditions carried into trace"
+            if conditions
+            else "No existing conditions available",
+        },
+        {
+            "step": 5,
+            "label": "Trajectory",
+            "input": list(trajectory.keys()),
+            "output": "Existing trajectory carried into trace"
+            if trajectory
+            else "No existing trajectory available",
+        },
+        {
+            "step": 6,
+            "label": "Determination",
+            "input": ["visible_record", "observed_evidence", "applied_rules"],
+            "output": determination,
+        },
+    ]
+    return {
+        "record_reference": record_reference,
+        "case_title": case_title,
+        "visible_record": visible_record,
+        "observed_evidence": observed_evidence,
+        "applied_rules": applied_rules,
+        "conditions": conditions,
+        "trajectory": trajectory,
+        "determination": determination,
+        "trace_path": trace_path,
+        "limitations": list(STAGE19A_LIMITATIONS),
+    }
+
+
+def _render_stage19a_list(items: list[Any], empty_label: str) -> str:
+    if not items:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rendered_items = "".join(
+        f"<li>{escape(_stage18a_display_value(item))}</li>" for item in items
+    )
+    return f"<ul>{rendered_items}</ul>"
+
+
+def _render_stage19a_observed_evidence(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return '<p class="evidence-empty-state">No observed evidence available.</p>'
+    rows = tuple((item["label"], item["value"]) for item in items)
+    return _render_stage18a_table(rows)
+
+
+def _render_stage19a_trace_path(trace_path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td>{escape(_stage18a_display_value(', '.join(str(item) for item in step.get('input') or [])))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in trace_path
+    )
+    return f"""
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Label</th>
+              <th>Input</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_determination_trace_content(trace: dict[str, Any]) -> str:
+    summary_rows = (
+        ("Record Reference", trace.get("record_reference")),
+        ("Case Title", trace.get("case_title")),
+        ("Determination", trace["determination"]),
+        ("Conditions Count", len(trace["conditions"])),
+        ("Applied Rule Families Count", len(trace["applied_rules"])),
+        ("Trace Steps Count", len(trace["trace_path"])),
+    )
+    return f"""
+        <h3>Trace Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        <section class="stage19a-visible-record">
+          <h3>Visible Record</h3>
+          {_render_stage18a_table(tuple((' '.join(key.split('_')).title(), value) for key, value in trace["visible_record"].items())) if trace["visible_record"] else '<p class="evidence-empty-state">No visible record fields available.</p>'}
+        </section>
+        <section class="stage19a-observed-evidence">
+          <h3>Observed Evidence</h3>
+          {_render_stage19a_observed_evidence(trace["observed_evidence"])}
+        </section>
+        <section class="stage19a-applied-rules">
+          <h3>Applied Rules</h3>
+          {_render_stage19a_list(trace["applied_rules"], "No applied rule families available.")}
+        </section>
+        <section class="stage19a-conditions">
+          <h3>Conditions</h3>
+          {_render_stage19a_list(trace["conditions"], "No existing conditions available.")}
+        </section>
+        <section class="stage19a-trajectory">
+          <h3>Trajectory</h3>
+          {_render_stage18a_table(tuple((' '.join(key.split('_')).title(), value) for key, value in trace["trajectory"].items())) if trace["trajectory"] else '<p class="evidence-empty-state">No existing trajectory available.</p>'}
+        </section>
+        <section class="stage19a-trace-path">
+          <h3>Trace Path</h3>
+          {_render_stage19a_trace_path(trace["trace_path"])}
+        </section>
+        <section class="stage19a-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(trace["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_determination_trace_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    return f"""
+      <section class="management-section stage19a-determination-trace">
+        <h2>Determination Trace</h2>
+        <p class="notice">
+          Determination trace is derived deterministically from visible record
+          data and existing analysis outputs only. It shows how a determination
+          pathway is formed from the visible record, observed evidence, applied
+          rules, conditions, trajectory, and resulting determination. It does
+          not determine truth, liability, intent, wrongdoing, or factual
+          correctness.
+        </p>
+        {_render_determination_trace_content(trace)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -28363,6 +28840,12 @@ def render_admin_record_evidence_page(
         record_metadata,
         version_history,
     )
+    stage19a_determination_trace = _render_determination_trace_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -28514,6 +28997,7 @@ def render_admin_record_evidence_page(
             f"{stage18r_record_evolution_reproducibility}"
             f"{stage18s_record_evolution_transparency}"
             f"{stage18t_record_evolution_accountability}"
+            f"{stage19a_determination_trace}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
