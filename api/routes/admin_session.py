@@ -29711,7 +29711,7 @@ def _render_stage19c_evidence_sources(
         f"<td>{escape(_stage18a_display_value(source.get('evidence_label')))}</td>"
         f"<td>{escape(_stage18a_display_value(source.get('evidence_type')))}</td>"
         f"<td><code>{escape(_stage18a_display_value(source.get('source_field')))}</code></td>"
-        f"<td>{escape(_stage18a_display_value(source.get('source_value')))}</td>"
+        f"<td>{_render_stage19c_list_value(source.get('source_value'))}</td>"
         f"<td>{escape(_stage18a_display_value(source.get('visibility_state')))}</td>"
         f"<td>{escape(_stage18a_display_value('; '.join(source.get('limitations') or [])))}</td>"
         "</tr>"
@@ -29734,6 +29734,51 @@ def _render_stage19c_evidence_sources(
         </table>"""
 
 
+def _render_stage19c_compact_items(value: Any) -> str:
+    if value in (None, ""):
+        return escape(_stage18a_display_value(value))
+    if isinstance(value, set):
+        items = sorted(value)
+    elif isinstance(value, (list, tuple)):
+        items = list(value)
+    else:
+        return escape(_stage18a_display_value(value))
+    visible_items = [item for item in items if item not in (None, "")]
+    if not visible_items:
+        return escape(_stage18a_display_value(None))
+    rendered_items = "".join(
+        f"<span>{escape(_stage18a_display_value(item))}</span>"
+        for item in visible_items
+    )
+    return f'<div class="stage19c-pill-list">{rendered_items}</div>'
+
+
+def _render_stage19c_attribution_path(
+    attribution_path: list[dict[str, Any]],
+) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td>{_render_stage19c_compact_items(step.get('input') or [])}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in attribution_path
+    )
+    return f"""
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Label</th>
+              <th>Input</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
 def _render_stage19c_attribution_rows(
     attributions: list[dict[str, Any]],
     empty_label: str,
@@ -29742,27 +29787,40 @@ def _render_stage19c_attribution_rows(
         return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
     rows = []
     for attribution in attributions:
-        rows.extend(
+        entry_rows = (
+            ("Output Type", attribution.get("output_type")),
+            ("Output Name", attribution.get("output_name")),
+            ("Output Value", attribution.get("output_value")),
             (
-                ("Output Type", attribution.get("output_type")),
-                ("Output Name", attribution.get("output_name")),
-                ("Output Value", attribution.get("output_value")),
-                (
-                    "Attributed Evidence IDs",
-                    ", ".join(attribution.get("attributed_evidence_ids") or []),
-                ),
-                ("Attribution Label", attribution.get("attribution_label")),
-                ("Attribution Basis", attribution.get("attribution_basis")),
-                ("Support State", attribution.get("support_state")),
-                (
-                    "Limitations",
-                    "; ".join(attribution.get("limitations") or []),
-                ),
-                ("", ""),
-            )
+                "Attributed Evidence IDs",
+                ", ".join(attribution.get("attributed_evidence_ids") or []),
+            ),
+            ("Attribution Label", attribution.get("attribution_label")),
+            ("Attribution Basis", attribution.get("attribution_basis")),
+            ("Support State", attribution.get("support_state")),
+            (
+                "Limitations",
+                "; ".join(attribution.get("limitations") or []),
+            ),
+        )
+        rows.extend(
+            "<tr>"
+            f"<td>{escape(str(label))}</td>"
+            f"<td>{escape(_stage18a_display_value(value))}</td>"
+            "</tr>"
+            for label, value in entry_rows
+        )
+        rows.append(
+            '<tr class="stage19c-attribution-entry-spacer"><td colspan="2"></td></tr>'
         )
     rows.pop()
-    return _render_stage18a_table(tuple(rows))
+    return f'<table class="stage19c-attribution-table"><tbody>{"".join(rows)}</tbody></table>'
+
+
+def _render_stage19c_list_value(value: Any) -> str:
+    if isinstance(value, (list, tuple, set)):
+        return _render_stage19c_compact_items(value)
+    return escape(_stage18a_display_value(value))
 
 
 def _render_stage19c_unsupported_outputs(
@@ -29859,7 +29917,7 @@ def _render_evidence_attribution_matrix_content(
         </section>
         <section class="stage19c-attribution-path">
           <h3>Attribution Path</h3>
-          {_render_stage19a_trace_path(attribution_matrix["attribution_path"])}
+          {_render_stage19c_attribution_path(attribution_matrix["attribution_path"])}
         </section>
         <section class="stage19c-limitations">
           <h3>Limitations</h3>
@@ -30689,6 +30747,7 @@ def render_admin_record_evidence_page(
     }}
     .stage19c-evidence-sources th,
     .stage19c-evidence-sources td {{
+      text-align: left;
       vertical-align: top;
       white-space: normal;
       word-break: normal;
@@ -30703,11 +30762,11 @@ def render_admin_record_evidence_page(
     }}
     .stage19c-evidence-sources th:nth-child(1),
     .stage19c-evidence-sources td:nth-child(1) {{
-      width: 10%;
+      width: 8%;
     }}
     .stage19c-evidence-sources th:nth-child(2),
     .stage19c-evidence-sources td:nth-child(2) {{
-      width: 18%;
+      width: 14%;
     }}
     .stage19c-evidence-sources th:nth-child(3),
     .stage19c-evidence-sources td:nth-child(3) {{
@@ -30715,7 +30774,7 @@ def render_admin_record_evidence_page(
     }}
     .stage19c-evidence-sources th:nth-child(4),
     .stage19c-evidence-sources td:nth-child(4) {{
-      width: 18%;
+      width: 26%;
     }}
     .stage19c-evidence-sources th:nth-child(5),
     .stage19c-evidence-sources td:nth-child(5) {{
@@ -30727,17 +30786,57 @@ def render_admin_record_evidence_page(
     }}
     .stage19c-evidence-sources th:nth-child(7),
     .stage19c-evidence-sources td:nth-child(7) {{
-      width: 22%;
+      width: 10%;
+    }}
+    .stage19c-evidence-sources .stage19c-pill-list,
+    .stage19c-attribution-path .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage19c-evidence-sources .stage19c-pill-list span,
+    .stage19c-attribution-path .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19c-attribution-table {{
+      table-layout: auto;
+    }}
+    .stage19c-attribution-table td {{
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19c-attribution-entry-spacer {{
+      border-bottom: 2px solid #dce8e6;
+    }}
+    .stage19c-attribution-entry-spacer td {{
+      height: 10px;
+      padding: 0;
+      background: #fafdfc;
     }}
     .stage19c-attribution-path table {{
       table-layout: auto;
     }}
     .stage19c-attribution-path th,
     .stage19c-attribution-path td {{
+      text-align: left;
       vertical-align: top;
       white-space: normal;
       word-break: normal;
-      overflow-wrap: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
     }}
     .stage19c-attribution-path th:nth-child(1),
     .stage19c-attribution-path td:nth-child(1) {{
@@ -30745,15 +30844,15 @@ def render_admin_record_evidence_page(
     }}
     .stage19c-attribution-path th:nth-child(2),
     .stage19c-attribution-path td:nth-child(2) {{
-      width: 28%;
+      width: 22%;
     }}
     .stage19c-attribution-path th:nth-child(3),
     .stage19c-attribution-path td:nth-child(3) {{
-      width: 28%;
+      width: 46%;
     }}
     .stage19c-attribution-path th:nth-child(4),
     .stage19c-attribution-path td:nth-child(4) {{
-      width: 36%;
+      width: 24%;
     }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
