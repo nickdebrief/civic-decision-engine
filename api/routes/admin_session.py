@@ -29055,6 +29055,854 @@ def _render_rule_citation_layer_section(
       </section>"""
 
 
+STAGE19C_LIMITATIONS = (
+    "Stage 19C does not determine truth.",
+    "Stage 19C does not determine liability.",
+    "Stage 19C does not infer intent.",
+    "Stage 19C does not assign blame.",
+    "Stage 19C does not validate evidence.",
+    "Stage 19C does not determine sufficiency in the real world.",
+    "Stage 19C does not create evidence.",
+    "Stage 19C does not create rules.",
+    "Stage 19C does not create conditions.",
+    "Stage 19C does not modify the record.",
+    "Stage 19C attributes only visible evidence elements to existing outputs.",
+)
+
+
+STAGE19C_ATTRIBUTION_LIMITATIONS = (
+    "Attribution identifies visible record-derived support only.",
+    "Attribution does not validate evidence truthfulness or real-world sufficiency.",
+)
+
+
+def _stage19c_normalize_key(value: Any) -> str:
+    return str(value).strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _stage19c_add_evidence_source(
+    evidence_sources: list[dict[str, Any]],
+    evidence_lookup: dict[str, list[str]],
+    *,
+    keys: tuple[str, ...],
+    evidence_label: str,
+    evidence_type: str,
+    source_field: str,
+    source_value: Any,
+) -> None:
+    if source_value in (None, "", [], {}):
+        return
+    evidence_id = f"EV-{len(evidence_sources) + 1:03d}"
+    evidence_sources.append(
+        {
+            "evidence_id": evidence_id,
+            "evidence_label": evidence_label,
+            "evidence_type": evidence_type,
+            "source_field": source_field,
+            "source_value": source_value,
+            "visibility_state": "Visible",
+            "limitations": list(STAGE19C_ATTRIBUTION_LIMITATIONS),
+        }
+    )
+    for key in keys:
+        evidence_lookup.setdefault(key, []).append(evidence_id)
+
+
+def _stage19c_lookup_ids(
+    evidence_lookup: dict[str, list[str]],
+    *keys: str,
+) -> list[str]:
+    ids = []
+    for key in keys:
+        for evidence_id in evidence_lookup.get(key) or []:
+            if evidence_id not in ids:
+                ids.append(evidence_id)
+    return ids
+
+
+def _stage19c_support_state(
+    evidence_ids: list[str],
+    *,
+    expected_multiple: bool = False,
+) -> str:
+    if not evidence_ids:
+        return "No Visible Evidence Attributed"
+    if expected_multiple and len(evidence_ids) == 1:
+        return "Partially Attributed"
+    return "Attributed"
+
+
+def _stage19c_attribution_entry(
+    *,
+    output_type: str,
+    output_name: Any,
+    output_value: Any,
+    attributed_evidence_ids: list[str],
+    attribution_label: str,
+    attribution_basis: str,
+    expected_multiple: bool = False,
+) -> dict[str, Any]:
+    return {
+        "output_type": output_type,
+        "output_name": output_name,
+        "output_value": output_value,
+        "attributed_evidence_ids": attributed_evidence_ids,
+        "attribution_label": attribution_label,
+        "attribution_basis": attribution_basis,
+        "support_state": _stage19c_support_state(
+            attributed_evidence_ids,
+            expected_multiple=expected_multiple,
+        ),
+        "limitations": list(STAGE19C_ATTRIBUTION_LIMITATIONS),
+    }
+
+
+def _stage19c_observed_mapping(
+    determination_trace: dict[str, Any],
+    label: str,
+) -> dict[str, Any]:
+    value = _stage19b_observed_value(determination_trace, label)
+    return value if isinstance(value, dict) else {}
+
+
+def _stage19c_evidence_sources(
+    *,
+    determination_trace: dict[str, Any],
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    evidence_sources: list[dict[str, Any]] = []
+    evidence_lookup: dict[str, list[str]] = {}
+
+    for key, value in (determination_trace.get("visible_record") or {}).items():
+        label = " ".join(key.split("_")).title()
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=(f"visible_record:{key}", key),
+            evidence_label=label,
+            evidence_type="Visible Record",
+            source_field=f"visible_record.{key}",
+            source_value=value,
+        )
+
+    for item in determination_trace.get("observed_evidence") or []:
+        label = item.get("label")
+        value = item.get("value")
+        normalized = _stage19c_normalize_key(label)
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=(f"observed:{normalized}", normalized),
+            evidence_label=_stage18a_display_value(label),
+            evidence_type="Observed Evidence",
+            source_field=f"observed_evidence.{normalized}",
+            source_value=value,
+        )
+
+    for condition in determination_trace.get("conditions") or []:
+        normalized = _stage19c_normalize_key(condition)
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("condition", f"condition:{normalized}"),
+            evidence_label=f"Condition: {_stage18a_display_value(condition)}",
+            evidence_type="Condition Output",
+            source_field=f"conditions.{normalized}",
+            source_value=condition,
+        )
+
+    for key, value in (determination_trace.get("trajectory") or {}).items():
+        label = " ".join(key.split("_")).title()
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("trajectory", f"trajectory:{key}", key),
+            evidence_label=label,
+            evidence_type="Trajectory Output",
+            source_field=f"trajectory.{key}",
+            source_value=value,
+        )
+
+    for rule_family in determination_trace.get("applied_rules") or []:
+        normalized = _stage19c_normalize_key(rule_family)
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("rule_family", f"rule_family:{normalized}"),
+            evidence_label=f"Rule Family: {rule_family}",
+            evidence_type="Applied Rule Family",
+            source_field=f"applied_rules.{normalized}",
+            source_value=rule_family,
+        )
+
+    determination = determination_trace.get("determination")
+    if determination != "No determination available":
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("determination",),
+            evidence_label="Determination",
+            evidence_type="Determination Trace Output",
+            source_field="determination",
+            source_value=determination,
+        )
+
+    for output_name, output_value in _stage19c_observed_mapping(
+        determination_trace,
+        "Administrative Outputs",
+    ).items():
+        normalized = _stage19c_normalize_key(output_name)
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("administrative", f"administrative:{normalized}"),
+            evidence_label=f"Administrative Output: {output_name}",
+            evidence_type="Administrative Output",
+            source_field=f"administrative_outputs.{normalized}",
+            source_value=output_value,
+        )
+
+    for output_name, output_value in _stage19c_observed_mapping(
+        determination_trace,
+        "Record Evolution Outputs",
+    ).items():
+        normalized = _stage19c_normalize_key(output_name)
+        _stage19c_add_evidence_source(
+            evidence_sources,
+            evidence_lookup,
+            keys=("record_evolution", f"record_evolution:{normalized}"),
+            evidence_label=f"Record Evolution Output: {output_name}",
+            evidence_type="Record Evolution Output",
+            source_field=f"record_evolution_outputs.{normalized}",
+            source_value=output_value,
+        )
+
+    for group_name, targets in (evidence_groups or {}).items():
+        for target_index, target in enumerate(targets or [], start=1):
+            for attachment_index, attachment in enumerate(
+                target.get("attachments") or [],
+                start=1,
+            ):
+                attachment_id = attachment.get("attachment_id") or attachment.get("id")
+                label = _stage19a_first_present(
+                    attachment.get("title"),
+                    attachment.get("filename"),
+                    attachment_id,
+                )
+                if label in (None, "", [], {}):
+                    continue
+                source_field = (
+                    f"evidence_groups.{group_name}.{target_index}"
+                    f".attachments.{attachment_index}"
+                )
+                _stage19c_add_evidence_source(
+                    evidence_sources,
+                    evidence_lookup,
+                    keys=("attachment_metadata", f"attachment:{attachment_id}"),
+                    evidence_label=f"Attachment Metadata: {label}",
+                    evidence_type="Attachment Metadata",
+                    source_field=source_field,
+                    source_value={
+                        key: value
+                        for key, value in {
+                            "attachment_id": attachment_id,
+                            "title": attachment.get("title"),
+                            "filename": attachment.get("filename"),
+                            "sha256_hash": attachment.get("sha256_hash"),
+                            "publication_status": attachment.get(
+                                "publication_status"
+                            ),
+                        }.items()
+                        if value not in (None, "", [], {})
+                    },
+                )
+
+    return evidence_sources, evidence_lookup
+
+
+def _stage19c_unsupported_outputs(
+    attributions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    unsupported = []
+    for attribution in attributions:
+        if attribution.get("attributed_evidence_ids"):
+            continue
+        unsupported.append(
+            {
+                "output_type": attribution.get("output_type"),
+                "output_name": attribution.get("output_name"),
+                "output_value": attribution.get("output_value"),
+                "reason": "No visible evidence source was attributed by Stage 19C.",
+                "limitations": (
+                    "Unsupported does not mean false or invalid.",
+                    "It means this matrix did not attribute a visible evidence source.",
+                ),
+            }
+        )
+    return unsupported
+
+
+def _stage19c_attribution_state(
+    *,
+    evidence_sources: list[dict[str, Any]],
+    total_attributions_count: int,
+    unsupported_outputs_count: int,
+) -> str:
+    if not evidence_sources and total_attributions_count == 0:
+        return "No Evidence Attribution Available"
+    if evidence_sources and total_attributions_count and unsupported_outputs_count == 0:
+        return "Evidence Attribution Matrix Available"
+    return "Partial Evidence Attribution Matrix"
+
+
+def build_evidence_attribution_matrix(
+    *,
+    determination_trace: dict[str, Any] | None = None,
+    rule_citation_layer: dict[str, Any] | None = None,
+    record_metadata: dict[str, Any] | None = None,
+    record_outputs: dict[str, Any] | None = None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None = None,
+    version_history: list[dict[str, Any]] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    stage18_outputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    trace = (
+        dict(determination_trace)
+        if determination_trace is not None
+        else build_determination_trace(
+            record_metadata=record_metadata or {},
+            record_outputs=record_outputs or {},
+            evidence_groups=evidence_groups or {},
+            version_history=version_history or [],
+            administrative_outputs=administrative_outputs,
+            stage18_outputs=stage18_outputs,
+        )
+    )
+    citation_layer = (
+        dict(rule_citation_layer)
+        if rule_citation_layer is not None
+        else build_rule_citation_layer(determination_trace=trace)
+    )
+    evidence_sources, evidence_lookup = _stage19c_evidence_sources(
+        determination_trace=trace,
+        evidence_groups=evidence_groups,
+    )
+
+    condition_attribution = [
+        _stage19c_attribution_entry(
+            output_type="Condition",
+            output_name=condition,
+            output_value=condition,
+            attributed_evidence_ids=_stage19c_lookup_ids(
+                evidence_lookup,
+                f"condition:{_stage19c_normalize_key(condition)}",
+                "condition",
+            ),
+            attribution_label="Condition Evidence Attribution",
+            attribution_basis="Existing condition output matched to visible condition evidence.",
+        )
+        for condition in trace.get("conditions") or []
+    ]
+
+    trajectory_attribution = [
+        _stage19c_attribution_entry(
+            output_type="Trajectory",
+            output_name=" ".join(key.split("_")).title(),
+            output_value=value,
+            attributed_evidence_ids=_stage19c_lookup_ids(
+                evidence_lookup,
+                f"trajectory:{key}",
+                key,
+                "trajectory",
+            ),
+            attribution_label="Trajectory Evidence Attribution",
+            attribution_basis="Existing trajectory output matched to visible trajectory evidence.",
+            expected_multiple=key in {"trajectory", "signals"},
+        )
+        for key, value in (trace.get("trajectory") or {}).items()
+        if value not in (None, "", [], {})
+    ]
+
+    administrative_outputs = _stage19c_observed_mapping(
+        trace,
+        "Administrative Outputs",
+    )
+    administrative_attribution = [
+        _stage19c_attribution_entry(
+            output_type="Administrative",
+            output_name=output_name,
+            output_value=output_value,
+            attributed_evidence_ids=_stage19c_lookup_ids(
+                evidence_lookup,
+                f"administrative:{_stage19c_normalize_key(output_name)}",
+                "administrative",
+            ),
+            attribution_label="Administrative Evidence Attribution",
+            attribution_basis="Existing administrative output matched to visible administrative evidence.",
+        )
+        for output_name, output_value in administrative_outputs.items()
+        if output_value not in (None, "", [], {})
+    ]
+
+    record_evolution_outputs = _stage19c_observed_mapping(
+        trace,
+        "Record Evolution Outputs",
+    )
+    record_evolution_attribution = [
+        _stage19c_attribution_entry(
+            output_type="Record Evolution",
+            output_name=output_name,
+            output_value=output_value,
+            attributed_evidence_ids=_stage19c_lookup_ids(
+                evidence_lookup,
+                f"record_evolution:{_stage19c_normalize_key(output_name)}",
+                "record_evolution",
+            ),
+            attribution_label="Record Evolution Evidence Attribution",
+            attribution_basis="Existing Stage 18 output matched to visible record evolution evidence.",
+        )
+        for output_name, output_value in record_evolution_outputs.items()
+        if output_value not in (None, "", [], {})
+    ]
+
+    trace_key_map = {
+        "Visible Record": tuple(f"visible_record:{key}" for key in (trace.get("visible_record") or {})),
+        "Observed Evidence": tuple(
+            f"observed:{_stage19c_normalize_key(item.get('label'))}"
+            for item in trace.get("observed_evidence") or []
+        ),
+        "Applied Rules": ("rule_family",),
+        "Conditions": ("condition",),
+        "Trajectory": ("trajectory",),
+        "Determination": ("determination",),
+    }
+    determination_trace_attribution = [
+        _stage19c_attribution_entry(
+            output_type="Determination Trace",
+            output_name=step.get("label"),
+            output_value=step.get("output"),
+            attributed_evidence_ids=_stage19c_lookup_ids(
+                evidence_lookup,
+                *(trace_key_map.get(step.get("label")) or ()),
+            ),
+            attribution_label="Determination Trace Evidence Attribution",
+            attribution_basis="Stage 19A trace step matched to visible trace evidence.",
+            expected_multiple=step.get("label") in {"Visible Record", "Observed Evidence"},
+        )
+        for step in trace.get("trace_path") or []
+    ]
+
+    rule_citation_attribution = []
+    for citation in citation_layer.get("rule_citations") or []:
+        rule_family = citation.get("rule_family")
+        normalized = _stage19c_normalize_key(rule_family)
+        rule_citation_attribution.append(
+            _stage19c_attribution_entry(
+                output_type="Rule Citation",
+                output_name=rule_family,
+                output_value=citation.get("citation_label"),
+                attributed_evidence_ids=_stage19c_lookup_ids(
+                    evidence_lookup,
+                    f"rule_family:{normalized}",
+                    "rule_family",
+                ),
+                attribution_label="Rule Citation Evidence Attribution",
+                attribution_basis="Stage 19B rule citation matched to visible applied rule family evidence.",
+            )
+        )
+    for citation in citation_layer.get("condition_citations") or []:
+        condition = citation.get("condition")
+        rule_citation_attribution.append(
+            _stage19c_attribution_entry(
+                output_type="Rule Citation",
+                output_name=condition,
+                output_value=citation.get("citation_label"),
+                attributed_evidence_ids=_stage19c_lookup_ids(
+                    evidence_lookup,
+                    f"condition:{_stage19c_normalize_key(condition)}",
+                    "condition",
+                ),
+                attribution_label="Condition Citation Evidence Attribution",
+                attribution_basis="Stage 19B condition citation matched to visible condition evidence.",
+            )
+        )
+    for citation in citation_layer.get("trajectory_citations") or []:
+        rule_citation_attribution.append(
+            _stage19c_attribution_entry(
+                output_type="Rule Citation",
+                output_name="Trajectory Citation",
+                output_value=citation.get("trajectory"),
+                attributed_evidence_ids=_stage19c_lookup_ids(
+                    evidence_lookup,
+                    "trajectory",
+                ),
+                attribution_label="Trajectory Citation Evidence Attribution",
+                attribution_basis="Stage 19B trajectory citation matched to visible trajectory evidence.",
+                expected_multiple=True,
+            )
+        )
+    for citation in citation_layer.get("administrative_citations") or []:
+        output_name = citation.get("output_name")
+        rule_citation_attribution.append(
+            _stage19c_attribution_entry(
+                output_type="Rule Citation",
+                output_name=output_name,
+                output_value=citation.get("output_value"),
+                attributed_evidence_ids=_stage19c_lookup_ids(
+                    evidence_lookup,
+                    f"administrative:{_stage19c_normalize_key(output_name)}",
+                    "administrative",
+                ),
+                attribution_label="Administrative Citation Evidence Attribution",
+                attribution_basis="Stage 19B administrative citation matched to visible administrative evidence.",
+            )
+        )
+    for citation in citation_layer.get("record_evolution_citations") or []:
+        output_name = citation.get("output_name")
+        rule_citation_attribution.append(
+            _stage19c_attribution_entry(
+                output_type="Rule Citation",
+                output_name=output_name,
+                output_value=citation.get("output_value"),
+                attributed_evidence_ids=_stage19c_lookup_ids(
+                    evidence_lookup,
+                    f"record_evolution:{_stage19c_normalize_key(output_name)}",
+                    "record_evolution",
+                ),
+                attribution_label="Record Evolution Citation Evidence Attribution",
+                attribution_basis="Stage 19B record evolution citation matched to visible record evolution evidence.",
+            )
+        )
+
+    all_attributions = (
+        condition_attribution
+        + trajectory_attribution
+        + administrative_attribution
+        + record_evolution_attribution
+        + determination_trace_attribution
+        + rule_citation_attribution
+    )
+    unsupported_outputs = _stage19c_unsupported_outputs(all_attributions)
+    total_attributions_count = len(all_attributions)
+    attribution_state = _stage19c_attribution_state(
+        evidence_sources=evidence_sources,
+        total_attributions_count=total_attributions_count,
+        unsupported_outputs_count=len(unsupported_outputs),
+    )
+    attribution_path = [
+        {
+            "step": 1,
+            "label": "Visible Record Evidence",
+            "input": list((trace.get("visible_record") or {}).keys()),
+            "output": "Visible record evidence identified"
+            if trace.get("visible_record")
+            else "No visible record evidence available",
+        },
+        {
+            "step": 2,
+            "label": "Evidence Sources",
+            "input": [source["evidence_id"] for source in evidence_sources],
+            "output": "Evidence sources extracted"
+            if evidence_sources
+            else "No evidence sources extracted",
+        },
+        {
+            "step": 3,
+            "label": "Condition Attribution",
+            "input": [entry["output_name"] for entry in condition_attribution],
+            "output": "Condition attributions available"
+            if condition_attribution
+            else "No condition attributions available",
+        },
+        {
+            "step": 4,
+            "label": "Trajectory Attribution",
+            "input": [entry["output_name"] for entry in trajectory_attribution],
+            "output": "Trajectory attributions available"
+            if trajectory_attribution
+            else "No trajectory attributions available",
+        },
+        {
+            "step": 5,
+            "label": "Administrative Attribution",
+            "input": [entry["output_name"] for entry in administrative_attribution],
+            "output": "Administrative attributions available"
+            if administrative_attribution
+            else "No administrative attributions available",
+        },
+        {
+            "step": 6,
+            "label": "Record Evolution Attribution",
+            "input": [entry["output_name"] for entry in record_evolution_attribution],
+            "output": "Record evolution attributions available"
+            if record_evolution_attribution
+            else "No record evolution attributions available",
+        },
+        {
+            "step": 7,
+            "label": "Determination Trace Attribution",
+            "input": [
+                entry["output_name"] for entry in determination_trace_attribution
+            ],
+            "output": "Determination trace attributions available"
+            if determination_trace_attribution
+            else "No determination trace attributions available",
+        },
+        {
+            "step": 8,
+            "label": "Rule Citation Attribution",
+            "input": [entry["output_name"] for entry in rule_citation_attribution],
+            "output": "Rule citation attributions available"
+            if rule_citation_attribution
+            else "No rule citation attributions available",
+        },
+        {
+            "step": 9,
+            "label": "Evidence Attribution Matrix",
+            "input": [
+                "attribution_summary",
+                "evidence_sources",
+                "unsupported_outputs",
+            ],
+            "output": attribution_state,
+        },
+    ]
+    attribution_summary = {
+        "record_reference": trace.get("record_reference"),
+        "case_title": trace.get("case_title"),
+        "evidence_sources_count": len(evidence_sources),
+        "condition_attributions_count": len(condition_attribution),
+        "trajectory_attributions_count": len(trajectory_attribution),
+        "administrative_attributions_count": len(administrative_attribution),
+        "record_evolution_attributions_count": len(record_evolution_attribution),
+        "determination_trace_attributions_count": len(
+            determination_trace_attribution
+        ),
+        "rule_citation_attributions_count": len(rule_citation_attribution),
+        "unsupported_outputs_count": len(unsupported_outputs),
+        "total_attributions_count": total_attributions_count,
+        "attribution_state": attribution_state,
+    }
+    return {
+        "record_reference": trace.get("record_reference"),
+        "case_title": trace.get("case_title"),
+        "attribution_summary": attribution_summary,
+        "evidence_sources": evidence_sources,
+        "condition_attribution": condition_attribution,
+        "trajectory_attribution": trajectory_attribution,
+        "administrative_attribution": administrative_attribution,
+        "record_evolution_attribution": record_evolution_attribution,
+        "determination_trace_attribution": determination_trace_attribution,
+        "rule_citation_attribution": rule_citation_attribution,
+        "unsupported_outputs": unsupported_outputs,
+        "attribution_path": attribution_path,
+        "limitations": list(STAGE19C_LIMITATIONS),
+    }
+
+
+def _render_stage19c_evidence_sources(
+    evidence_sources: list[dict[str, Any]],
+) -> str:
+    if not evidence_sources:
+        return '<p class="evidence-empty-state">No evidence sources available.</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(source.get('evidence_id')))}</td>"
+        f"<td>{escape(_stage18a_display_value(source.get('evidence_label')))}</td>"
+        f"<td>{escape(_stage18a_display_value(source.get('evidence_type')))}</td>"
+        f"<td>{escape(_stage18a_display_value(source.get('source_field')))}</td>"
+        f"<td>{escape(_stage18a_display_value(source.get('source_value')))}</td>"
+        f"<td>{escape(_stage18a_display_value(source.get('visibility_state')))}</td>"
+        f"<td>{escape(_stage18a_display_value('; '.join(source.get('limitations') or [])))}</td>"
+        "</tr>"
+        for source in evidence_sources
+    )
+    return f"""
+        <table>
+          <thead>
+            <tr>
+              <th>Evidence ID</th>
+              <th>Evidence Label</th>
+              <th>Evidence Type</th>
+              <th>Source Field</th>
+              <th>Source Value</th>
+              <th>Visibility State</th>
+              <th>Limitations</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage19c_attribution_rows(
+    attributions: list[dict[str, Any]],
+    empty_label: str,
+) -> str:
+    if not attributions:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rows = []
+    for attribution in attributions:
+        rows.extend(
+            (
+                ("Output Type", attribution.get("output_type")),
+                ("Output Name", attribution.get("output_name")),
+                ("Output Value", attribution.get("output_value")),
+                (
+                    "Attributed Evidence IDs",
+                    ", ".join(attribution.get("attributed_evidence_ids") or []),
+                ),
+                ("Attribution Label", attribution.get("attribution_label")),
+                ("Attribution Basis", attribution.get("attribution_basis")),
+                ("Support State", attribution.get("support_state")),
+                (
+                    "Limitations",
+                    "; ".join(attribution.get("limitations") or []),
+                ),
+                ("", ""),
+            )
+        )
+    rows.pop()
+    return _render_stage18a_table(tuple(rows))
+
+
+def _render_stage19c_unsupported_outputs(
+    unsupported_outputs: list[dict[str, Any]],
+) -> str:
+    if not unsupported_outputs:
+        return '<p class="evidence-empty-state">No unsupported outputs identified.</p>'
+    rows = []
+    for output in unsupported_outputs:
+        rows.extend(
+            (
+                ("Output Type", output.get("output_type")),
+                ("Output Name", output.get("output_name")),
+                ("Output Value", output.get("output_value")),
+                ("Reason", output.get("reason")),
+                ("Limitations", "; ".join(output.get("limitations") or [])),
+                ("", ""),
+            )
+        )
+    rows.pop()
+    return _render_stage18a_table(tuple(rows))
+
+
+def _render_evidence_attribution_matrix_content(
+    attribution_matrix: dict[str, Any],
+) -> str:
+    summary = attribution_matrix["attribution_summary"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Case Title", summary["case_title"]),
+        ("Attribution State", summary["attribution_state"]),
+        ("Evidence Sources Count", summary["evidence_sources_count"]),
+        (
+            "Condition Attributions Count",
+            summary["condition_attributions_count"],
+        ),
+        (
+            "Trajectory Attributions Count",
+            summary["trajectory_attributions_count"],
+        ),
+        (
+            "Administrative Attributions Count",
+            summary["administrative_attributions_count"],
+        ),
+        (
+            "Record Evolution Attributions Count",
+            summary["record_evolution_attributions_count"],
+        ),
+        (
+            "Determination Trace Attributions Count",
+            summary["determination_trace_attributions_count"],
+        ),
+        (
+            "Rule Citation Attributions Count",
+            summary["rule_citation_attributions_count"],
+        ),
+        ("Unsupported Outputs Count", summary["unsupported_outputs_count"]),
+        ("Total Attributions Count", summary["total_attributions_count"]),
+    )
+    return f"""
+        <h3>Attribution Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        <section class="stage19c-evidence-sources">
+          <h3>Evidence Sources</h3>
+          {_render_stage19c_evidence_sources(attribution_matrix["evidence_sources"])}
+        </section>
+        <section class="stage19c-condition-attribution">
+          <h3>Condition Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["condition_attribution"], "No condition attributions available.")}
+        </section>
+        <section class="stage19c-trajectory-attribution">
+          <h3>Trajectory Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["trajectory_attribution"], "No trajectory attributions available.")}
+        </section>
+        <section class="stage19c-administrative-attribution">
+          <h3>Administrative Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["administrative_attribution"], "No administrative attributions available.")}
+        </section>
+        <section class="stage19c-record-evolution-attribution">
+          <h3>Record Evolution Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["record_evolution_attribution"], "No record evolution attributions available.")}
+        </section>
+        <section class="stage19c-determination-trace-attribution">
+          <h3>Determination Trace Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["determination_trace_attribution"], "No determination trace attributions available.")}
+        </section>
+        <section class="stage19c-rule-citation-attribution">
+          <h3>Rule Citation Attribution</h3>
+          {_render_stage19c_attribution_rows(attribution_matrix["rule_citation_attribution"], "No rule citation attributions available.")}
+        </section>
+        <section class="stage19c-unsupported-outputs">
+          <h3>Unsupported Outputs</h3>
+          {_render_stage19c_unsupported_outputs(attribution_matrix["unsupported_outputs"])}
+        </section>
+        <section class="stage19c-attribution-path">
+          <h3>Attribution Path</h3>
+          {_render_stage19a_trace_path(attribution_matrix["attribution_path"])}
+        </section>
+        <section class="stage19c-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(attribution_matrix["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_evidence_attribution_matrix_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    attribution_matrix = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_groups=evidence_groups or {},
+    )
+    return f"""
+      <section class="management-section stage19c-evidence-attribution-matrix">
+        <h2>Evidence Attribution Matrix</h2>
+        <p class="notice">
+          Evidence attribution matrix is derived deterministically from visible
+          record data, the determination trace, the rule citation layer, and
+          existing analysis outputs only. It shows which visible evidence
+          elements are attributed to conditions, trajectory outputs,
+          administrative outputs, record evolution outputs, determination trace
+          steps, and rule citations. It does not determine truth, liability,
+          intent, wrongdoing, factual correctness, or real-world sufficiency,
+          and it does not create evidence, rules, or conditions.
+        </p>
+        {_render_evidence_attribution_matrix_content(attribution_matrix)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -29337,6 +30185,12 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19c_evidence_attribution_matrix = _render_evidence_attribution_matrix_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -29490,6 +30344,7 @@ def render_admin_record_evidence_page(
             f"{stage18t_record_evolution_accountability}"
             f"{stage19a_determination_trace}"
             f"{stage19b_rule_citation_layer}"
+            f"{stage19c_evidence_attribution_matrix}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -29827,6 +30682,32 @@ def render_admin_record_evidence_page(
     }}
     .stage19b-citation-path th:nth-child(4),
     .stage19b-citation-path td:nth-child(4) {{
+      width: 36%;
+    }}
+    .stage19c-attribution-path table {{
+      table-layout: auto;
+    }}
+    .stage19c-attribution-path th,
+    .stage19c-attribution-path td {{
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: normal;
+    }}
+    .stage19c-attribution-path th:nth-child(1),
+    .stage19c-attribution-path td:nth-child(1) {{
+      width: 8%;
+    }}
+    .stage19c-attribution-path th:nth-child(2),
+    .stage19c-attribution-path td:nth-child(2) {{
+      width: 28%;
+    }}
+    .stage19c-attribution-path th:nth-child(3),
+    .stage19c-attribution-path td:nth-child(3) {{
+      width: 28%;
+    }}
+    .stage19c-attribution-path th:nth-child(4),
+    .stage19c-attribution-path td:nth-child(4) {{
       width: 36%;
     }}
     .stage7f-sufficiency-table .target-cell {{

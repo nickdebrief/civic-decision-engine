@@ -5061,6 +5061,217 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertEqual(1, trajectory_only["citation_summary"]["trajectory_citations_count"])
 
+    def test_stage19c_evidence_attribution_matrix_builds_from_trace_and_citations(self):
+        trace = self.admin_session.build_determination_trace(
+            record_outputs={
+                "reference": "Strike-LA-20260710-004",
+                "case_title": "Administrative complaint awaiting response",
+                "decision_trigger": "No response beyond deadline",
+                "case_lifecycle": {"status": "active", "days_open": 90},
+                "trajectory": "Deteriorating",
+                "system_state": "TRANSITION_TO_ESCALATION",
+                "signals": ["Dominant Resistance"],
+                "pattern_interpretation": "Delay escalated without response.",
+                "finding": "Trajectory recorded as Deteriorating",
+            },
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Escalation Without Response", "attachments": []}
+                ]
+            },
+            administrative_outputs={
+                "Administrative Action": "Escalate Review",
+            },
+            stage18_outputs={
+                "Evolution Classification": "Initial Record State",
+            },
+        )
+        citation_layer = self.admin_session.build_rule_citation_layer(
+            determination_trace=trace
+        )
+        matrix = self.admin_session.build_evidence_attribution_matrix(
+            determination_trace=trace,
+            rule_citation_layer=citation_layer,
+        )
+
+        summary = matrix["attribution_summary"]
+        self.assertEqual(
+            "Strike-LA-20260710-004",
+            matrix["record_reference"],
+        )
+        self.assertEqual(
+            "Administrative complaint awaiting response",
+            matrix["case_title"],
+        )
+        self.assertEqual(
+            "Evidence Attribution Matrix Available",
+            summary["attribution_state"],
+        )
+        self.assertGreater(summary["evidence_sources_count"], 0)
+        self.assertEqual(1, summary["condition_attributions_count"])
+        self.assertGreater(summary["trajectory_attributions_count"], 0)
+        self.assertEqual(1, summary["administrative_attributions_count"])
+        self.assertEqual(1, summary["record_evolution_attributions_count"])
+        self.assertEqual(6, summary["determination_trace_attributions_count"])
+        self.assertEqual(11, summary["rule_citation_attributions_count"])
+        self.assertEqual(0, summary["unsupported_outputs_count"])
+        self.assertEqual(
+            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            [step["step"] for step in matrix["attribution_path"]],
+        )
+        self.assertEqual(
+            [
+                "Visible Record Evidence",
+                "Evidence Sources",
+                "Condition Attribution",
+                "Trajectory Attribution",
+                "Administrative Attribution",
+                "Record Evolution Attribution",
+                "Determination Trace Attribution",
+                "Rule Citation Attribution",
+                "Evidence Attribution Matrix",
+            ],
+            [step["label"] for step in matrix["attribution_path"]],
+        )
+        self.assertEqual("EV-001", matrix["evidence_sources"][0]["evidence_id"])
+        self.assertEqual(
+            "EV-002",
+            matrix["evidence_sources"][1]["evidence_id"],
+        )
+        self.assertEqual(
+            "Escalation Without Response",
+            matrix["condition_attribution"][0]["output_name"],
+        )
+        self.assertTrue(
+            matrix["condition_attribution"][0]["attributed_evidence_ids"]
+        )
+        self.assertEqual(
+            "Attributed",
+            matrix["condition_attribution"][0]["support_state"],
+        )
+        self.assertTrue(matrix["trajectory_attribution"])
+        self.assertTrue(matrix["administrative_attribution"])
+        self.assertTrue(matrix["record_evolution_attribution"])
+        self.assertTrue(matrix["determination_trace_attribution"])
+        self.assertTrue(matrix["rule_citation_attribution"])
+        self.assertIn(
+            "Stage 19C does not validate evidence.",
+            matrix["limitations"],
+        )
+        self.assertIn(
+            "Stage 19C attributes only visible evidence elements to existing outputs.",
+            matrix["limitations"],
+        )
+        self.assertEqual(
+            matrix,
+            self.admin_session.build_evidence_attribution_matrix(
+                determination_trace=trace,
+                rule_citation_layer=citation_layer,
+            ),
+        )
+
+        rendered = self.admin_session._render_evidence_attribution_matrix_content(
+            matrix
+        )
+        self.assertIn("<h3>Attribution Summary</h3>", rendered)
+        self.assertIn("<h3>Evidence Sources</h3>", rendered)
+        self.assertIn("<h3>Condition Attribution</h3>", rendered)
+        self.assertIn("<h3>Trajectory Attribution</h3>", rendered)
+        self.assertIn("<h3>Administrative Attribution</h3>", rendered)
+        self.assertIn("<h3>Record Evolution Attribution</h3>", rendered)
+        self.assertIn("<h3>Determination Trace Attribution</h3>", rendered)
+        self.assertIn("<h3>Rule Citation Attribution</h3>", rendered)
+        self.assertIn("<h3>Unsupported Outputs</h3>", rendered)
+        self.assertIn("<h3>Attribution Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Attribution State</td><td>Evidence Attribution Matrix Available</td>",
+            rendered,
+        )
+
+    def test_stage19c_evidence_attribution_matrix_handles_absent_and_partial_outputs(self):
+        no_attribution = self.admin_session.build_evidence_attribution_matrix(
+            determination_trace={
+                "record_reference": "REC-1",
+                "case_title": None,
+                "visible_record": {},
+                "observed_evidence": [],
+                "applied_rules": [],
+                "conditions": [],
+                "trajectory": {},
+                "determination": "No determination available",
+                "trace_path": [],
+            },
+            rule_citation_layer={
+                "rule_citations": [],
+                "condition_citations": [],
+                "trajectory_citations": [],
+                "administrative_citations": [],
+                "record_evolution_citations": [],
+            },
+        )
+        partial = self.admin_session.build_evidence_attribution_matrix(
+            determination_trace={
+                "record_reference": "REC-2",
+                "case_title": None,
+                "visible_record": {},
+                "observed_evidence": [],
+                "applied_rules": [],
+                "conditions": [],
+                "trajectory": {},
+                "determination": "No determination available",
+                "trace_path": [],
+            },
+            rule_citation_layer={
+                "rule_citations": [
+                    {
+                        "rule_family": "Conditions Layer",
+                        "citation_label": "Conditions Layer Specification",
+                    }
+                ],
+                "condition_citations": [],
+                "trajectory_citations": [],
+                "administrative_citations": [],
+                "record_evolution_citations": [],
+            },
+        )
+        trace_without_trajectory = self.admin_session.build_determination_trace(
+            record_outputs={"reference": "REC-3"},
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+        no_trajectory = self.admin_session.build_evidence_attribution_matrix(
+            determination_trace=trace_without_trajectory,
+            rule_citation_layer=self.admin_session.build_rule_citation_layer(
+                determination_trace=trace_without_trajectory,
+            ),
+        )
+
+        self.assertEqual(
+            "No Evidence Attribution Available",
+            no_attribution["attribution_summary"]["attribution_state"],
+        )
+        self.assertEqual([], no_attribution["evidence_sources"])
+        self.assertEqual([], no_attribution["condition_attribution"])
+        self.assertEqual([], no_attribution["trajectory_attribution"])
+        self.assertEqual([], no_attribution["administrative_attribution"])
+        self.assertEqual([], no_attribution["record_evolution_attribution"])
+        self.assertEqual([], no_attribution["unsupported_outputs"])
+        self.assertEqual(
+            "Partial Evidence Attribution Matrix",
+            partial["attribution_summary"]["attribution_state"],
+        )
+        self.assertEqual(1, partial["attribution_summary"]["unsupported_outputs_count"])
+        self.assertEqual(
+            "Conditions Layer",
+            partial["unsupported_outputs"][0]["output_name"],
+        )
+        self.assertIn(
+            "Unsupported does not mean false or invalid.",
+            partial["unsupported_outputs"][0]["limitations"],
+        )
+        self.assertEqual([], no_trajectory["trajectory_attribution"])
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7272,6 +7483,21 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Citation State</td><td>Rule Citation Layer Available</td>",
             after_content,
         )
+        self.assertIn("Evidence Attribution Matrix", after_content)
+        self.assertIn("Attribution Summary", after_content)
+        self.assertIn("Evidence Sources", after_content)
+        self.assertIn("Condition Attribution", after_content)
+        self.assertIn("Trajectory Attribution", after_content)
+        self.assertIn("Administrative Attribution", after_content)
+        self.assertIn("Record Evolution Attribution", after_content)
+        self.assertIn("Determination Trace Attribution", after_content)
+        self.assertIn("Rule Citation Attribution", after_content)
+        self.assertIn("Unsupported Outputs", after_content)
+        self.assertIn("Attribution Path", after_content)
+        self.assertIn(
+            "<td>Attribution State</td><td>Evidence Attribution Matrix Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -8644,6 +8870,21 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Citation State</td><td>Rule Citation Layer Available</td>",
             content,
         )
+        self.assertIn("Evidence Attribution Matrix", content)
+        self.assertIn("Attribution Summary", content)
+        self.assertIn("Evidence Sources", content)
+        self.assertIn("Condition Attribution", content)
+        self.assertIn("Trajectory Attribution", content)
+        self.assertIn("Administrative Attribution", content)
+        self.assertIn("Record Evolution Attribution", content)
+        self.assertIn("Determination Trace Attribution", content)
+        self.assertIn("Rule Citation Attribution", content)
+        self.assertIn("Unsupported Outputs", content)
+        self.assertIn("Attribution Path", content)
+        self.assertIn(
+            "<td>Attribution State</td><td>Evidence Attribution Matrix Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -9717,6 +9958,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Determination Trace</h2>"),
             governance_content.index("<h2>Rule Citation Layer</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Rule Citation Layer</h2>"),
+            governance_content.index("<h2>Evidence Attribution Matrix</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -9795,6 +10040,13 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Rule Citation Layer</h2>", print_governance_content)
         self.assertIn("<h3>Citation Summary</h3>", print_governance_content)
         self.assertIn("<h3>Citation Path</h3>", print_governance_content)
+        self.assertIn(
+            "<h2>Evidence Attribution Matrix</h2>",
+            print_governance_content,
+        )
+        self.assertIn("<h3>Attribution Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Evidence Sources</h3>", print_governance_content)
+        self.assertIn("<h3>Attribution Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
