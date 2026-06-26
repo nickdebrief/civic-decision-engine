@@ -4680,6 +4680,210 @@ class AdminSessionTests(unittest.TestCase):
             self.assertIn("Non-Accountable Evolution Outputs", rendered)
             self.assertIn("Missing Evolution Outputs", rendered)
 
+    def test_stage19a_determination_trace_builds_visible_pathway(self):
+        evidence_groups = {
+            "condition": [
+                {"target_label": "Escalation Without Response", "attachments": []}
+            ],
+            "signal": [
+                {"target_label": "Dominant Resistance", "attachments": []}
+            ],
+        }
+        record_outputs = {
+            "reference": "Strike-LA-20260710-004",
+            "case_title": "Administrative complaint awaiting response",
+            "civic_domain": "local_government",
+            "institutions": ["Local Authority"],
+            "decision_trigger": "No response beyond deadline",
+            "case_lifecycle": {
+                "current_stage": "awaiting_response",
+                "status": "active",
+                "stalled": True,
+                "days_open": 90,
+            },
+            "urgency": "high",
+            "trajectory": "Deteriorating",
+            "system_state": "TRANSITION_TO_ESCALATION",
+            "moment_of_change": {
+                "from": "TRANSFER_OF_BURDEN",
+                "to": "ESCALATION_WITHOUT_RESPONSE",
+            },
+            "pattern_interpretation": "Delay has escalated without response.",
+            "finding": "Trajectory recorded as Deteriorating",
+        }
+        trace = self.admin_session.build_determination_trace(
+            record_outputs=record_outputs,
+            evidence_groups=evidence_groups,
+            administrative_outputs={"Administrative Action": "Escalate Review"},
+            stage18_outputs={
+                "Evolution Classification": "Initial Record State",
+            },
+        )
+
+        self.assertEqual("Strike-LA-20260710-004", trace["record_reference"])
+        self.assertEqual(
+            "Administrative complaint awaiting response",
+            trace["case_title"],
+        )
+        self.assertEqual(
+            "local_government",
+            trace["visible_record"]["civic_domain"],
+        )
+        self.assertEqual(["Local Authority"], trace["visible_record"]["institutions"])
+        self.assertEqual(["Escalation Without Response"], trace["conditions"])
+        self.assertEqual("Deteriorating", trace["trajectory"]["trajectory"])
+        self.assertEqual(
+            "Determination derived from visible record evolution",
+            trace["determination"],
+        )
+        self.assertEqual(
+            [1, 2, 3, 4, 5, 6],
+            [step["step"] for step in trace["trace_path"]],
+        )
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Observed Evidence",
+                "Applied Rules",
+                "Conditions",
+                "Trajectory",
+                "Determination",
+            ],
+            [step["label"] for step in trace["trace_path"]],
+        )
+        self.assertIn("Conditions Layer", trace["applied_rules"])
+        self.assertIn("Trajectory Classification", trace["applied_rules"])
+        self.assertIn("Administrative Evaluation Layer", trace["applied_rules"])
+        self.assertIn("Record Evolution Analysis", trace["applied_rules"])
+        self.assertIn(
+            "Stage 19A does not determine truth.",
+            trace["limitations"],
+        )
+        self.assertIn(
+            "Stage 19A evaluates only visible record-derived analysis pathways.",
+            trace["limitations"],
+        )
+        self.assertEqual(
+            trace,
+            self.admin_session.build_determination_trace(
+                record_outputs=record_outputs,
+                evidence_groups=evidence_groups,
+                administrative_outputs={"Administrative Action": "Escalate Review"},
+                stage18_outputs={
+                    "Evolution Classification": "Initial Record State",
+                },
+            ),
+        )
+
+        rendered = self.admin_session._render_determination_trace_content(trace)
+        self.assertIn("<h3>Trace Summary</h3>", rendered)
+        self.assertIn("<h3>Visible Record</h3>", rendered)
+        self.assertIn("<h3>Observed Evidence</h3>", rendered)
+        self.assertIn("<h3>Applied Rules</h3>", rendered)
+        self.assertIn("<h3>Conditions</h3>", rendered)
+        self.assertIn("<h3>Trajectory</h3>", rendered)
+        self.assertIn("<h3>Trace Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn("<td>Conditions Count</td><td>1</td>", rendered)
+        self.assertIn("<td>Trace Steps Count</td><td>6</td>", rendered)
+
+    def test_stage19a_determination_trace_does_not_infer_missing_values(self):
+        trace = self.admin_session.build_determination_trace(
+            record_outputs={"reference": "REC-1"},
+            evidence_groups={},
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+
+        self.assertEqual("REC-1", trace["record_reference"])
+        self.assertNotIn("case_title", trace["visible_record"])
+        self.assertNotIn("institutions", trace["visible_record"])
+        self.assertEqual([], trace["conditions"])
+        self.assertEqual({}, trace["trajectory"])
+        self.assertEqual([], trace["applied_rules"])
+        self.assertEqual("No determination available", trace["determination"])
+
+        falsey_trace = self.admin_session.build_determination_trace(
+            record_outputs={
+                "reference": "REC-2",
+                "case_lifecycle": {
+                    "status": "active",
+                    "stalled": False,
+                    "days_open": 0,
+                },
+            },
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+        self.assertEqual(0, falsey_trace["visible_record"]["days_open"])
+        self.assertIn(
+            {"label": "Stalled State", "value": False},
+            falsey_trace["observed_evidence"],
+        )
+
+    def test_stage19a_determination_trace_derivation_order(self):
+        no_outputs = self.admin_session.build_determination_trace(
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+        conditions_only = self.admin_session.build_determination_trace(
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Transfer Of Burden", "attachments": []}
+                ]
+            },
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+        conditions_trajectory = self.admin_session.build_determination_trace(
+            record_outputs={"trajectory": "Stable"},
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Transfer Of Burden", "attachments": []}
+                ]
+            },
+            administrative_outputs={},
+            stage18_outputs={},
+        )
+        administrative = self.admin_session.build_determination_trace(
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Transfer Of Burden", "attachments": []}
+                ]
+            },
+            administrative_outputs={"Workflow State": "Review Active"},
+            stage18_outputs={},
+        )
+        evolution = self.admin_session.build_determination_trace(
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Transfer Of Burden", "attachments": []}
+                ]
+            },
+            administrative_outputs={"Workflow State": "Review Active"},
+            stage18_outputs={
+                "Evolution Classification": "Initial Record State",
+            },
+        )
+
+        self.assertEqual("No determination available", no_outputs["determination"])
+        self.assertEqual(
+            "Determination derived from visible record structure",
+            conditions_only["determination"],
+        )
+        self.assertEqual(
+            "Determination derived from visible conditions and trajectory",
+            conditions_trajectory["determination"],
+        )
+        self.assertEqual(
+            "Determination derived from visible administrative evaluation",
+            administrative["determination"],
+        )
+        self.assertEqual(
+            "Determination derived from visible record evolution",
+            evolution["determination"],
+        )
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -6866,6 +7070,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Accountability Classification</td><td>Non-Accountable Evolution Chain</td>",
             after_content,
         )
+        self.assertIn("Determination Trace", after_content)
+        self.assertIn("Trace Summary", after_content)
+        self.assertIn("Visible Record", after_content)
+        self.assertIn("Observed Evidence", after_content)
+        self.assertIn("Applied Rules", after_content)
+        self.assertIn("Trace Path", after_content)
+        self.assertIn("Limitations", after_content)
+        self.assertIn(
+            "<td>Determination</td><td>Determination derived from visible record evolution</td>",
+            after_content,
+        )
+        self.assertIn("<td>Conditions Count</td><td>1</td>", after_content)
+        self.assertIn("<td>Trace Steps Count</td><td>6</td>", after_content)
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -8213,6 +8430,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Accountability Classification</td><td>Non-Accountable Evolution Chain</td>",
             content,
         )
+        self.assertIn("Determination Trace", content)
+        self.assertIn("Trace Summary", content)
+        self.assertIn("Visible Record", content)
+        self.assertIn("Observed Evidence", content)
+        self.assertIn("Applied Rules", content)
+        self.assertIn("Trace Path", content)
+        self.assertIn("Limitations", content)
+        self.assertIn(
+            "<td>Determination</td><td>Determination derived from visible record evolution</td>",
+            content,
+        )
+        self.assertIn("<td>Conditions Count</td><td>5</td>", content)
+        self.assertIn("<td>Trace Steps Count</td><td>6</td>", content)
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -9278,6 +9508,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Transparency</h2>"),
             governance_content.index("<h2>Record Evolution Accountability</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Record Evolution Accountability</h2>"),
+            governance_content.index("<h2>Determination Trace</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -9349,6 +9583,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Record Evolution Reproducibility</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Transparency</h2>", print_governance_content)
         self.assertIn("<h2>Record Evolution Accountability</h2>", print_governance_content)
+        self.assertIn("<h2>Determination Trace</h2>", print_governance_content)
+        self.assertIn("<h3>Trace Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Trace Path</h3>", print_governance_content)
+        self.assertIn("<h3>Limitations</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
