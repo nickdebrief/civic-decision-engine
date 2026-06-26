@@ -29803,6 +29803,32 @@ def render_admin_record_evidence_page(
       vertical-align: top;
       word-break: break-word;
     }}
+    .stage19b-citation-path table {{
+      table-layout: auto;
+    }}
+    .stage19b-citation-path th,
+    .stage19b-citation-path td {{
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: normal;
+    }}
+    .stage19b-citation-path th:nth-child(1),
+    .stage19b-citation-path td:nth-child(1) {{
+      width: 8%;
+    }}
+    .stage19b-citation-path th:nth-child(2),
+    .stage19b-citation-path td:nth-child(2) {{
+      width: 26%;
+    }}
+    .stage19b-citation-path th:nth-child(3),
+    .stage19b-citation-path td:nth-child(3) {{
+      width: 30%;
+    }}
+    .stage19b-citation-path th:nth-child(4),
+    .stage19b-citation-path td:nth-child(4) {{
+      width: 36%;
+    }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;
