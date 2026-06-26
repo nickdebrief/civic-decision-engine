@@ -28570,6 +28570,491 @@ def _render_determination_trace_section(
       </section>"""
 
 
+STAGE19B_LIMITATIONS = (
+    "Stage 19B does not determine truth.",
+    "Stage 19B does not determine liability.",
+    "Stage 19B does not infer intent.",
+    "Stage 19B does not assign blame.",
+    "Stage 19B does not validate evidence.",
+    "Stage 19B does not create new rules.",
+    "Stage 19B does not create new conditions.",
+    "Stage 19B does not modify the record.",
+    "Stage 19B cites only visible rule families and existing outputs.",
+)
+
+
+STAGE19B_RULE_REFERENCES = {
+    "Conditions Layer": {
+        "citation_label": "Conditions Layer Specification",
+        "specification_reference": "docs/specs/conditions-layer-spec-v1.md",
+        "version_reference": "Conditions Layer Specification v1.0",
+        "source_type": "Repository specification",
+        "deterministic_requirements": (
+            "Use existing detected condition outputs only.",
+            "Do not create or infer conditions.",
+        ),
+        "limitations": (
+            "Condition citations identify visible classifications only.",
+            "They do not validate truthfulness or wrongdoing.",
+        ),
+    },
+    "Timeline Analysis": {
+        "citation_label": "Timeline Analysis Rule Family",
+        "specification_reference": "Admin session deterministic analysis flow",
+        "version_reference": "CDE v12 admin analysis",
+        "source_type": "Visible analysis output",
+        "deterministic_requirements": (
+            "Use visible lifecycle, status, and timing fields only.",
+            "Do not infer hidden procedural events.",
+        ),
+        "limitations": (
+            "Timeline citations describe visible record timing only.",
+            "They do not determine causation.",
+        ),
+    },
+    "Pattern Interpretation": {
+        "citation_label": "Pattern Interpretation Rule Family",
+        "specification_reference": "README.md pattern interpretation model",
+        "version_reference": "CDE v12",
+        "source_type": "Visible analysis output",
+        "deterministic_requirements": (
+            "Use existing signals, moment-of-change, and pattern outputs only.",
+            "Do not generate new pattern conclusions.",
+        ),
+        "limitations": (
+            "Pattern citations explain visible analysis outputs only.",
+            "They do not determine motive or intent.",
+        ),
+    },
+    "Trajectory Classification": {
+        "citation_label": "Trajectory Classification Rule Family",
+        "specification_reference": "README.md trajectory model",
+        "version_reference": "CDE v12",
+        "source_type": "Visible trajectory output",
+        "deterministic_requirements": (
+            "Use existing trajectory and system-state outputs only.",
+            "Do not forecast future trajectory.",
+        ),
+        "limitations": (
+            "Trajectory citations describe visible classification state only.",
+            "They do not predict outcomes.",
+        ),
+    },
+    "Administrative Evaluation Layer": {
+        "citation_label": "Administrative Evaluation Layer",
+        "specification_reference": "Admin Record Evidence deterministic outputs",
+        "version_reference": "Stages 7F through 14F",
+        "source_type": "Visible administrative output",
+        "deterministic_requirements": (
+            "Use existing administrative evaluation outputs only.",
+            "Do not create administrative findings.",
+        ),
+        "limitations": (
+            "Administrative citations identify visible workflow outputs only.",
+            "They do not decide legality or liability.",
+        ),
+    },
+    "Record Evolution Analysis": {
+        "citation_label": "Record Evolution Analysis",
+        "specification_reference": "docs/releases/STAGE18T_RECORD_EVOLUTION_ACCOUNTABILITY.md",
+        "version_reference": "Stages 18A through 18T",
+        "source_type": "Visible record evolution output",
+        "deterministic_requirements": (
+            "Use existing Stage 18 classifications only.",
+            "Do not alter record evolution classifications.",
+        ),
+        "limitations": (
+            "Record evolution citations identify visible chain outputs only.",
+            "They do not certify factual accuracy.",
+        ),
+    },
+    "Determination Trace": {
+        "citation_label": "Determination Trace",
+        "specification_reference": "docs/releases/STAGE19A_DETERMINATION_TRACE.md",
+        "version_reference": "Stage 19A",
+        "source_type": "Visible determination trace",
+        "deterministic_requirements": (
+            "Use the existing Stage 19A determination trace only.",
+            "Do not change determination trace outputs.",
+        ),
+        "limitations": (
+            "Determination Trace citations explain pathway structure only.",
+            "They do not determine truth or correctness.",
+        ),
+    },
+}
+
+
+def _stage19b_observed_value(
+    determination_trace: dict[str, Any],
+    label: str,
+) -> Any:
+    for item in determination_trace.get("observed_evidence") or []:
+        if item.get("label") == label:
+            return item.get("value")
+    return None
+
+
+def _stage19b_rule_citation(rule_family: str) -> dict[str, Any]:
+    reference = STAGE19B_RULE_REFERENCES.get(
+        rule_family,
+        {
+            "citation_label": rule_family,
+            "specification_reference": "Visible rule family output",
+            "version_reference": "Visible analysis output",
+            "source_type": "Visible analysis output",
+            "deterministic_requirements": (
+                "Use existing visible output only.",
+                "Do not create new rules.",
+            ),
+            "limitations": (
+                "Citation identifies a visible rule family only.",
+                "Citation does not validate truthfulness.",
+            ),
+        },
+    )
+    return {"rule_family": rule_family, **reference}
+
+
+def _stage19b_condition_citation(condition: Any) -> dict[str, Any]:
+    return {
+        "condition": condition,
+        "citation_label": "Visible Condition Citation",
+        "definition_reference": "Definition not available in visible rule set",
+        "specification_reference": "docs/specs/conditions-layer-spec-v1.md",
+        "source_type": "Visible condition output",
+        "deterministic_requirements": (
+            "Use existing detected condition only.",
+            "Do not create or infer new conditions.",
+        ),
+        "limitations": (
+            "Condition citation does not determine truth.",
+            "Condition citation does not assign blame.",
+        ),
+    }
+
+
+def _stage19b_citation_state(
+    *,
+    rule_citations: list[dict[str, Any]],
+    condition_citations: list[dict[str, Any]],
+    trajectory_citations: list[dict[str, Any]],
+    administrative_citations: list[dict[str, Any]],
+    record_evolution_citations: list[dict[str, Any]],
+) -> str:
+    detail_count = (
+        len(condition_citations)
+        + len(trajectory_citations)
+        + len(administrative_citations)
+        + len(record_evolution_citations)
+    )
+    if not rule_citations and detail_count == 0:
+        return "No Rule Citations Available"
+    if rule_citations and detail_count > 0:
+        return "Rule Citation Layer Available"
+    return "Partial Rule Citation Layer"
+
+
+def build_rule_citation_layer(
+    *,
+    determination_trace: dict[str, Any] | None = None,
+    record_metadata: dict[str, Any] | None = None,
+    record_outputs: dict[str, Any] | None = None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None = None,
+    version_history: list[dict[str, Any]] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    stage18_outputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    trace = (
+        dict(determination_trace)
+        if determination_trace is not None
+        else build_determination_trace(
+            record_metadata=record_metadata or {},
+            record_outputs=record_outputs or {},
+            evidence_groups=evidence_groups or {},
+            version_history=version_history or [],
+            administrative_outputs=administrative_outputs,
+            stage18_outputs=stage18_outputs,
+        )
+    )
+    applied_rule_families = list(trace.get("applied_rules") or [])
+    if applied_rule_families and "Determination Trace" not in applied_rule_families:
+        applied_rule_families.append("Determination Trace")
+    rule_citations = [
+        _stage19b_rule_citation(rule_family)
+        for rule_family in applied_rule_families
+    ]
+    condition_citations = [
+        _stage19b_condition_citation(condition)
+        for condition in trace.get("conditions") or []
+    ]
+    trajectory = trace.get("trajectory") or {}
+    trajectory_citations = []
+    if trajectory:
+        trajectory_citations.append(
+            {
+                "trajectory": trajectory.get("trajectory"),
+                "system_state": trajectory.get("system_state"),
+                "signals": trajectory.get("signals") or [],
+                "citation_label": "Visible Trajectory Citation",
+                "specification_reference": "README.md trajectory model",
+                "deterministic_requirements": (
+                    "Use existing trajectory, system-state, and signal outputs only.",
+                    "Do not infer or forecast trajectory.",
+                ),
+                "limitations": (
+                    "Trajectory citation does not predict outcomes.",
+                    "Trajectory citation does not validate factual correctness.",
+                ),
+            }
+        )
+    administrative_outputs = _stage19b_observed_value(
+        trace,
+        "Administrative Outputs",
+    )
+    if not isinstance(administrative_outputs, dict):
+        administrative_outputs = {}
+    administrative_citations = [
+        {
+            "output_name": output_name,
+            "output_value": output_value,
+            "citation_label": "Visible Administrative Output Citation",
+            "specification_reference": "Admin Record Evidence deterministic outputs",
+            "deterministic_requirements": (
+                "Use existing administrative output only.",
+                "Do not create administrative findings.",
+            ),
+            "limitations": (
+                "Administrative citation does not determine liability.",
+                "Administrative citation does not determine wrongdoing.",
+            ),
+        }
+        for output_name, output_value in administrative_outputs.items()
+        if output_value not in (None, "", [], {})
+    ]
+    record_evolution_outputs = _stage19b_observed_value(
+        trace,
+        "Record Evolution Outputs",
+    )
+    if not isinstance(record_evolution_outputs, dict):
+        record_evolution_outputs = {}
+    record_evolution_citations = [
+        {
+            "output_name": output_name,
+            "output_value": output_value,
+            "citation_label": "Visible Record Evolution Output Citation",
+            "specification_reference": "Stage 18 record evolution framework",
+            "deterministic_requirements": (
+                "Use existing Stage 18 output only.",
+                "Do not alter record evolution classifications.",
+            ),
+            "limitations": (
+                "Record evolution citation does not certify evidence.",
+                "Record evolution citation does not validate truthfulness.",
+            ),
+        }
+        for output_name, output_value in record_evolution_outputs.items()
+        if output_value not in (None, "", [], {})
+    ]
+    citation_state = _stage19b_citation_state(
+        rule_citations=rule_citations,
+        condition_citations=condition_citations,
+        trajectory_citations=trajectory_citations,
+        administrative_citations=administrative_citations,
+        record_evolution_citations=record_evolution_citations,
+    )
+    total_citations_count = (
+        len(rule_citations)
+        + len(condition_citations)
+        + len(trajectory_citations)
+        + len(administrative_citations)
+        + len(record_evolution_citations)
+    )
+    citation_path = [
+        {
+            "step": 1,
+            "label": "Visible Determination Trace",
+            "input": ["record_reference", "case_title", "determination"],
+            "output": "Determination trace available"
+            if trace.get("determination") != "No determination available"
+            else "No determination trace outputs available",
+        },
+        {
+            "step": 2,
+            "label": "Applied Rule Families",
+            "input": applied_rule_families,
+            "output": "Rule families cited"
+            if rule_citations
+            else "No rule families cited",
+        },
+        {
+            "step": 3,
+            "label": "Condition Citations",
+            "input": [citation["condition"] for citation in condition_citations],
+            "output": "Condition citations available"
+            if condition_citations
+            else "No condition citations available",
+        },
+        {
+            "step": 4,
+            "label": "Trajectory Citations",
+            "input": [citation.get("trajectory") for citation in trajectory_citations],
+            "output": "Trajectory citations available"
+            if trajectory_citations
+            else "No trajectory citations available",
+        },
+        {
+            "step": 5,
+            "label": "Administrative Citations",
+            "input": [
+                citation["output_name"] for citation in administrative_citations
+            ],
+            "output": "Administrative citations available"
+            if administrative_citations
+            else "No administrative citations available",
+        },
+        {
+            "step": 6,
+            "label": "Record Evolution Citations",
+            "input": [
+                citation["output_name"] for citation in record_evolution_citations
+            ],
+            "output": "Record evolution citations available"
+            if record_evolution_citations
+            else "No record evolution citations available",
+        },
+        {
+            "step": 7,
+            "label": "Rule Citation Layer",
+            "input": ["citation_summary", "rule_citations", "citation_path"],
+            "output": citation_state,
+        },
+    ]
+    citation_summary = {
+        "record_reference": trace.get("record_reference"),
+        "case_title": trace.get("case_title"),
+        "rule_families_count": len(rule_citations),
+        "condition_citations_count": len(condition_citations),
+        "trajectory_citations_count": len(trajectory_citations),
+        "administrative_citations_count": len(administrative_citations),
+        "record_evolution_citations_count": len(record_evolution_citations),
+        "total_citations_count": total_citations_count,
+        "citation_state": citation_state,
+    }
+    return {
+        "record_reference": trace.get("record_reference"),
+        "case_title": trace.get("case_title"),
+        "citation_summary": citation_summary,
+        "rule_citations": rule_citations,
+        "condition_citations": condition_citations,
+        "trajectory_citations": trajectory_citations,
+        "administrative_citations": administrative_citations,
+        "record_evolution_citations": record_evolution_citations,
+        "citation_path": citation_path,
+        "limitations": list(STAGE19B_LIMITATIONS),
+    }
+
+
+def _render_stage19b_citation_rows(
+    citations: list[dict[str, Any]],
+    fields: tuple[str, ...],
+    empty_label: str,
+) -> str:
+    if not citations:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rows = []
+    for citation in citations:
+        for field in fields:
+            label = " ".join(field.split("_")).title()
+            rows.append((label, citation.get(field)))
+        rows.append(("", ""))
+    if rows:
+        rows.pop()
+    return _render_stage18a_table(tuple(rows))
+
+
+def _render_rule_citation_layer_content(citation_layer: dict[str, Any]) -> str:
+    summary = citation_layer["citation_summary"]
+    summary_rows = (
+        ("Record Reference", summary["record_reference"]),
+        ("Case Title", summary["case_title"]),
+        ("Citation State", summary["citation_state"]),
+        ("Rule Families Count", summary["rule_families_count"]),
+        ("Condition Citations Count", summary["condition_citations_count"]),
+        ("Trajectory Citations Count", summary["trajectory_citations_count"]),
+        (
+            "Administrative Citations Count",
+            summary["administrative_citations_count"],
+        ),
+        (
+            "Record Evolution Citations Count",
+            summary["record_evolution_citations_count"],
+        ),
+        ("Total Citations Count", summary["total_citations_count"]),
+    )
+    return f"""
+        <h3>Citation Summary</h3>
+        {_render_stage18a_table(summary_rows)}
+        <section class="stage19b-rule-family-citations">
+          <h3>Rule Family Citations</h3>
+          {_render_stage19b_citation_rows(citation_layer["rule_citations"], ("rule_family", "citation_label", "specification_reference", "version_reference", "source_type", "deterministic_requirements", "limitations"), "No rule family citations available.")}
+        </section>
+        <section class="stage19b-condition-citations">
+          <h3>Condition Citations</h3>
+          {_render_stage19b_citation_rows(citation_layer["condition_citations"], ("condition", "citation_label", "definition_reference", "specification_reference", "source_type", "deterministic_requirements", "limitations"), "No condition citations available.")}
+        </section>
+        <section class="stage19b-trajectory-citations">
+          <h3>Trajectory Citations</h3>
+          {_render_stage19b_citation_rows(citation_layer["trajectory_citations"], ("trajectory", "system_state", "signals", "citation_label", "specification_reference", "deterministic_requirements", "limitations"), "No trajectory citations available.")}
+        </section>
+        <section class="stage19b-administrative-citations">
+          <h3>Administrative Citations</h3>
+          {_render_stage19b_citation_rows(citation_layer["administrative_citations"], ("output_name", "output_value", "citation_label", "specification_reference", "deterministic_requirements", "limitations"), "No administrative citations available.")}
+        </section>
+        <section class="stage19b-record-evolution-citations">
+          <h3>Record Evolution Citations</h3>
+          {_render_stage19b_citation_rows(citation_layer["record_evolution_citations"], ("output_name", "output_value", "citation_label", "specification_reference", "deterministic_requirements", "limitations"), "No record evolution citations available.")}
+        </section>
+        <section class="stage19b-citation-path">
+          <h3>Citation Path</h3>
+          {_render_stage19a_trace_path(citation_layer["citation_path"])}
+        </section>
+        <section class="stage19b-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(citation_layer["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_rule_citation_layer_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    return f"""
+      <section class="management-section stage19b-rule-citation-layer">
+        <h2>Rule Citation Layer</h2>
+        <p class="notice">
+          Rule citation layer is derived deterministically from the
+          determination trace and existing visible analysis outputs only. It
+          shows which rule families, condition definitions, trajectory outputs,
+          administrative outputs, and record evolution outputs support the
+          visible determination pathway. It does not determine truth,
+          liability, intent, wrongdoing, or factual correctness, and it does
+          not create new rules or conditions.
+        </p>
+        {_render_rule_citation_layer_content(citation_layer)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -28846,6 +29331,12 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19b_rule_citation_layer = _render_rule_citation_layer_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -28998,6 +29489,7 @@ def render_admin_record_evidence_page(
             f"{stage18s_record_evolution_transparency}"
             f"{stage18t_record_evolution_accountability}"
             f"{stage19a_determination_trace}"
+            f"{stage19b_rule_citation_layer}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",

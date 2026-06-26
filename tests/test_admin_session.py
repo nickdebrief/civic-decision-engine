@@ -4884,6 +4884,183 @@ class AdminSessionTests(unittest.TestCase):
             evolution["determination"],
         )
 
+    def test_stage19b_rule_citation_layer_builds_from_determination_trace(self):
+        trace = self.admin_session.build_determination_trace(
+            record_outputs={
+                "reference": "Strike-LA-20260710-004",
+                "case_title": "Administrative complaint awaiting response",
+                "decision_trigger": "No response beyond deadline",
+                "case_lifecycle": {"status": "active", "days_open": 90},
+                "trajectory": "Deteriorating",
+                "system_state": "TRANSITION_TO_ESCALATION",
+                "signals": ["Dominant Resistance"],
+                "pattern_interpretation": "Delay escalated without response.",
+            },
+            evidence_groups={
+                "condition": [
+                    {"target_label": "Escalation Without Response", "attachments": []}
+                ]
+            },
+            administrative_outputs={
+                "Administrative Action": "Escalate Review",
+            },
+            stage18_outputs={
+                "Evolution Classification": "Initial Record State",
+            },
+        )
+        citation_layer = self.admin_session.build_rule_citation_layer(
+            determination_trace=trace
+        )
+
+        summary = citation_layer["citation_summary"]
+        self.assertEqual(
+            "Strike-LA-20260710-004",
+            citation_layer["record_reference"],
+        )
+        self.assertEqual(
+            "Administrative complaint awaiting response",
+            citation_layer["case_title"],
+        )
+        self.assertEqual("Rule Citation Layer Available", summary["citation_state"])
+        self.assertEqual(7, summary["rule_families_count"])
+        self.assertEqual(1, summary["condition_citations_count"])
+        self.assertEqual(1, summary["trajectory_citations_count"])
+        self.assertEqual(1, summary["administrative_citations_count"])
+        self.assertEqual(1, summary["record_evolution_citations_count"])
+        self.assertEqual(11, summary["total_citations_count"])
+        self.assertEqual(
+            [1, 2, 3, 4, 5, 6, 7],
+            [step["step"] for step in citation_layer["citation_path"]],
+        )
+        self.assertEqual(
+            [
+                "Visible Determination Trace",
+                "Applied Rule Families",
+                "Condition Citations",
+                "Trajectory Citations",
+                "Administrative Citations",
+                "Record Evolution Citations",
+                "Rule Citation Layer",
+            ],
+            [step["label"] for step in citation_layer["citation_path"]],
+        )
+        rule_families = [
+            citation["rule_family"] for citation in citation_layer["rule_citations"]
+        ]
+        self.assertIn("Conditions Layer", rule_families)
+        self.assertIn("Trajectory Classification", rule_families)
+        self.assertIn("Administrative Evaluation Layer", rule_families)
+        self.assertIn("Record Evolution Analysis", rule_families)
+        self.assertIn("Determination Trace", rule_families)
+        self.assertEqual(
+            "Escalation Without Response",
+            citation_layer["condition_citations"][0]["condition"],
+        )
+        self.assertEqual(
+            "Definition not available in visible rule set",
+            citation_layer["condition_citations"][0]["definition_reference"],
+        )
+        self.assertEqual(
+            "Visible condition output",
+            citation_layer["condition_citations"][0]["source_type"],
+        )
+        self.assertEqual(
+            "Deteriorating",
+            citation_layer["trajectory_citations"][0]["trajectory"],
+        )
+        self.assertEqual(
+            "Administrative Action",
+            citation_layer["administrative_citations"][0]["output_name"],
+        )
+        self.assertEqual(
+            "Evolution Classification",
+            citation_layer["record_evolution_citations"][0]["output_name"],
+        )
+        self.assertIn(
+            "Stage 19B does not create new rules.",
+            citation_layer["limitations"],
+        )
+        self.assertIn(
+            "Stage 19B cites only visible rule families and existing outputs.",
+            citation_layer["limitations"],
+        )
+        self.assertEqual(
+            citation_layer,
+            self.admin_session.build_rule_citation_layer(determination_trace=trace),
+        )
+
+        rendered = self.admin_session._render_rule_citation_layer_content(
+            citation_layer
+        )
+        self.assertIn("<h3>Citation Summary</h3>", rendered)
+        self.assertIn("<h3>Rule Family Citations</h3>", rendered)
+        self.assertIn("<h3>Condition Citations</h3>", rendered)
+        self.assertIn("<h3>Trajectory Citations</h3>", rendered)
+        self.assertIn("<h3>Administrative Citations</h3>", rendered)
+        self.assertIn("<h3>Record Evolution Citations</h3>", rendered)
+        self.assertIn("<h3>Citation Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Citation State</td><td>Rule Citation Layer Available</td>",
+            rendered,
+        )
+
+    def test_stage19b_rule_citation_layer_handles_absent_and_partial_outputs(self):
+        no_citations = self.admin_session.build_rule_citation_layer(
+            determination_trace={
+                "record_reference": "REC-1",
+                "case_title": None,
+                "applied_rules": [],
+                "conditions": [],
+                "trajectory": {},
+                "observed_evidence": [],
+                "determination": "No determination available",
+            }
+        )
+        partial = self.admin_session.build_rule_citation_layer(
+            determination_trace={
+                "record_reference": "REC-2",
+                "case_title": None,
+                "applied_rules": ["Conditions Layer"],
+                "conditions": [],
+                "trajectory": {},
+                "observed_evidence": [],
+                "determination": "Determination derived from visible record structure",
+            }
+        )
+        trajectory_only = self.admin_session.build_rule_citation_layer(
+            determination_trace={
+                "record_reference": "REC-3",
+                "case_title": None,
+                "applied_rules": ["Trajectory Classification"],
+                "conditions": [],
+                "trajectory": {"trajectory": "Stable"},
+                "observed_evidence": [],
+                "determination": "Determination derived from visible conditions and trajectory",
+            }
+        )
+
+        self.assertEqual(
+            "No Rule Citations Available",
+            no_citations["citation_summary"]["citation_state"],
+        )
+        self.assertEqual([], no_citations["rule_citations"])
+        self.assertEqual([], no_citations["condition_citations"])
+        self.assertEqual([], no_citations["trajectory_citations"])
+        self.assertEqual([], no_citations["administrative_citations"])
+        self.assertEqual([], no_citations["record_evolution_citations"])
+        self.assertEqual(
+            "Partial Rule Citation Layer",
+            partial["citation_summary"]["citation_state"],
+        )
+        self.assertEqual(2, partial["citation_summary"]["rule_families_count"])
+        self.assertEqual([], partial["condition_citations"])
+        self.assertEqual(
+            "Rule Citation Layer Available",
+            trajectory_only["citation_summary"]["citation_state"],
+        )
+        self.assertEqual(1, trajectory_only["citation_summary"]["trajectory_citations_count"])
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7083,6 +7260,18 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<td>Conditions Count</td><td>1</td>", after_content)
         self.assertIn("<td>Trace Steps Count</td><td>6</td>", after_content)
+        self.assertIn("Rule Citation Layer", after_content)
+        self.assertIn("Citation Summary", after_content)
+        self.assertIn("Rule Family Citations", after_content)
+        self.assertIn("Condition Citations", after_content)
+        self.assertIn("Trajectory Citations", after_content)
+        self.assertIn("Administrative Citations", after_content)
+        self.assertIn("Record Evolution Citations", after_content)
+        self.assertIn("Citation Path", after_content)
+        self.assertIn(
+            "<td>Citation State</td><td>Rule Citation Layer Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -8443,6 +8632,18 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertIn("<td>Conditions Count</td><td>5</td>", content)
         self.assertIn("<td>Trace Steps Count</td><td>6</td>", content)
+        self.assertIn("Rule Citation Layer", content)
+        self.assertIn("Citation Summary", content)
+        self.assertIn("Rule Family Citations", content)
+        self.assertIn("Condition Citations", content)
+        self.assertIn("Trajectory Citations", content)
+        self.assertIn("Administrative Citations", content)
+        self.assertIn("Record Evolution Citations", content)
+        self.assertIn("Citation Path", content)
+        self.assertIn(
+            "<td>Citation State</td><td>Rule Citation Layer Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -9512,6 +9713,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Record Evolution Accountability</h2>"),
             governance_content.index("<h2>Determination Trace</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Determination Trace</h2>"),
+            governance_content.index("<h2>Rule Citation Layer</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -9587,6 +9792,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Trace Summary</h3>", print_governance_content)
         self.assertIn("<h3>Trace Path</h3>", print_governance_content)
         self.assertIn("<h3>Limitations</h3>", print_governance_content)
+        self.assertIn("<h2>Rule Citation Layer</h2>", print_governance_content)
+        self.assertIn("<h3>Citation Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Citation Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
