@@ -5272,6 +5272,129 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertEqual([], no_trajectory["trajectory_attribution"])
 
+    def test_stage19d_determination_report_assembles_existing_outputs(self):
+        trace = {
+            "visible_record": {
+                "record_reference": "Strike-LA-20260710-004",
+                "case_title": "Administrative complaint awaiting response",
+            },
+            "observed_evidence": [
+                {
+                    "label": "Administrative Outputs",
+                    "value": {"Administrative Action": "Escalate Review"},
+                },
+                {
+                    "label": "Record Evolution Outputs",
+                    "value": {"Evolution Classification": "Initial Record State"},
+                },
+            ],
+            "conditions": ["Escalation Without Response"],
+            "trajectory": {"trajectory": "Deteriorating"},
+            "trace_path": [{"step": 1, "label": "Visible Record"}],
+        }
+        citation_layer = {"rule_citations": [{"rule_family": "Conditions Layer"}]}
+        attribution_matrix = {
+            "attribution_summary": {
+                "attribution_state": "Evidence Attribution Matrix Available"
+            }
+        }
+        original_inputs = json.loads(
+            json.dumps([trace, citation_layer, attribution_matrix])
+        )
+
+        report = self.admin_session.build_determination_report(
+            determination_trace=trace,
+            rule_citation_layer=citation_layer,
+            evidence_attribution_matrix=attribution_matrix,
+        )
+
+        self.assertEqual("Determination Report Available", report["report_state"])
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Conditions",
+                "Trajectory",
+                "Administrative Outputs",
+                "Record Evolution",
+                "Determination Trace",
+                "Rule Citation Layer",
+                "Evidence Attribution Matrix",
+            ],
+            [section["section_name"] for section in report["report_sections"]],
+        )
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Conditions",
+                "Trajectory",
+                "Administrative Outputs",
+                "Record Evolution",
+                "Determination Trace",
+                "Rule Citation Layer",
+                "Evidence Attribution Matrix",
+                "Determination Report",
+            ],
+            [step["label"] for step in report["report_path"]],
+        )
+        self.assertEqual(
+            list(range(1, 10)),
+            [step["step"] for step in report["report_path"]],
+        )
+        self.assertIn(
+            "This report summarises visible record data",
+            report["report_summary"],
+        )
+        self.assertIn(
+            "Stage 19D only describes existing outputs.",
+            report["limitations"],
+        )
+        self.assertEqual(
+            report,
+            self.admin_session.build_determination_report(
+                determination_trace=trace,
+                rule_citation_layer=citation_layer,
+                evidence_attribution_matrix=attribution_matrix,
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            [trace, citation_layer, attribution_matrix],
+        )
+
+        rendered = self.admin_session._render_determination_report_content(report)
+        self.assertIn("<h3>Report Overview</h3>", rendered)
+        self.assertIn("<h3>Report Summary</h3>", rendered)
+        self.assertIn("<h3>Report Sections</h3>", rendered)
+        self.assertIn("<h3>Report Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Report State</td><td>Determination Report Available</td>",
+            rendered,
+        )
+
+    def test_stage19d_determination_report_handles_unavailable_outputs(self):
+        report = self.admin_session.build_determination_report()
+
+        self.assertEqual(
+            "Determination Report Unavailable",
+            report["report_state"],
+        )
+        self.assertEqual(
+            "No Stage 19 outputs are available for a determination report.",
+            report["report_summary"],
+        )
+        self.assertEqual(8, len(report["report_sections"]))
+        self.assertTrue(
+            all(
+                section["section_summary"].endswith("outputs unavailable.")
+                for section in report["report_sections"]
+            )
+        )
+        self.assertEqual(
+            "determination report unavailable",
+            report["report_path"][-1]["output"],
+        )
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7498,6 +7621,15 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Attribution State</td><td>Evidence Attribution Matrix Available</td>",
             after_content,
         )
+        self.assertIn("Determination Report", after_content)
+        self.assertIn("Report Overview", after_content)
+        self.assertIn("Report Summary", after_content)
+        self.assertIn("Report Sections", after_content)
+        self.assertIn("Report Path", after_content)
+        self.assertIn(
+            "<td>Report State</td><td>Determination Report Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -8885,6 +9017,15 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Attribution State</td><td>Evidence Attribution Matrix Available</td>",
             content,
         )
+        self.assertIn("Determination Report", content)
+        self.assertIn("Report Overview", content)
+        self.assertIn("Report Summary", content)
+        self.assertIn("Report Sections", content)
+        self.assertIn("Report Path", content)
+        self.assertIn(
+            "<td>Report State</td><td>Determination Report Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -9962,6 +10103,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Rule Citation Layer</h2>"),
             governance_content.index("<h2>Evidence Attribution Matrix</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Evidence Attribution Matrix</h2>"),
+            governance_content.index("<h2>Determination Report</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -10047,6 +10192,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Attribution Summary</h3>", print_governance_content)
         self.assertIn("<h3>Evidence Sources</h3>", print_governance_content)
         self.assertIn("<h3>Attribution Path</h3>", print_governance_content)
+        self.assertIn("<h2>Determination Report</h2>", print_governance_content)
+        self.assertIn("<h3>Report Overview</h3>", print_governance_content)
+        self.assertIn("<h3>Report Sections</h3>", print_governance_content)
+        self.assertIn("<h3>Report Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,

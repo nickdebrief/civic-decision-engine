@@ -87,6 +87,18 @@ Outputs include:
 
 ---
 
+## Stage 19D — Determination Report
+
+Provides a deterministic report layer that assembles and describes visible
+record data and existing framework outputs, including conditions, trajectories,
+administrative outputs, record evolution outputs, determination traces, rule
+citations, and evidence attribution outputs.
+
+The report is descriptive only and does not perform new analysis or create new
+findings.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
