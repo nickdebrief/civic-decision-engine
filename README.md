@@ -99,6 +99,18 @@ findings.
 
 ---
 
+## Stage 19E — Sufficiency Boundaries
+
+Identifies visible support boundaries for existing framework outputs by
+classifying whether outputs are supported, partially supported, or unsupported
+within the Evidence Attribution Matrix.
+
+The layer evaluates visible support inside the framework only and does not
+determine truth, legal sufficiency, evidential sufficiency in the real world,
+liability, intent, blame, or factual correctness.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

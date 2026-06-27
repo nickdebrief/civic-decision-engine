@@ -30243,6 +30243,357 @@ def _render_determination_report_section(
       </section>"""
 
 
+STAGE19E_LIMITATIONS = (
+    "Stage 19E does not determine truth.",
+    "Stage 19E does not determine liability.",
+    "Stage 19E does not infer intent.",
+    "Stage 19E does not assign blame.",
+    "Stage 19E does not validate evidence.",
+    "Stage 19E does not determine factual correctness.",
+    "Stage 19E does not determine legal sufficiency.",
+    "Stage 19E does not determine evidential sufficiency in the real world.",
+    "Stage 19E does not create evidence.",
+    "Stage 19E does not create rules.",
+    "Stage 19E does not create conditions.",
+    "Stage 19E does not create classifications.",
+    "Stage 19E does not modify the record.",
+    "Stage 19E evaluates only visible support boundaries inside the framework.",
+)
+
+
+STAGE19E_OUTPUT_LIMITATIONS = (
+    "Visible support does not establish truth or factual correctness.",
+    "Boundary status does not determine legal or real-world evidential sufficiency.",
+)
+
+
+STAGE19E_ATTRIBUTION_KEYS = (
+    "condition_attribution",
+    "trajectory_attribution",
+    "administrative_attribution",
+    "record_evolution_attribution",
+    "determination_trace_attribution",
+    "rule_citation_attribution",
+)
+
+
+def _stage19e_boundary_output(
+    attribution: dict[str, Any],
+    *,
+    support_state: str,
+    source_support_state: str,
+    boundary_label: str,
+    boundary_basis: str,
+) -> dict[str, Any]:
+    return {
+        "output_type": _stage18a_display_value(attribution.get("output_type")),
+        "output_name": _stage18a_display_value(attribution.get("output_name")),
+        "output_value": _stage18a_display_value(attribution.get("output_value")),
+        "support_state": support_state,
+        "source_support_state": source_support_state,
+        "attributed_evidence_ids": list(
+            attribution.get("attributed_evidence_ids") or []
+        ),
+        "boundary_label": boundary_label,
+        "boundary_basis": boundary_basis,
+        "limitations": list(STAGE19E_OUTPUT_LIMITATIONS),
+    }
+
+
+def _stage19e_matrix_attributions(
+    evidence_attribution_matrix: dict[str, Any],
+) -> list[dict[str, Any]]:
+    attributions = [
+        dict(attribution)
+        for key in STAGE19E_ATTRIBUTION_KEYS
+        for attribution in evidence_attribution_matrix.get(key) or []
+    ]
+    for unsupported in evidence_attribution_matrix.get("unsupported_outputs") or []:
+        if any(
+            attribution.get("output_type") == unsupported.get("output_type")
+            and attribution.get("output_name") == unsupported.get("output_name")
+            and attribution.get("output_value") == unsupported.get("output_value")
+            for attribution in attributions
+        ):
+            continue
+        attributions.append(
+            {
+                "output_type": unsupported.get("output_type"),
+                "output_name": unsupported.get("output_name"),
+                "output_value": unsupported.get("output_value"),
+                "support_state": "No Visible Evidence Attributed",
+                "attributed_evidence_ids": [],
+            }
+        )
+    return attributions
+
+
+def build_sufficiency_boundaries(
+    *,
+    evidence_attribution_matrix: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    matrix = dict(evidence_attribution_matrix or {})
+    supported_outputs = []
+    partially_supported_outputs = []
+    unsupported_outputs = []
+
+    for attribution in _stage19e_matrix_attributions(matrix):
+        source_state = attribution.get("support_state")
+        if source_state == "Attributed":
+            supported_outputs.append(
+                _stage19e_boundary_output(
+                    attribution,
+                    support_state="Supported",
+                    source_support_state="Attributed",
+                    boundary_label="Visible Support Present",
+                    boundary_basis=(
+                        "Existing Stage 19C attribution identifies visible "
+                        "evidence support for this output."
+                    ),
+                )
+            )
+        elif source_state == "Partially Attributed":
+            partially_supported_outputs.append(
+                _stage19e_boundary_output(
+                    attribution,
+                    support_state="Partially Supported",
+                    source_support_state="Partially Attributed",
+                    boundary_label="Partial Visible Support",
+                    boundary_basis=(
+                        "Existing Stage 19C attribution identifies partial "
+                        "visible evidence support for this output."
+                    ),
+                )
+            )
+        elif source_state == "No Visible Evidence Attributed":
+            unsupported_outputs.append(
+                _stage19e_boundary_output(
+                    attribution,
+                    support_state="Unsupported Within Visible Attribution",
+                    source_support_state="No Visible Evidence Attributed",
+                    boundary_label="No Visible Support Attributed",
+                    boundary_basis=(
+                        "No visible evidence source was attributed to this "
+                        "output by Stage 19C."
+                    ),
+                )
+            )
+
+    if not matrix:
+        boundary_state = "Sufficiency Boundaries Unavailable"
+    elif supported_outputs:
+        boundary_state = "Sufficiency Boundaries Available"
+    else:
+        boundary_state = "Partial Sufficiency Boundaries"
+
+    total_outputs_evaluated = (
+        len(supported_outputs)
+        + len(partially_supported_outputs)
+        + len(unsupported_outputs)
+    )
+    boundary_summary = {
+        "boundary_state": boundary_state,
+        "supported_outputs_count": len(supported_outputs),
+        "partially_supported_outputs_count": len(partially_supported_outputs),
+        "unsupported_outputs_count": len(unsupported_outputs),
+        "total_outputs_evaluated": total_outputs_evaluated,
+        "source_layer": "Stage 19C Evidence Attribution Matrix",
+        "limitation_summary": (
+            "Sufficiency boundaries describe visible support inside the "
+            "framework only and do not determine real-world sufficiency."
+        ),
+    }
+    boundary_path = [
+        {
+            "step": 1,
+            "label": "Evidence Attribution Matrix",
+            "input": "evidence_attribution_matrix",
+            "output": "Attribution states identified"
+            if matrix
+            else "Evidence attribution matrix unavailable",
+        },
+        {
+            "step": 2,
+            "label": "Attributed Outputs",
+            "input": "Attributed",
+            "output": f"{len(supported_outputs)} supported outputs identified",
+        },
+        {
+            "step": 3,
+            "label": "Partially Attributed Outputs",
+            "input": "Partially Attributed",
+            "output": (
+                f"{len(partially_supported_outputs)} partially supported "
+                "outputs identified"
+            ),
+        },
+        {
+            "step": 4,
+            "label": "Unsupported Outputs",
+            "input": "No Visible Evidence Attributed",
+            "output": f"{len(unsupported_outputs)} unsupported outputs identified",
+        },
+        {
+            "step": 5,
+            "label": "Sufficiency Boundary Classification",
+            "input": (
+                "supported_outputs, partially_supported_outputs, "
+                "unsupported_outputs"
+            ),
+            "output": boundary_state.lower(),
+        },
+    ]
+    return {
+        "boundary_state": boundary_state,
+        "boundary_summary": boundary_summary,
+        "supported_outputs": supported_outputs,
+        "partially_supported_outputs": partially_supported_outputs,
+        "unsupported_outputs": unsupported_outputs,
+        "boundary_path": boundary_path,
+        "limitations": list(STAGE19E_LIMITATIONS),
+    }
+
+
+def _render_stage19e_boundary_value(label: str, value: Any) -> str:
+    if label == "Attributed Evidence IDs":
+        return _render_stage19c_compact_items(value)
+    if isinstance(value, list):
+        return escape("; ".join(str(item) for item in value))
+    return escape(_stage18a_display_value(value))
+
+
+def _render_stage19e_boundary_outputs(
+    outputs: list[dict[str, Any]],
+    empty_label: str,
+) -> str:
+    if not outputs:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rows = []
+    for output in outputs:
+        entry_rows = (
+            ("Output Type", output.get("output_type")),
+            ("Output Name", output.get("output_name")),
+            ("Output Value", output.get("output_value")),
+            ("Support State", output.get("support_state")),
+            ("Source Support State", output.get("source_support_state")),
+            (
+                "Attributed Evidence IDs",
+                output.get("attributed_evidence_ids") or [],
+            ),
+            ("Boundary Label", output.get("boundary_label")),
+            ("Boundary Basis", output.get("boundary_basis")),
+            ("Limitations", output.get("limitations") or []),
+        )
+        rows.extend(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{_render_stage19e_boundary_value(label, value)}</td>"
+            "</tr>"
+            for label, value in entry_rows
+        )
+        rows.append(
+            '<tr class="stage19e-boundary-entry-spacer"><td colspan="2"></td></tr>'
+        )
+    rows.pop()
+    return f'<table class="stage19e-boundary-output-table"><tbody>{"".join(rows)}</tbody></table>'
+
+
+def _render_stage19e_boundary_path(boundary_path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(step.get('input')))}</code></td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in boundary_path
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Step</th><th>Label</th><th>Input</th><th>Output</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_sufficiency_boundaries_content(boundaries: dict[str, Any]) -> str:
+    summary = boundaries["boundary_summary"]
+    overview_rows = (
+        ("Boundary State", boundaries["boundary_state"]),
+        ("Total Outputs Evaluated", summary["total_outputs_evaluated"]),
+        ("Boundary Path Steps Count", len(boundaries["boundary_path"])),
+    )
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <section class="stage19e-boundary-overview">
+          <h3>Boundary Overview</h3>
+          {_render_stage18a_table(overview_rows)}
+        </section>
+        <section class="stage19e-boundary-summary">
+          <h3>Boundary Summary</h3>
+          {_render_stage18a_table(summary_rows)}
+        </section>
+        <section class="stage19e-supported-outputs">
+          <h3>Supported Outputs</h3>
+          {_render_stage19e_boundary_outputs(boundaries["supported_outputs"], "No supported outputs available.")}
+        </section>
+        <section class="stage19e-partially-supported-outputs">
+          <h3>Partially Supported Outputs</h3>
+          {_render_stage19e_boundary_outputs(boundaries["partially_supported_outputs"], "No partially supported outputs available.")}
+        </section>
+        <section class="stage19e-unsupported-outputs">
+          <h3>Unsupported Outputs</h3>
+          {_render_stage19e_boundary_outputs(boundaries["unsupported_outputs"], "No unsupported outputs available.")}
+        </section>
+        <section class="stage19e-boundary-path">
+          <h3>Boundary Path</h3>
+          {_render_stage19e_boundary_path(boundaries["boundary_path"])}
+        </section>
+        <section class="stage19e-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(boundaries["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_sufficiency_boundaries_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    attribution_matrix = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_groups=evidence_groups or {},
+    )
+    boundaries = build_sufficiency_boundaries(
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    return f"""
+      <section class="management-section stage19e-sufficiency-boundaries">
+        <h2>Sufficiency Boundaries</h2>
+        <p class="notice">
+          Sufficiency Boundaries are derived deterministically from the Evidence
+          Attribution Matrix and existing framework outputs only. They identify
+          whether outputs have visible support inside the framework, partial
+          visible support, or no visible attribution. They do not determine
+          truth, liability, factual correctness, legal sufficiency, real-world
+          evidential sufficiency, intent, blame, or wrongdoing.
+        </p>
+        {_render_sufficiency_boundaries_content(boundaries)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -30537,6 +30888,12 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19e_sufficiency_boundaries = _render_sufficiency_boundaries_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -30692,6 +31049,7 @@ def render_admin_record_evidence_page(
             f"{stage19b_rule_citation_layer}"
             f"{stage19c_evidence_attribution_matrix}"
             f"{stage19d_determination_report}"
+            f"{stage19e_sufficiency_boundaries}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -31178,6 +31536,61 @@ def render_admin_record_evidence_page(
     .stage19d-report-path td:nth-child(3) {{ width: 28%; }}
     .stage19d-report-path th:nth-child(4),
     .stage19d-report-path td:nth-child(4) {{ width: 40%; }}
+    .stage19e-boundary-output-table,
+    .stage19e-boundary-path table {{
+      table-layout: auto;
+    }}
+    .stage19e-boundary-output-table td,
+    .stage19e-boundary-path th,
+    .stage19e-boundary-path td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19e-boundary-output-table td:first-child {{ width: 24%; }}
+    .stage19e-boundary-output-table td:last-child {{ width: 76%; }}
+    .stage19e-boundary-entry-spacer {{
+      border-bottom: 2px solid #dce8e6;
+    }}
+    .stage19e-boundary-entry-spacer td {{
+      height: 10px;
+      padding: 0;
+      background: #fafdfc;
+    }}
+    .stage19e-sufficiency-boundaries .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage19e-sufficiency-boundaries .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19e-boundary-path code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19e-boundary-path th:nth-child(1),
+    .stage19e-boundary-path td:nth-child(1) {{ width: 8%; }}
+    .stage19e-boundary-path th:nth-child(2),
+    .stage19e-boundary-path td:nth-child(2) {{ width: 26%; }}
+    .stage19e-boundary-path th:nth-child(3),
+    .stage19e-boundary-path td:nth-child(3) {{ width: 30%; }}
+    .stage19e-boundary-path th:nth-child(4),
+    .stage19e-boundary-path td:nth-child(4) {{ width: 36%; }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;
