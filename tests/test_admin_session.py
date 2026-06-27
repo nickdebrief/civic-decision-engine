@@ -5395,6 +5395,176 @@ class AdminSessionTests(unittest.TestCase):
             report["report_path"][-1]["output"],
         )
 
+    def test_stage19e_sufficiency_boundaries_map_stage19c_support_states(self):
+        matrix = {
+            "condition_attribution": [
+                {
+                    "output_type": "Condition",
+                    "output_name": "Escalation Without Response",
+                    "output_value": "Escalation Without Response",
+                    "support_state": "Attributed",
+                    "attributed_evidence_ids": ["EV-001", "EV-002"],
+                }
+            ],
+            "trajectory_attribution": [
+                {
+                    "output_type": "Trajectory",
+                    "output_name": "Trajectory",
+                    "output_value": "Deteriorating",
+                    "support_state": "Partially Attributed",
+                    "attributed_evidence_ids": ["EV-003"],
+                }
+            ],
+            "administrative_attribution": [
+                {
+                    "output_type": "Administrative",
+                    "output_name": "Administrative Action",
+                    "output_value": "Escalate Review",
+                    "support_state": "No Visible Evidence Attributed",
+                    "attributed_evidence_ids": [],
+                }
+            ],
+            "unsupported_outputs": [
+                {
+                    "output_type": "Administrative",
+                    "output_name": "Administrative Action",
+                    "output_value": "Escalate Review",
+                }
+            ],
+        }
+        original_matrix = json.loads(json.dumps(matrix))
+
+        boundaries = self.admin_session.build_sufficiency_boundaries(
+            evidence_attribution_matrix=matrix,
+        )
+
+        self.assertEqual(
+            "Sufficiency Boundaries Available",
+            boundaries["boundary_state"],
+        )
+        self.assertEqual(
+            {
+                "boundary_state": "Sufficiency Boundaries Available",
+                "supported_outputs_count": 1,
+                "partially_supported_outputs_count": 1,
+                "unsupported_outputs_count": 1,
+                "total_outputs_evaluated": 3,
+                "source_layer": "Stage 19C Evidence Attribution Matrix",
+                "limitation_summary": (
+                    "Sufficiency boundaries describe visible support inside "
+                    "the framework only and do not determine real-world "
+                    "sufficiency."
+                ),
+            },
+            boundaries["boundary_summary"],
+        )
+        supported = boundaries["supported_outputs"][0]
+        self.assertEqual("Supported", supported["support_state"])
+        self.assertEqual("Attributed", supported["source_support_state"])
+        self.assertEqual(["EV-001", "EV-002"], supported["attributed_evidence_ids"])
+        self.assertEqual("Visible Support Present", supported["boundary_label"])
+        partial = boundaries["partially_supported_outputs"][0]
+        self.assertEqual("Partially Supported", partial["support_state"])
+        self.assertEqual("Partially Attributed", partial["source_support_state"])
+        unsupported = boundaries["unsupported_outputs"][0]
+        self.assertEqual(
+            "Unsupported Within Visible Attribution",
+            unsupported["support_state"],
+        )
+        self.assertEqual(
+            "No Visible Evidence Attributed",
+            unsupported["source_support_state"],
+        )
+        self.assertEqual([], unsupported["attributed_evidence_ids"])
+        self.assertEqual(
+            [
+                "Evidence Attribution Matrix",
+                "Attributed Outputs",
+                "Partially Attributed Outputs",
+                "Unsupported Outputs",
+                "Sufficiency Boundary Classification",
+            ],
+            [step["label"] for step in boundaries["boundary_path"]],
+        )
+        self.assertEqual(
+            list(range(1, 6)),
+            [step["step"] for step in boundaries["boundary_path"]],
+        )
+        self.assertIn(
+            "Stage 19E does not determine legal sufficiency.",
+            boundaries["limitations"],
+        )
+        self.assertIn(
+            "Stage 19E evaluates only visible support boundaries inside the framework.",
+            boundaries["limitations"],
+        )
+        self.assertEqual(
+            boundaries,
+            self.admin_session.build_sufficiency_boundaries(
+                evidence_attribution_matrix=matrix,
+            ),
+        )
+        self.assertEqual(original_matrix, matrix)
+
+        rendered = self.admin_session._render_sufficiency_boundaries_content(
+            boundaries
+        )
+        self.assertIn("<h3>Boundary Overview</h3>", rendered)
+        self.assertIn("<h3>Boundary Summary</h3>", rendered)
+        self.assertIn("<h3>Supported Outputs</h3>", rendered)
+        self.assertIn("<h3>Partially Supported Outputs</h3>", rendered)
+        self.assertIn("<h3>Unsupported Outputs</h3>", rendered)
+        self.assertIn("<h3>Boundary Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Boundary State</td><td>Sufficiency Boundaries Available</td>",
+            rendered,
+        )
+
+    def test_stage19e_sufficiency_boundaries_handle_partial_and_unavailable_states(self):
+        partial_matrix = {
+            "trajectory_attribution": [
+                {
+                    "output_type": "Trajectory",
+                    "output_name": "Trajectory",
+                    "output_value": "Initial",
+                    "support_state": "Partially Attributed",
+                    "attributed_evidence_ids": ["EV-001"],
+                }
+            ],
+            "unsupported_outputs": [
+                {
+                    "output_type": "Administrative",
+                    "output_name": "Administrative Status",
+                    "output_value": "Pending",
+                }
+            ],
+        }
+
+        partial = self.admin_session.build_sufficiency_boundaries(
+            evidence_attribution_matrix=partial_matrix,
+        )
+        unavailable = self.admin_session.build_sufficiency_boundaries()
+
+        self.assertEqual(
+            "Partial Sufficiency Boundaries",
+            partial["boundary_state"],
+        )
+        self.assertEqual(0, partial["boundary_summary"]["supported_outputs_count"])
+        self.assertEqual(
+            1,
+            partial["boundary_summary"]["partially_supported_outputs_count"],
+        )
+        self.assertEqual(1, partial["boundary_summary"]["unsupported_outputs_count"])
+        self.assertEqual(
+            "Sufficiency Boundaries Unavailable",
+            unavailable["boundary_state"],
+        )
+        self.assertEqual(0, unavailable["boundary_summary"]["total_outputs_evaluated"])
+        self.assertEqual([], unavailable["supported_outputs"])
+        self.assertEqual([], unavailable["partially_supported_outputs"])
+        self.assertEqual([], unavailable["unsupported_outputs"])
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7630,6 +7800,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Report State</td><td>Determination Report Available</td>",
             after_content,
         )
+        self.assertIn("Sufficiency Boundaries", after_content)
+        self.assertIn("Boundary Overview", after_content)
+        self.assertIn("Boundary Summary", after_content)
+        self.assertIn("Supported Outputs", after_content)
+        self.assertIn("Partially Supported Outputs", after_content)
+        self.assertIn("Unsupported Outputs", after_content)
+        self.assertIn("Boundary Path", after_content)
+        self.assertIn(
+            "<td>Boundary State</td><td>Sufficiency Boundaries Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -9026,6 +9207,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Report State</td><td>Determination Report Available</td>",
             content,
         )
+        self.assertIn("Sufficiency Boundaries", content)
+        self.assertIn("Boundary Overview", content)
+        self.assertIn("Boundary Summary", content)
+        self.assertIn("Supported Outputs", content)
+        self.assertIn("Partially Supported Outputs", content)
+        self.assertIn("Unsupported Outputs", content)
+        self.assertIn("Boundary Path", content)
+        self.assertIn(
+            "<td>Boundary State</td><td>Sufficiency Boundaries Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -10107,6 +10299,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Evidence Attribution Matrix</h2>"),
             governance_content.index("<h2>Determination Report</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Determination Report</h2>"),
+            governance_content.index("<h2>Sufficiency Boundaries</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -10196,6 +10392,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Report Overview</h3>", print_governance_content)
         self.assertIn("<h3>Report Sections</h3>", print_governance_content)
         self.assertIn("<h3>Report Path</h3>", print_governance_content)
+        self.assertIn("<h2>Sufficiency Boundaries</h2>", print_governance_content)
+        self.assertIn("<h3>Boundary Overview</h3>", print_governance_content)
+        self.assertIn("<h3>Boundary Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Boundary Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
