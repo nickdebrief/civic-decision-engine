@@ -29961,6 +29961,288 @@ def _render_evidence_attribution_matrix_section(
       </section>"""
 
 
+STAGE19D_LIMITATIONS = (
+    "Stage 19D does not determine truth.",
+    "Stage 19D does not determine liability.",
+    "Stage 19D does not infer intent.",
+    "Stage 19D does not assign blame.",
+    "Stage 19D does not validate evidence.",
+    "Stage 19D does not determine sufficiency in the real world.",
+    "Stage 19D does not create evidence.",
+    "Stage 19D does not create rules.",
+    "Stage 19D does not create conditions.",
+    "Stage 19D does not create classifications.",
+    "Stage 19D does not modify the record.",
+    "Stage 19D only describes existing outputs.",
+)
+
+
+STAGE19D_REPORT_SECTION_DEFINITIONS = (
+    ("Visible Record", "visible_record", "Visible record context identified."),
+    ("Conditions", "conditions", "Condition outputs available."),
+    ("Trajectory", "trajectory", "Trajectory outputs available."),
+    (
+        "Administrative Outputs",
+        "administrative",
+        "Administrative outputs available.",
+    ),
+    (
+        "Record Evolution",
+        "record_evolution",
+        "Record evolution outputs available.",
+    ),
+    (
+        "Determination Trace",
+        "determination_trace",
+        "Determination trace available.",
+    ),
+    (
+        "Rule Citation Layer",
+        "rule_citation",
+        "Rule citation outputs available.",
+    ),
+    (
+        "Evidence Attribution Matrix",
+        "evidence_attribution",
+        "Evidence attribution outputs available.",
+    ),
+)
+
+
+def _stage19d_observed_output(
+    determination_trace: dict[str, Any],
+    label: str,
+) -> Any:
+    for item in determination_trace.get("observed_evidence") or []:
+        if item.get("label") == label:
+            return item.get("value")
+    return None
+
+
+def build_determination_report(
+    *,
+    visible_record: dict[str, Any] | None = None,
+    conditions: list[Any] | None = None,
+    trajectory: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    record_evolution_outputs: dict[str, Any] | None = None,
+    determination_trace: dict[str, Any] | None = None,
+    rule_citation_layer: dict[str, Any] | None = None,
+    evidence_attribution_matrix: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    trace = dict(determination_trace or {})
+    citations = dict(rule_citation_layer or {})
+    attribution = dict(evidence_attribution_matrix or {})
+    sources = {
+        "visible_record": dict(
+            visible_record
+            if visible_record is not None
+            else trace.get("visible_record") or {}
+        ),
+        "conditions": list(
+            conditions if conditions is not None else trace.get("conditions") or []
+        ),
+        "trajectory": dict(
+            trajectory if trajectory is not None else trace.get("trajectory") or {}
+        ),
+        "administrative": dict(
+            administrative_outputs
+            if administrative_outputs is not None
+            else _stage19d_observed_output(trace, "Administrative Outputs") or {}
+        ),
+        "record_evolution": dict(
+            record_evolution_outputs
+            if record_evolution_outputs is not None
+            else _stage19d_observed_output(trace, "Record Evolution Outputs") or {}
+        ),
+        "determination_trace": trace,
+        "rule_citation": citations,
+        "evidence_attribution": attribution,
+    }
+    stage19_outputs_present = any(
+        sources[source]
+        for source in (
+            "determination_trace",
+            "rule_citation",
+            "evidence_attribution",
+        )
+    )
+    report_state = (
+        "Determination Report Available"
+        if stage19_outputs_present
+        else "Determination Report Unavailable"
+    )
+    report_summary = (
+        "This report summarises visible record data and existing framework "
+        "outputs including conditions, trajectories, administrative outputs, "
+        "record evolution outputs, determination traces, rule citations, and "
+        "evidence attribution outputs."
+        if stage19_outputs_present
+        else "No Stage 19 outputs are available for a determination report."
+    )
+    report_sections = []
+    for section_name, source, available_summary in STAGE19D_REPORT_SECTION_DEFINITIONS:
+        report_sections.append(
+            {
+                "section_name": section_name,
+                "section_summary": available_summary
+                if sources[source]
+                else f"{section_name} outputs unavailable.",
+                "source": source,
+            }
+        )
+
+    path_definitions = (
+        ("Visible Record", "record_reference", "Visible record identified"),
+        ("Conditions", "conditions", "Condition outputs described"),
+        ("Trajectory", "trajectory", "Trajectory outputs described"),
+        (
+            "Administrative Outputs",
+            "administrative",
+            "Administrative outputs described",
+        ),
+        (
+            "Record Evolution",
+            "record_evolution",
+            "Record evolution outputs described",
+        ),
+        (
+            "Determination Trace",
+            "determination_trace",
+            "Determination trace described",
+        ),
+        (
+            "Rule Citation Layer",
+            "rule_citation",
+            "Rule citation outputs described",
+        ),
+        (
+            "Evidence Attribution Matrix",
+            "evidence_attribution",
+            "Evidence attribution outputs described",
+        ),
+    )
+    report_path = [
+        {"step": step, "label": label, "input": input_name, "output": output}
+        for step, (label, input_name, output) in enumerate(path_definitions, start=1)
+    ]
+    report_path.append(
+        {
+            "step": 9,
+            "label": "Determination Report",
+            "input": "report_sections",
+            "output": report_state.lower(),
+        }
+    )
+    return {
+        "report_state": report_state,
+        "report_summary": report_summary,
+        "report_sections": report_sections,
+        "report_path": report_path,
+        "limitations": list(STAGE19D_LIMITATIONS),
+    }
+
+
+def _render_stage19d_report_sections(report_sections: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(section.get('section_name')))}</td>"
+        f"<td>{escape(_stage18a_display_value(section.get('section_summary')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(section.get('source')))}</code></td>"
+        "</tr>"
+        for section in report_sections
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Section</th><th>Summary</th><th>Source</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage19d_report_path(report_path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(step.get('input')))}</code></td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in report_path
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Step</th><th>Label</th><th>Input</th><th>Output</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_determination_report_content(report: dict[str, Any]) -> str:
+    overview_rows = (
+        ("Report State", report["report_state"]),
+        ("Report Sections Count", len(report["report_sections"])),
+        ("Report Path Steps Count", len(report["report_path"])),
+    )
+    return f"""
+        <section class="stage19d-report-overview">
+          <h3>Report Overview</h3>
+          {_render_stage18a_table(overview_rows)}
+        </section>
+        <section class="stage19d-report-summary">
+          <h3>Report Summary</h3>
+          <p>{escape(report["report_summary"])}</p>
+        </section>
+        <section class="stage19d-report-sections">
+          <h3>Report Sections</h3>
+          {_render_stage19d_report_sections(report["report_sections"])}
+        </section>
+        <section class="stage19d-report-path">
+          <h3>Report Path</h3>
+          {_render_stage19d_report_path(report["report_path"])}
+        </section>
+        <section class="stage19d-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(report["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_determination_report_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    attribution_matrix = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_groups=evidence_groups or {},
+    )
+    report = build_determination_report(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    return f"""
+      <section class="management-section stage19d-determination-report">
+        <h2>Determination Report</h2>
+        <p class="notice">
+          The Determination Report is derived deterministically from visible
+          record data and existing framework outputs only. It assembles and
+          describes previously generated outputs and does not perform additional
+          analysis, create findings, validate evidence, determine truth, infer
+          intent, assign blame, or modify the record.
+        </p>
+        {_render_determination_report_content(report)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -30249,6 +30531,12 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19d_determination_report = _render_determination_report_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -30403,6 +30691,7 @@ def render_admin_record_evidence_page(
             f"{stage19a_determination_trace}"
             f"{stage19b_rule_citation_layer}"
             f"{stage19c_evidence_attribution_matrix}"
+            f"{stage19d_determination_report}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -30854,6 +31143,41 @@ def render_admin_record_evidence_page(
     .stage19c-attribution-path td:nth-child(4) {{
       width: 24%;
     }}
+    .stage19d-report-sections table,
+    .stage19d-report-path table {{
+      table-layout: auto;
+    }}
+    .stage19d-report-sections th,
+    .stage19d-report-sections td,
+    .stage19d-report-path th,
+    .stage19d-report-path td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19d-report-sections code,
+    .stage19d-report-path code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19d-report-sections th:nth-child(1),
+    .stage19d-report-sections td:nth-child(1) {{ width: 24%; }}
+    .stage19d-report-sections th:nth-child(2),
+    .stage19d-report-sections td:nth-child(2) {{ width: 52%; }}
+    .stage19d-report-sections th:nth-child(3),
+    .stage19d-report-sections td:nth-child(3) {{ width: 24%; }}
+    .stage19d-report-path th:nth-child(1),
+    .stage19d-report-path td:nth-child(1) {{ width: 8%; }}
+    .stage19d-report-path th:nth-child(2),
+    .stage19d-report-path td:nth-child(2) {{ width: 24%; }}
+    .stage19d-report-path th:nth-child(3),
+    .stage19d-report-path td:nth-child(3) {{ width: 28%; }}
+    .stage19d-report-path th:nth-child(4),
+    .stage19d-report-path td:nth-child(4) {{ width: 40%; }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;
