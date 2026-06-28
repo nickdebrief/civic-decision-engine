@@ -111,6 +111,17 @@ liability, intent, blame, or factual correctness.
 
 ---
 
+## Stage 19F — Counterfactual Visibility
+
+Identifies which framework layers and evidence categories are visibly present
+or not represented in the current record-derived outputs.
+
+The layer is descriptive only. It does not generate hypothetical scenarios,
+assign meaning to absence, infer intent, predict outcomes, validate evidence,
+determine truth, or modify the record.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

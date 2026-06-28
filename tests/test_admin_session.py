@@ -5565,6 +5565,178 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual([], unavailable["partially_supported_outputs"])
         self.assertEqual([], unavailable["unsupported_outputs"])
 
+    def test_stage19f_counterfactual_visibility_maps_visible_and_absent_layers(self):
+        trace = {
+            "visible_record": {"record_reference": "REC-19F"},
+            "observed_evidence": [],
+            "conditions": ["Escalation Without Response"],
+            "trajectory": {},
+        }
+        matrix = {
+            "evidence_sources": [
+                {
+                    "evidence_id": "EV-001",
+                    "evidence_label": "Record Reference",
+                    "evidence_type": "Visible Record",
+                },
+                {
+                    "evidence_id": "EV-002",
+                    "evidence_label": "Condition: Escalation Without Response",
+                    "evidence_type": "Condition Output",
+                },
+            ],
+            "condition_attribution": [
+                {
+                    "output_name": "Escalation Without Response",
+                    "support_state": "Attributed",
+                    "attributed_evidence_ids": ["EV-002"],
+                }
+            ],
+        }
+        report = {"report_state": "Determination Report Available"}
+        boundaries = {
+            "boundary_state": "Sufficiency Boundaries Available",
+            "supported_outputs": [
+                {"attributed_evidence_ids": ["EV-002"]}
+            ],
+            "partially_supported_outputs": [],
+        }
+        original_inputs = json.loads(json.dumps([trace, matrix, report, boundaries]))
+
+        visibility = self.admin_session.build_counterfactual_visibility(
+            determination_trace=trace,
+            evidence_attribution_matrix=matrix,
+            determination_report=report,
+            sufficiency_boundaries=boundaries,
+        )
+
+        self.assertEqual(
+            "Counterfactual Visibility Available",
+            visibility["visibility_state"],
+        )
+        self.assertEqual(6, len(visibility["visible_layers"]))
+        self.assertEqual(4, len(visibility["non_visible_layers"]))
+        self.assertEqual(
+            {
+                "Trajectory",
+                "Administrative Outputs",
+                "Record Evolution",
+                "Rule Citation Layer",
+            },
+            {layer["layer_name"] for layer in visibility["non_visible_layers"]},
+        )
+        condition_layer = next(
+            layer
+            for layer in visibility["visible_layers"]
+            if layer["layer_name"] == "Conditions"
+        )
+        visible_record_layer = next(
+            layer
+            for layer in visibility["visible_layers"]
+            if layer["layer_name"] == "Visible Record"
+        )
+        self.assertEqual(
+            "Attributed",
+            visible_record_layer["source_support_state"],
+        )
+        self.assertEqual(
+            ["EV-001"],
+            visible_record_layer["supporting_evidence_ids"],
+        )
+        self.assertEqual("Visible", condition_layer["visibility_state"])
+        self.assertEqual("Attributed", condition_layer["source_support_state"])
+        self.assertEqual(["EV-002"], condition_layer["supporting_evidence_ids"])
+        self.assertEqual(
+            "Visible Support Present",
+            condition_layer["visibility_label"],
+        )
+        self.assertEqual(2, len(visibility["visible_evidence_elements"]))
+        self.assertEqual(7, len(visibility["non_visible_evidence_elements"]))
+        self.assertIn(
+            "Evidence category: Attachment Metadata",
+            {
+                item["evidence_identifier"]
+                for item in visibility["non_visible_evidence_elements"]
+            },
+        )
+        summary = visibility["visibility_summary"]
+        self.assertEqual(6, summary["visible_framework_layers_count"])
+        self.assertEqual(4, summary["non_visible_framework_layers_count"])
+        self.assertEqual(2, summary["visible_evidence_count"])
+        self.assertEqual(7, summary["non_visible_evidence_count"])
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Framework Layers Evaluated",
+                "Visible Layers",
+                "Non-Visible Layers",
+                "Evidence Visibility",
+                "Counterfactual Visibility Classification",
+            ],
+            [step["label"] for step in visibility["counterfactual_path"]],
+        )
+        self.assertEqual(
+            list(range(1, 7)),
+            [step["step"] for step in visibility["counterfactual_path"]],
+        )
+        self.assertIn(
+            "Stage 19F does not generate hypothetical scenarios.",
+            visibility["limitations"],
+        )
+        self.assertIn(
+            "Stage 19F evaluates only visible and non-visible representation inside the framework.",
+            visibility["limitations"],
+        )
+        self.assertEqual(
+            visibility,
+            self.admin_session.build_counterfactual_visibility(
+                determination_trace=trace,
+                evidence_attribution_matrix=matrix,
+                determination_report=report,
+                sufficiency_boundaries=boundaries,
+            ),
+        )
+        self.assertEqual(original_inputs, [trace, matrix, report, boundaries])
+
+        rendered = self.admin_session._render_counterfactual_visibility_content(
+            visibility
+        )
+        self.assertIn("<h3>Boundary Overview</h3>", rendered)
+        self.assertIn("<h3>Visibility Summary</h3>", rendered)
+        self.assertIn("<h3>Visible Layers</h3>", rendered)
+        self.assertIn("<h3>Non-Visible Layers</h3>", rendered)
+        self.assertIn("<h3>Visible Evidence Elements</h3>", rendered)
+        self.assertIn("<h3>Non-Visible Evidence Elements</h3>", rendered)
+        self.assertIn("<h3>Counterfactual Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Visibility State</td><td>Counterfactual Visibility Available</td>",
+            rendered,
+        )
+
+    def test_stage19f_counterfactual_visibility_handles_partial_and_unavailable_states(self):
+        partial = self.admin_session.build_counterfactual_visibility(
+            determination_trace={
+                "visible_record": {"record_reference": "REC-PARTIAL"}
+            }
+        )
+        unavailable = self.admin_session.build_counterfactual_visibility()
+
+        self.assertEqual(
+            "Partial Counterfactual Visibility",
+            partial["visibility_state"],
+        )
+        self.assertEqual(2, len(partial["visible_layers"]))
+        self.assertEqual(8, len(partial["non_visible_layers"]))
+        self.assertEqual(
+            "Counterfactual Visibility Unavailable",
+            unavailable["visibility_state"],
+        )
+        self.assertEqual([], unavailable["visible_layers"])
+        self.assertEqual(10, len(unavailable["non_visible_layers"]))
+        self.assertEqual([], unavailable["visible_evidence_elements"])
+        self.assertEqual(9, len(unavailable["non_visible_evidence_elements"]))
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7811,6 +7983,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Boundary State</td><td>Sufficiency Boundaries Available</td>",
             after_content,
         )
+        self.assertIn("Counterfactual Visibility", after_content)
+        self.assertIn("Visibility Summary", after_content)
+        self.assertIn("Visible Layers", after_content)
+        self.assertIn("Non-Visible Layers", after_content)
+        self.assertIn("Visible Evidence Elements", after_content)
+        self.assertIn("Non-Visible Evidence Elements", after_content)
+        self.assertIn("Counterfactual Path", after_content)
+        self.assertIn(
+            "<td>Visibility State</td><td>Counterfactual Visibility Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -9218,6 +9401,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Boundary State</td><td>Sufficiency Boundaries Available</td>",
             content,
         )
+        self.assertIn("Counterfactual Visibility", content)
+        self.assertIn("Visibility Summary", content)
+        self.assertIn("Visible Layers", content)
+        self.assertIn("Non-Visible Layers", content)
+        self.assertIn("Visible Evidence Elements", content)
+        self.assertIn("Non-Visible Evidence Elements", content)
+        self.assertIn("Counterfactual Path", content)
+        self.assertIn(
+            "<td>Visibility State</td><td>Counterfactual Visibility Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -10303,6 +10497,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Determination Report</h2>"),
             governance_content.index("<h2>Sufficiency Boundaries</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Sufficiency Boundaries</h2>"),
+            governance_content.index("<h2>Counterfactual Visibility</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -10396,6 +10594,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Boundary Overview</h3>", print_governance_content)
         self.assertIn("<h3>Boundary Summary</h3>", print_governance_content)
         self.assertIn("<h3>Boundary Path</h3>", print_governance_content)
+        self.assertIn("<h2>Counterfactual Visibility</h2>", print_governance_content)
+        self.assertIn("<h3>Visibility Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Visible Layers</h3>", print_governance_content)
+        self.assertIn("<h3>Non-Visible Layers</h3>", print_governance_content)
+        self.assertIn("<h3>Counterfactual Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,

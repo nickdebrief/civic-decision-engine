@@ -30594,6 +30594,477 @@ def _render_sufficiency_boundaries_section(
       </section>"""
 
 
+STAGE19F_LIMITATIONS = (
+    "Stage 19F does not determine truth.",
+    "Stage 19F does not determine liability.",
+    "Stage 19F does not infer intent.",
+    "Stage 19F does not assign blame.",
+    "Stage 19F does not validate evidence.",
+    "Stage 19F does not predict outcomes.",
+    "Stage 19F does not generate hypothetical scenarios.",
+    "Stage 19F does not determine factual correctness.",
+    "Stage 19F does not determine legal sufficiency.",
+    "Stage 19F does not determine evidential sufficiency.",
+    "Stage 19F does not create evidence.",
+    "Stage 19F does not create rules.",
+    "Stage 19F does not create conditions.",
+    "Stage 19F does not create classifications.",
+    "Stage 19F does not modify the record.",
+    "Stage 19F evaluates only visible and non-visible representation inside the framework.",
+)
+
+
+STAGE19F_VISIBILITY_LIMITATIONS = (
+    "Visibility describes representation inside the framework only.",
+    "Presence or absence does not establish truth, correctness, or sufficiency.",
+)
+
+
+STAGE19F_FRAMEWORK_LAYERS = (
+    ("Record Context", "Visible Record"),
+    ("Analysis Output", "Conditions"),
+    ("Analysis Output", "Trajectory"),
+    ("Analysis Output", "Administrative Outputs"),
+    ("Analysis Output", "Record Evolution"),
+    ("Methodology Provenance", "Determination Trace"),
+    ("Methodology Provenance", "Rule Citation Layer"),
+    ("Methodology Provenance", "Evidence Attribution Matrix"),
+    ("Methodology Provenance", "Determination Report"),
+    ("Methodology Provenance", "Sufficiency Boundaries"),
+)
+
+
+STAGE19F_EVIDENCE_CATEGORIES = (
+    "Visible Record",
+    "Observed Evidence",
+    "Condition Output",
+    "Trajectory Output",
+    "Applied Rule Family",
+    "Determination Trace Output",
+    "Administrative Output",
+    "Record Evolution Output",
+    "Attachment Metadata",
+)
+
+
+STAGE19F_LAYER_ATTRIBUTION_KEYS = {
+    "Conditions": "condition_attribution",
+    "Trajectory": "trajectory_attribution",
+    "Administrative Outputs": "administrative_attribution",
+    "Record Evolution": "record_evolution_attribution",
+    "Determination Trace": "determination_trace_attribution",
+    "Rule Citation Layer": "rule_citation_attribution",
+}
+
+
+def _stage19f_unique_evidence_ids(entries: list[dict[str, Any]]) -> list[str]:
+    evidence_ids = []
+    for entry in entries:
+        for evidence_id in entry.get("attributed_evidence_ids") or []:
+            if evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+    return evidence_ids
+
+
+def _stage19f_layer_support_state(entries: list[dict[str, Any]]) -> str:
+    source_states = [entry.get("support_state") for entry in entries]
+    if "Attributed" in source_states:
+        return "Attributed"
+    if "Partially Attributed" in source_states:
+        return "Partially Attributed"
+    if "No Visible Evidence Attributed" in source_states:
+        return "No Visible Evidence Attributed"
+    return "Visible Output Present"
+
+
+def build_counterfactual_visibility(
+    *,
+    determination_trace: dict[str, Any] | None = None,
+    rule_citation_layer: dict[str, Any] | None = None,
+    evidence_attribution_matrix: dict[str, Any] | None = None,
+    determination_report: dict[str, Any] | None = None,
+    sufficiency_boundaries: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    trace = dict(determination_trace or {})
+    citations = dict(rule_citation_layer or {})
+    matrix = dict(evidence_attribution_matrix or {})
+    report = dict(determination_report or {})
+    boundaries = dict(sufficiency_boundaries or {})
+    evidence_sources = [dict(source) for source in matrix.get("evidence_sources") or []]
+
+    layer_entries = {
+        layer_name: [
+            dict(entry)
+            for entry in matrix.get(
+                STAGE19F_LAYER_ATTRIBUTION_KEYS.get(layer_name, ""),
+                [],
+            )
+        ]
+        for _, layer_name in STAGE19F_FRAMEWORK_LAYERS
+    }
+    visible_record_ids = [
+        source.get("evidence_id")
+        for source in evidence_sources
+        if source.get("evidence_type") == "Visible Record"
+        and source.get("evidence_id")
+    ]
+    all_evidence_ids = [
+        source.get("evidence_id")
+        for source in evidence_sources
+        if source.get("evidence_id")
+    ]
+    boundary_evidence_ids = _stage19f_unique_evidence_ids(
+        list(boundaries.get("supported_outputs") or [])
+        + list(boundaries.get("partially_supported_outputs") or [])
+    )
+
+    administrative_outputs = _stage19b_observed_value(
+        trace,
+        "Administrative Outputs",
+    )
+    record_evolution_outputs = _stage19b_observed_value(
+        trace,
+        "Record Evolution Outputs",
+    )
+    layer_presence = {
+        "Visible Record": bool(trace.get("visible_record")),
+        "Conditions": bool(trace.get("conditions") or layer_entries["Conditions"]),
+        "Trajectory": bool(trace.get("trajectory") or layer_entries["Trajectory"]),
+        "Administrative Outputs": bool(
+            administrative_outputs or layer_entries["Administrative Outputs"]
+        ),
+        "Record Evolution": bool(
+            record_evolution_outputs or layer_entries["Record Evolution"]
+        ),
+        "Determination Trace": bool(trace),
+        "Rule Citation Layer": bool(citations),
+        "Evidence Attribution Matrix": bool(matrix),
+        "Determination Report": bool(report),
+        "Sufficiency Boundaries": bool(boundaries),
+    }
+    layer_evidence_ids = {
+        "Visible Record": visible_record_ids,
+        "Evidence Attribution Matrix": all_evidence_ids,
+        "Determination Report": all_evidence_ids,
+        "Sufficiency Boundaries": boundary_evidence_ids,
+    }
+
+    visible_layers = []
+    non_visible_layers = []
+    for layer_type, layer_name in STAGE19F_FRAMEWORK_LAYERS:
+        entries = layer_entries[layer_name]
+        evidence_ids = layer_evidence_ids.get(
+            layer_name,
+            _stage19f_unique_evidence_ids(entries),
+        )
+        if layer_presence[layer_name]:
+            if entries:
+                source_support_state = _stage19f_layer_support_state(entries)
+            elif evidence_ids:
+                source_support_state = "Attributed"
+            else:
+                source_support_state = "Visible Output Present"
+            visible_layers.append(
+                {
+                    "layer_type": layer_type,
+                    "layer_name": layer_name,
+                    "visibility_state": "Visible",
+                    "source_support_state": source_support_state,
+                    "supporting_evidence_ids": evidence_ids,
+                    "visibility_label": "Visible Support Present"
+                    if evidence_ids
+                    else "Visible Framework Layer",
+                    "visibility_basis": (
+                        "Existing visible framework output represents this "
+                        "layer in the current record."
+                    ),
+                    "limitations": list(STAGE19F_VISIBILITY_LIMITATIONS),
+                }
+            )
+        else:
+            non_visible_layers.append(
+                {
+                    "layer_type": layer_type,
+                    "layer_name": layer_name,
+                    "visibility_state": "No Visible Representation",
+                    "visibility_label": "Framework Layer Not Present",
+                    "visibility_basis": (
+                        "No visible output represents this framework layer in "
+                        "the supplied record-derived outputs."
+                    ),
+                    "limitations": list(STAGE19F_VISIBILITY_LIMITATIONS),
+                }
+            )
+
+    visible_evidence_elements = [
+        {
+            "evidence_id": source.get("evidence_id"),
+            "evidence_label": source.get("evidence_label"),
+            "evidence_type": source.get("evidence_type"),
+            "visibility_state": "Visible",
+            "visibility_basis": (
+                "Existing Stage 19C evidence source is visibly represented in "
+                "the current record."
+            ),
+        }
+        for source in evidence_sources
+    ]
+    represented_categories = {
+        source.get("evidence_type")
+        for source in evidence_sources
+        if source.get("evidence_type")
+    }
+    non_visible_evidence_elements = [
+        {
+            "evidence_identifier": f"Evidence category: {category}",
+            "visibility_state": "No Visible Representation",
+            "visibility_basis": (
+                "No visible Stage 19C evidence source represents this evidence "
+                "category in the current record."
+            ),
+            "limitations": list(STAGE19F_VISIBILITY_LIMITATIONS),
+        }
+        for category in STAGE19F_EVIDENCE_CATEGORIES
+        if category not in represented_categories
+    ]
+
+    if matrix:
+        visibility_state = "Counterfactual Visibility Available"
+    elif any((trace, citations, report, boundaries)):
+        visibility_state = "Partial Counterfactual Visibility"
+    else:
+        visibility_state = "Counterfactual Visibility Unavailable"
+
+    visibility_summary = {
+        "visibility_state": visibility_state,
+        "visible_framework_layers_count": len(visible_layers),
+        "non_visible_framework_layers_count": len(non_visible_layers),
+        "visible_evidence_count": len(visible_evidence_elements),
+        "non_visible_evidence_count": len(non_visible_evidence_elements),
+        "source_layer": "Stages 19A-19E visible framework outputs",
+        "limitation_summary": (
+            "Counterfactual visibility describes presence and absence inside "
+            "the framework only and assigns no meaning to absence."
+        ),
+    }
+    counterfactual_path = [
+        {
+            "step": 1,
+            "label": "Visible Record",
+            "input": "determination_trace.visible_record",
+            "output": "visible record identified"
+            if trace.get("visible_record")
+            else "no visible record identified",
+        },
+        {
+            "step": 2,
+            "label": "Framework Layers Evaluated",
+            "input": "stage19_framework_layers",
+            "output": f"{len(STAGE19F_FRAMEWORK_LAYERS)} framework layers evaluated",
+        },
+        {
+            "step": 3,
+            "label": "Visible Layers",
+            "input": "visible_layers",
+            "output": "visible framework layers identified",
+        },
+        {
+            "step": 4,
+            "label": "Non-Visible Layers",
+            "input": "non_visible_layers",
+            "output": "non-visible framework layers identified",
+        },
+        {
+            "step": 5,
+            "label": "Evidence Visibility",
+            "input": "visible_evidence_elements, non_visible_evidence_elements",
+            "output": "visible and non-visible evidence representation identified",
+        },
+        {
+            "step": 6,
+            "label": "Counterfactual Visibility Classification",
+            "input": "visible_layers, non_visible_layers, evidence_visibility",
+            "output": visibility_state.lower(),
+        },
+    ]
+    return {
+        "visibility_state": visibility_state,
+        "visibility_summary": visibility_summary,
+        "visible_layers": visible_layers,
+        "non_visible_layers": non_visible_layers,
+        "visible_evidence_elements": visible_evidence_elements,
+        "non_visible_evidence_elements": non_visible_evidence_elements,
+        "counterfactual_path": counterfactual_path,
+        "limitations": list(STAGE19F_LIMITATIONS),
+    }
+
+
+def _render_stage19f_detail_entries(
+    entries: list[dict[str, Any]],
+    *,
+    empty_label: str,
+) -> str:
+    if not entries:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rows = []
+    for entry in entries:
+        for key, value in entry.items():
+            label = " ".join(key.split("_")).title()
+            if key == "supporting_evidence_ids":
+                rendered_value = _render_stage19c_compact_items(value)
+            elif isinstance(value, list):
+                rendered_value = escape("; ".join(str(item) for item in value))
+            else:
+                rendered_value = escape(_stage18a_display_value(value))
+            rows.append(
+                "<tr>"
+                f"<td>{escape(label)}</td>"
+                f"<td>{rendered_value}</td>"
+                "</tr>"
+            )
+        rows.append(
+            '<tr class="stage19f-entry-spacer"><td colspan="2"></td></tr>'
+        )
+    rows.pop()
+    return f'<table class="stage19f-detail-table"><tbody>{"".join(rows)}</tbody></table>'
+
+
+def _render_stage19f_visible_evidence(entries: list[dict[str, Any]]) -> str:
+    if not entries:
+        return '<p class="evidence-empty-state">No visible evidence elements available.</p>'
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(entry.get('evidence_id')))}</td>"
+        f"<td>{escape(_stage18a_display_value(entry.get('evidence_label')))}</td>"
+        f"<td>{escape(_stage18a_display_value(entry.get('evidence_type')))}</td>"
+        f"<td>{escape(_stage18a_display_value(entry.get('visibility_state')))}</td>"
+        f"<td>{escape(_stage18a_display_value(entry.get('visibility_basis')))}</td>"
+        "</tr>"
+        for entry in entries
+    )
+    return f"""
+        <table>
+          <thead>
+            <tr><th>Evidence ID</th><th>Evidence Label</th><th>Evidence Type</th><th>Visibility State</th><th>Visibility Basis</th></tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage19f_path(path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(step.get('input')))}</code></td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in path
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Step</th><th>Label</th><th>Input</th><th>Output</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_counterfactual_visibility_content(visibility: dict[str, Any]) -> str:
+    summary = visibility["visibility_summary"]
+    overview_rows = (
+        ("Visibility State", visibility["visibility_state"]),
+        ("Total Framework Layers Evaluated", len(STAGE19F_FRAMEWORK_LAYERS)),
+        ("Total Visible Layers", len(visibility["visible_layers"])),
+        ("Total Non-Visible Layers", len(visibility["non_visible_layers"])),
+        ("Counterfactual Path Steps Count", len(visibility["counterfactual_path"])),
+    )
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <section class="stage19f-boundary-overview">
+          <h3>Boundary Overview</h3>
+          {_render_stage18a_table(overview_rows)}
+        </section>
+        <section class="stage19f-visibility-summary">
+          <h3>Visibility Summary</h3>
+          {_render_stage18a_table(summary_rows)}
+        </section>
+        <section class="stage19f-visible-layers">
+          <h3>Visible Layers</h3>
+          {_render_stage19f_detail_entries(visibility["visible_layers"], empty_label="No visible framework layers available.")}
+        </section>
+        <section class="stage19f-non-visible-layers">
+          <h3>Non-Visible Layers</h3>
+          {_render_stage19f_detail_entries(visibility["non_visible_layers"], empty_label="No non-visible framework layers identified.")}
+        </section>
+        <section class="stage19f-visible-evidence-elements">
+          <h3>Visible Evidence Elements</h3>
+          {_render_stage19f_visible_evidence(visibility["visible_evidence_elements"])}
+        </section>
+        <section class="stage19f-non-visible-evidence-elements">
+          <h3>Non-Visible Evidence Elements</h3>
+          {_render_stage19f_detail_entries(visibility["non_visible_evidence_elements"], empty_label="No non-visible evidence categories identified.")}
+        </section>
+        <section class="stage19f-counterfactual-path">
+          <h3>Counterfactual Path</h3>
+          {_render_stage19f_path(visibility["counterfactual_path"])}
+        </section>
+        <section class="stage19f-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(visibility["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_counterfactual_visibility_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    attribution_matrix = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_groups=evidence_groups or {},
+    )
+    report = build_determination_report(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    boundaries = build_sufficiency_boundaries(
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    visibility = build_counterfactual_visibility(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+        determination_report=report,
+        sufficiency_boundaries=boundaries,
+    )
+    return f"""
+      <section class="management-section stage19f-counterfactual-visibility">
+        <h2>Counterfactual Visibility</h2>
+        <p class="notice">
+          Counterfactual Visibility is derived deterministically from visible
+          record data and existing framework outputs only. It identifies which
+          framework outputs, evidence elements, and layers are not visibly
+          present in the current record. It does not create hypothetical
+          scenarios, infer intent, predict outcomes, determine truth, validate
+          evidence, or modify the record.
+        </p>
+        {_render_counterfactual_visibility_content(visibility)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -30894,6 +31365,12 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19f_counterfactual_visibility = _render_counterfactual_visibility_section(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -31050,6 +31527,7 @@ def render_admin_record_evidence_page(
             f"{stage19c_evidence_attribution_matrix}"
             f"{stage19d_determination_report}"
             f"{stage19e_sufficiency_boundaries}"
+            f"{stage19f_counterfactual_visibility}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -31591,6 +32069,74 @@ def render_admin_record_evidence_page(
     .stage19e-boundary-path td:nth-child(3) {{ width: 30%; }}
     .stage19e-boundary-path th:nth-child(4),
     .stage19e-boundary-path td:nth-child(4) {{ width: 36%; }}
+    .stage19f-detail-table,
+    .stage19f-visible-evidence-elements table,
+    .stage19f-counterfactual-path table {{
+      table-layout: auto;
+    }}
+    .stage19f-detail-table td,
+    .stage19f-visible-evidence-elements th,
+    .stage19f-visible-evidence-elements td,
+    .stage19f-counterfactual-path th,
+    .stage19f-counterfactual-path td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19f-detail-table td:first-child {{ width: 24%; }}
+    .stage19f-detail-table td:last-child {{ width: 76%; }}
+    .stage19f-entry-spacer {{
+      border-bottom: 2px solid #dce8e6;
+    }}
+    .stage19f-entry-spacer td {{
+      height: 10px;
+      padding: 0;
+      background: #fafdfc;
+    }}
+    .stage19f-counterfactual-visibility .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage19f-counterfactual-visibility .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19f-visible-evidence-elements th:nth-child(1),
+    .stage19f-visible-evidence-elements td:nth-child(1) {{ width: 10%; }}
+    .stage19f-visible-evidence-elements th:nth-child(2),
+    .stage19f-visible-evidence-elements td:nth-child(2) {{ width: 18%; }}
+    .stage19f-visible-evidence-elements th:nth-child(3),
+    .stage19f-visible-evidence-elements td:nth-child(3) {{ width: 14%; }}
+    .stage19f-visible-evidence-elements th:nth-child(4),
+    .stage19f-visible-evidence-elements td:nth-child(4) {{ width: 14%; }}
+    .stage19f-visible-evidence-elements th:nth-child(5),
+    .stage19f-visible-evidence-elements td:nth-child(5) {{ width: 44%; }}
+    .stage19f-counterfactual-path code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19f-counterfactual-path th:nth-child(1),
+    .stage19f-counterfactual-path td:nth-child(1) {{ width: 8%; }}
+    .stage19f-counterfactual-path th:nth-child(2),
+    .stage19f-counterfactual-path td:nth-child(2) {{ width: 26%; }}
+    .stage19f-counterfactual-path th:nth-child(3),
+    .stage19f-counterfactual-path td:nth-child(3) {{ width: 30%; }}
+    .stage19f-counterfactual-path th:nth-child(4),
+    .stage19f-counterfactual-path td:nth-child(4) {{ width: 36%; }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;
