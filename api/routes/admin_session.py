@@ -31065,6 +31065,383 @@ def _render_counterfactual_visibility_section(
       </section>"""
 
 
+STAGE19G_LIMITATIONS = (
+    "Stage 19G does not determine truth.",
+    "Stage 19G does not determine liability.",
+    "Stage 19G does not infer intent.",
+    "Stage 19G does not assign blame.",
+    "Stage 19G does not validate evidence.",
+    "Stage 19G does not determine factual correctness.",
+    "Stage 19G does not determine legal sufficiency.",
+    "Stage 19G does not determine evidential sufficiency in the real world.",
+    "Stage 19G does not certify factual truth.",
+    "Stage 19G does not certify legal correctness.",
+    "Stage 19G does not certify real-world evidence sufficiency.",
+    "Stage 19G does not create evidence.",
+    "Stage 19G does not create rules.",
+    "Stage 19G does not create conditions.",
+    "Stage 19G does not create classifications.",
+    "Stage 19G does not modify the record.",
+    "Stage 19G certifies only internal framework explainability.",
+)
+
+
+STAGE19G_COMPONENT_LIMITATIONS = (
+    "Certification confirms internal component availability only.",
+    "Certification does not establish truth, legality, or real-world sufficiency.",
+)
+
+
+STAGE19G_REQUIRED_COMPONENTS = (
+    ("Determination Trace", "Stage 19A", "determination_trace"),
+    ("Rule Citation Layer", "Stage 19B", "rule_citation_layer"),
+    ("Evidence Attribution Matrix", "Stage 19C", "evidence_attribution_matrix"),
+    ("Determination Report", "Stage 19D", "determination_report"),
+    ("Sufficiency Boundaries", "Stage 19E", "sufficiency_boundaries"),
+    ("Counterfactual Visibility", "Stage 19F", "counterfactual_visibility"),
+)
+
+
+def _stage19g_component_availability(
+    component_name: str,
+    output: dict[str, Any],
+) -> str:
+    if not output:
+        return "Unavailable"
+    if component_name == "Determination Trace":
+        if output.get("visible_record") and output.get("trace_path"):
+            return "Available"
+        return "Partially Available"
+
+    state_paths = {
+        "Rule Citation Layer": (
+            ("citation_summary", "citation_state"),
+            "Rule Citation Layer Available",
+            "Partial Rule Citation Layer",
+        ),
+        "Evidence Attribution Matrix": (
+            ("attribution_summary", "attribution_state"),
+            "Evidence Attribution Matrix Available",
+            "Partial Evidence Attribution Matrix",
+        ),
+        "Determination Report": (
+            ("report_state",),
+            "Determination Report Available",
+            None,
+        ),
+        "Sufficiency Boundaries": (
+            ("boundary_state",),
+            "Sufficiency Boundaries Available",
+            "Partial Sufficiency Boundaries",
+        ),
+        "Counterfactual Visibility": (
+            ("visibility_state",),
+            "Counterfactual Visibility Available",
+            "Partial Counterfactual Visibility",
+        ),
+    }
+    path, available_state, partial_state = state_paths[component_name]
+    value: Any = output
+    for key in path:
+        value = value.get(key) if isinstance(value, dict) else None
+    if value == available_state:
+        return "Available"
+    if partial_state and value == partial_state:
+        return "Partially Available"
+    return "Unavailable"
+
+
+def _stage19g_component_entry(
+    *,
+    component_name: str,
+    source_stage: str,
+    availability_state: str,
+) -> dict[str, Any]:
+    if availability_state == "Available":
+        certification_state = "Certified"
+        certification_label = "Explainability Component Present"
+        certification_basis = (
+            "Existing framework output is available and inspectable for this record."
+        )
+    elif availability_state == "Partially Available":
+        certification_state = "Partially Certified"
+        certification_label = "Explainability Component Partially Present"
+        certification_basis = (
+            "Existing framework output is partially available or partially "
+            "inspectable for this record."
+        )
+    else:
+        certification_state = "Not Certified"
+        certification_label = "Explainability Component Not Present"
+        certification_basis = (
+            "No existing framework output is available for this explainability "
+            "component."
+        )
+    return {
+        "component_name": component_name,
+        "source_stage": source_stage,
+        "availability_state": availability_state,
+        "certification_state": certification_state,
+        "certification_label": certification_label,
+        "certification_basis": certification_basis,
+        "limitations": list(STAGE19G_COMPONENT_LIMITATIONS),
+    }
+
+
+def build_explainability_certification(
+    *,
+    determination_trace: dict[str, Any] | None = None,
+    rule_citation_layer: dict[str, Any] | None = None,
+    evidence_attribution_matrix: dict[str, Any] | None = None,
+    determination_report: dict[str, Any] | None = None,
+    sufficiency_boundaries: dict[str, Any] | None = None,
+    counterfactual_visibility: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    outputs = {
+        "determination_trace": dict(determination_trace or {}),
+        "rule_citation_layer": dict(rule_citation_layer or {}),
+        "evidence_attribution_matrix": dict(evidence_attribution_matrix or {}),
+        "determination_report": dict(determination_report or {}),
+        "sufficiency_boundaries": dict(sufficiency_boundaries or {}),
+        "counterfactual_visibility": dict(counterfactual_visibility or {}),
+    }
+    certified_components = []
+    partially_certified_components = []
+    uncertified_components = []
+
+    for component_name, source_stage, output_key in STAGE19G_REQUIRED_COMPONENTS:
+        availability_state = _stage19g_component_availability(
+            component_name,
+            outputs[output_key],
+        )
+        component = _stage19g_component_entry(
+            component_name=component_name,
+            source_stage=source_stage,
+            availability_state=availability_state,
+        )
+        if availability_state == "Available":
+            certified_components.append(component)
+        elif availability_state == "Partially Available":
+            partially_certified_components.append(component)
+        else:
+            uncertified_components.append(component)
+
+    if len(certified_components) == len(STAGE19G_REQUIRED_COMPONENTS):
+        certification_state = "Explainability Certified"
+    elif certified_components or partially_certified_components:
+        certification_state = "Explainability Partially Certified"
+    else:
+        certification_state = "Explainability Not Certified"
+
+    certification_summary = {
+        "certification_state": certification_state,
+        "required_components_count": len(STAGE19G_REQUIRED_COMPONENTS),
+        "certified_components_count": len(certified_components),
+        "partially_certified_components_count": len(
+            partially_certified_components
+        ),
+        "uncertified_components_count": len(uncertified_components),
+        "source_layer": "Stages 19A-19F explainability outputs",
+        "limitation_summary": (
+            "Explainability certification confirms internal framework "
+            "explainability only and does not certify truth, legality, "
+            "liability, or real-world evidential sufficiency."
+        ),
+    }
+    certification_path = [
+        {
+            "step": step,
+            "label": component_name,
+            "input": output_key,
+            "output": f"{component_name} availability evaluated",
+        }
+        for step, (component_name, _, output_key) in enumerate(
+            STAGE19G_REQUIRED_COMPONENTS,
+            start=1,
+        )
+    ]
+    final_output = {
+        "Explainability Certified": "explainability certification available",
+        "Explainability Partially Certified": (
+            "partial explainability certification available"
+        ),
+        "Explainability Not Certified": "explainability certification unavailable",
+    }[certification_state]
+    certification_path.append(
+        {
+            "step": 7,
+            "label": "Explainability Certification",
+            "input": (
+                "certified_components, partially_certified_components, "
+                "uncertified_components"
+            ),
+            "output": final_output,
+        }
+    )
+    return {
+        "certification_state": certification_state,
+        "certification_summary": certification_summary,
+        "certified_components": certified_components,
+        "partially_certified_components": partially_certified_components,
+        "uncertified_components": uncertified_components,
+        "certification_path": certification_path,
+        "limitations": list(STAGE19G_LIMITATIONS),
+    }
+
+
+def _render_stage19g_components(
+    components: list[dict[str, Any]],
+    *,
+    empty_label: str,
+) -> str:
+    if not components:
+        return f'<p class="evidence-empty-state">{escape(empty_label)}</p>'
+    rows = []
+    for component in components:
+        for key, value in component.items():
+            label = " ".join(key.split("_")).title()
+            rendered_value = (
+                escape("; ".join(str(item) for item in value))
+                if isinstance(value, list)
+                else escape(_stage18a_display_value(value))
+            )
+            rows.append(
+                "<tr>"
+                f"<td>{escape(label)}</td>"
+                f"<td>{rendered_value}</td>"
+                "</tr>"
+            )
+        rows.append(
+            '<tr class="stage19g-component-spacer"><td colspan="2"></td></tr>'
+        )
+    rows.pop()
+    return f'<table class="stage19g-component-table"><tbody>{"".join(rows)}</tbody></table>'
+
+
+def _render_stage19g_certification_path(path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(step.get('input')))}</code></td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in path
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Step</th><th>Label</th><th>Input</th><th>Output</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_explainability_certification_content(
+    certification: dict[str, Any],
+) -> str:
+    summary = certification["certification_summary"]
+    overview_rows = (
+        ("Certification State", certification["certification_state"]),
+        ("Required Components Count", summary["required_components_count"]),
+        ("Certified Components Count", summary["certified_components_count"]),
+        (
+            "Partially Certified Components Count",
+            summary["partially_certified_components_count"],
+        ),
+        ("Uncertified Components Count", summary["uncertified_components_count"]),
+        ("Certification Path Steps Count", len(certification["certification_path"])),
+    )
+    summary_rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in summary.items()
+    )
+    return f"""
+        <section class="stage19g-certification-overview">
+          <h3>Certification Overview</h3>
+          {_render_stage18a_table(overview_rows)}
+        </section>
+        <section class="stage19g-certification-summary">
+          <h3>Certification Summary</h3>
+          {_render_stage18a_table(summary_rows)}
+        </section>
+        <section class="stage19g-certified-components">
+          <h3>Certified Components</h3>
+          {_render_stage19g_components(certification["certified_components"], empty_label="No certified components available.")}
+        </section>
+        <section class="stage19g-partially-certified-components">
+          <h3>Partially Certified Components</h3>
+          {_render_stage19g_components(certification["partially_certified_components"], empty_label="No partially certified components available.")}
+        </section>
+        <section class="stage19g-uncertified-components">
+          <h3>Uncertified Components</h3>
+          {_render_stage19g_components(certification["uncertified_components"], empty_label="No uncertified components available.")}
+        </section>
+        <section class="stage19g-certification-path">
+          <h3>Certification Path</h3>
+          {_render_stage19g_certification_path(certification["certification_path"])}
+        </section>
+        <section class="stage19g-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(certification["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_explainability_certification_section(
+    *,
+    record_metadata: dict[str, Any] | None,
+    record_outputs: dict[str, Any] | None,
+    evidence_groups: dict[str, list[dict[str, Any]]] | None,
+    version_history: list[dict[str, Any]] | None,
+) -> str:
+    trace = build_determination_trace(
+        record_metadata=record_metadata or {},
+        record_outputs=record_outputs or {},
+        evidence_groups=evidence_groups or {},
+        version_history=version_history or [],
+    )
+    citation_layer = build_rule_citation_layer(determination_trace=trace)
+    attribution_matrix = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_groups=evidence_groups or {},
+    )
+    report = build_determination_report(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    boundaries = build_sufficiency_boundaries(
+        evidence_attribution_matrix=attribution_matrix,
+    )
+    visibility = build_counterfactual_visibility(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+        determination_report=report,
+        sufficiency_boundaries=boundaries,
+    )
+    certification = build_explainability_certification(
+        determination_trace=trace,
+        rule_citation_layer=citation_layer,
+        evidence_attribution_matrix=attribution_matrix,
+        determination_report=report,
+        sufficiency_boundaries=boundaries,
+        counterfactual_visibility=visibility,
+    )
+    return f"""
+      <section class="management-section stage19g-explainability-certification">
+        <h2>Explainability Certification</h2>
+        <p class="notice">
+          Explainability Certification is derived deterministically from
+          existing Stage 19 explainability outputs only. It evaluates whether
+          the framework's explainability components are present, inspectable,
+          and structurally complete inside the framework. It does not certify
+          truth, legality, liability, intent, factual correctness, evidential
+          sufficiency, or real-world correctness.
+        </p>
+        {_render_explainability_certification_content(certification)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -31371,6 +31748,14 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=version_history,
     )
+    stage19g_explainability_certification = (
+        _render_explainability_certification_section(
+            record_metadata=record_metadata,
+            record_outputs=record_outputs,
+            evidence_groups=evidence_groups,
+            version_history=version_history,
+        )
+    )
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -31528,6 +31913,7 @@ def render_admin_record_evidence_page(
             f"{stage19d_determination_report}"
             f"{stage19e_sufficiency_boundaries}"
             f"{stage19f_counterfactual_visibility}"
+            f"{stage19g_explainability_certification}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -32137,6 +32523,43 @@ def render_admin_record_evidence_page(
     .stage19f-counterfactual-path td:nth-child(3) {{ width: 30%; }}
     .stage19f-counterfactual-path th:nth-child(4),
     .stage19f-counterfactual-path td:nth-child(4) {{ width: 36%; }}
+    .stage19g-component-table,
+    .stage19g-certification-path table {{
+      table-layout: auto;
+    }}
+    .stage19g-component-table td,
+    .stage19g-certification-path th,
+    .stage19g-certification-path td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage19g-component-table td:first-child {{ width: 24%; }}
+    .stage19g-component-table td:last-child {{ width: 76%; }}
+    .stage19g-component-spacer {{
+      border-bottom: 2px solid #dce8e6;
+    }}
+    .stage19g-component-spacer td {{
+      height: 10px;
+      padding: 0;
+      background: #fafdfc;
+    }}
+    .stage19g-certification-path code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage19g-certification-path th:nth-child(1),
+    .stage19g-certification-path td:nth-child(1) {{ width: 8%; }}
+    .stage19g-certification-path th:nth-child(2),
+    .stage19g-certification-path td:nth-child(2) {{ width: 26%; }}
+    .stage19g-certification-path th:nth-child(3),
+    .stage19g-certification-path td:nth-child(3) {{ width: 30%; }}
+    .stage19g-certification-path th:nth-child(4),
+    .stage19g-certification-path td:nth-child(4) {{ width: 36%; }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;

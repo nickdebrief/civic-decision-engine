@@ -5737,6 +5737,169 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual([], unavailable["visible_evidence_elements"])
         self.assertEqual(9, len(unavailable["non_visible_evidence_elements"]))
 
+    def test_stage19g_explainability_certification_certifies_available_components(self):
+        inputs = {
+            "determination_trace": {
+                "visible_record": {"record_reference": "REC-19G"},
+                "trace_path": [{"step": 1, "label": "Visible Record"}],
+            },
+            "rule_citation_layer": {
+                "citation_summary": {
+                    "citation_state": "Rule Citation Layer Available"
+                }
+            },
+            "evidence_attribution_matrix": {
+                "attribution_summary": {
+                    "attribution_state": "Evidence Attribution Matrix Available"
+                }
+            },
+            "determination_report": {
+                "report_state": "Determination Report Available"
+            },
+            "sufficiency_boundaries": {
+                "boundary_state": "Sufficiency Boundaries Available"
+            },
+            "counterfactual_visibility": {
+                "visibility_state": "Counterfactual Visibility Available"
+            },
+        }
+        original_inputs = json.loads(json.dumps(inputs))
+
+        certification = self.admin_session.build_explainability_certification(
+            **inputs
+        )
+
+        self.assertEqual(
+            "Explainability Certified",
+            certification["certification_state"],
+        )
+        self.assertEqual(6, len(certification["certified_components"]))
+        self.assertEqual([], certification["partially_certified_components"])
+        self.assertEqual([], certification["uncertified_components"])
+        summary = certification["certification_summary"]
+        self.assertEqual(6, summary["required_components_count"])
+        self.assertEqual(6, summary["certified_components_count"])
+        self.assertEqual(0, summary["partially_certified_components_count"])
+        self.assertEqual(0, summary["uncertified_components_count"])
+        trace_component = certification["certified_components"][0]
+        self.assertEqual("Determination Trace", trace_component["component_name"])
+        self.assertEqual("Stage 19A", trace_component["source_stage"])
+        self.assertEqual("Available", trace_component["availability_state"])
+        self.assertEqual("Certified", trace_component["certification_state"])
+        self.assertEqual(
+            "Explainability Component Present",
+            trace_component["certification_label"],
+        )
+        self.assertEqual(
+            [
+                "Determination Trace",
+                "Rule Citation Layer",
+                "Evidence Attribution Matrix",
+                "Determination Report",
+                "Sufficiency Boundaries",
+                "Counterfactual Visibility",
+                "Explainability Certification",
+            ],
+            [step["label"] for step in certification["certification_path"]],
+        )
+        self.assertEqual(
+            list(range(1, 8)),
+            [step["step"] for step in certification["certification_path"]],
+        )
+        self.assertEqual(
+            "explainability certification available",
+            certification["certification_path"][-1]["output"],
+        )
+        self.assertIn(
+            "Stage 19G does not certify factual truth.",
+            certification["limitations"],
+        )
+        self.assertIn(
+            "Stage 19G certifies only internal framework explainability.",
+            certification["limitations"],
+        )
+        self.assertEqual(
+            certification,
+            self.admin_session.build_explainability_certification(**inputs),
+        )
+        self.assertEqual(original_inputs, inputs)
+
+        rendered = self.admin_session._render_explainability_certification_content(
+            certification
+        )
+        self.assertIn("<h3>Certification Overview</h3>", rendered)
+        self.assertIn("<h3>Certification Summary</h3>", rendered)
+        self.assertIn("<h3>Certified Components</h3>", rendered)
+        self.assertIn("<h3>Partially Certified Components</h3>", rendered)
+        self.assertIn("<h3>Uncertified Components</h3>", rendered)
+        self.assertIn("<h3>Certification Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Certification State</td><td>Explainability Certified</td>",
+            rendered,
+        )
+
+    def test_stage19g_explainability_certification_handles_partial_and_missing_components(self):
+        partial = self.admin_session.build_explainability_certification(
+            determination_trace={"trace_path": [{"step": 1}]},
+            rule_citation_layer={
+                "citation_summary": {
+                    "citation_state": "Partial Rule Citation Layer"
+                }
+            },
+            evidence_attribution_matrix={
+                "attribution_summary": {
+                    "attribution_state": "No Evidence Attribution Available"
+                }
+            },
+            determination_report={
+                "report_state": "Determination Report Unavailable"
+            },
+            sufficiency_boundaries={
+                "boundary_state": "Partial Sufficiency Boundaries"
+            },
+            counterfactual_visibility={
+                "visibility_state": "Partial Counterfactual Visibility"
+            },
+        )
+        uncertified = self.admin_session.build_explainability_certification()
+
+        self.assertEqual(
+            "Explainability Partially Certified",
+            partial["certification_state"],
+        )
+        self.assertEqual([], partial["certified_components"])
+        self.assertEqual(4, len(partial["partially_certified_components"]))
+        self.assertEqual(2, len(partial["uncertified_components"]))
+        partial_component = partial["partially_certified_components"][0]
+        self.assertEqual("Partially Available", partial_component["availability_state"])
+        self.assertEqual(
+            "Partially Certified",
+            partial_component["certification_state"],
+        )
+        self.assertEqual(
+            "Explainability Component Partially Present",
+            partial_component["certification_label"],
+        )
+        missing_component = partial["uncertified_components"][0]
+        self.assertEqual("Unavailable", missing_component["availability_state"])
+        self.assertEqual("Not Certified", missing_component["certification_state"])
+        self.assertEqual(
+            "Explainability Component Not Present",
+            missing_component["certification_label"],
+        )
+        self.assertEqual(
+            "Explainability Not Certified",
+            uncertified["certification_state"],
+        )
+        self.assertEqual([], uncertified["certified_components"])
+        self.assertEqual([], uncertified["partially_certified_components"])
+        self.assertEqual(6, len(uncertified["uncertified_components"]))
+        self.assertEqual(
+            "explainability certification unavailable",
+            uncertified["certification_path"][-1]["output"],
+        )
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -7994,6 +8157,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Visibility State</td><td>Counterfactual Visibility Available</td>",
             after_content,
         )
+        self.assertIn("Explainability Certification", after_content)
+        self.assertIn("Certification Overview", after_content)
+        self.assertIn("Certification Summary", after_content)
+        self.assertIn("Certified Components", after_content)
+        self.assertIn("Partially Certified Components", after_content)
+        self.assertIn("Uncertified Components", after_content)
+        self.assertIn("Certification Path", after_content)
+        self.assertIn(
+            "<td>Certification State</td><td>Explainability Certified</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -9412,6 +9586,17 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Visibility State</td><td>Counterfactual Visibility Available</td>",
             content,
         )
+        self.assertIn("Explainability Certification", content)
+        self.assertIn("Certification Overview", content)
+        self.assertIn("Certification Summary", content)
+        self.assertIn("Certified Components", content)
+        self.assertIn("Partially Certified Components", content)
+        self.assertIn("Uncertified Components", content)
+        self.assertIn("Certification Path", content)
+        self.assertIn(
+            "<td>Certification State</td><td>Explainability Certified</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -10501,6 +10686,10 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Sufficiency Boundaries</h2>"),
             governance_content.index("<h2>Counterfactual Visibility</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Counterfactual Visibility</h2>"),
+            governance_content.index("<h2>Explainability Certification</h2>"),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -10599,6 +10788,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Visible Layers</h3>", print_governance_content)
         self.assertIn("<h3>Non-Visible Layers</h3>", print_governance_content)
         self.assertIn("<h3>Counterfactual Path</h3>", print_governance_content)
+        self.assertIn("<h2>Explainability Certification</h2>", print_governance_content)
+        self.assertIn("<h3>Certification Overview</h3>", print_governance_content)
+        self.assertIn("<h3>Certification Summary</h3>", print_governance_content)
+        self.assertIn("<h3>Certification Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
