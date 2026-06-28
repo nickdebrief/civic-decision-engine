@@ -122,6 +122,18 @@ determine truth, or modify the record.
 
 ---
 
+## Stage 19G — Explainability Certification
+
+Provides an internal explainability certification layer that evaluates whether
+required Stage 19 explainability components are present and inspectable for a
+record.
+
+The certification is internal to the framework only and does not certify truth,
+legality, liability, factual correctness, real-world evidential sufficiency,
+intent, blame, or wrongdoing.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
