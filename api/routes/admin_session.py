@@ -31442,6 +31442,491 @@ def _render_explainability_certification_section(
       </section>"""
 
 
+STAGE20_LIMITATIONS = (
+    "Stage 20 does not determine truth.",
+    "Stage 20 does not determine liability.",
+    "Stage 20 does not infer intent.",
+    "Stage 20 does not assign blame.",
+    "Stage 20 does not validate evidence.",
+    "Stage 20 does not determine factual correctness.",
+    "Stage 20 does not determine legal sufficiency.",
+    "Stage 20 does not determine real-world sufficiency.",
+    "Stage 20 does not create evidence.",
+    "Stage 20 does not create rules.",
+    "Stage 20 does not create conditions.",
+    "Stage 20 does not create classifications.",
+    "Stage 20 does not create methodology.",
+    "Stage 20 does not create framework identity.",
+    "Stage 20 describes only what already exists within the implemented framework.",
+)
+
+
+STAGE20_FRAMEWORK_IDENTITY = {
+    "framework_name": "Civic Record Evaluation Framework",
+    "framework_acronym": "CREF",
+    "framework_version": "CREF Stage 20",
+    "framework_type": "Deterministic Record Evaluation Framework",
+    "framework_purpose_label": "Structured Evaluation of Visible Record Data",
+}
+
+
+STAGE20_PURPOSE_DESCRIPTION = {
+    "why_the_framework_exists": (
+        "To evaluate what visible civic records can support without relying on "
+        "undocumented assumptions."
+    ),
+    "what_it_evaluates": (
+        "Visible record structure, metadata, evidence presence, conditions, "
+        "administrative pathways, record evolution, and explainability outputs."
+    ),
+    "what_it_produces": (
+        "Deterministic classifications, traces, citations, attribution views, "
+        "boundary descriptions, reports, and internal certification summaries."
+    ),
+    "intended_operational_role": (
+        "Structured administrative inspection of visible record-derived outputs."
+    ),
+}
+
+
+STAGE20_SCOPE_DESCRIPTION = {
+    "inputs": (
+        "Visible record data",
+        "Metadata",
+        "Relationships",
+        "Conditions",
+        "Existing framework outputs",
+    ),
+    "outputs": (
+        "Conditions",
+        "Trajectories",
+        "Administrative outputs",
+        "Record evolution classifications",
+        "Determination traces",
+        "Rule citations",
+        "Evidence attribution",
+        "Explainability outputs",
+        "Certification outputs",
+    ),
+    "operational_boundaries": (
+        "Deterministic processing only",
+        "Record-derived outputs only",
+        "No external truth determination",
+    ),
+}
+
+
+STAGE20_ARCHITECTURE = (
+    {
+        "layer_name": "Visible Record",
+        "description": "Visible record identifiers, metadata, and evidence context.",
+        "source_stages": "Stage 7 Record Evidence View",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Conditions",
+        "description": "Existing deterministic condition outputs from visible inputs.",
+        "source_stages": "Conditions Layer; Stages 7F-7G",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Rule Layers",
+        "description": "Visible deterministic rule families and their citations.",
+        "source_stages": "Existing analysis layers; Stage 19B",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Determination Trace",
+        "description": "Ordered pathway from visible record to existing determination.",
+        "source_stages": "Stage 19A",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Administrative Layers",
+        "description": "Administrative action, workflow, review, outcome, and archive outputs.",
+        "source_stages": "Stages 8A-14F",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Record Evolution",
+        "description": "Visible record lineage and evolution-chain classifications.",
+        "source_stages": "Stages 18A-18T",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Explainability Layers",
+        "description": "Trace, citation, report, boundary, visibility, and certification outputs.",
+        "source_stages": "Stages 19A-19G",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Evidence Attribution",
+        "description": "Visible evidence provenance and evidence-to-output attribution.",
+        "source_stages": "Stages 16A-16F; Stage 19C",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Certification Layers",
+        "description": "Internal evolution and explainability component certification views.",
+        "source_stages": "Stages 18O-18P; Stage 19G",
+        "output_state": "Implemented",
+    },
+    {
+        "layer_name": "Framework Self-Description",
+        "description": "Deterministic description of implemented framework methodology.",
+        "source_stages": "Stages 20A-20G",
+        "output_state": "Implemented",
+    },
+)
+
+
+STAGE20_GUARANTEES = (
+    {
+        "guarantee_name": "Deterministic Execution",
+        "description": "The same visible inputs follow the same declared rules.",
+        "basis": "Deterministic constraints implemented across CREF analysis layers.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Reproducibility",
+        "description": "Visible analysis can be repeated from the same visible inputs.",
+        "basis": "Stages 17D and 18R reproducibility outputs.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Inspectability",
+        "description": "Administrative outputs and their explanation pathways remain visible.",
+        "basis": "Stages 19A-19D and 19F inspection views.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Traceability",
+        "description": "Visible evidence, governance, and evolution lineage can be traced.",
+        "basis": "Stages 16D, 17M, and 18F traceability outputs.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Explainability",
+        "description": "Determination pathways and supporting framework layers are exposed.",
+        "basis": "Stages 19A-19G explainability outputs.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Evidence Attribution Visibility",
+        "description": "Visible evidence-to-output attribution remains inspectable.",
+        "basis": "Stage 19C Evidence Attribution Matrix.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Boundary Visibility",
+        "description": "Visible support and non-visible representation boundaries are exposed.",
+        "basis": "Stages 19E and 19F boundary outputs.",
+        "availability_state": "Available",
+    },
+    {
+        "guarantee_name": "Self-Description Capability",
+        "description": "Implemented methodology can be described from declared definitions.",
+        "basis": "Stages 20A-20G framework self-description outputs.",
+        "availability_state": "Available",
+    },
+)
+
+
+STAGE20_CONSTRAINT_DEFINITIONS = (
+    ("Does Not Determine Truth", "The framework does not determine truth."),
+    ("Does Not Determine Liability", "The framework does not determine liability."),
+    ("Does Not Infer Intent", "The framework does not infer intent."),
+    ("Does Not Assign Blame", "The framework does not assign blame."),
+    ("Does Not Validate Evidence", "The framework does not validate evidence."),
+    (
+        "Does Not Determine Factual Correctness",
+        "The framework does not determine factual correctness.",
+    ),
+    (
+        "Does Not Determine Legal Sufficiency",
+        "The framework does not determine legal sufficiency.",
+    ),
+    (
+        "Does Not Determine Real-World Evidential Sufficiency",
+        "The framework does not determine real-world evidential sufficiency.",
+    ),
+    ("Does Not Create Evidence", "The framework does not create evidence."),
+    ("Does Not Create Rules", "The framework does not create rules."),
+    ("Does Not Create Conditions", "The framework does not create conditions."),
+    (
+        "Does Not Create Classifications",
+        "Stage 20 does not create framework classifications.",
+    ),
+    ("Does Not Modify Records", "The framework analysis does not modify records."),
+)
+
+
+def build_framework_self_description() -> dict[str, Any]:
+    framework_identity = dict(STAGE20_FRAMEWORK_IDENTITY)
+    purpose_description = dict(STAGE20_PURPOSE_DESCRIPTION)
+    scope_description = {
+        key: list(values) for key, values in STAGE20_SCOPE_DESCRIPTION.items()
+    }
+    framework_architecture = [dict(layer) for layer in STAGE20_ARCHITECTURE]
+    framework_guarantees = [dict(guarantee) for guarantee in STAGE20_GUARANTEES]
+    framework_constraints = [
+        {
+            "constraint": constraint,
+            "description": description,
+            "limitation_basis": "Declared CREF deterministic methodology boundary.",
+        }
+        for constraint, description in STAGE20_CONSTRAINT_DEFINITIONS
+    ]
+    reflexive_methodology = {
+        "state": "Framework Self-Description Available",
+        "what_it_is": (
+            "A deterministic record evaluation framework operating on visible "
+            "record data."
+        ),
+        "how_it_operates": (
+            "Declared deterministic layers transform visible record inputs into "
+            "inspectable record-derived outputs."
+        ),
+        "implemented_stage_families": [
+            "Stage 7 Record Evidence View",
+            "Stages 8A-14F Administrative Lifecycle",
+            "Stages 15D-16F Evidence Evaluation",
+            "Stages 17A-17O Record Governance",
+            "Stages 18A-18T Record Evolution",
+            "Stages 19A-19G Methodology Provenance and Explainability",
+            "Stages 20A-20G Framework Self-Description",
+        ],
+        "implemented_outputs": [
+            "Conditions and trajectories",
+            "Administrative and record evolution outputs",
+            "Determination traces and rule citations",
+            "Evidence attribution and boundary views",
+            "Explainability certification and framework self-description",
+        ],
+        "guarantees_state": f"{len(framework_guarantees)} implemented guarantees available",
+        "constraints_state": f"{len(framework_constraints)} declared constraints visible",
+        "output_derivation": (
+            "Outputs are derived from visible record data, metadata, relationships, "
+            "conditions, and existing framework outputs."
+        ),
+        "output_inspection": (
+            "Outputs are rendered in ordered administrative summaries, tables, "
+            "paths, attribution views, and limitation statements."
+        ),
+    }
+    self_description_summary = {
+        "framework_identity": (
+            "Civic Record Evaluation Framework (CREF), CREF Stage 20"
+        ),
+        "purpose": framework_identity["framework_purpose_label"],
+        "scope": (
+            f"{len(scope_description['inputs'])} declared input categories and "
+            f"{len(scope_description['outputs'])} declared output categories"
+        ),
+        "guarantees": f"{len(framework_guarantees)} implemented guarantees available",
+        "constraints": f"{len(framework_constraints)} declared constraints visible",
+        "architecture": f"{len(framework_architecture)} implemented layers described",
+        "reflexive_methodology_state": reflexive_methodology["state"],
+    }
+    reflexive_methodology_path = [
+        {
+            "step": 1,
+            "label": "Framework Definitions",
+            "input": "documented_methodology",
+            "output": "framework definitions identified",
+        },
+        {
+            "step": 2,
+            "label": "Implemented Stages",
+            "input": "implemented_stage_families",
+            "output": "implemented stages identified",
+        },
+        {
+            "step": 3,
+            "label": "Deterministic Outputs",
+            "input": "implemented_outputs",
+            "output": "deterministic outputs identified",
+        },
+        {
+            "step": 4,
+            "label": "Framework Description",
+            "input": "identity, purpose, scope, guarantees, constraints",
+            "output": "framework description assembled",
+        },
+        {
+            "step": 5,
+            "label": "Methodology Description",
+            "input": "architecture, derivation, inspection",
+            "output": "methodology description assembled",
+        },
+        {
+            "step": 6,
+            "label": "Framework Self-Description Available",
+            "input": "framework_description, methodology_description",
+            "output": "framework self-description available",
+        },
+    ]
+    return {
+        "framework_self_description_summary": self_description_summary,
+        "framework_identity": framework_identity,
+        "purpose_description": purpose_description,
+        "scope_description": scope_description,
+        "framework_architecture": framework_architecture,
+        "framework_guarantees": framework_guarantees,
+        "framework_constraints": framework_constraints,
+        "reflexive_methodology": reflexive_methodology,
+        "reflexive_methodology_path": reflexive_methodology_path,
+        "limitations": list(STAGE20_LIMITATIONS),
+    }
+
+
+def _render_stage20_detail_table(values: dict[str, Any]) -> str:
+    rows = []
+    for key, value in values.items():
+        label = " ".join(key.split("_")).title()
+        if isinstance(value, list):
+            rendered_value = _render_stage19c_compact_items(value)
+        else:
+            rendered_value = escape(_stage18a_display_value(value))
+        rows.append(
+            "<tr>"
+            f"<td>{escape(label)}</td>"
+            f"<td>{rendered_value}</td>"
+            "</tr>"
+        )
+    return f'<table class="stage20-detail-table"><tbody>{"".join(rows)}</tbody></table>'
+
+
+def _render_stage20_architecture(layers: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(layer.get('layer_name')))}</td>"
+        f"<td>{escape(_stage18a_display_value(layer.get('description')))}</td>"
+        f"<td>{escape(_stage18a_display_value(layer.get('source_stages')))}</td>"
+        f"<td>{escape(_stage18a_display_value(layer.get('output_state')))}</td>"
+        "</tr>"
+        for layer in layers
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Layer Name</th><th>Description</th><th>Source Stages</th><th>Output State</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage20_guarantees(guarantees: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(item.get('guarantee_name')))}</td>"
+        f"<td>{escape(_stage18a_display_value(item.get('description')))}</td>"
+        f"<td>{escape(_stage18a_display_value(item.get('basis')))}</td>"
+        f"<td>{escape(_stage18a_display_value(item.get('availability_state')))}</td>"
+        "</tr>"
+        for item in guarantees
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Guarantee Name</th><th>Description</th><th>Basis</th><th>Availability State</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage20_constraints(constraints: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(item.get('constraint')))}</td>"
+        f"<td>{escape(_stage18a_display_value(item.get('description')))}</td>"
+        f"<td>{escape(_stage18a_display_value(item.get('limitation_basis')))}</td>"
+        "</tr>"
+        for item in constraints
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Constraint</th><th>Description</th><th>Limitation Basis</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_stage20_path(path: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(_stage18a_display_value(step.get('step')))}</td>"
+        f"<td>{escape(_stage18a_display_value(step.get('label')))}</td>"
+        f"<td><code>{escape(_stage18a_display_value(step.get('input')))}</code></td>"
+        f"<td>{escape(_stage18a_display_value(step.get('output')))}</td>"
+        "</tr>"
+        for step in path
+    )
+    return f"""
+        <table>
+          <thead><tr><th>Step</th><th>Label</th><th>Input</th><th>Output</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+
+def _render_framework_self_description_content(
+    self_description: dict[str, Any],
+) -> str:
+    return f"""
+        <section class="stage20-self-description-summary">
+          <h3>Framework Self-Description Summary</h3>
+          {_render_stage20_detail_table(self_description["framework_self_description_summary"])}
+        </section>
+        <section class="stage20-framework-identity">
+          <h3>Framework Identity</h3>
+          {_render_stage20_detail_table(self_description["framework_identity"])}
+        </section>
+        <section class="stage20-purpose-description">
+          <h3>Purpose Description</h3>
+          {_render_stage20_detail_table(self_description["purpose_description"])}
+        </section>
+        <section class="stage20-scope-description">
+          <h3>Scope Description</h3>
+          {_render_stage20_detail_table(self_description["scope_description"])}
+        </section>
+        <section class="stage20-framework-architecture">
+          <h3>Framework Architecture View</h3>
+          {_render_stage20_architecture(self_description["framework_architecture"])}
+        </section>
+        <section class="stage20-framework-guarantees">
+          <h3>Framework Guarantees</h3>
+          {_render_stage20_guarantees(self_description["framework_guarantees"])}
+        </section>
+        <section class="stage20-framework-constraints">
+          <h3>Framework Constraints</h3>
+          {_render_stage20_constraints(self_description["framework_constraints"])}
+        </section>
+        <section class="stage20-reflexive-methodology">
+          <h3>Reflexive Methodology Description</h3>
+          {_render_stage20_detail_table(self_description["reflexive_methodology"])}
+        </section>
+        <section class="stage20-reflexive-methodology-path">
+          <h3>Reflexive Methodology Path</h3>
+          {_render_stage20_path(self_description["reflexive_methodology_path"])}
+        </section>
+        <section class="stage20-limitations">
+          <h3>Limitations</h3>
+          {_render_stage19a_list(self_description["limitations"], "No limitations available.")}
+        </section>"""
+
+
+def _render_framework_self_description_section() -> str:
+    self_description = build_framework_self_description()
+    return f"""
+      <section class="management-section stage20-framework-self-description">
+        <h2>Framework Self-Description &amp; Reflexive Methodology</h2>
+        <p class="notice">
+          Framework Self-Description is derived deterministically from
+          implemented CREF definitions, stages, outputs, guarantees, and
+          constraints only. It describes the framework's existing purpose,
+          scope, reasoning architecture, and methodological boundaries. It does
+          not create methodology, generate new reasoning, infer facts, determine
+          truth or liability, validate evidence, or modify records.
+        </p>
+        {_render_framework_self_description_content(self_description)}
+      </section>"""
+
+
 def _render_record_evidence_attachment(attachment: dict[str, Any]) -> str:
     rows = (
         ("Attachment ID", attachment.get("attachment_id")),
@@ -31756,6 +32241,7 @@ def render_admin_record_evidence_page(
             version_history=version_history,
         )
     )
+    stage20_framework_self_description = _render_framework_self_description_section()
     evidence_gap_summary = _render_record_evidence_gap_summary(evidence_groups)
     evidence_sufficiency = _render_record_evidence_sufficiency(evidence_groups)
     evidence_readiness = _render_record_evidence_readiness(evidence_groups)
@@ -31914,6 +32400,7 @@ def render_admin_record_evidence_page(
             f"{stage19e_sufficiency_boundaries}"
             f"{stage19f_counterfactual_visibility}"
             f"{stage19g_explainability_certification}"
+            f"{stage20_framework_self_description}"
             f"{evidence_gap_summary}"
         ),
         class_name="evidence-coverage-admin-group",
@@ -32560,6 +33047,73 @@ def render_admin_record_evidence_page(
     .stage19g-certification-path td:nth-child(3) {{ width: 30%; }}
     .stage19g-certification-path th:nth-child(4),
     .stage19g-certification-path td:nth-child(4) {{ width: 36%; }}
+    .stage20-framework-self-description table {{
+      table-layout: auto;
+    }}
+    .stage20-framework-self-description th,
+    .stage20-framework-self-description td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }}
+    .stage20-detail-table td:first-child {{ width: 24%; }}
+    .stage20-detail-table td:last-child {{ width: 76%; }}
+    .stage20-framework-self-description .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage20-framework-self-description .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage20-framework-architecture th:nth-child(1),
+    .stage20-framework-architecture td:nth-child(1) {{ width: 18%; }}
+    .stage20-framework-architecture th:nth-child(2),
+    .stage20-framework-architecture td:nth-child(2) {{ width: 36%; }}
+    .stage20-framework-architecture th:nth-child(3),
+    .stage20-framework-architecture td:nth-child(3) {{ width: 28%; }}
+    .stage20-framework-architecture th:nth-child(4),
+    .stage20-framework-architecture td:nth-child(4) {{ width: 18%; }}
+    .stage20-framework-guarantees th:nth-child(1),
+    .stage20-framework-guarantees td:nth-child(1) {{ width: 18%; }}
+    .stage20-framework-guarantees th:nth-child(2),
+    .stage20-framework-guarantees td:nth-child(2) {{ width: 30%; }}
+    .stage20-framework-guarantees th:nth-child(3),
+    .stage20-framework-guarantees td:nth-child(3) {{ width: 34%; }}
+    .stage20-framework-guarantees th:nth-child(4),
+    .stage20-framework-guarantees td:nth-child(4) {{ width: 18%; }}
+    .stage20-framework-constraints th:nth-child(1),
+    .stage20-framework-constraints td:nth-child(1) {{ width: 24%; }}
+    .stage20-framework-constraints th:nth-child(2),
+    .stage20-framework-constraints td:nth-child(2) {{ width: 38%; }}
+    .stage20-framework-constraints th:nth-child(3),
+    .stage20-framework-constraints td:nth-child(3) {{ width: 38%; }}
+    .stage20-reflexive-methodology-path code {{
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage20-reflexive-methodology-path th:nth-child(1),
+    .stage20-reflexive-methodology-path td:nth-child(1) {{ width: 8%; }}
+    .stage20-reflexive-methodology-path th:nth-child(2),
+    .stage20-reflexive-methodology-path td:nth-child(2) {{ width: 26%; }}
+    .stage20-reflexive-methodology-path th:nth-child(3),
+    .stage20-reflexive-methodology-path td:nth-child(3) {{ width: 30%; }}
+    .stage20-reflexive-methodology-path th:nth-child(4),
+    .stage20-reflexive-methodology-path td:nth-child(4) {{ width: 36%; }}
     .stage7f-sufficiency-table .target-cell {{
       word-break: normal;
       overflow-wrap: break-word;

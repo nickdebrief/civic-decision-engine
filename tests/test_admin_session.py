@@ -5900,6 +5900,141 @@ class AdminSessionTests(unittest.TestCase):
             uncertified["certification_path"][-1]["output"],
         )
 
+    def test_stage20_framework_self_description_is_deterministic_and_complete(self):
+        self_description = self.admin_session.build_framework_self_description()
+
+        identity = self_description["framework_identity"]
+        self.assertEqual(
+            "Civic Record Evaluation Framework",
+            identity["framework_name"],
+        )
+        self.assertEqual("CREF", identity["framework_acronym"])
+        self.assertEqual("CREF Stage 20", identity["framework_version"])
+        self.assertEqual(
+            "Deterministic Record Evaluation Framework",
+            identity["framework_type"],
+        )
+        self.assertEqual(
+            "Structured Evaluation of Visible Record Data",
+            identity["framework_purpose_label"],
+        )
+        purpose = self_description["purpose_description"]
+        self.assertIn("visible civic records", purpose["why_the_framework_exists"])
+        self.assertIn("Deterministic classifications", purpose["what_it_produces"])
+        scope = self_description["scope_description"]
+        self.assertEqual(5, len(scope["inputs"]))
+        self.assertEqual(9, len(scope["outputs"]))
+        self.assertEqual(3, len(scope["operational_boundaries"]))
+        self.assertIn("No external truth determination", scope["operational_boundaries"])
+
+        architecture = self_description["framework_architecture"]
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Conditions",
+                "Rule Layers",
+                "Determination Trace",
+                "Administrative Layers",
+                "Record Evolution",
+                "Explainability Layers",
+                "Evidence Attribution",
+                "Certification Layers",
+                "Framework Self-Description",
+            ],
+            [layer["layer_name"] for layer in architecture],
+        )
+        self.assertTrue(
+            all(layer["output_state"] == "Implemented" for layer in architecture)
+        )
+        guarantees = self_description["framework_guarantees"]
+        self.assertEqual(8, len(guarantees))
+        self.assertIn(
+            "Self-Description Capability",
+            {guarantee["guarantee_name"] for guarantee in guarantees},
+        )
+        self.assertTrue(
+            all(
+                guarantee["availability_state"] == "Available"
+                for guarantee in guarantees
+            )
+        )
+        constraints = self_description["framework_constraints"]
+        self.assertEqual(13, len(constraints))
+        self.assertIn(
+            "Does Not Determine Truth",
+            {constraint["constraint"] for constraint in constraints},
+        )
+        self.assertIn(
+            "Does Not Modify Records",
+            {constraint["constraint"] for constraint in constraints},
+        )
+        reflexive = self_description["reflexive_methodology"]
+        self.assertEqual(
+            "Framework Self-Description Available",
+            reflexive["state"],
+        )
+        self.assertEqual(7, len(reflexive["implemented_stage_families"]))
+        summary = self_description["framework_self_description_summary"]
+        self.assertEqual(
+            "Civic Record Evaluation Framework (CREF), CREF Stage 20",
+            summary["framework_identity"],
+        )
+        self.assertEqual(
+            "8 implemented guarantees available",
+            summary["guarantees"],
+        )
+        self.assertEqual(
+            "13 declared constraints visible",
+            summary["constraints"],
+        )
+        self.assertEqual(
+            "10 implemented layers described",
+            summary["architecture"],
+        )
+        path = self_description["reflexive_methodology_path"]
+        self.assertEqual(
+            [
+                "Framework Definitions",
+                "Implemented Stages",
+                "Deterministic Outputs",
+                "Framework Description",
+                "Methodology Description",
+                "Framework Self-Description Available",
+            ],
+            [step["label"] for step in path],
+        )
+        self.assertEqual(list(range(1, 7)), [step["step"] for step in path])
+        self.assertIn(
+            "Stage 20 does not create methodology.",
+            self_description["limitations"],
+        )
+        self.assertIn(
+            "Stage 20 describes only what already exists within the implemented framework.",
+            self_description["limitations"],
+        )
+        self.assertEqual(
+            self_description,
+            self.admin_session.build_framework_self_description(),
+        )
+
+        rendered = self.admin_session._render_framework_self_description_content(
+            self_description
+        )
+        self.assertIn("<h3>Framework Self-Description Summary</h3>", rendered)
+        self.assertIn("<h3>Framework Identity</h3>", rendered)
+        self.assertIn("<h3>Purpose Description</h3>", rendered)
+        self.assertIn("<h3>Scope Description</h3>", rendered)
+        self.assertIn("<h3>Framework Architecture View</h3>", rendered)
+        self.assertIn("<h3>Framework Guarantees</h3>", rendered)
+        self.assertIn("<h3>Framework Constraints</h3>", rendered)
+        self.assertIn("<h3>Reflexive Methodology Description</h3>", rendered)
+        self.assertIn("<h3>Reflexive Methodology Path</h3>", rendered)
+        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn(
+            "<td>Framework Name</td><td>Civic Record Evaluation Framework</td>",
+            rendered,
+        )
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -8168,6 +8303,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Certification State</td><td>Explainability Certified</td>",
             after_content,
         )
+        self.assertIn("Framework Self-Description", after_content)
+        self.assertIn("Framework Identity", after_content)
+        self.assertIn("Purpose Description", after_content)
+        self.assertIn("Scope Description", after_content)
+        self.assertIn("Framework Architecture View", after_content)
+        self.assertIn("Framework Guarantees", after_content)
+        self.assertIn("Framework Constraints", after_content)
+        self.assertIn("Reflexive Methodology Description", after_content)
+        self.assertIn("Reflexive Methodology Path", after_content)
+        self.assertIn(
+            "<td>Reflexive Methodology State</td><td>Framework Self-Description Available</td>",
+            after_content,
+        )
         self.assertIn(
             "This target is classified as Unsupported because it has 0 active supports. It remains Incomplete because completion requires Sufficient or Strong sufficiency. It requires 2 additional supporting attachments to reach Sufficient.",
             after_content,
@@ -9597,6 +9745,19 @@ class AdminSessionTests(unittest.TestCase):
             "<td>Certification State</td><td>Explainability Certified</td>",
             content,
         )
+        self.assertIn("Framework Self-Description", content)
+        self.assertIn("Framework Identity", content)
+        self.assertIn("Purpose Description", content)
+        self.assertIn("Scope Description", content)
+        self.assertIn("Framework Architecture View", content)
+        self.assertIn("Framework Guarantees", content)
+        self.assertIn("Framework Constraints", content)
+        self.assertIn("Reflexive Methodology Description", content)
+        self.assertIn("Reflexive Methodology Path", content)
+        self.assertIn(
+            "<td>Reflexive Methodology State</td><td>Framework Self-Description Available</td>",
+            content,
+        )
         self.assertIn(
             "Institutional Delay — Sufficient — 1 supporting attachment",
             content,
@@ -10690,6 +10851,12 @@ class AdminSessionTests(unittest.TestCase):
             governance_content.index("<h2>Counterfactual Visibility</h2>"),
             governance_content.index("<h2>Explainability Certification</h2>"),
         )
+        self.assertLess(
+            governance_content.index("<h2>Explainability Certification</h2>"),
+            governance_content.index(
+                "<h2>Framework Self-Description &amp; Reflexive Methodology</h2>"
+            ),
+        )
         self.assertIn(
             "Expand to inspect deterministic administrative reasoning.",
             content,
@@ -10792,6 +10959,18 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Certification Overview</h3>", print_governance_content)
         self.assertIn("<h3>Certification Summary</h3>", print_governance_content)
         self.assertIn("<h3>Certification Path</h3>", print_governance_content)
+        self.assertIn(
+            "<h2>Framework Self-Description &amp; Reflexive Methodology</h2>",
+            print_governance_content,
+        )
+        self.assertIn(
+            "<h3>Framework Self-Description Summary</h3>",
+            print_governance_content,
+        )
+        self.assertIn("<h3>Framework Architecture View</h3>", print_governance_content)
+        self.assertIn("<h3>Framework Guarantees</h3>", print_governance_content)
+        self.assertIn("<h3>Framework Constraints</h3>", print_governance_content)
+        self.assertIn("<h3>Reflexive Methodology Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,

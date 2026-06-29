@@ -134,6 +134,18 @@ intent, blame, or wrongdoing.
 
 ---
 
+## Stage 20 — Framework Self-Description & Reflexive Methodology
+
+Provides deterministic self-description of CREF identity, purpose, scope,
+implemented guarantees, declared constraints, reasoning architecture, and
+reflexive methodology.
+
+Stage 20 describes only implemented framework definitions and outputs. It does
+not create methodology, introduce reasoning, infer facts, validate evidence,
+determine truth or liability, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
