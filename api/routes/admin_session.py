@@ -32104,6 +32104,505 @@ def _render_admin_section_group(
     </section>"""
 
 
+STAGE21_REPORT_MODES = {
+    "executive": {
+        "label": "Executive Report",
+        "purpose": "What is the current state of the record?",
+        "scope": "Concise current-state, evidence, progression, and limitation summaries.",
+    },
+    "review": {
+        "label": "Review Report",
+        "purpose": "How was the current state reached, and what supports it?",
+        "scope": "Administrative review detail with trace, citation, attribution, and boundary summaries.",
+    },
+    "full": {
+        "label": "Full Inspection Report",
+        "purpose": "What is everything visible in the framework for this record?",
+        "scope": "Complete administrative, evidence, governance, evolution, explainability, and framework inspection detail.",
+    },
+}
+
+
+STAGE21_SECTION_INDEX = (
+    ("Record Summary", True, True, True),
+    ("Administrative State", True, True, True),
+    ("Evidence State", True, True, True),
+    ("Progression Requirements", True, True, True),
+    ("Determination Trace", "Summary", "Detail", "Detail"),
+    ("Rule Citation Layer", False, "Summary", "Detail"),
+    ("Evidence Attribution Matrix", False, "Summary", "Detail"),
+    ("Sufficiency and Visibility Boundaries", False, "Summary", "Detail"),
+    ("Explainability Certification", False, "Summary", "Detail"),
+    ("Supporting Evidence", False, "Target Summary", "Detail"),
+    ("Framework Self-Description", "Limitations", "Summary", "Detail"),
+)
+
+
+STAGE21_SUMMARY_LIMITATIONS = (
+    "This report mode is a summary view.",
+    "It does not remove underlying framework information.",
+    "Full inspection remains available in Full Inspection Report mode.",
+    "Summary mode does not change classifications, evidence relationships, thresholds, limitations, or framework behaviour.",
+)
+
+
+STAGE21_FULL_LIMITATIONS = (
+    "This mode preserves the complete visible framework inspection record.",
+    "Report structure does not change classifications, evidence relationships, thresholds, limitations, or framework behaviour.",
+)
+
+
+def _normalize_stage21_report_mode(report_mode: str | None) -> str:
+    normalized = str(report_mode or "").strip().lower()
+    return normalized if normalized in STAGE21_REPORT_MODES else "full"
+
+
+def classify_report_mode(report_mode: str | None) -> str:
+    return STAGE21_REPORT_MODES[_normalize_stage21_report_mode(report_mode)]["label"]
+
+
+def build_stage21_report_structure(report_mode: str | None = None) -> dict[str, Any]:
+    mode = _normalize_stage21_report_mode(report_mode)
+    mode_definition = STAGE21_REPORT_MODES[mode]
+    return {
+        "report_mode": mode,
+        "report_mode_label": mode_definition["label"],
+        "report_purpose": mode_definition["purpose"],
+        "report_scope": mode_definition["scope"],
+        "available_report_modes": [
+            {
+                "report_mode": key,
+                "report_mode_label": value["label"],
+            }
+            for key, value in STAGE21_REPORT_MODES.items()
+        ],
+        "section_index": [
+            {
+                "section_number": index,
+                "section_title": title,
+                "executive_report": executive,
+                "review_report": review,
+                "full_inspection_report": full,
+            }
+            for index, (title, executive, review, full) in enumerate(
+                STAGE21_SECTION_INDEX,
+                start=1,
+            )
+        ],
+        "limitations": list(
+            STAGE21_FULL_LIMITATIONS
+            if mode == "full"
+            else STAGE21_SUMMARY_LIMITATIONS
+        ),
+    }
+
+
+def _stage21_inclusion_label(value: Any) -> str:
+    if value is True:
+        return "Included"
+    if value is False:
+        return "Not included"
+    return str(value)
+
+
+def _render_stage21_navigation_header(
+    *,
+    reference: str,
+    record_version: int,
+    structure: dict[str, Any],
+    generated_at: Any,
+) -> str:
+    mode_links = "".join(
+        f'<a href="?report_mode={escape(str(mode["report_mode"]))}"'
+        f' class="stage21-mode-link{" active" if mode["report_mode"] == structure["report_mode"] else ""}">'
+        f'{escape(str(mode["report_mode_label"]))}</a>'
+        for mode in structure["available_report_modes"]
+    )
+    generated_row = (
+        f"<tr><td>Last Generated Timestamp</td><td>{escape(str(generated_at))}</td></tr>"
+        if generated_at not in (None, "")
+        else ""
+    )
+    return f"""
+    <section class="management-section stage21-report-navigation">
+      <h2>Report Navigation</h2>
+      <table>
+        <tbody>
+          <tr><td>Record Reference</td><td>{escape(reference)}</td></tr>
+          <tr><td>Record Version</td><td>{record_version}</td></tr>
+          <tr><td>Current Report Mode</td><td>{escape(str(structure["report_mode_label"]))}</td></tr>
+          <tr><td>Report Purpose</td><td>{escape(str(structure["report_purpose"]))}</td></tr>
+          <tr><td>Report Scope</td><td>{escape(str(structure["report_scope"]))}</td></tr>
+          {generated_row}
+        </tbody>
+      </table>
+      <nav class="stage21-mode-navigation" aria-label="Available report modes">
+        <span>Available report modes</span>
+        {mode_links}
+      </nav>
+    </section>"""
+
+
+def _render_stage21_section_index(structure: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td>{int(section["section_number"])}</td>'
+        f'<td>{escape(str(section["section_title"]).replace(" ", chr(160)))}</td>'
+        f'<td>{escape(_stage21_inclusion_label(section["executive_report"]))}</td>'
+        f'<td>{escape(_stage21_inclusion_label(section["review_report"]))}</td>'
+        f'<td>{escape(_stage21_inclusion_label(section["full_inspection_report"]))}</td>'
+        "</tr>"
+        for section in structure["section_index"]
+    )
+    return f"""
+    <section class="management-section stage21-section-index">
+      <h2>Report Section Index</h2>
+      <table>
+        <thead>
+          <tr><th>Section</th><th>Section Title</th><th>Executive Report</th><th>Review Report</th><th>Full Inspection Report</th></tr>
+        </thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>"""
+
+
+def _stage21_administrative_state(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    readiness_values = _record_evidence_readiness_values(evidence_groups)
+    readiness = readiness_values["readiness"]
+    action = classify_administrative_action(readiness)
+    workflow_state = classify_workflow_state(readiness, action)
+    disposition = classify_administrative_disposition(workflow_state)
+    eligibility = classify_review_eligibility(disposition)
+    status = build_administrative_status_summary(
+        disposition,
+        eligibility,
+        workflow_state,
+        readiness,
+    )["status"]
+    implementation_action = classify_implementation_action(status)
+    effective_state = classify_effective_state(implementation_action, status)
+    outcome = classify_outcome(effective_state)
+    outcome_preconditions = build_outcome_preconditions(
+        outcome,
+        effective_state,
+        implementation_action,
+        status,
+        eligibility,
+    )
+    outcome_readiness = classify_outcome_readiness(
+        outcome,
+        outcome_preconditions,
+        eligibility,
+        status,
+        effective_state,
+    )
+    outcome_target = classify_outcome_target(
+        outcome,
+        outcome_readiness,
+        effective_state,
+        eligibility,
+        status,
+    )
+    resolution = classify_resolution(
+        outcome,
+        outcome_readiness,
+        outcome_target,
+        effective_state,
+        implementation_action,
+        status,
+    )
+    return {
+        "readiness": readiness,
+        "action": action,
+        "workflow_state": workflow_state,
+        "disposition": disposition,
+        "review_eligibility": eligibility,
+        "administrative_status": status,
+        "implementation_action": implementation_action,
+        "effective_state": effective_state,
+        "outcome": outcome,
+        "outcome_readiness": outcome_readiness,
+        "outcome_target": outcome_target,
+        "resolution": resolution,
+        "completion_requirements": build_completion_requirements(
+            readiness,
+            action,
+            int(readiness_values["gap_summary"]["supported_targets"]),
+            int(readiness_values["gap_summary"]["unsupported_targets"]),
+            int(readiness_values["gap_summary"]["evidence_gap_count"]),
+            readiness_values["classifications"],
+        ),
+        "review_preconditions": build_review_preconditions(
+            eligibility,
+            disposition,
+            workflow_state,
+            build_transition_conditions(
+                workflow_state,
+                readiness,
+                action,
+                build_completion_requirements(
+                    readiness,
+                    action,
+                    int(readiness_values["gap_summary"]["supported_targets"]),
+                    int(readiness_values["gap_summary"]["unsupported_targets"]),
+                    int(readiness_values["gap_summary"]["evidence_gap_count"]),
+                    readiness_values["classifications"],
+                ),
+            ),
+        ),
+    }
+
+
+def _render_stage21_administrative_state_table(values: dict[str, Any]) -> str:
+    rows = (
+        ("Evidence Readiness", values["readiness"], "Stage 7G", "Current evidence readiness."),
+        ("Administrative Action", values["action"], "Stage 8A", "Current administrative action."),
+        ("Workflow State", values["workflow_state"], "Stage 8D", "Current workflow position."),
+        ("Administrative Disposition", values["disposition"], "Stage 9A", "Current administrative disposition."),
+        ("Review Eligibility", values["review_eligibility"], "Stage 9C", "Current review eligibility."),
+        ("Administrative Status", values["administrative_status"], "Stage 9E", "Current administrative status."),
+        ("Effective State", values["effective_state"], "Stage 10C", "Current effective state."),
+        ("Outcome Classification", values["outcome"], "Stage 11A", "Current outcome classification."),
+        ("Resolution Classification", values["resolution"], "Stage 12A", "Current resolution classification."),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(output)}</td><td>{escape(str(value))}</td>"
+        f"<td>{escape(source)}</td><td>{escape(meaning)}</td>"
+        "</tr>"
+        for output, value, source, meaning in rows
+    )
+    return f"""
+    <section class="management-section stage21-administrative-state">
+      <h2>Administrative State Table</h2>
+      <table><thead><tr><th>Output</th><th>Current Value</th><th>Source Stage</th><th>Meaning</th></tr></thead>
+      <tbody>{table_rows}</tbody></table>
+    </section>"""
+
+
+def _stage21_evidence_state(
+    evidence_groups: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    coverage = _record_evidence_coverage(evidence_groups)
+    sufficiency = _record_stage15d_evidence_sufficiency(evidence_groups)
+    completeness = _record_stage15e_evidence_completeness(evidence_groups)
+    requirements = _record_stage15f_evidence_requirements(evidence_groups)
+    rows = []
+    for target_type in ("condition", "signal", "finding", "record"):
+        requirement_targets = {
+            target["target_label"]: target
+            for target in requirements["groups"][target_type]["targets"]
+        }
+        for target in completeness["groups"][target_type]["targets"]:
+            requirement = requirement_targets.get(target["target_label"], {})
+            rows.append(
+                {
+                    "target_type": _target_type_display_label(target_type),
+                    "target_label": target["target_label"],
+                    "supported": "Yes" if int(target["supporting_attachment_count"]) > 0 else "No",
+                    "sufficiency": target["sufficiency"],
+                    "completeness": target["completeness"],
+                    "additional_required": int(requirement.get("additional_required") or 0),
+                }
+            )
+    return {
+        "coverage": coverage,
+        "sufficiency": sufficiency,
+        "completeness": completeness,
+        "requirements": requirements,
+        "targets": rows,
+    }
+
+
+def _render_stage21_evidence_summary(evidence_state: dict[str, Any]) -> str:
+    coverage = evidence_state["coverage"]
+    sufficiency = evidence_state["sufficiency"]
+    completeness = evidence_state["completeness"]
+    requirements = evidence_state["requirements"]
+    return f"""
+    <section class="management-section stage21-evidence-summary">
+      <h2>Evidence State Summary</h2>
+      {_render_stage18a_table((
+          ("Evidence Coverage", coverage["status"]),
+          ("Supported Targets", coverage["supported_targets"]),
+          ("Total Targets", coverage["total_targets"]),
+          ("Evidence Sufficiency", sufficiency["overall"]),
+          ("Evidence Completeness", completeness["overall"]),
+          ("Complete Targets", completeness["complete_targets"]),
+          ("Incomplete Targets", completeness["incomplete_targets"]),
+          ("Additional Attachments Required", requirements["additional_required"]),
+      ))}
+    </section>"""
+
+
+def _render_stage21_target_evidence_table(evidence_state: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td>{escape(str(target["target_type"]))}</td>'
+        f'<td>{escape(str(target["target_label"]))}</td>'
+        f'<td>{escape(str(target["supported"]))}</td>'
+        f'<td>{escape(str(target["sufficiency"]))}</td>'
+        f'<td>{escape(str(target["completeness"]))}</td>'
+        f'<td>{int(target["additional_required"])}</td>'
+        "</tr>"
+        for target in evidence_state["targets"]
+    ) or '<tr><td colspan="6">No record targets are available.</td></tr>'
+    return f"""
+    <section class="management-section stage21-target-evidence-summary">
+      <h2>Target-Level Evidence Summary</h2>
+      <table><thead><tr><th>Target Type</th><th>Target</th><th>Supported</th><th>Sufficiency</th><th>Completeness</th><th>Additional Attachments Required</th></tr></thead>
+      <tbody>{rows}</tbody></table>
+    </section>"""
+
+
+def _render_stage21_progression_requirements(values: dict[str, Any]) -> str:
+    completion = values["completion_requirements"]
+    review = values["review_preconditions"]
+    rows = (
+        ("Evidence", values["readiness"], completion, completion[0] if completion else "None identified"),
+        ("Review", values["review_eligibility"], review, review[0] if review else "None identified"),
+        ("Outcome", values["outcome"], [describe_outcome_target(values["outcome_target"])], values["outcome_target"]),
+        ("Resolution", values["resolution"], [describe_resolution(values["resolution"])], values["resolution"]),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(domain)}</td><td>{escape(str(state))}</td>"
+        f"<td>{_render_stage19c_compact_items(requirements)}</td>"
+        f"<td>{escape(str(blocking))}</td>"
+        "</tr>"
+        for domain, state, requirements, blocking in rows
+    )
+    return f"""
+    <section class="management-section stage21-progression-requirements">
+      <h2>Progression Requirements Table</h2>
+      <table><thead><tr><th>Domain</th><th>Current State</th><th>Required Advancement</th><th>Blocking Condition</th></tr></thead>
+      <tbody>{table_rows}</tbody></table>
+    </section>"""
+
+
+def _build_stage21_explainability_outputs(
+    *,
+    record_metadata: dict[str, Any],
+    record_outputs: dict[str, Any],
+    evidence_groups: dict[str, list[dict[str, Any]]],
+    version_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    trace = build_determination_trace(
+        record_metadata=record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=version_history,
+    )
+    citations = build_rule_citation_layer(determination_trace=trace)
+    attribution = build_evidence_attribution_matrix(
+        determination_trace=trace,
+        rule_citation_layer=citations,
+        evidence_groups=evidence_groups,
+    )
+    report = build_determination_report(
+        determination_trace=trace,
+        rule_citation_layer=citations,
+        evidence_attribution_matrix=attribution,
+    )
+    boundaries = build_sufficiency_boundaries(
+        evidence_attribution_matrix=attribution,
+    )
+    visibility = build_counterfactual_visibility(
+        determination_trace=trace,
+        rule_citation_layer=citations,
+        evidence_attribution_matrix=attribution,
+        determination_report=report,
+        sufficiency_boundaries=boundaries,
+    )
+    certification = build_explainability_certification(
+        determination_trace=trace,
+        rule_citation_layer=citations,
+        evidence_attribution_matrix=attribution,
+        determination_report=report,
+        sufficiency_boundaries=boundaries,
+        counterfactual_visibility=visibility,
+    )
+    return {
+        "trace": trace,
+        "citations": citations,
+        "attribution": attribution,
+        "boundaries": boundaries,
+        "visibility": visibility,
+        "certification": certification,
+    }
+
+
+def _render_stage21_determination_trace_summary(trace: dict[str, Any]) -> str:
+    return f"""
+    <section class="management-section stage21-determination-trace-summary">
+      <h2>Determination Trace Summary</h2>
+      {_render_stage18a_table((
+          ("Record Reference", trace.get("record_reference")),
+          ("Case Title", trace.get("case_title")),
+          ("Determination", trace["determination"]),
+          ("Conditions Count", len(trace["conditions"])),
+          ("Applied Rule Families Count", len(trace["applied_rules"])),
+          ("Trace Steps Count", len(trace["trace_path"])),
+      ))}
+    </section>"""
+
+
+def _render_stage21_explainability_summary(outputs: dict[str, Any]) -> str:
+    citations = outputs["citations"]["citation_summary"]
+    attribution = outputs["attribution"]["attribution_summary"]
+    boundaries = outputs["boundaries"]["boundary_summary"]
+    visibility = outputs["visibility"]["visibility_summary"]
+    certification = outputs["certification"]["certification_summary"]
+    rows = (
+        ("Determination Trace", "Available" if outputs["trace"].get("trace_path") else "Unavailable", "Stage 19A", "Summary and detail available"),
+        ("Rule Citation Layer", citations["citation_state"], "Stage 19B", f'{citations["total_citations_count"]} citations'),
+        ("Evidence Attribution Matrix", attribution["attribution_state"], "Stage 19C", f'{attribution["total_attributions_count"]} attributions'),
+        ("Sufficiency Boundaries", boundaries["boundary_state"], "Stage 19E", f'{boundaries["total_outputs_evaluated"]} outputs evaluated'),
+        ("Counterfactual Visibility", outputs["visibility"]["visibility_state"], "Stage 19F", f'{visibility["visible_framework_layers_count"]} visible layers'),
+        ("Explainability Certification", certification["certification_state"], "Stage 19G", f'{certification["certified_components_count"]} certified components'),
+    )
+    table_rows = "".join(
+        "<tr>"
+        f"<td>{escape(component)}</td><td>{escape(str(availability))}</td>"
+        f"<td>{escape(source)}</td><td>{escape(str(state))}</td>"
+        "</tr>"
+        for component, availability, source, state in rows
+    )
+    return f"""
+    <section class="management-section stage21-explainability-summary">
+      <h2>Explainability Summary Table</h2>
+      <table><thead><tr><th>Component</th><th>Availability</th><th>Source Stage</th><th>Inspection State</th></tr></thead>
+      <tbody>{table_rows}</tbody></table>
+    </section>"""
+
+
+def _render_stage21_mapping_summary(
+    *,
+    title: str,
+    class_name: str,
+    values: dict[str, Any],
+) -> str:
+    rows = tuple(
+        (" ".join(str(key).split("_")).title(), value)
+        for key, value in values.items()
+    )
+    return f"""
+    <section class="management-section {escape(class_name)}">
+      <h2>{escape(title)}</h2>
+      {_render_stage18a_table(rows)}
+    </section>"""
+
+
+def _render_stage21_limitations(structure: dict[str, Any]) -> str:
+    return f"""
+    <section class="management-section stage21-report-limitations">
+      <h2>Report Mode Limitations</h2>
+      {_render_stage19a_list(structure["limitations"], "No report-mode limitations available.")}
+    </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -32112,7 +32611,11 @@ def render_admin_record_evidence_page(
     record_outputs: dict[str, Any],
     record_metadata: dict[str, Any] | None = None,
     version_history: list[dict[str, Any]] | None = None,
+    report_mode: str | None = None,
 ) -> str:
+    normalized_record_metadata = dict(record_metadata or {})
+    normalized_version_history = list(version_history or [])
+    report_structure = build_stage21_report_structure(report_mode)
     evidence_sections = _render_record_evidence_groups(evidence_groups)
     evidence_coverage = _render_record_evidence_coverage(evidence_groups)
     stage15d_evidence_sufficiency = _render_stage15d_evidence_sufficiency(
@@ -32565,6 +33068,80 @@ def render_admin_record_evidence_page(
         content=supporting_evidence,
         class_name="supporting-evidence-admin-group",
     )
+    stage21_navigation = _render_stage21_navigation_header(
+        reference=reference,
+        record_version=record_version,
+        structure=report_structure,
+        generated_at=(
+            normalized_record_metadata.get("generated_at")
+            or normalized_record_metadata.get("exported_at")
+        ),
+    )
+    stage21_section_index = _render_stage21_section_index(report_structure)
+    stage21_administrative_values = _stage21_administrative_state(evidence_groups)
+    stage21_evidence_values = _stage21_evidence_state(evidence_groups)
+    stage21_explainability_outputs = _build_stage21_explainability_outputs(
+        record_metadata=normalized_record_metadata,
+        record_outputs=record_outputs,
+        evidence_groups=evidence_groups,
+        version_history=normalized_version_history,
+    )
+    stage21_executive_core = (
+        '<section class="stage21-report-mode stage21-executive-report">'
+        '<h2>Executive Report Summary</h2>'
+        '<p class="notice">This concise mode answers: What is the current state of the record?</p>'
+        f"{_render_stage21_administrative_state_table(stage21_administrative_values)}"
+        f"{_render_stage21_evidence_summary(stage21_evidence_values)}"
+        f"{_render_stage21_progression_requirements(stage21_administrative_values)}"
+        f"{outcome_classification}"
+        f"{resolution_classification}"
+        f"{closure_classification}"
+        f"{archive_classification}"
+        f"{_render_stage21_determination_trace_summary(stage21_explainability_outputs['trace'])}"
+        '<section class="management-section stage21-framework-limitations">'
+        '<h2>Framework Limitations</h2>'
+        f"{_render_stage19a_list(list(STAGE20_LIMITATIONS), 'No framework limitations available.')}"
+        "</section>"
+        "</section>"
+    )
+    stage21_review_detail = (
+        '<section class="stage21-review-detail">'
+        '<h2>Review Support Detail</h2>'
+        '<p class="notice">This mode adds deterministic trace and support summaries for administrative review.</p>'
+        f"{_render_stage21_target_evidence_table(stage21_evidence_values)}"
+        f"{stage15f_evidence_requirements}"
+        f"{stage19a_determination_trace}"
+        f"{_render_stage21_mapping_summary(title='Rule Citation Summary', class_name='stage21-rule-citation-summary', values=stage21_explainability_outputs['citations']['citation_summary'])}"
+        f"{_render_stage21_mapping_summary(title='Evidence Attribution Summary', class_name='stage21-evidence-attribution-summary', values=stage21_explainability_outputs['attribution']['attribution_summary'])}"
+        f"{_render_stage21_mapping_summary(title='Sufficiency Boundaries Summary', class_name='stage21-sufficiency-boundaries-summary', values=stage21_explainability_outputs['boundaries']['boundary_summary'])}"
+        f"{_render_stage21_mapping_summary(title='Counterfactual Visibility Summary', class_name='stage21-counterfactual-visibility-summary', values=stage21_explainability_outputs['visibility']['visibility_summary'])}"
+        f"{_render_stage21_mapping_summary(title='Explainability Certification Summary', class_name='stage21-explainability-certification-summary', values=stage21_explainability_outputs['certification']['certification_summary'])}"
+        f"{_render_stage21_explainability_summary(stage21_explainability_outputs)}"
+        f"{_render_stage21_mapping_summary(title='Framework Self-Description Summary', class_name='stage21-framework-summary', values=build_framework_self_description()['framework_self_description_summary'])}"
+        "</section>"
+    )
+    if report_structure["report_mode"] == "executive":
+        stage21_report_content = (
+            stage21_executive_core
+            + _render_stage21_limitations(report_structure)
+        )
+    elif report_structure["report_mode"] == "review":
+        stage21_report_content = (
+            stage21_executive_core
+            + stage21_review_detail
+            + _render_stage21_limitations(report_structure)
+        )
+    else:
+        stage21_report_content = (
+            f"{administrative_workflow_group}"
+            f"{outcome_analysis_group}"
+            f"{resolution_analysis_group}"
+            f"{closure_analysis_group}"
+            f"{archive_analysis_group}"
+            f"{supporting_evidence_group}"
+            f"{evidence_coverage_group}"
+            f"{_render_stage21_limitations(report_structure)}"
+        )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -32661,6 +33238,89 @@ def render_admin_record_evidence_page(
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }}
+    .stage21-mode-navigation {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+    }}
+    .stage21-mode-navigation > span {{
+      color: #555;
+      font-size: 0.82rem;
+      font-weight: 650;
+      margin-right: 4px;
+    }}
+    .stage21-mode-link {{
+      display: inline-block;
+      border: 1px solid #b9c9c7;
+      padding: 6px 9px;
+      color: #245d61;
+      background: #f8fbfa;
+      font-size: 0.84rem;
+      font-weight: 650;
+      text-decoration: none;
+    }}
+    .stage21-mode-link.active {{
+      border-color: #245d61;
+      background: #eaf3f2;
+      color: #173f42;
+    }}
+    .stage21-section-index table,
+    .stage21-report-navigation table,
+    .stage21-report-mode table,
+    .stage21-review-detail table,
+    .stage21-report-limitations table {{
+      table-layout: auto;
+    }}
+    .stage21-section-index th,
+    .stage21-section-index td,
+    .stage21-report-navigation th,
+    .stage21-report-navigation td,
+    .stage21-report-mode th,
+    .stage21-report-mode td,
+    .stage21-review-detail th,
+    .stage21-review-detail td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage21-section-index,
+    .stage21-administrative-state,
+    .stage21-progression-requirements,
+    .stage21-target-evidence-summary,
+    .stage21-explainability-summary {{
+      overflow-x: auto;
+    }}
+    .stage21-report-navigation td:first-child {{
+      width: 34%;
+      min-width: 130px;
+    }}
+    .stage21-report-navigation td:last-child {{
+      width: 66%;
+    }}
+    .stage21-section-index th:first-child,
+    .stage21-section-index td:first-child {{ width: 8%; }}
+    .stage21-section-index th:nth-child(2),
+    .stage21-section-index td:nth-child(2) {{ width: 32%; }}
+    .stage21-section-index th:nth-child(n+3),
+    .stage21-section-index td:nth-child(n+3) {{ width: 20%; }}
+    @media (max-width: 640px) {{
+      body {{ padding: 12px; }}
+      main {{ padding: 16px; }}
+      .stage21-report-navigation td:first-child {{
+        width: 42%;
+        min-width: 0;
+      }}
+      .stage21-report-navigation td:last-child {{ width: 58%; }}
+      .stage21-section-index table {{ min-width: 720px; }}
+      .stage21-administrative-state table,
+      .stage21-progression-requirements table,
+      .stage21-explainability-summary table {{ min-width: 680px; }}
+      .stage21-target-evidence-summary table {{ min-width: 760px; }}
     }}
     details {{
       break-inside: avoid;
@@ -34093,19 +34753,15 @@ def render_admin_record_evidence_page(
       This read-only administrative view inverts attachment relationships by record target.
       No upload, download, public file access, or mutation controls are available here.
     </p>
+    {stage21_navigation}
     <section class="management-section record-summary">
       <h2>Record summary</h2>
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
     </section>
-    {administrative_workflow_group}
-    {outcome_analysis_group}
-    {resolution_analysis_group}
-    {closure_analysis_group}
-    {archive_analysis_group}
-    {supporting_evidence_group}
-    {evidence_coverage_group}
+    {stage21_section_index}
+    {stage21_report_content}
   </main>
 </body>
 </html>"""
@@ -35093,6 +35749,12 @@ def admin_record_attachments_page(reference: str, request: Request):
 @router.get("/admin/records/{reference}/evidence", response_class=HTMLResponse)
 def admin_record_evidence_page(reference: str, request: Request):
     require_admin_session(request)
+    query_params = getattr(request, "query_params", {})
+    requested_report_mode = (
+        query_params.get("report_mode")
+        if hasattr(query_params, "get")
+        else None
+    )
     conn = get_db()
     try:
         record = conn.execute(
@@ -35128,6 +35790,7 @@ def admin_record_evidence_page(reference: str, request: Request):
                     conn,
                     reference=record["reference"],
                 ),
+                report_mode=requested_report_mode,
             )
         )
     finally:
