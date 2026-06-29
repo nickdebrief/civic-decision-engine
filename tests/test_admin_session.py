@@ -5927,19 +5927,34 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual(3, len(scope["operational_boundaries"]))
         self.assertIn("No external truth determination", scope["operational_boundaries"])
 
+        framework_description = self_description["framework_description"]
+        self.assertEqual(
+            "Civic Record Evaluation Framework",
+            framework_description["framework_name"],
+        )
+        self.assertEqual(
+            "Deterministic Record Evaluation Methodology",
+            framework_description["methodology_type"],
+        )
+        self.assertEqual(
+            "Methodological Boundaries Declared",
+            framework_description["boundary_definition_state"],
+        )
+
         architecture = self_description["framework_architecture"]
         self.assertEqual(
             [
-                "Visible Record",
-                "Conditions",
-                "Rule Layers",
-                "Determination Trace",
-                "Administrative Layers",
-                "Record Evolution",
-                "Explainability Layers",
-                "Evidence Attribution",
-                "Certification Layers",
-                "Framework Self-Description",
+                "Visible Record Layer",
+                "Conditions Layer",
+                "Pattern Interpretation Layer",
+                "Trajectory Classification Layer",
+                "Administrative Evaluation Layer",
+                "Record Evolution Layer",
+                "Determination Trace Layer",
+                "Rule Citation Layer",
+                "Evidence Attribution Layer",
+                "Explainability Certification Layer",
+                "Framework Self-Description Layer",
             ],
             [layer["layer_name"] for layer in architecture],
         )
@@ -5949,7 +5964,7 @@ class AdminSessionTests(unittest.TestCase):
         guarantees = self_description["framework_guarantees"]
         self.assertEqual(8, len(guarantees))
         self.assertIn(
-            "Self-Description Capability",
+            "Rule Visibility",
             {guarantee["guarantee_name"] for guarantee in guarantees},
         )
         self.assertTrue(
@@ -5959,7 +5974,7 @@ class AdminSessionTests(unittest.TestCase):
             )
         )
         constraints = self_description["framework_constraints"]
-        self.assertEqual(13, len(constraints))
+        self.assertEqual(16, len(constraints))
         self.assertIn(
             "Does Not Determine Truth",
             {constraint["constraint"] for constraint in constraints},
@@ -5974,6 +5989,16 @@ class AdminSessionTests(unittest.TestCase):
             reflexive["state"],
         )
         self.assertEqual(7, len(reflexive["implemented_stage_families"]))
+        for key in (
+            "what_it_does",
+            "what_it_does_not_do",
+            "how_it_reasons",
+            "how_outputs_are_produced",
+            "which_evidence_supports_outputs",
+            "which_rules_support_reasoning",
+            "which_boundaries_constrain_interpretation",
+        ):
+            self.assertTrue(reflexive[key])
         summary = self_description["framework_self_description_summary"]
         self.assertEqual(
             "Civic Record Evaluation Framework (CREF), CREF Stage 20",
@@ -5984,28 +6009,41 @@ class AdminSessionTests(unittest.TestCase):
             summary["guarantees"],
         )
         self.assertEqual(
-            "13 declared constraints visible",
+            "16 declared constraints visible",
             summary["constraints"],
         )
         self.assertEqual(
-            "10 implemented layers described",
+            "11 implemented layers described",
             summary["architecture"],
         )
-        path = self_description["reflexive_methodology_path"]
+        path = self_description["self_description_path"]
         self.assertEqual(
             [
-                "Framework Definitions",
+                "Framework Documentation",
                 "Implemented Stages",
-                "Deterministic Outputs",
+                "Methodological Principles",
                 "Framework Description",
-                "Methodology Description",
-                "Framework Self-Description Available",
+                "Guarantees",
+                "Limitations",
+                "Reflexive Methodology",
             ],
             [step["label"] for step in path],
         )
-        self.assertEqual(list(range(1, 7)), [step["step"] for step in path])
+        self.assertEqual(list(range(1, 8)), [step["step"] for step in path])
         self.assertIn(
             "Stage 20 does not create methodology.",
+            self_description["limitations"],
+        )
+        self.assertIn(
+            "Stage 20 does not introduce new reasoning.",
+            self_description["limitations"],
+        )
+        self.assertIn(
+            "Stage 20 does not perform self-improvement.",
+            self_description["limitations"],
+        )
+        self.assertIn(
+            "Stage 20 does not change framework behaviour.",
             self_description["limitations"],
         )
         self.assertIn(
@@ -6021,15 +6059,16 @@ class AdminSessionTests(unittest.TestCase):
             self_description
         )
         self.assertIn("<h3>Framework Self-Description Summary</h3>", rendered)
+        self.assertIn("<h3>Framework Description</h3>", rendered)
         self.assertIn("<h3>Framework Identity</h3>", rendered)
         self.assertIn("<h3>Purpose Description</h3>", rendered)
         self.assertIn("<h3>Scope Description</h3>", rendered)
-        self.assertIn("<h3>Framework Architecture View</h3>", rendered)
+        self.assertIn("<h3>Framework Architecture</h3>", rendered)
         self.assertIn("<h3>Framework Guarantees</h3>", rendered)
         self.assertIn("<h3>Framework Constraints</h3>", rendered)
-        self.assertIn("<h3>Reflexive Methodology Description</h3>", rendered)
-        self.assertIn("<h3>Reflexive Methodology Path</h3>", rendered)
-        self.assertIn("<h3>Limitations</h3>", rendered)
+        self.assertIn("<h3>Reflexive Methodology</h3>", rendered)
+        self.assertIn("<h3>Self-Description Path</h3>", rendered)
+        self.assertIn("<h3>Framework Limitations</h3>", rendered)
         self.assertIn(
             "<td>Framework Name</td><td>Civic Record Evaluation Framework</td>",
             rendered,
@@ -8304,14 +8343,16 @@ class AdminSessionTests(unittest.TestCase):
             after_content,
         )
         self.assertIn("Framework Self-Description", after_content)
+        self.assertIn("Framework Description", after_content)
         self.assertIn("Framework Identity", after_content)
         self.assertIn("Purpose Description", after_content)
         self.assertIn("Scope Description", after_content)
-        self.assertIn("Framework Architecture View", after_content)
+        self.assertIn("Framework Architecture", after_content)
         self.assertIn("Framework Guarantees", after_content)
         self.assertIn("Framework Constraints", after_content)
-        self.assertIn("Reflexive Methodology Description", after_content)
-        self.assertIn("Reflexive Methodology Path", after_content)
+        self.assertIn("Framework Limitations", after_content)
+        self.assertIn("Reflexive Methodology", after_content)
+        self.assertIn("Self-Description Path", after_content)
         self.assertIn(
             "<td>Reflexive Methodology State</td><td>Framework Self-Description Available</td>",
             after_content,
@@ -9746,14 +9787,16 @@ class AdminSessionTests(unittest.TestCase):
             content,
         )
         self.assertIn("Framework Self-Description", content)
+        self.assertIn("Framework Description", content)
         self.assertIn("Framework Identity", content)
         self.assertIn("Purpose Description", content)
         self.assertIn("Scope Description", content)
-        self.assertIn("Framework Architecture View", content)
+        self.assertIn("Framework Architecture", content)
         self.assertIn("Framework Guarantees", content)
         self.assertIn("Framework Constraints", content)
-        self.assertIn("Reflexive Methodology Description", content)
-        self.assertIn("Reflexive Methodology Path", content)
+        self.assertIn("Framework Limitations", content)
+        self.assertIn("Reflexive Methodology", content)
+        self.assertIn("Self-Description Path", content)
         self.assertIn(
             "<td>Reflexive Methodology State</td><td>Framework Self-Description Available</td>",
             content,
@@ -10967,10 +11010,12 @@ class AdminSessionTests(unittest.TestCase):
             "<h3>Framework Self-Description Summary</h3>",
             print_governance_content,
         )
-        self.assertIn("<h3>Framework Architecture View</h3>", print_governance_content)
+        self.assertIn("<h3>Framework Description</h3>", print_governance_content)
+        self.assertIn("<h3>Framework Architecture</h3>", print_governance_content)
         self.assertIn("<h3>Framework Guarantees</h3>", print_governance_content)
         self.assertIn("<h3>Framework Constraints</h3>", print_governance_content)
-        self.assertIn("<h3>Reflexive Methodology Path</h3>", print_governance_content)
+        self.assertIn("<h3>Framework Limitations</h3>", print_governance_content)
+        self.assertIn("<h3>Self-Description Path</h3>", print_governance_content)
         self.assertIn(
             "details.admin-section-group > .admin-section-body",
             content,
