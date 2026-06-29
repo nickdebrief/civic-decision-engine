@@ -146,6 +146,20 @@ determine truth or liability, or modify records.
 
 ---
 
+## Stage 21 — Report Structure & Output Modes
+
+Organises the Admin Record Evidence view into Executive Report, Review Report,
+and Full Inspection Report modes. Executive mode presents concise current-state
+and progression summaries; Review mode adds trace, citation, attribution, and
+boundary summaries; Full Inspection mode preserves every existing report
+section and supporting-evidence detail.
+
+Stage 21 changes presentation and report composition only. It does not change
+framework reasoning, evidence relationships, thresholds, classifications,
+hashes, or record data. Full Inspection Report remains the default mode.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

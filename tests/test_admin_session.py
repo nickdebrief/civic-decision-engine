@@ -110,8 +110,9 @@ def install_fastapi_stubs():
 
 
 class FakeRequest:
-    def __init__(self, cookies=None):
+    def __init__(self, cookies=None, query_params=None):
         self.cookies = cookies or {}
+        self.query_params = query_params or {}
 
 
 class FakeUploadFile:
@@ -6074,6 +6075,146 @@ class AdminSessionTests(unittest.TestCase):
             rendered,
         )
 
+    def test_stage21_report_mode_classification_and_structure_are_deterministic(self):
+        classify = self.admin_session.classify_report_mode
+
+        self.assertEqual("Executive Report", classify("executive"))
+        self.assertEqual("Review Report", classify("review"))
+        self.assertEqual("Full Inspection Report", classify("full"))
+        self.assertEqual("Full Inspection Report", classify(None))
+        self.assertEqual("Full Inspection Report", classify("unsupported"))
+
+        review = self.admin_session.build_stage21_report_structure("review")
+        self.assertEqual("review", review["report_mode"])
+        self.assertEqual("Review Report", review["report_mode_label"])
+        self.assertEqual(3, len(review["available_report_modes"]))
+        self.assertEqual(11, len(review["section_index"]))
+        self.assertEqual(
+            list(range(1, 12)),
+            [section["section_number"] for section in review["section_index"]],
+        )
+        self.assertIn(
+            "This report mode is a summary view.",
+            review["limitations"],
+        )
+        self.assertEqual(
+            review,
+            self.admin_session.build_stage21_report_structure("review"),
+        )
+
+    def test_stage21_report_modes_preserve_values_and_scope_output(self):
+        evidence_groups = {
+            "condition": [
+                {
+                    "target_label": "Escalation Without Response",
+                    "attachments": [],
+                    "relationship_count": 0,
+                    "relationship_type_counts": {},
+                }
+            ],
+            "signal": [],
+            "finding": [],
+            "record": [],
+        }
+        inputs = {
+            "reference": "CREF-STAGE21-001",
+            "record_version": 1,
+            "evidence_groups": evidence_groups,
+            "record_outputs": {
+                "reference": "CREF-STAGE21-001",
+                "case_title": "Stage 21 fixture",
+                "conditions": ["Escalation Without Response"],
+            },
+            "record_metadata": {
+                "reference": "CREF-STAGE21-001",
+                "version": 1,
+                "generated_at": "2026-06-29T10:00:00Z",
+                "verification_hash": "a" * 64,
+            },
+            "version_history": [
+                {
+                    "reference": "CREF-STAGE21-001",
+                    "version": 1,
+                    "generated_at": "2026-06-29T10:00:00Z",
+                    "verification_hash": "a" * 64,
+                    "is_latest": 1,
+                }
+            ],
+        }
+
+        default_full = self.admin_session.render_admin_record_evidence_page(**inputs)
+        explicit_full = self.admin_session.render_admin_record_evidence_page(
+            **inputs,
+            report_mode="full",
+        )
+        executive = self.admin_session.render_admin_record_evidence_page(
+            **inputs,
+            report_mode="executive",
+        )
+        review = self.admin_session.render_admin_record_evidence_page(
+            **inputs,
+            report_mode="review",
+        )
+
+        for content, mode in (
+            (default_full, "Full Inspection Report"),
+            (explicit_full, "Full Inspection Report"),
+            (executive, "Executive Report"),
+            (review, "Review Report"),
+        ):
+            self.assertIn("Report Navigation", content)
+            self.assertIn("Report Section Index", content)
+            self.assertIn(f"<td>Current Report Mode</td><td>{mode}</td>", content)
+            self.assertIn("CREF-STAGE21-001", content)
+            self.assertIn("Unsupported", content)
+            self.assertIn("Report Mode Limitations", content)
+
+        self.assertIn("Executive Report Summary", executive)
+        self.assertIn("Administrative State Table", executive)
+        self.assertIn("Evidence State Summary", executive)
+        self.assertIn("Progression Requirements Table", executive)
+        self.assertIn("Determination Trace Summary", executive)
+        self.assertIn("Framework Limitations", executive)
+        self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
+        self.assertNotIn("supporting-evidence-admin-group", executive)
+        self.assertIn(
+            "Full inspection remains available in Full Inspection Report mode.",
+            executive,
+        )
+
+        self.assertIn("Review Support Detail", review)
+        self.assertIn("Target-Level Evidence Summary", review)
+        self.assertIn("Rule Citation Summary", review)
+        self.assertIn("Evidence Attribution Summary", review)
+        self.assertIn("Sufficiency Boundaries Summary", review)
+        self.assertIn("Counterfactual Visibility Summary", review)
+        self.assertIn("Explainability Certification Summary", review)
+        self.assertIn("<h2>Determination Trace</h2>", review)
+        self.assertNotIn("stage19c-evidence-attribution-matrix", review)
+
+        for section in (
+            "Administrative Workflow",
+            "Outcome Analysis",
+            "Resolution Analysis",
+            "Closure Analysis",
+            "Archive Analysis",
+            "Supporting Evidence",
+            "Record Evolution Accountability",
+            "Determination Trace",
+            "Rule Citation Layer",
+            "Evidence Attribution Matrix",
+            "Sufficiency Boundaries",
+            "Counterfactual Visibility",
+            "Explainability Certification",
+            "Framework Self-Description",
+        ):
+            self.assertIn(section, explicit_full)
+        self.assertIn(
+            "This mode preserves the complete visible framework inspection record.",
+            explicit_full,
+        )
+        self.assertEqual(default_full, explicit_full)
+
     def session_from_response(self, response):
         cookie = response.headers["Set-Cookie"]
         prefix = f"{self.admin_session.SESSION_COOKIE_NAME}="
@@ -6325,10 +6466,54 @@ class AdminSessionTests(unittest.TestCase):
         )
         conn.commit()
 
-    def valid_request(self):
+    def valid_request(self, report_mode=None):
         with self.env():
             session = self.admin_session.create_admin_session()
-        return FakeRequest({self.admin_session.SESSION_COOKIE_NAME: session})
+        query_params = (
+            {"report_mode": report_mode}
+            if report_mode is not None
+            else {}
+        )
+        return FakeRequest(
+            {self.admin_session.SESSION_COOKIE_NAME: session},
+            query_params=query_params,
+        )
+
+    def test_stage21_admin_route_selects_report_mode_from_query_parameter(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_db_path = self.admin_session.DB_PATH
+            self.admin_session.DB_PATH = Path(temp_dir) / "records.db"
+            conn = self.make_admin_listing_db(self.admin_session.DB_PATH)
+            conn.close()
+            try:
+                with self.env():
+                    executive_response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request("executive"),
+                    )
+                    fallback_response = self.admin_session.admin_record_evidence_page(
+                        "Strike-OT-20260604-ADMIN",
+                        self.valid_request("unknown"),
+                    )
+            finally:
+                self.admin_session.DB_PATH = original_db_path
+
+        self.assertIn(
+            "<td>Current Report Mode</td><td>Executive Report</td>",
+            executive_response.content,
+        )
+        self.assertNotIn(
+            "stage19c-evidence-attribution-matrix",
+            executive_response.content,
+        )
+        self.assertIn(
+            "<td>Current Report Mode</td><td>Full Inspection Report</td>",
+            fallback_response.content,
+        )
+        self.assertIn(
+            "stage19c-evidence-attribution-matrix",
+            fallback_response.content,
+        )
 
     def test_admin_attachment_listing_requires_session(self):
         with tempfile.TemporaryDirectory() as temp_dir:
