@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "The Civic Record Evaluation Framework (CREF)"
+message: "If you use this framework, please cite it using the metadata below."
+type: software
+authors:
+  - family-names: Moloney
+    given-names: Nick
+title: "The Civic Record Evaluation Framework (CREF), Version 2.0"
+version: "2.0"
+doi: 10.5281/zenodo.21033426
+date-released: 2026-06-29
+repository-code: https://github.com/nickdebrief/civic-decision-engine
+keywords:
+  - Civic Record Evaluation Framework
+  - CREF
+  - Deterministic Methodology
+  - Administrative Record Evaluation
+  - Explainability
+  - Traceability
+  - Reproducibility
+  - Transparency
+  - Accountability
+  - Records Management
+  - Digital Governance
+license: MIT
