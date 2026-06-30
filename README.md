@@ -208,6 +208,22 @@ or record data.
 
 ---
 
+## Stage 23 — Pathway Stability Analysis
+
+Evaluates the structural stability of eight existing determination pathways
+using Stage 22 dependency availability, evidence readiness, sufficiency and
+completeness, and existing administrative readiness outputs. Pathways are
+classified as stable, partially stable, evidence-sensitive, unstable, or not
+available without altering their underlying values.
+
+Executive mode presents the stability state and administrative path summary;
+Review mode adds stability inputs, key pathway classifications, sensitivity
+indicators, and paths; Full Inspection mode presents the complete stability
+analysis. Stage 23 is deterministic structural inspection only. It does not
+predict outcomes, validate evidence, change dependencies, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

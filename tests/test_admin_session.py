@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import io
 import importlib
@@ -6088,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(12, len(review["section_index"]))
+        self.assertEqual(13, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 13)),
+            list(range(1, 14)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -6229,6 +6230,216 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Upstream Dependencies</h3>", full)
         self.assertIn("<h3>Downstream Dependents</h3>", full)
 
+    def test_stage23_pathway_stability_states_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        current_values.update(
+            {
+                "evidence_readiness": "Ready",
+                "review_eligibility": "Eligible",
+                "outcome_readiness": "Ready",
+                "resolution_readiness": "Ready",
+                "closure_readiness": "Ready",
+                "archive_classification": "Archive Eligible",
+            }
+        )
+        complete_evidence = {
+            "coverage": {"unsupported_targets": 0},
+            "sufficiency": {"overall": "Sufficient"},
+            "completeness": {
+                "overall": "Complete",
+                "incomplete_targets": 0,
+            },
+            "requirements": {"additional_required": 0},
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        original_map = copy.deepcopy(dependency_map)
+        original_evidence = copy.deepcopy(complete_evidence)
+        stable = self.admin_session.build_pathway_stability_analysis(
+            dependency_map,
+            complete_evidence,
+        )
+
+        self.assertEqual("Stable Pathway", stable["stability_state"])
+        self.assertEqual(8, len(stable["pathways"]))
+        self.assertEqual(
+            8,
+            stable["pathway_stability_summary"]["stable_pathways_count"],
+        )
+        self.assertEqual([], stable["evidence_sensitivity_indicators"])
+        self.assertEqual(
+            stable,
+            self.admin_session.build_pathway_stability_analysis(
+                dependency_map,
+                complete_evidence,
+            ),
+        )
+        self.assertEqual(original_map, dependency_map)
+        self.assertEqual(original_evidence, complete_evidence)
+
+        partial_values = dict(current_values)
+        partial_values["resolution_readiness"] = "Conditionally Ready"
+        partial = self.admin_session.build_pathway_stability_analysis(
+            self.admin_session.build_determination_dependency_map(partial_values),
+            complete_evidence,
+        )
+        self.assertEqual("Partially Stable Pathway", partial["stability_state"])
+        self.assertGreater(
+            partial["pathway_stability_summary"]["partially_stable_pathways_count"],
+            0,
+        )
+
+        sensitive_values = dict(current_values)
+        sensitive_values["evidence_readiness"] = "Evidence Gaps Present"
+        evidence_sensitive = self.admin_session.build_pathway_stability_analysis(
+            self.admin_session.build_determination_dependency_map(sensitive_values),
+            {
+                "coverage": {"unsupported_targets": 2},
+                "sufficiency": {"overall": "Partial"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 2,
+                },
+                "requirements": {"additional_required": 2},
+            },
+        )
+        self.assertEqual(
+            "Evidence-Sensitive Pathway",
+            evidence_sensitive["stability_state"],
+        )
+        self.assertIn(
+            "Evidence gaps present",
+            [
+                indicator["indicator"]
+                for indicator in evidence_sensitive[
+                    "evidence_sensitivity_indicators"
+                ]
+            ],
+        )
+
+        unstable_values = dict(current_values)
+        unstable_values.pop("closure_readiness")
+        unstable = self.admin_session.build_pathway_stability_analysis(
+            self.admin_session.build_determination_dependency_map(unstable_values),
+            complete_evidence,
+        )
+        self.assertEqual("Unstable Pathway", unstable["stability_state"])
+
+        unavailable = self.admin_session.build_pathway_stability_analysis()
+        self.assertEqual("Stability Not Available", unavailable["stability_state"])
+
+    def test_stage23_stability_inputs_pathways_and_limitations_are_visible(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        current_values.update(
+            {
+                "evidence_readiness": "Evidence Gaps Present",
+                "review_eligibility": "Not Eligible",
+                "administrative_status": "Active Evidence Review",
+                "outcome_readiness": "Not Ready",
+                "resolution_readiness": "Not Ready",
+                "closure_readiness": "Not Ready",
+                "archive_classification": "Not Archivable",
+            }
+        )
+        analysis = self.admin_session.build_pathway_stability_analysis(
+            self.admin_session.build_determination_dependency_map(current_values),
+            {
+                "coverage": {"unsupported_targets": 1},
+                "sufficiency": {"overall": "Unsupported"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 1,
+                },
+                "requirements": {"additional_required": 1},
+            },
+        )
+
+        inputs = analysis["stability_inputs"]
+        self.assertEqual("Complete Dependency Map", inputs["dependency_completeness_state"])
+        self.assertEqual(0, inputs["missing_dependency_count"])
+        self.assertEqual("Unsupported", inputs["evidence_sufficiency"])
+        self.assertEqual("Incomplete", inputs["evidence_completeness"])
+        self.assertEqual("Active Evidence Review", inputs["administrative_status"])
+        self.assertEqual(
+            [
+                "Administrative Determination Path",
+                "Evidence Review Path",
+                "Outcome Path",
+                "Resolution Path",
+                "Closure Path",
+                "Archive Path",
+                "Explainability Path",
+                "Report Mode Path",
+            ],
+            [pathway["pathway_name"] for pathway in analysis["pathways"]],
+        )
+        self.assertEqual(2, len(analysis["stability_paths"]))
+        self.assertEqual(
+            list(range(1, 9)),
+            [
+                step["step"]
+                for step in analysis["stability_paths"][0]["steps"]
+            ],
+        )
+        self.assertIn(
+            "Pathway stability analysis does not predict outcomes.",
+            analysis["limitations"],
+        )
+
+    def test_stage23_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        analysis = self.admin_session.build_pathway_stability_analysis(
+            self.admin_session.build_determination_dependency_map(current_values),
+            {
+                "coverage": {"unsupported_targets": 1},
+                "sufficiency": {"overall": "Partial"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 1,
+                },
+                "requirements": {"additional_required": 1},
+            },
+        )
+        executive = self.admin_session._render_pathway_stability_analysis(
+            analysis,
+            report_mode="executive",
+        )
+        review = self.admin_session._render_pathway_stability_analysis(
+            analysis,
+            report_mode="review",
+        )
+        full = self.admin_session._render_pathway_stability_analysis(
+            analysis,
+            report_mode="full",
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Pathway Stability Analysis</h2>", rendered)
+            self.assertIn("<h3>Stability Overview</h3>", rendered)
+            self.assertIn("<h3>Evidence Sensitivity Indicators</h3>", rendered)
+            self.assertIn("<h3>Stability Path View</h3>", rendered)
+            self.assertIn("<h3>Stability Limitations</h3>", rendered)
+        self.assertIn("stage23-stability-summary", executive)
+        self.assertNotIn("<h3>Stability Input Summary</h3>", executive)
+        self.assertNotIn("<h3>Pathway-Level Stability</h3>", executive)
+        self.assertIn("stage23-stability-review", review)
+        self.assertIn("<h3>Stability Input Summary</h3>", review)
+        self.assertIn("PW-007", review)
+        self.assertNotIn("PW-008", review)
+        self.assertIn("stage23-stability-full", full)
+        self.assertIn("PW-008", full)
+        self.assertIn("<h3>Pathway Stability Summary</h3>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -6305,6 +6516,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage22-dependency-summary", executive)
         self.assertIn("Dependency Map Available", executive)
         self.assertNotIn("<h3>Dependency Nodes</h3>", executive)
+        self.assertIn("stage23-stability-summary", executive)
+        self.assertIn("<h2>Pathway Stability Analysis</h2>", executive)
+        self.assertNotIn("<h3>Pathway-Level Stability</h3>", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -6323,6 +6537,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Key Upstream Dependencies", review)
         self.assertIn("Key Downstream Dependents", review)
         self.assertNotIn("<h3>Dependency Nodes</h3>", review)
+        self.assertIn("stage23-stability-review", review)
+        self.assertIn("<h3>Stability Input Summary</h3>", review)
+        self.assertIn("<h3>Stability Path View</h3>", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -6342,10 +6559,18 @@ class AdminSessionTests(unittest.TestCase):
             "Explainability Certification",
             "Framework Self-Description",
             "Determination Dependency Mapping",
+            "Pathway Stability Analysis",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
         self.assertIn("<h3>Dependency Nodes</h3>", explicit_full)
+        self.assertIn("stage23-stability-full", explicit_full)
+        self.assertIn("<h3>Pathway-Level Stability</h3>", explicit_full)
+        self.assertLess(
+            explicit_full.index("Determination Dependency Mapping"),
+            explicit_full.index("Pathway Stability Analysis"),
+        )
+        self.assertIn("@media print", explicit_full)
         self.assertIn(
             "This mode preserves the complete visible framework inspection record.",
             explicit_full,
