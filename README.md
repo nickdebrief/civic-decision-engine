@@ -456,3 +456,22 @@ The record does not argue.
 
 It becomes clear enough  
 to be returned to.
+
+---
+
+## Research Publications
+
+The Civic Record Evaluation Framework (CREF) is accompanied by published research materials.
+
+- Version 1.0 – Foundational methodology paper
+- Version 2.0 – Reflexive methodology and self-description paper
+
+Research documents are available in:
+
+docs/research/
+
+DOI:
+https://doi.org/10.5281/zenodo.21033426
+
+Open Science Framework:
+https://osf.io/wz29x/files/vf4h5
