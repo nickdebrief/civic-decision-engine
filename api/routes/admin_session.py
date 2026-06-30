@@ -32136,6 +32136,7 @@ STAGE21_SECTION_INDEX = (
     ("Supporting Evidence", False, "Target Summary", "Detail"),
     ("Framework Self-Description", "Limitations", "Summary", "Detail"),
     ("Determination Dependency Mapping", "Summary", "Overview and Paths", "Detail"),
+    ("Pathway Stability Analysis", "Summary", "Overview and Paths", "Detail"),
 )
 
 
@@ -32814,6 +32815,54 @@ def _stage22_current_values(
         implementation_action=administrative_values["implementation_action"],
         effective_state=administrative_values["effective_state"],
     )
+    archive_preconditions = _archive_preconditions(
+        archive_classification=archive_classification,
+        closure_classification=closure_classification,
+        closure_completion=closure_completion,
+        closure_determination=closure_determination,
+        closure_readiness=closure_readiness,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    archive_pathway = _archive_pathway(
+        archive_classification=archive_classification,
+        archive_preconditions=archive_preconditions,
+        closure_classification=closure_classification,
+        closure_completion=closure_completion,
+        closure_determination=closure_determination,
+        closure_readiness=closure_readiness,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    archive_readiness = _archive_readiness(
+        archive_classification=archive_classification,
+        archive_preconditions=archive_preconditions,
+        archive_pathway=archive_pathway,
+        closure_classification=closure_classification,
+        closure_completion=closure_completion,
+        closure_determination=closure_determination,
+        closure_readiness=closure_readiness,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
     return {
         "record_context": reference,
         "evidence_readiness": administrative_values["readiness"],
@@ -32837,6 +32886,7 @@ def _stage22_current_values(
         "closure_determination": closure_determination,
         "closure_completion": closure_completion,
         "archive_classification": archive_classification,
+        "archive_readiness": archive_readiness,
         "determination_trace": explainability_outputs["trace"].get("determination"),
         "rule_citation": explainability_outputs["citations"]["citation_summary"].get("citation_state"),
         "evidence_attribution": explainability_outputs["attribution"]["attribution_summary"].get("attribution_state"),
@@ -33237,6 +33287,763 @@ def _render_determination_dependency_mapping(
     return f"""
       <section class="management-section stage22-determination-dependency-mapping {mode_class}">
         <h2>Determination Dependency Mapping</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
+STAGE23_LIMITATIONS = (
+    "Pathway stability analysis describes structural stability of existing framework pathways only.",
+    "Pathway stability analysis does not determine truth.",
+    "Pathway stability analysis does not determine liability.",
+    "Pathway stability analysis does not infer intent.",
+    "Pathway stability analysis does not assign blame.",
+    "Pathway stability analysis does not validate evidence.",
+    "Pathway stability analysis does not determine factual correctness.",
+    "Pathway stability analysis does not determine legal sufficiency.",
+    "Pathway stability analysis does not determine real-world evidential sufficiency.",
+    "Pathway stability analysis does not predict outcomes.",
+    "Pathway stability analysis does not forecast future record states.",
+    "Pathway stability analysis does not determine whether additional evidence will change a classification.",
+    "Pathway stability analysis does not create evidence.",
+    "Pathway stability analysis does not create rules.",
+    "Pathway stability analysis does not create conditions.",
+    "Pathway stability analysis does not modify records.",
+    "Pathway stability analysis does not change classifications.",
+    "Pathway stability analysis does not change thresholds.",
+    "Pathway stability analysis does not change dependencies.",
+    "Pathway stability analysis does not change report modes.",
+)
+
+
+STAGE23_PATHWAY_DEFINITIONS = (
+    (
+        "PW-001",
+        "Administrative Determination Path",
+        "effective_state",
+        (
+            "record_context",
+            "evidence_readiness",
+            "administrative_action",
+            "workflow_state",
+            "administrative_disposition",
+            "review_eligibility",
+            "administrative_status",
+            "implementation_action",
+            "effective_state",
+        ),
+        True,
+    ),
+    (
+        "PW-002",
+        "Evidence Review Path",
+        "evidence_readiness",
+        ("record_context", "evidence_readiness"),
+        True,
+    ),
+    (
+        "PW-003",
+        "Outcome Path",
+        "outcome_classification",
+        (
+            "record_context",
+            "evidence_readiness",
+            "review_eligibility",
+            "administrative_status",
+            "implementation_action",
+            "effective_state",
+            "outcome_classification",
+            "outcome_readiness",
+            "outcome_target",
+        ),
+        True,
+    ),
+    (
+        "PW-004",
+        "Resolution Path",
+        "resolution_classification",
+        (
+            "record_context",
+            "outcome_classification",
+            "outcome_readiness",
+            "outcome_target",
+            "resolution_classification",
+            "resolution_pathway",
+            "resolution_readiness",
+            "resolution_determination",
+            "resolution_completion",
+        ),
+        True,
+    ),
+    (
+        "PW-005",
+        "Closure Path",
+        "closure_classification",
+        (
+            "record_context",
+            "resolution_classification",
+            "resolution_readiness",
+            "resolution_determination",
+            "resolution_completion",
+            "closure_classification",
+            "closure_readiness",
+            "closure_determination",
+            "closure_completion",
+        ),
+        True,
+    ),
+    (
+        "PW-006",
+        "Archive Path",
+        "archive_classification",
+        (
+            "record_context",
+            "closure_classification",
+            "closure_readiness",
+            "closure_determination",
+            "closure_completion",
+            "archive_classification",
+        ),
+        True,
+    ),
+    (
+        "PW-007",
+        "Explainability Path",
+        "explainability_certification",
+        (
+            "record_context",
+            "determination_trace",
+            "rule_citation",
+            "evidence_attribution",
+            "sufficiency_boundaries",
+            "counterfactual_visibility",
+            "explainability_certification",
+            "framework_self_description",
+        ),
+        False,
+    ),
+    (
+        "PW-008",
+        "Report Mode Path",
+        "report_mode",
+        (
+            "record_context",
+            "administrative_status",
+            "outcome_classification",
+            "resolution_classification",
+            "closure_classification",
+            "archive_classification",
+            "determination_trace",
+            "rule_citation",
+            "evidence_attribution",
+            "explainability_certification",
+            "framework_self_description",
+            "report_mode",
+        ),
+        False,
+    ),
+)
+
+
+STAGE23_STABILITY_LABELS = {
+    "Stable Pathway": "Structurally Stable",
+    "Partially Stable Pathway": "Structurally Available With Open Evidence Conditions",
+    "Evidence-Sensitive Pathway": "Evidence-Sensitive Determination Path",
+    "Unstable Pathway": "Dependency Gaps Present",
+    "Stability Not Available": "Stability Not Available",
+}
+
+
+def classify_pathway_stability(
+    *,
+    current_pathway_state: Any,
+    required_nodes_available: bool,
+    has_evidence_sensitivity: bool,
+    has_blocking_conditions: bool,
+    stability_inputs_available: bool = True,
+) -> str:
+    if not stability_inputs_available:
+        return "Stability Not Available"
+    if not required_nodes_available or current_pathway_state in (None, "", [], {}):
+        return "Unstable Pathway"
+    if has_evidence_sensitivity:
+        return "Evidence-Sensitive Pathway"
+    if has_blocking_conditions:
+        return "Partially Stable Pathway"
+    return "Stable Pathway"
+
+
+def _stage23_stability_inputs(
+    dependency_map: dict[str, Any] | None,
+    evidence_state: dict[str, Any] | None,
+    current_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_map = dict(dependency_map or {})
+    normalized_evidence = dict(evidence_state or {})
+    node_values = {
+        str(node.get("node_key")): node.get("current_value")
+        for node in normalized_map.get("nodes") or []
+    }
+    coverage = dict(normalized_evidence.get("coverage") or {})
+    sufficiency = dict(normalized_evidence.get("sufficiency") or {})
+    completeness = dict(normalized_evidence.get("completeness") or {})
+    requirements = dict(normalized_evidence.get("requirements") or {})
+    normalized_current_values = dict(current_values or {})
+    dependency_completeness = dict(
+        normalized_map.get("dependency_completeness") or {}
+    )
+    archive_classification = node_values.get("archive_classification")
+    archive_readiness = normalized_current_values.get("archive_readiness")
+    return {
+        "dependency_completeness_state": dependency_completeness.get(
+            "classification"
+        ),
+        "missing_dependency_count": dependency_completeness.get(
+            "missing_dependency_nodes"
+        ),
+        "evidence_readiness": node_values.get("evidence_readiness"),
+        "evidence_sufficiency": sufficiency.get("overall"),
+        "evidence_completeness": completeness.get("overall"),
+        "unsupported_targets_count": coverage.get("unsupported_targets"),
+        "incomplete_targets_count": completeness.get("incomplete_targets"),
+        "additional_attachments_required": requirements.get(
+            "additional_required"
+        ),
+        "administrative_status": node_values.get("administrative_status"),
+        "effective_state": node_values.get("effective_state"),
+        "review_eligibility": node_values.get("review_eligibility"),
+        "outcome_classification": node_values.get("outcome_classification"),
+        "outcome_readiness": node_values.get("outcome_readiness"),
+        "resolution_classification": node_values.get("resolution_classification"),
+        "resolution_readiness": node_values.get("resolution_readiness"),
+        "closure_classification": node_values.get("closure_classification"),
+        "closure_readiness": node_values.get("closure_readiness"),
+        "archive_classification": archive_classification,
+        "archive_readiness": archive_readiness,
+    }
+
+
+def _stage23_evidence_sensitivity_indicators(
+    stability_inputs: dict[str, Any],
+) -> list[dict[str, Any]]:
+    indicator_definitions = (
+        (
+            "SI-001",
+            "Evidence gaps present",
+            stability_inputs.get("evidence_readiness") == "Evidence Gaps Present",
+            stability_inputs.get("evidence_readiness"),
+        ),
+        (
+            "SI-002",
+            "Evidence sufficiency partial",
+            stability_inputs.get("evidence_sufficiency") in {"Partial", "Unsupported"},
+            stability_inputs.get("evidence_sufficiency"),
+        ),
+        (
+            "SI-003",
+            "Evidence completeness incomplete",
+            stability_inputs.get("evidence_completeness") in {"Partial", "Incomplete"},
+            stability_inputs.get("evidence_completeness"),
+        ),
+        (
+            "SI-004",
+            "Unsupported targets present",
+            int(stability_inputs.get("unsupported_targets_count") or 0) > 0,
+            stability_inputs.get("unsupported_targets_count"),
+        ),
+        (
+            "SI-005",
+            "Incomplete targets present",
+            int(stability_inputs.get("incomplete_targets_count") or 0) > 0,
+            stability_inputs.get("incomplete_targets_count"),
+        ),
+        (
+            "SI-006",
+            "Additional attachments required",
+            int(stability_inputs.get("additional_attachments_required") or 0) > 0,
+            stability_inputs.get("additional_attachments_required"),
+        ),
+        (
+            "SI-007",
+            "Review eligibility not satisfied",
+            stability_inputs.get("review_eligibility") not in {None, "Eligible"},
+            stability_inputs.get("review_eligibility"),
+        ),
+        (
+            "SI-008",
+            "Resolution not ready",
+            stability_inputs.get("resolution_readiness") not in {None, "Ready", "Resolved"},
+            stability_inputs.get("resolution_readiness"),
+        ),
+        (
+            "SI-009",
+            "Closure not ready",
+            stability_inputs.get("closure_readiness") not in {None, "Ready"},
+            stability_inputs.get("closure_readiness"),
+        ),
+        (
+            "SI-010",
+            "Archive not ready",
+            stability_inputs.get("archive_readiness") not in {None, "Ready", "Archived"},
+            stability_inputs.get("archive_readiness"),
+        ),
+    )
+    return [
+        {
+            "indicator_id": indicator_id,
+            "indicator": indicator,
+            "indicator_state": "Present",
+            "source_value": source_value,
+            "visibility_basis": (
+                "Existing framework output visibly records this structural sensitivity."
+            ),
+            "limitations": (
+                "Indicator presence does not predict whether evidence or a later record state will change the pathway."
+            ),
+        }
+        for indicator_id, indicator, is_present, source_value in indicator_definitions
+        if is_present
+    ]
+
+
+def build_pathway_stability_analysis(
+    dependency_map: dict[str, Any] | None = None,
+    evidence_state: dict[str, Any] | None = None,
+    current_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_map = dict(dependency_map or {})
+    stability_inputs = _stage23_stability_inputs(
+        normalized_map,
+        evidence_state,
+        current_values,
+    )
+    indicators = _stage23_evidence_sensitivity_indicators(stability_inputs)
+    nodes = normalized_map.get("nodes") or []
+    node_by_key = {str(node.get("node_key")): node for node in nodes}
+    dependency_inputs_available = bool(nodes)
+    evidence_indicator_ids = {
+        "SI-001",
+        "SI-002",
+        "SI-003",
+        "SI-004",
+        "SI-005",
+        "SI-006",
+    }
+    indicator_by_id = {
+        str(indicator["indicator_id"]): indicator for indicator in indicators
+    }
+    pathways = []
+    for pathway_id, pathway_name, current_key, required_keys, evidence_dependent in STAGE23_PATHWAY_DEFINITIONS:
+        required_nodes = [
+            node_by_key[key]["node_id"] for key in required_keys if key in node_by_key
+        ]
+        available_nodes = [
+            node_by_key[key]["node_id"]
+            for key in required_keys
+            if key in node_by_key
+            and node_by_key[key].get("dependency_state") == "Available"
+        ]
+        missing_nodes = [
+            node_by_key[key]["node_id"]
+            for key in required_keys
+            if key in node_by_key
+            and node_by_key[key].get("dependency_state") != "Available"
+        ]
+        missing_nodes.extend(
+            key for key in required_keys if key not in node_by_key
+        )
+        current_state = (
+            stability_inputs.get(current_key)
+            if current_key in stability_inputs
+            else node_by_key.get(current_key, {}).get("current_value")
+        )
+        pathway_indicator_ids = []
+        if evidence_dependent:
+            pathway_indicator_ids.extend(
+                indicator_id
+                for indicator_id in indicator_by_id
+                if indicator_id in evidence_indicator_ids
+            )
+        if pathway_id in {"PW-001", "PW-003", "PW-004", "PW-005", "PW-006"} and "SI-007" in indicator_by_id:
+            pathway_indicator_ids.append("SI-007")
+        if pathway_id in {"PW-004", "PW-005", "PW-006"} and "SI-008" in indicator_by_id:
+            pathway_indicator_ids.append("SI-008")
+        if pathway_id in {"PW-005", "PW-006"} and "SI-009" in indicator_by_id:
+            pathway_indicator_ids.append("SI-009")
+        if pathway_id == "PW-006" and "SI-010" in indicator_by_id:
+            pathway_indicator_ids.append("SI-010")
+        evidence_sensitive = any(
+            indicator_id in evidence_indicator_ids
+            for indicator_id in pathway_indicator_ids
+        )
+        blocking_conditions = [
+            indicator_by_id[indicator_id]["indicator"]
+            for indicator_id in pathway_indicator_ids
+            if indicator_id not in evidence_indicator_ids
+        ]
+        classification = classify_pathway_stability(
+            current_pathway_state=current_state,
+            required_nodes_available=(
+                len(required_nodes) == len(required_keys) and not missing_nodes
+            ),
+            has_evidence_sensitivity=evidence_sensitive,
+            has_blocking_conditions=bool(blocking_conditions),
+            stability_inputs_available=dependency_inputs_available,
+        )
+        if classification == "Stable Pathway":
+            basis = "All required dependency nodes and the current pathway state are visibly available."
+        elif classification == "Evidence-Sensitive Pathway":
+            basis = "The pathway is structurally available but existing evidence-state outputs identify open evidence conditions."
+        elif classification == "Partially Stable Pathway":
+            basis = "The pathway is structurally available but existing readiness or administrative conditions remain open."
+        elif classification == "Unstable Pathway":
+            basis = "One or more required dependency nodes or the current pathway state are unavailable."
+        else:
+            basis = "Required dependency inputs are not available for stability inspection."
+        pathways.append(
+            {
+                "pathway_id": pathway_id,
+                "pathway_name": pathway_name,
+                "current_pathway_state": current_state,
+                "pathway_stability_classification": classification,
+                "stability_label": STAGE23_STABILITY_LABELS[classification],
+                "required_upstream_nodes": required_nodes,
+                "available_upstream_nodes": available_nodes,
+                "missing_upstream_nodes": missing_nodes,
+                "evidence_sensitivity_indicators": [
+                    indicator_by_id[indicator_id]["indicator"]
+                    for indicator_id in pathway_indicator_ids
+                    if indicator_id in indicator_by_id
+                ],
+                "blocking_conditions": blocking_conditions,
+                "stability_basis": basis,
+                "limitation_statement": (
+                    "Structural stability only; this pathway state does not establish truth, correctness, sufficiency, or a future outcome."
+                ),
+            }
+        )
+
+    counts = {
+        state: sum(
+            1
+            for pathway in pathways
+            if pathway["pathway_stability_classification"] == state
+        )
+        for state in STAGE23_STABILITY_LABELS
+    }
+    if pathways and counts["Stability Not Available"] == len(pathways):
+        stability_state = "Stability Not Available"
+    elif counts["Unstable Pathway"]:
+        stability_state = "Unstable Pathway"
+    elif counts["Evidence-Sensitive Pathway"]:
+        stability_state = "Evidence-Sensitive Pathway"
+    elif counts["Partially Stable Pathway"]:
+        stability_state = "Partially Stable Pathway"
+    elif pathways and counts["Stable Pathway"] == len(pathways):
+        stability_state = "Stable Pathway"
+    else:
+        stability_state = "Stability Not Available"
+
+    unstable_path = next(
+        (
+            pathway
+            for pathway in pathways
+            if pathway["pathway_stability_classification"] == "Unstable Pathway"
+        ),
+        None,
+    )
+    partial_path = next(
+        (
+            pathway
+            for pathway in pathways
+            if pathway["pathway_stability_classification"] == "Partially Stable Pathway"
+        ),
+        None,
+    )
+    if stability_state == "Stable Pathway":
+        primary_stability_basis = "All evaluated pathways are structurally available without visible dependency or readiness gaps."
+        primary_instability_basis = "No structural instability identified."
+    elif stability_state == "Evidence-Sensitive Pathway":
+        primary_stability_basis = "Current determinations remain structurally available and traceable."
+        primary_instability_basis = indicators[0]["indicator"] if indicators else "Open evidence conditions are visible."
+    elif stability_state == "Partially Stable Pathway":
+        primary_stability_basis = "Current pathways are structurally available."
+        primary_instability_basis = (
+            partial_path["blocking_conditions"][0]
+            if partial_path and partial_path["blocking_conditions"]
+            else "One or more readiness conditions remain open."
+        )
+    elif stability_state == "Unstable Pathway":
+        primary_stability_basis = "Available pathway components remain visible."
+        primary_instability_basis = (
+            f'{unstable_path["pathway_name"]} has missing required dependency nodes.'
+            if unstable_path
+            else "Dependency gaps are present."
+        )
+    else:
+        primary_stability_basis = "No stability basis is available."
+        primary_instability_basis = "Required stability inputs are unavailable."
+
+    path_definitions = (
+        (
+            "Administrative Stability Path",
+            (
+                "record_context",
+                "evidence_readiness",
+                "administrative_status",
+                "effective_state",
+                "outcome_classification",
+                "resolution_classification",
+                "closure_classification",
+                "archive_classification",
+            ),
+            pathways[0]["stability_label"] if pathways else "Stability Not Available",
+        ),
+        (
+            "Explainability Stability Path",
+            (
+                "record_context",
+                "determination_trace",
+                "rule_citation",
+                "evidence_attribution",
+                "sufficiency_boundaries",
+                "counterfactual_visibility",
+                "explainability_certification",
+                "framework_self_description",
+                "report_mode",
+            ),
+            pathways[6]["stability_label"] if len(pathways) > 6 else "Stability Not Available",
+        ),
+    )
+    stability_paths = [
+        {
+            "path_name": path_name,
+            "stability_label": stability_label,
+            "steps": [
+                {
+                    "step": index,
+                    "node_id": node_by_key.get(key, {}).get("node_id"),
+                    "label": node_by_key.get(key, {}).get("output_name", key),
+                    "current_value": node_by_key.get(key, {}).get("current_value"),
+                    "dependency_state": node_by_key.get(key, {}).get(
+                        "dependency_state", "Missing"
+                    ),
+                }
+                for index, key in enumerate(keys, start=1)
+            ],
+        }
+        for path_name, keys, stability_label in path_definitions
+    ]
+    summary = {
+        "stability_state": stability_state,
+        "stability_label": STAGE23_STABILITY_LABELS[stability_state],
+        "total_pathways_evaluated": len(pathways),
+        "stable_pathways_count": counts["Stable Pathway"],
+        "partially_stable_pathways_count": counts["Partially Stable Pathway"],
+        "evidence_sensitive_pathways_count": counts["Evidence-Sensitive Pathway"],
+        "unstable_pathways_count": counts["Unstable Pathway"],
+        "stability_not_available_count": counts["Stability Not Available"],
+        "primary_stability_basis": primary_stability_basis,
+        "primary_instability_basis": primary_instability_basis,
+        "limitation_summary": (
+            "Stability describes existing structural pathways only and does not predict outcomes or establish real-world sufficiency."
+        ),
+    }
+    return {
+        "stability_state": stability_state,
+        "stability_inputs": stability_inputs,
+        "pathway_stability_summary": summary,
+        "pathways": pathways,
+        "evidence_sensitivity_indicators": indicators,
+        "stability_paths": stability_paths,
+        "limitations": list(STAGE23_LIMITATIONS),
+    }
+
+
+def _render_stage23_overview(analysis: dict[str, Any]) -> str:
+    summary = analysis["pathway_stability_summary"]
+    return f"""
+      <section class="stage23-stability-overview">
+        <h3>Stability Overview</h3>
+        {_render_stage18a_table((
+            ("Stability State", summary["stability_state"]),
+            ("Stability Label", summary["stability_label"]),
+            ("Total Pathways Evaluated", summary["total_pathways_evaluated"]),
+            ("Primary Stability Basis", summary["primary_stability_basis"]),
+            ("Primary Instability Basis", summary["primary_instability_basis"]),
+        ))}
+      </section>"""
+
+
+def _render_stage23_input_summary(analysis: dict[str, Any]) -> str:
+    rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in analysis["stability_inputs"].items()
+    )
+    return f"""
+      <section class="stage23-stability-inputs">
+        <h3>Stability Input Summary</h3>
+        {_render_stage18a_table(rows)}
+      </section>"""
+
+
+def _render_stage23_summary(analysis: dict[str, Any]) -> str:
+    rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in analysis["pathway_stability_summary"].items()
+    )
+    return f"""
+      <section class="stage23-pathway-summary">
+        <h3>Pathway Stability Summary</h3>
+        {_render_stage18a_table(rows)}
+      </section>"""
+
+
+def _render_stage23_pathways(pathways: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td><code>{escape(str(pathway["pathway_id"]))}</code></td>'
+        f'<td>{escape(str(pathway["pathway_name"]))}</td>'
+        f'<td>{escape(_stage18a_display_value(pathway.get("current_pathway_state")))}</td>'
+        f'<td>{escape(str(pathway["pathway_stability_classification"]))}</td>'
+        f'<td>{_render_stage19c_compact_items(pathway["required_upstream_nodes"])}</td>'
+        f'<td>{_render_stage19c_compact_items(pathway["available_upstream_nodes"])}</td>'
+        f'<td>{_render_stage19c_compact_items(pathway["missing_upstream_nodes"])}</td>'
+        f'<td>{_render_stage19c_compact_items(pathway["evidence_sensitivity_indicators"])}</td>'
+        f'<td>{_render_stage19c_compact_items(pathway["blocking_conditions"])}</td>'
+        f'<td>{escape(str(pathway["stability_basis"]))}</td>'
+        f'<td>{escape(str(pathway["limitation_statement"]))}</td>'
+        "</tr>"
+        for pathway in pathways
+    ) or '<tr><td colspan="11">No pathway stability entries available.</td></tr>'
+    return f"""
+      <section class="stage23-pathway-level-stability">
+        <h3>Pathway-Level Stability</h3>
+        <table>
+          <thead><tr><th>Pathway ID</th><th>Pathway Name</th><th>Current Pathway State</th><th>Stability Classification</th><th>Required Upstream Nodes</th><th>Available Upstream Nodes</th><th>Missing Upstream Nodes</th><th>Evidence Sensitivity Indicators</th><th>Blocking Conditions</th><th>Stability Basis</th><th>Limitation Statement</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage23_indicators(indicators: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td><code>{escape(str(indicator["indicator_id"]))}</code></td>'
+        f'<td>{escape(str(indicator["indicator"]))}</td>'
+        f'<td>{escape(str(indicator["indicator_state"]))}</td>'
+        f'<td>{escape(_stage18a_display_value(indicator.get("source_value")))}</td>'
+        f'<td>{escape(str(indicator["visibility_basis"]))}</td>'
+        f'<td>{escape(str(indicator["limitations"]))}</td>'
+        "</tr>"
+        for indicator in indicators
+    ) or '<tr><td colspan="6">No evidence sensitivity indicators are present.</td></tr>'
+    return f"""
+      <section class="stage23-evidence-sensitivity-indicators">
+        <h3>Evidence Sensitivity Indicators</h3>
+        <table>
+          <thead><tr><th>Indicator ID</th><th>Indicator</th><th>State</th><th>Source Value</th><th>Visibility Basis</th><th>Limitations</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage23_paths(paths: list[dict[str, Any]]) -> str:
+    rendered_paths = "".join(
+        f'<section class="stage23-stability-path">'
+        f'<h4>{escape(str(path["path_name"]))}</h4>'
+        f'<p><strong>Stability label:</strong> {escape(str(path["stability_label"]))}</p>'
+        '<table><thead><tr><th>Step</th><th>Node ID</th><th>Output</th><th>Current Value</th><th>Dependency State</th></tr></thead><tbody>'
+        + "".join(
+            "<tr>"
+            f'<td>{int(step["step"])}</td>'
+            f'<td><code>{escape(_stage18a_display_value(step.get("node_id")))}</code></td>'
+            f'<td>{escape(str(step["label"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(step.get("current_value")))}</td>'
+            f'<td>{escape(str(step["dependency_state"]))}</td>'
+            "</tr>"
+            for step in path["steps"]
+        )
+        + "</tbody></table></section>"
+        for path in paths
+    )
+    return f"""
+      <section class="stage23-stability-paths">
+        <h3>Stability Path View</h3>
+        {rendered_paths}
+      </section>"""
+
+
+def _render_stage23_limitations(analysis: dict[str, Any]) -> str:
+    return f"""
+      <section class="stage23-stability-limitations">
+        <h3>Stability Limitations</h3>
+        {_render_stage19a_list(analysis["limitations"], "No stability limitations available.")}
+      </section>"""
+
+
+def _render_pathway_stability_analysis(
+    analysis: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Pathway Stability Analysis is derived deterministically from existing
+          framework outputs, Stage 22 dependency mappings, and visible evidence
+          states only. It inspects structural stability and evidence sensitivity;
+          it does not predict outcomes, validate evidence, determine truth, or
+          modify any classification or record.
+        </p>"""
+    overview = _render_stage23_overview(analysis)
+    summary = _render_stage23_summary(analysis)
+    limitations = _render_stage23_limitations(analysis)
+    if report_mode == "executive":
+        content = (
+            overview
+            + _render_stage23_indicators(
+                analysis["evidence_sensitivity_indicators"][:1]
+            )
+            + _render_stage23_paths(analysis["stability_paths"][:1])
+            + limitations
+        )
+        mode_class = "stage23-stability-summary"
+    elif report_mode == "review":
+        key_pathway_ids = {"PW-001", "PW-002", "PW-003", "PW-004", "PW-007"}
+        content = (
+            overview
+            + _render_stage23_input_summary(analysis)
+            + summary
+            + _render_stage23_pathways(
+                [
+                    pathway
+                    for pathway in analysis["pathways"]
+                    if pathway["pathway_id"] in key_pathway_ids
+                ]
+            )
+            + _render_stage23_indicators(
+                analysis["evidence_sensitivity_indicators"]
+            )
+            + _render_stage23_paths(analysis["stability_paths"])
+            + limitations
+        )
+        mode_class = "stage23-stability-review"
+    else:
+        content = (
+            overview
+            + _render_stage23_input_summary(analysis)
+            + summary
+            + _render_stage23_pathways(analysis["pathways"])
+            + _render_stage23_indicators(
+                analysis["evidence_sensitivity_indicators"]
+            )
+            + _render_stage23_paths(analysis["stability_paths"])
+            + limitations
+        )
+        mode_class = "stage23-stability-full"
+    return f"""
+      <section class="management-section stage23-pathway-stability-analysis {mode_class}">
+        <h2>Pathway Stability Analysis</h2>
         {notice}
         {content}
       </section>"""
@@ -33726,17 +34533,27 @@ def render_admin_record_evidence_page(
         version_history=normalized_version_history,
     )
     stage22_framework_self_description = build_framework_self_description()
+    stage22_current_values = _stage22_current_values(
+        reference=reference,
+        administrative_values=stage21_administrative_values,
+        explainability_outputs=stage21_explainability_outputs,
+        framework_self_description=stage22_framework_self_description,
+        report_structure=report_structure,
+    )
     stage22_dependency_map = build_determination_dependency_map(
-        _stage22_current_values(
-            reference=reference,
-            administrative_values=stage21_administrative_values,
-            explainability_outputs=stage21_explainability_outputs,
-            framework_self_description=stage22_framework_self_description,
-            report_structure=report_structure,
-        )
+        stage22_current_values
     )
     stage22_dependency_section = _render_determination_dependency_mapping(
         stage22_dependency_map,
+        report_mode=report_structure["report_mode"],
+    )
+    stage23_stability_analysis = build_pathway_stability_analysis(
+        stage22_dependency_map,
+        stage21_evidence_values,
+        stage22_current_values,
+    )
+    stage23_stability_section = _render_pathway_stability_analysis(
+        stage23_stability_analysis,
         report_mode=report_structure["report_mode"],
     )
     stage21_executive_core = (
@@ -33777,6 +34594,7 @@ def render_admin_record_evidence_page(
         stage21_report_content = (
             stage21_executive_core
             + stage22_dependency_section
+            + stage23_stability_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -33784,6 +34602,7 @@ def render_admin_record_evidence_page(
             stage21_executive_core
             + stage21_review_detail
             + stage22_dependency_section
+            + stage23_stability_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -33796,6 +34615,7 @@ def render_admin_record_evidence_page(
             f"{supporting_evidence_group}"
             f"{evidence_coverage_group}"
             f"{stage22_dependency_section}"
+            f"{stage23_stability_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -34002,6 +34822,43 @@ def render_admin_record_evidence_page(
     .stage22-dependency-path h4 {{
       margin: 16px 0 8px;
     }}
+    .stage23-pathway-stability-analysis table {{
+      table-layout: auto;
+    }}
+    .stage23-pathway-stability-analysis th,
+    .stage23-pathway-stability-analysis td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage23-pathway-level-stability,
+    .stage23-evidence-sensitivity-indicators,
+    .stage23-stability-path {{
+      overflow-x: auto;
+    }}
+    .stage23-pathway-stability-analysis .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage23-pathway-stability-analysis .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage23-stability-path h4 {{
+      margin: 16px 0 6px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -34019,6 +34876,9 @@ def render_admin_record_evidence_page(
       .stage22-upstream-dependencies table,
       .stage22-downstream-dependents table,
       .stage22-dependency-path table {{ min-width: 720px; }}
+      .stage23-pathway-level-stability table {{ min-width: 1640px; }}
+      .stage23-evidence-sensitivity-indicators table {{ min-width: 860px; }}
+      .stage23-stability-path table {{ min-width: 720px; }}
     }}
     details {{
       break-inside: avoid;
