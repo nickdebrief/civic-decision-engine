@@ -160,6 +160,21 @@ hashes, or record data. Full Inspection Report remains the default mode.
 
 ---
 
+## Stage 22 — Determination Dependency Mapping
+
+Adds deterministic structural maps showing which visible framework outputs are
+required by later determinations and which downstream outputs depend on each
+available node. The map covers administrative state, outcome, resolution,
+closure, archive, explainability, self-description, and report-mode outputs.
+
+Executive mode shows dependency summary and the key administrative path;
+Review mode adds key upstream and downstream mappings; Full Inspection mode
+shows every dependency node and mapping. Stage 22 is read-only inspection only
+and does not change reasoning, evidence, thresholds, classifications, hashes,
+or record data.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
