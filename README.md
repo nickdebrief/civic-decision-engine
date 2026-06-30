@@ -1,6 +1,39 @@
 # Civic Decision Engine (CDE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21033426.svg)](https://doi.org/10.5281/zenodo.21033426)
+[![OSF](https://img.shields.io/badge/OSF-Project-blue)](https://osf.io/wz29x/)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black)](https://github.com/nickdebrief/civic-decision-engine)
 
 <img width="512" alt="Civic Decision Engine v12" src="docs/releases/assets/v12-seal.png" />
+
+An open, deterministic framework for evaluating visible civic records and record-derived administrative outputs through inspectable evidence relationships, dependency mappings, pathway stability analysis, and reproducible report generation.
+
+---
+
+## Key Capabilities
+- Structured civic record evaluation
+- Evidence relationship mapping
+- Administrative dependency mapping
+- Pathway stability analysis
+- Reproducible report generation
+- Public verification and citation export
+
+---
+
+## Design Principles
+
+- Deterministic evaluation
+- Explicit methodological limitations
+- Inspectable evidence relationships
+- Reproducible outputs
+- Versioned and citable artefacts
+- Public verification and transparency
+
+---
+
+## Research Artefacts
+- DOI: https://doi.org/10.5281/zenodo.21033426
+- OSF Project: [Open Science Framework (OSF)](https://osf.io/wz29x/)
+- GitHub Repository: https://github.com/nickdebrief/civic-decision-engine
 
 ---
 
@@ -474,19 +507,13 @@ to be returned to.
 
 ---
 
-## Research Publications
+## Associated Research
 
-The Civic Record Evaluation Framework (CREF) is accompanied by published research materials.
+The Civic Record Evaluation Framework (CREF) is accompanied by published research materials:
 
 - Version 1.0 – Foundational methodology paper
-- Version 2.0 – Reflexive methodology and self-description paper
+- Version 2.0 – Reflexive methodology and framework self-description paper
 
-Research documents are available in:
-
-docs/research/
-
-DOI:
-https://doi.org/10.5281/zenodo.21033426
-
-Open Science Framework:
-https://osf.io/wz29x/files/vf4h5
+Research materials:
+- DOI: https://doi.org/10.5281/zenodo.21033426
+- Open Science Framework: https://osf.io/wz29x/
