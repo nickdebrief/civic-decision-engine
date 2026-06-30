@@ -32135,6 +32135,7 @@ STAGE21_SECTION_INDEX = (
     ("Explainability Certification", False, "Summary", "Detail"),
     ("Supporting Evidence", False, "Target Summary", "Detail"),
     ("Framework Self-Description", "Limitations", "Summary", "Detail"),
+    ("Determination Dependency Mapping", "Summary", "Overview and Paths", "Detail"),
 )
 
 
@@ -32601,6 +32602,644 @@ def _render_stage21_limitations(structure: dict[str, Any]) -> str:
       <h2>Report Mode Limitations</h2>
       {_render_stage19a_list(structure["limitations"], "No report-mode limitations available.")}
     </section>"""
+
+
+STAGE22_LIMITATIONS = (
+    "Dependency mapping describes structural relationships between existing framework outputs only.",
+    "Dependency mapping does not determine truth.",
+    "Dependency mapping does not determine liability.",
+    "Dependency mapping does not infer intent.",
+    "Dependency mapping does not assign blame.",
+    "Dependency mapping does not validate evidence.",
+    "Dependency mapping does not determine factual correctness.",
+    "Dependency mapping does not determine legal sufficiency.",
+    "Dependency mapping does not determine real-world evidential sufficiency.",
+    "Dependency mapping does not create evidence.",
+    "Dependency mapping does not create rules.",
+    "Dependency mapping does not create conditions.",
+    "Dependency mapping does not modify records.",
+    "Dependency mapping does not change classifications.",
+    "Dependency mapping does not change thresholds.",
+    "Dependency mapping does not change report modes.",
+)
+
+
+STAGE22_NODE_DEFINITIONS = (
+    ("DN-001", "record_context", "Visible Record", "Record Context", "Visible Record", ()),
+    ("DN-002", "evidence_readiness", "Evidence Readiness", "Evidence State", "Stage 7G", ("record_context",)),
+    ("DN-003", "administrative_action", "Administrative Action", "Administrative State", "Stage 8A", ("evidence_readiness",)),
+    ("DN-004", "workflow_state", "Workflow State", "Administrative State", "Stage 8D", ("evidence_readiness", "administrative_action")),
+    ("DN-005", "administrative_disposition", "Administrative Disposition", "Administrative State", "Stage 9A", ("workflow_state",)),
+    ("DN-006", "review_eligibility", "Review Eligibility", "Administrative State", "Stage 9C", ("administrative_disposition",)),
+    ("DN-007", "administrative_status", "Administrative Status", "Administrative State", "Stage 9E", ("administrative_disposition", "review_eligibility", "workflow_state", "evidence_readiness")),
+    ("DN-008", "implementation_action", "Implementation Action", "Administrative State", "Stage 10A", ("administrative_status",)),
+    ("DN-009", "effective_state", "Effective State", "Effective State", "Stage 10C", ("implementation_action", "administrative_status")),
+    ("DN-010", "outcome_classification", "Outcome Classification", "Outcome", "Stage 11A", ("effective_state", "implementation_action", "administrative_status")),
+    ("DN-011", "outcome_readiness", "Outcome Readiness", "Outcome", "Stage 11E", ("outcome_classification", "review_eligibility", "administrative_status", "effective_state")),
+    ("DN-012", "outcome_target", "Outcome Target", "Outcome", "Stage 11F", ("outcome_classification", "outcome_readiness", "effective_state", "review_eligibility", "administrative_status")),
+    ("DN-013", "resolution_classification", "Resolution Classification", "Resolution", "Stage 12A", ("outcome_classification", "outcome_readiness", "outcome_target", "effective_state", "implementation_action", "administrative_status")),
+    ("DN-014", "resolution_pathway", "Resolution Pathway", "Resolution", "Stage 12C", ("resolution_classification", "outcome_target", "outcome_readiness", "effective_state", "review_eligibility", "administrative_status", "implementation_action")),
+    ("DN-015", "resolution_readiness", "Resolution Readiness", "Resolution", "Stage 12D", ("resolution_classification", "resolution_pathway", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-016", "resolution_determination", "Resolution Determination", "Resolution", "Stage 12E", ("resolution_classification", "resolution_pathway", "resolution_readiness", "outcome_target", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-017", "resolution_completion", "Resolution Completion", "Resolution", "Stage 12F", ("resolution_classification", "resolution_pathway", "resolution_readiness", "resolution_determination", "outcome_target", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-018", "closure_classification", "Closure Classification", "Closure", "Stage 13A", ("resolution_classification", "resolution_completion", "resolution_determination", "resolution_pathway", "outcome_classification", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-019", "closure_readiness", "Closure Readiness", "Closure", "Stage 13D", ("closure_classification", "resolution_classification", "resolution_completion", "resolution_determination", "resolution_readiness", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-020", "closure_determination", "Closure Determination", "Closure", "Stage 13E", ("closure_classification", "closure_readiness", "resolution_classification", "resolution_completion", "resolution_determination", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-021", "closure_completion", "Closure Completion", "Closure", "Stage 13F", ("closure_classification", "closure_readiness", "closure_determination", "resolution_classification", "resolution_completion", "resolution_determination", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-022", "archive_classification", "Archive Classification", "Archive", "Stage 14A", ("closure_classification", "closure_completion", "closure_determination", "closure_readiness", "resolution_classification", "outcome_readiness", "review_eligibility", "administrative_status", "implementation_action", "effective_state")),
+    ("DN-023", "determination_trace", "Determination Trace", "Determination Trace", "Stage 19A", ("record_context", "evidence_readiness", "administrative_status")),
+    ("DN-024", "rule_citation", "Rule Citation Layer", "Rule Citation", "Stage 19B", ("determination_trace",)),
+    ("DN-025", "evidence_attribution", "Evidence Attribution Matrix", "Evidence Attribution", "Stage 19C", ("determination_trace", "rule_citation")),
+    ("DN-026", "sufficiency_boundaries", "Sufficiency Boundaries", "Explainability", "Stage 19E", ("evidence_attribution",)),
+    ("DN-027", "counterfactual_visibility", "Counterfactual Visibility", "Explainability", "Stage 19F", ("determination_trace", "rule_citation", "evidence_attribution", "sufficiency_boundaries")),
+    ("DN-028", "explainability_certification", "Explainability Certification", "Explainability Certification", "Stage 19G", ("determination_trace", "rule_citation", "evidence_attribution", "sufficiency_boundaries", "counterfactual_visibility")),
+    ("DN-029", "framework_self_description", "Framework Self-Description", "Framework Self-Description", "Stage 20", ("rule_citation", "evidence_attribution", "explainability_certification")),
+    ("DN-030", "report_mode", "Report Mode", "Report Mode", "Stage 21", ("administrative_status", "outcome_classification", "resolution_classification", "closure_classification", "archive_classification", "determination_trace", "rule_citation", "evidence_attribution", "explainability_certification", "framework_self_description")),
+)
+
+
+def _stage22_current_values(
+    *,
+    reference: str,
+    administrative_values: dict[str, Any],
+    explainability_outputs: dict[str, Any],
+    framework_self_description: dict[str, Any],
+    report_structure: dict[str, Any],
+) -> dict[str, Any]:
+    resolution_preconditions = build_resolution_preconditions(
+        administrative_values["resolution"],
+        administrative_values["outcome"],
+        administrative_values["outcome_readiness"],
+        administrative_values["outcome_target"],
+        administrative_values["effective_state"],
+        administrative_values["implementation_action"],
+        administrative_values["administrative_status"],
+        administrative_values["review_eligibility"],
+    )
+    resolution_pathway = _classify_resolution_pathway(
+        resolution=administrative_values["resolution"],
+        resolution_preconditions=resolution_preconditions,
+        outcome_target=administrative_values["outcome_target"],
+        outcome_readiness=administrative_values["outcome_readiness"],
+        effective_state=administrative_values["effective_state"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+    )
+    resolution_readiness = _classify_resolution_readiness(
+        resolution=administrative_values["resolution"],
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    resolution_determination = _classify_resolution_determination(
+        resolution=administrative_values["resolution"],
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        resolution_readiness=resolution_readiness,
+        outcome_target=administrative_values["outcome_target"],
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    resolution_completion = _classify_resolution_completion(
+        resolution=administrative_values["resolution"],
+        resolution_preconditions=resolution_preconditions,
+        resolution_pathway=resolution_pathway,
+        resolution_readiness=resolution_readiness,
+        resolution_determination=resolution_determination,
+        outcome_target=administrative_values["outcome_target"],
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_classification = _classify_closure(
+        resolution=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=administrative_values["outcome_target"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_preconditions = _classify_closure_preconditions(
+        closure=closure_classification,
+        resolution=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=administrative_values["outcome_target"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_pathway = _classify_closure_pathway(
+        closure=closure_classification,
+        closure_preconditions=closure_preconditions,
+        resolution=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        resolution_readiness=resolution_readiness,
+        resolution_pathway=resolution_pathway,
+        outcome_target=administrative_values["outcome_target"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_readiness = _classify_closure_readiness(
+        closure_classification=closure_classification,
+        closure_preconditions=closure_preconditions,
+        closure_pathway=closure_pathway,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        resolution_readiness=resolution_readiness,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_determination = _classify_closure_determination(
+        closure_classification=closure_classification,
+        closure_preconditions=closure_preconditions,
+        closure_pathway=closure_pathway,
+        closure_readiness=closure_readiness,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    closure_completion = _classify_closure_completion(
+        closure_classification=closure_classification,
+        closure_preconditions=closure_preconditions,
+        closure_pathway=closure_pathway,
+        closure_readiness=closure_readiness,
+        closure_determination=closure_determination,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    archive_classification = _archive_classification(
+        closure_classification=closure_classification,
+        closure_completion=closure_completion,
+        closure_determination=closure_determination,
+        closure_readiness=closure_readiness,
+        resolution_classification=administrative_values["resolution"],
+        resolution_completion=resolution_completion,
+        resolution_determination=resolution_determination,
+        outcome_readiness=administrative_values["outcome_readiness"],
+        review_eligibility=administrative_values["review_eligibility"],
+        administrative_status=administrative_values["administrative_status"],
+        implementation_action=administrative_values["implementation_action"],
+        effective_state=administrative_values["effective_state"],
+    )
+    return {
+        "record_context": reference,
+        "evidence_readiness": administrative_values["readiness"],
+        "administrative_action": administrative_values["action"],
+        "workflow_state": administrative_values["workflow_state"],
+        "administrative_disposition": administrative_values["disposition"],
+        "review_eligibility": administrative_values["review_eligibility"],
+        "administrative_status": administrative_values["administrative_status"],
+        "implementation_action": administrative_values["implementation_action"],
+        "effective_state": administrative_values["effective_state"],
+        "outcome_classification": administrative_values["outcome"],
+        "outcome_readiness": administrative_values["outcome_readiness"],
+        "outcome_target": administrative_values["outcome_target"],
+        "resolution_classification": administrative_values["resolution"],
+        "resolution_pathway": resolution_pathway,
+        "resolution_readiness": resolution_readiness,
+        "resolution_determination": resolution_determination,
+        "resolution_completion": resolution_completion,
+        "closure_classification": closure_classification,
+        "closure_readiness": closure_readiness,
+        "closure_determination": closure_determination,
+        "closure_completion": closure_completion,
+        "archive_classification": archive_classification,
+        "determination_trace": explainability_outputs["trace"].get("determination"),
+        "rule_citation": explainability_outputs["citations"]["citation_summary"].get("citation_state"),
+        "evidence_attribution": explainability_outputs["attribution"]["attribution_summary"].get("attribution_state"),
+        "sufficiency_boundaries": explainability_outputs["boundaries"].get("boundary_state"),
+        "counterfactual_visibility": explainability_outputs["visibility"].get("visibility_state"),
+        "explainability_certification": explainability_outputs["certification"].get("certification_state"),
+        "framework_self_description": framework_self_description["reflexive_methodology"].get("state"),
+        "report_mode": report_structure.get("report_mode_label"),
+    }
+
+
+def build_determination_dependency_map(
+    current_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    values = dict(current_values or {})
+    definition_by_key = {
+        definition[1]: definition for definition in STAGE22_NODE_DEFINITIONS
+    }
+    direct_dependents = {key: [] for key in definition_by_key}
+    for definition in STAGE22_NODE_DEFINITIONS:
+        for upstream_key in definition[5]:
+            if upstream_key in direct_dependents:
+                direct_dependents[upstream_key].append(definition[1])
+
+    def downstream_keys(key: str) -> list[str]:
+        discovered = []
+        pending = list(direct_dependents.get(key) or [])
+        while pending:
+            dependent = pending.pop(0)
+            if dependent in discovered:
+                continue
+            discovered.append(dependent)
+            pending.extend(direct_dependents.get(dependent) or [])
+        return discovered
+
+    available_keys = {
+        key
+        for key, value in values.items()
+        if value not in (None, "", [], {}) and key in definition_by_key
+    }
+    nodes = []
+    fully_mapped_outputs = 0
+    partially_mapped_outputs = 0
+    unmapped_outputs = 0
+    for node_id, key, output_name, output_type, source_stage, upstream_keys in STAGE22_NODE_DEFINITIONS:
+        available = key in available_keys
+        available_upstream = sum(
+            1 for upstream_key in upstream_keys if upstream_key in available_keys
+        )
+        if not available:
+            mapping_state = "Unmapped"
+            unmapped_outputs += 1
+        elif available_upstream == len(upstream_keys):
+            mapping_state = "Fully Mapped"
+            fully_mapped_outputs += 1
+        else:
+            mapping_state = "Partially Mapped"
+            partially_mapped_outputs += 1
+        nodes.append(
+            {
+                "node_id": node_id,
+                "node_key": key,
+                "output_name": output_name,
+                "output_type": output_type,
+                "current_value": values.get(key),
+                "source_stage": source_stage,
+                "dependency_state": "Available" if available else "Missing",
+                "mapping_state": mapping_state,
+                "upstream_dependencies": [
+                    definition_by_key[upstream_key][0]
+                    for upstream_key in upstream_keys
+                    if upstream_key in definition_by_key
+                ],
+                "downstream_dependents": [
+                    definition_by_key[downstream_key][0]
+                    for downstream_key in downstream_keys(key)
+                ],
+                "limitation_statement": (
+                    "Structural dependency only; availability does not establish truth, correctness, or sufficiency."
+                ),
+            }
+        )
+
+    total_nodes = len(nodes)
+    available_nodes = sum(
+        1 for node in nodes if node["dependency_state"] == "Available"
+    )
+    missing_nodes = total_nodes - available_nodes
+    if available_nodes == 0:
+        completeness_classification = "Dependency Map Not Available"
+        dependency_mapping_state = "Dependency Map Not Available"
+    elif missing_nodes == 0 and partially_mapped_outputs == 0:
+        completeness_classification = "Complete Dependency Map"
+        dependency_mapping_state = "Dependency Map Available"
+    elif fully_mapped_outputs > 0:
+        completeness_classification = "Partial Dependency Map"
+        dependency_mapping_state = "Dependency Map Partially Available"
+    else:
+        completeness_classification = "Dependency Gaps Present"
+        dependency_mapping_state = "Dependency Map Partially Available"
+    completeness_percentage = (
+        (fully_mapped_outputs / total_nodes) * 100 if total_nodes else 0.0
+    )
+    node_by_key = {node["node_key"]: node for node in nodes}
+    path_definitions = (
+        (
+            "Administrative Determination Path",
+            (
+                "record_context",
+                "evidence_readiness",
+                "administrative_status",
+                "effective_state",
+                "outcome_classification",
+                "resolution_classification",
+                "closure_classification",
+                "archive_classification",
+            ),
+        ),
+        (
+            "Explainability and Report Path",
+            (
+                "record_context",
+                "determination_trace",
+                "rule_citation",
+                "evidence_attribution",
+                "sufficiency_boundaries",
+                "counterfactual_visibility",
+                "explainability_certification",
+                "framework_self_description",
+                "report_mode",
+            ),
+        ),
+    )
+    dependency_paths = [
+        {
+            "path_name": path_name,
+            "steps": [
+                {
+                    "step": index,
+                    "node_id": node_by_key[key]["node_id"],
+                    "label": node_by_key[key]["output_name"],
+                    "current_value": node_by_key[key]["current_value"],
+                    "dependency_state": node_by_key[key]["dependency_state"],
+                }
+                for index, key in enumerate(keys, start=1)
+            ],
+        }
+        for path_name, keys in path_definitions
+    ]
+    return {
+        "dependency_mapping_state": dependency_mapping_state,
+        "dependency_completeness": {
+            "classification": completeness_classification,
+            "total_dependency_nodes": total_nodes,
+            "available_dependency_nodes": available_nodes,
+            "missing_dependency_nodes": missing_nodes,
+            "fully_mapped_outputs": fully_mapped_outputs,
+            "partially_mapped_outputs": partially_mapped_outputs,
+            "unmapped_outputs": unmapped_outputs,
+            "dependency_completeness_percentage": f"{completeness_percentage:.1f}%",
+        },
+        "nodes": nodes,
+        "upstream_dependencies": [
+            {
+                "node_id": node["node_id"],
+                "output_name": node["output_name"],
+                "upstream_dependencies": list(node["upstream_dependencies"]),
+                "mapping_state": node["mapping_state"],
+            }
+            for node in nodes
+        ],
+        "downstream_dependents": [
+            {
+                "node_id": node["node_id"],
+                "output_name": node["output_name"],
+                "downstream_dependents": list(node["downstream_dependents"]),
+                "dependency_state": node["dependency_state"],
+            }
+            for node in nodes
+        ],
+        "dependency_paths": dependency_paths,
+        "limitations": list(STAGE22_LIMITATIONS),
+    }
+
+
+def _render_stage22_overview(dependency_map: dict[str, Any]) -> str:
+    completeness = dependency_map["dependency_completeness"]
+    return f"""
+      <section class="stage22-dependency-overview">
+        <h3>Dependency Mapping Overview</h3>
+        {_render_stage18a_table((
+            ("Dependency Mapping State", dependency_map["dependency_mapping_state"]),
+            ("Dependency Completeness State", completeness["classification"]),
+            ("Total Dependency Nodes", completeness["total_dependency_nodes"]),
+            ("Available Dependency Nodes", completeness["available_dependency_nodes"]),
+            ("Missing Dependency Nodes", completeness["missing_dependency_nodes"]),
+        ))}
+      </section>"""
+
+
+def _render_stage22_completeness(dependency_map: dict[str, Any]) -> str:
+    completeness = dependency_map["dependency_completeness"]
+    rows = tuple(
+        (" ".join(key.split("_")).title(), value)
+        for key, value in completeness.items()
+    )
+    return f"""
+      <section class="stage22-dependency-completeness">
+        <h3>Dependency Completeness Summary</h3>
+        {_render_stage18a_table(rows)}
+      </section>"""
+
+
+def _render_stage22_nodes(nodes: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td><code>{escape(str(node["node_id"]))}</code></td>'
+        f'<td>{escape(str(node["output_name"]))}</td>'
+        f'<td>{escape(str(node["output_type"]))}</td>'
+        f'<td>{escape(_stage18a_display_value(node.get("current_value")))}</td>'
+        f'<td>{escape(str(node["source_stage"]))}</td>'
+        f'<td>{escape(str(node["dependency_state"]))}</td>'
+        f'<td>{escape(str(node["mapping_state"]))}</td>'
+        f'<td>{_render_stage19c_compact_items(node["upstream_dependencies"])}</td>'
+        f'<td>{_render_stage19c_compact_items(node["downstream_dependents"])}</td>'
+        f'<td>{escape(str(node["limitation_statement"]))}</td>'
+        "</tr>"
+        for node in nodes
+    )
+    return f"""
+      <section class="stage22-dependency-nodes">
+        <h3>Dependency Nodes</h3>
+        <table>
+          <thead><tr><th>Node ID</th><th>Output Name</th><th>Output Type</th><th>Current Value</th><th>Source Stage</th><th>Dependency State</th><th>Mapping State</th><th>Upstream Dependencies</th><th>Downstream Dependents</th><th>Limitation Statement</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage22_mapping_table(
+    *,
+    title: str,
+    class_name: str,
+    mappings: list[dict[str, Any]],
+    relationship_key: str,
+    state_key: str,
+) -> str:
+    rows = "".join(
+        "<tr>"
+        f'<td><code>{escape(str(mapping["node_id"]))}</code></td>'
+        f'<td>{escape(str(mapping["output_name"]))}</td>'
+        f'<td>{_render_stage19c_compact_items(mapping[relationship_key])}</td>'
+        f'<td>{escape(str(mapping[state_key]))}</td>'
+        "</tr>"
+        for mapping in mappings
+    ) or '<tr><td colspan="4">No dependency mappings available.</td></tr>'
+    relationship_label = (
+        "Upstream Dependencies"
+        if relationship_key == "upstream_dependencies"
+        else "Downstream Dependents"
+    )
+    return f"""
+      <section class="{escape(class_name)}">
+        <h3>{escape(title)}</h3>
+        <table>
+          <thead><tr><th>Node ID</th><th>Output Name</th><th>{relationship_label}</th><th>State</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage22_paths(paths: list[dict[str, Any]]) -> str:
+    path_sections = "".join(
+        f'<section class="stage22-dependency-path">'
+        f'<h4>{escape(str(path["path_name"]))}</h4>'
+        '<table><thead><tr><th>Step</th><th>Node ID</th><th>Output</th><th>Current Value</th><th>Dependency State</th></tr></thead><tbody>'
+        + "".join(
+            "<tr>"
+            f'<td>{int(step["step"])}</td>'
+            f'<td><code>{escape(str(step["node_id"]))}</code></td>'
+            f'<td>{escape(str(step["label"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(step.get("current_value")))}</td>'
+            f'<td>{escape(str(step["dependency_state"]))}</td>'
+            "</tr>"
+            for step in path["steps"]
+        )
+        + "</tbody></table></section>"
+        for path in paths
+    )
+    return f"""
+      <section class="stage22-dependency-paths">
+        <h3>Dependency Paths</h3>
+        {path_sections}
+      </section>"""
+
+
+def _render_stage22_limitations(dependency_map: dict[str, Any]) -> str:
+    return f"""
+      <section class="stage22-dependency-limitations">
+        <h3>Dependency Limitations</h3>
+        {_render_stage19a_list(dependency_map["limitations"], "No dependency limitations available.")}
+      </section>"""
+
+
+def _render_determination_dependency_mapping(
+    dependency_map: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Determination dependency mapping is derived deterministically from
+          existing visible record-derived outputs and implemented framework
+          dependencies only. It describes which existing outputs require other
+          existing outputs and does not create reasoning, validate evidence,
+          change classifications, or modify the record.
+        </p>"""
+    overview = _render_stage22_overview(dependency_map)
+    completeness = _render_stage22_completeness(dependency_map)
+    limitations = _render_stage22_limitations(dependency_map)
+    if report_mode == "executive":
+        content = (
+            overview
+            + completeness
+            + _render_stage22_paths(dependency_map["dependency_paths"][:1])
+            + limitations
+        )
+        mode_class = "stage22-dependency-summary"
+    elif report_mode == "review":
+        key_node_ids = {
+            "DN-007",
+            "DN-009",
+            "DN-010",
+            "DN-013",
+            "DN-017",
+            "DN-018",
+            "DN-021",
+            "DN-022",
+            "DN-023",
+            "DN-025",
+            "DN-028",
+            "DN-030",
+        }
+        upstream = [
+            mapping
+            for mapping in dependency_map["upstream_dependencies"]
+            if mapping["node_id"] in key_node_ids
+        ]
+        downstream = [
+            mapping
+            for mapping in dependency_map["downstream_dependents"]
+            if mapping["node_id"] in key_node_ids
+        ]
+        content = (
+            overview
+            + completeness
+            + _render_stage22_mapping_table(
+                title="Key Upstream Dependencies",
+                class_name="stage22-upstream-dependencies",
+                mappings=upstream,
+                relationship_key="upstream_dependencies",
+                state_key="mapping_state",
+            )
+            + _render_stage22_mapping_table(
+                title="Key Downstream Dependents",
+                class_name="stage22-downstream-dependents",
+                mappings=downstream,
+                relationship_key="downstream_dependents",
+                state_key="dependency_state",
+            )
+            + _render_stage22_paths(dependency_map["dependency_paths"])
+            + limitations
+        )
+        mode_class = "stage22-dependency-review"
+    else:
+        content = (
+            overview
+            + completeness
+            + _render_stage22_nodes(dependency_map["nodes"])
+            + _render_stage22_mapping_table(
+                title="Upstream Dependencies",
+                class_name="stage22-upstream-dependencies",
+                mappings=dependency_map["upstream_dependencies"],
+                relationship_key="upstream_dependencies",
+                state_key="mapping_state",
+            )
+            + _render_stage22_mapping_table(
+                title="Downstream Dependents",
+                class_name="stage22-downstream-dependents",
+                mappings=dependency_map["downstream_dependents"],
+                relationship_key="downstream_dependents",
+                state_key="dependency_state",
+            )
+            + _render_stage22_paths(dependency_map["dependency_paths"])
+            + limitations
+        )
+        mode_class = "stage22-dependency-full"
+    return f"""
+      <section class="management-section stage22-determination-dependency-mapping {mode_class}">
+        <h2>Determination Dependency Mapping</h2>
+        {notice}
+        {content}
+      </section>"""
 
 
 def render_admin_record_evidence_page(
@@ -33086,6 +33725,20 @@ def render_admin_record_evidence_page(
         evidence_groups=evidence_groups,
         version_history=normalized_version_history,
     )
+    stage22_framework_self_description = build_framework_self_description()
+    stage22_dependency_map = build_determination_dependency_map(
+        _stage22_current_values(
+            reference=reference,
+            administrative_values=stage21_administrative_values,
+            explainability_outputs=stage21_explainability_outputs,
+            framework_self_description=stage22_framework_self_description,
+            report_structure=report_structure,
+        )
+    )
+    stage22_dependency_section = _render_determination_dependency_mapping(
+        stage22_dependency_map,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -33117,18 +33770,20 @@ def render_admin_record_evidence_page(
         f"{_render_stage21_mapping_summary(title='Counterfactual Visibility Summary', class_name='stage21-counterfactual-visibility-summary', values=stage21_explainability_outputs['visibility']['visibility_summary'])}"
         f"{_render_stage21_mapping_summary(title='Explainability Certification Summary', class_name='stage21-explainability-certification-summary', values=stage21_explainability_outputs['certification']['certification_summary'])}"
         f"{_render_stage21_explainability_summary(stage21_explainability_outputs)}"
-        f"{_render_stage21_mapping_summary(title='Framework Self-Description Summary', class_name='stage21-framework-summary', values=build_framework_self_description()['framework_self_description_summary'])}"
+        f"{_render_stage21_mapping_summary(title='Framework Self-Description Summary', class_name='stage21-framework-summary', values=stage22_framework_self_description['framework_self_description_summary'])}"
         "</section>"
     )
     if report_structure["report_mode"] == "executive":
         stage21_report_content = (
             stage21_executive_core
+            + stage22_dependency_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
         stage21_report_content = (
             stage21_executive_core
             + stage21_review_detail
+            + stage22_dependency_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -33140,6 +33795,7 @@ def render_admin_record_evidence_page(
             f"{archive_analysis_group}"
             f"{supporting_evidence_group}"
             f"{evidence_coverage_group}"
+            f"{stage22_dependency_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -33308,6 +33964,44 @@ def render_admin_record_evidence_page(
     .stage21-section-index td:nth-child(2) {{ width: 32%; }}
     .stage21-section-index th:nth-child(n+3),
     .stage21-section-index td:nth-child(n+3) {{ width: 20%; }}
+    .stage22-determination-dependency-mapping table {{
+      table-layout: auto;
+    }}
+    .stage22-determination-dependency-mapping th,
+    .stage22-determination-dependency-mapping td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage22-dependency-nodes,
+    .stage22-upstream-dependencies,
+    .stage22-downstream-dependents,
+    .stage22-dependency-path {{
+      overflow-x: auto;
+    }}
+    .stage22-determination-dependency-mapping .stage19c-pill-list {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: flex-start;
+    }}
+    .stage22-determination-dependency-mapping .stage19c-pill-list span {{
+      display: inline-block;
+      padding: 2px 6px;
+      border: 1px solid #d8e4e2;
+      border-radius: 999px;
+      background: #f6faf9;
+      color: #26423f;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage22-dependency-path h4 {{
+      margin: 16px 0 8px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -33321,6 +34015,10 @@ def render_admin_record_evidence_page(
       .stage21-progression-requirements table,
       .stage21-explainability-summary table {{ min-width: 680px; }}
       .stage21-target-evidence-summary table {{ min-width: 760px; }}
+      .stage22-dependency-nodes table {{ min-width: 1480px; }}
+      .stage22-upstream-dependencies table,
+      .stage22-downstream-dependents table,
+      .stage22-dependency-path table {{ min-width: 720px; }}
     }}
     details {{
       break-inside: avoid;

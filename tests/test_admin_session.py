@@ -6088,9 +6088,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(11, len(review["section_index"]))
+        self.assertEqual(12, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 12)),
+            list(range(1, 13)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -6101,6 +6101,133 @@ class AdminSessionTests(unittest.TestCase):
             review,
             self.admin_session.build_stage21_report_structure("review"),
         )
+
+    def test_stage22_dependency_map_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        original_values = dict(current_values)
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+
+        self.assertEqual(
+            "Dependency Map Available",
+            dependency_map["dependency_mapping_state"],
+        )
+        completeness = dependency_map["dependency_completeness"]
+        self.assertEqual("Complete Dependency Map", completeness["classification"])
+        self.assertEqual(30, completeness["total_dependency_nodes"])
+        self.assertEqual(30, completeness["available_dependency_nodes"])
+        self.assertEqual(0, completeness["missing_dependency_nodes"])
+        self.assertEqual(30, completeness["fully_mapped_outputs"])
+        self.assertEqual("100.0%", completeness["dependency_completeness_percentage"])
+
+        nodes = {node["node_id"]: node for node in dependency_map["nodes"]}
+        self.assertEqual("Effective State", nodes["DN-009"]["output_name"])
+        self.assertEqual(
+            ["DN-008", "DN-007"],
+            nodes["DN-009"]["upstream_dependencies"],
+        )
+        self.assertIn("DN-010", nodes["DN-007"]["downstream_dependents"])
+        self.assertIn("DN-013", nodes["DN-007"]["downstream_dependents"])
+        self.assertIn("DN-018", nodes["DN-007"]["downstream_dependents"])
+        self.assertIn("DN-022", nodes["DN-007"]["downstream_dependents"])
+        self.assertEqual(
+            [
+                "Visible Record",
+                "Evidence Readiness",
+                "Administrative Status",
+                "Effective State",
+                "Outcome Classification",
+                "Resolution Classification",
+                "Closure Classification",
+                "Archive Classification",
+            ],
+            [
+                step["label"]
+                for step in dependency_map["dependency_paths"][0]["steps"]
+            ],
+        )
+        self.assertIn(
+            "Dependency mapping does not change classifications.",
+            dependency_map["limitations"],
+        )
+        self.assertEqual(
+            dependency_map,
+            self.admin_session.build_determination_dependency_map(current_values),
+        )
+        self.assertEqual(original_values, current_values)
+
+    def test_stage22_dependency_map_handles_partial_gaps_and_unavailable_states(self):
+        partial = self.admin_session.build_determination_dependency_map(
+            {"record_context": "CREF-STAGE22-001"}
+        )
+        gaps = self.admin_session.build_determination_dependency_map(
+            {"evidence_readiness": "Ready"}
+        )
+        unavailable = self.admin_session.build_determination_dependency_map()
+
+        self.assertEqual(
+            "Dependency Map Partially Available",
+            partial["dependency_mapping_state"],
+        )
+        self.assertEqual(
+            "Partial Dependency Map",
+            partial["dependency_completeness"]["classification"],
+        )
+        self.assertEqual(
+            "Dependency Gaps Present",
+            gaps["dependency_completeness"]["classification"],
+        )
+        self.assertEqual(
+            "Dependency Map Not Available",
+            unavailable["dependency_mapping_state"],
+        )
+        self.assertEqual(
+            "Dependency Map Not Available",
+            unavailable["dependency_completeness"]["classification"],
+        )
+
+    def test_stage22_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        executive = self.admin_session._render_determination_dependency_mapping(
+            dependency_map,
+            report_mode="executive",
+        )
+        review = self.admin_session._render_determination_dependency_mapping(
+            dependency_map,
+            report_mode="review",
+        )
+        full = self.admin_session._render_determination_dependency_mapping(
+            dependency_map,
+            report_mode="full",
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Determination Dependency Mapping</h2>", rendered)
+            self.assertIn("<h3>Dependency Mapping Overview</h3>", rendered)
+            self.assertIn("<h3>Dependency Completeness Summary</h3>", rendered)
+            self.assertIn("<h3>Dependency Paths</h3>", rendered)
+            self.assertIn("<h3>Dependency Limitations</h3>", rendered)
+        self.assertIn("stage22-dependency-summary", executive)
+        self.assertNotIn("<h3>Dependency Nodes</h3>", executive)
+        self.assertNotIn("Key Upstream Dependencies", executive)
+        self.assertIn("stage22-dependency-review", review)
+        self.assertIn("Key Upstream Dependencies", review)
+        self.assertIn("Key Downstream Dependents", review)
+        self.assertNotIn("<h3>Dependency Nodes</h3>", review)
+        self.assertIn("stage22-dependency-full", full)
+        self.assertIn("<h3>Dependency Nodes</h3>", full)
+        self.assertIn("<h3>Upstream Dependencies</h3>", full)
+        self.assertIn("<h3>Downstream Dependents</h3>", full)
 
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
@@ -6175,6 +6302,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Progression Requirements Table", executive)
         self.assertIn("Determination Trace Summary", executive)
         self.assertIn("Framework Limitations", executive)
+        self.assertIn("stage22-dependency-summary", executive)
+        self.assertIn("Dependency Map Available", executive)
+        self.assertNotIn("<h3>Dependency Nodes</h3>", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -6189,6 +6319,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Sufficiency Boundaries Summary", review)
         self.assertIn("Counterfactual Visibility Summary", review)
         self.assertIn("Explainability Certification Summary", review)
+        self.assertIn("stage22-dependency-review", review)
+        self.assertIn("Key Upstream Dependencies", review)
+        self.assertIn("Key Downstream Dependents", review)
+        self.assertNotIn("<h3>Dependency Nodes</h3>", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -6207,8 +6341,11 @@ class AdminSessionTests(unittest.TestCase):
             "Counterfactual Visibility",
             "Explainability Certification",
             "Framework Self-Description",
+            "Determination Dependency Mapping",
         ):
             self.assertIn(section, explicit_full)
+        self.assertIn("stage22-dependency-full", explicit_full)
+        self.assertIn("<h3>Dependency Nodes</h3>", explicit_full)
         self.assertIn(
             "This mode preserves the complete visible framework inspection record.",
             explicit_full,
