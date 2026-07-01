@@ -32139,6 +32139,7 @@ STAGE21_SECTION_INDEX = (
     ("Pathway Stability Analysis", "Summary", "Overview and Paths", "Detail"),
     ("Record State Transition History", "Overview", "Summary", "Detail"),
     ("Output Provenance Layer", "Overview", "Summary", "Detail"),
+    ("Deterministic Replay Mode", "Overview", "Summary", "Detail"),
 )
 
 
@@ -34811,6 +34812,326 @@ def _render_output_provenance_layer(
       </section>"""
 
 
+STAGE26_LIMITATIONS = (
+    "Deterministic Replay Mode does not simulate alternate outcomes.",
+    "Deterministic Replay Mode does not predict future states.",
+    "Deterministic Replay Mode does not infer hidden inputs.",
+    "Deterministic Replay Mode does not create evidence.",
+    "Deterministic Replay Mode does not validate evidence.",
+    "Deterministic Replay Mode does not determine truth.",
+    "Deterministic Replay Mode does not determine liability.",
+    "Deterministic Replay Mode does not infer intent.",
+    "Deterministic Replay Mode does not assign blame.",
+    "Deterministic Replay Mode does not modify records.",
+    "Deterministic Replay Mode does not change classifications.",
+    "Deterministic Replay Mode does not change thresholds.",
+    "Deterministic Replay Mode does not change dependencies.",
+    "Deterministic Replay Mode does not change evidence relationships.",
+    "Deterministic Replay Mode does not change transition history.",
+    "Deterministic Replay Mode does not change provenance.",
+    "Deterministic Replay Mode does not change report modes.",
+    "Deterministic Replay Mode does not write to the database.",
+    "Deterministic Replay Mode does not alter public API behaviour.",
+)
+
+
+def classify_deterministic_replay_label(
+    provenance_label: Any,
+    *,
+    replay_basis_available: bool,
+) -> str:
+    if not replay_basis_available:
+        return "Replay Basis Not Available"
+    labels = {
+        "Dependency-Derived Output": "Replayable Dependency-Derived Output",
+        "Stability-Derived Output": "Replayable Stability-Derived Output",
+        "Transition-Derived Output": "Replayable Transition-Derived Output",
+        "Provenance-Derived Output": "Replayable Provenance-Derived Output",
+    }
+    return labels.get(
+        str(provenance_label),
+        "Replayable Framework Output",
+    )
+
+
+def build_deterministic_replay(
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    producing_helper_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_dependency_map = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition_history = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    helper_overrides = dict(producing_helper_overrides or {})
+    source_entries = [
+        dict(entry)
+        for entry in normalized_provenance.get("provenance_entries") or []
+    ]
+    provenance_state = normalized_provenance.get(
+        "provenance_state", "Provenance Not Available"
+    )
+    if provenance_state != "Provenance Not Available":
+        source_entries.append(
+            {
+                "provenance_id": "OP-015",
+                "output_name": "Output Provenance Layer",
+                "output_value": provenance_state,
+                "producing_stage": "Stage 25",
+                "producing_function_or_helper": "build_output_provenance_layer",
+                "visible_input_basis": (
+                    f'{len(normalized_provenance.get("provenance_entries") or [])} visible Stage 25 provenance entries.'
+                ),
+                "dependency_basis": (
+                    f'Stage 22 dependency state: {normalized_dependency_map.get("dependency_mapping_state", "Not Available")}.'
+                ),
+                "stability_basis": (
+                    f'Stage 23 stability state: {normalized_stability.get("stability_state", "Stability Not Available")}.'
+                ),
+                "transition_basis": (
+                    f'Stage 24 transition state: {normalized_transition_history.get("transition_state", "Transition History Not Available")}.'
+                ),
+                "provenance_label": "Provenance-Derived Output",
+                "limitation_statement": (
+                    "Replay describes the existing provenance state only; it does not recreate provenance."
+                ),
+            }
+        )
+
+    replay_entries = []
+    for replay_step, source in enumerate(source_entries, start=1):
+        source_id = str(source.get("provenance_id") or "")
+        output_name = str(source.get("output_name") or "Not Available")
+        declared_helper = source.get("producing_function_or_helper")
+        helper_value = helper_overrides.get(
+            source_id,
+            helper_overrides.get(output_name, declared_helper),
+        )
+        producing_helper = _stage25_helper_name(helper_value)
+        output_value = source.get("output_value")
+        replay_basis_available = (
+            output_value not in (None, "", [], {})
+            and producing_helper != "Not Available"
+        )
+        replay_label = classify_deterministic_replay_label(
+            source.get("provenance_label"),
+            replay_basis_available=replay_basis_available,
+        )
+        replay_entries.append(
+            {
+                "replay_id": f"RP-{replay_step:03d}",
+                "replay_step": replay_step,
+                "output_name": output_name,
+                "output_value": output_value,
+                "producing_stage": source.get("producing_stage", "Not Available"),
+                "producing_function_or_helper": producing_helper,
+                "visible_input_basis": source.get(
+                    "visible_input_basis", "Not Available"
+                ),
+                "dependency_basis": source.get(
+                    "dependency_basis", "Not Available"
+                ),
+                "stability_basis": source.get(
+                    "stability_basis", "Not Available"
+                ),
+                "transition_basis": source.get(
+                    "transition_basis", "Not Available"
+                ),
+                "provenance_basis": (
+                    f'Stage 25 provenance {source_id or "Not Available"}: '
+                    f'{source.get("provenance_label", "Provenance Not Available")}.'
+                ),
+                "replay_result": (
+                    "Existing output reproduced from the same visible value and declared production basis."
+                    if replay_basis_available
+                    else "Replay basis is not available; the existing output is not replayed."
+                ),
+                "replay_label": replay_label,
+                "limitation_statement": (
+                    "Replay restates an existing visible output and its declared bases only; it does not recalculate or validate the output."
+                ),
+            }
+        )
+
+    replayable_outputs = sum(
+        entry["replay_label"] != "Replay Basis Not Available"
+        for entry in replay_entries
+    )
+    non_replayable_outputs = len(replay_entries) - replayable_outputs
+    if not replay_entries or replayable_outputs == 0:
+        replay_state = "Replay Basis Not Available"
+    elif non_replayable_outputs:
+        replay_state = "Partial Replay Available"
+    else:
+        replay_state = "Deterministic Replay Available"
+    replay_summary = {
+        "replay_state": replay_state,
+        "total_replay_steps": len(replay_entries),
+        "replayable_outputs": replayable_outputs,
+        "non_replayable_outputs": non_replayable_outputs,
+        "dependency_mapping_state": normalized_dependency_map.get(
+            "dependency_mapping_state", "Not Available"
+        ),
+        "pathway_stability_state": normalized_stability.get(
+            "stability_state", "Stability Not Available"
+        ),
+        "transition_history_state": normalized_transition_history.get(
+            "transition_state", "Transition History Not Available"
+        ),
+        "provenance_state": provenance_state,
+        "limitation_summary": (
+            "Deterministic replay restates existing visible outputs in stable order; it does not simulate, reclassify, or mutate the record."
+        ),
+    }
+    return {
+        "replay_state": replay_state,
+        "replay_summary": replay_summary,
+        "replay_entries": replay_entries,
+        "limitations": list(STAGE26_LIMITATIONS),
+    }
+
+
+def _render_stage26_overview(replay: dict[str, Any]) -> str:
+    summary = replay["replay_summary"]
+    return f"""
+      <section class="stage26-replay-overview">
+        <h3>Replay Overview</h3>
+        {_render_stage18a_table((
+            ("Replay State", summary["replay_state"]),
+            ("Total Replay Steps", summary["total_replay_steps"]),
+            ("Replayable Outputs", summary["replayable_outputs"]),
+            ("Non-Replayable Outputs", summary["non_replayable_outputs"]),
+            ("Dependency Mapping State", summary["dependency_mapping_state"]),
+            ("Pathway Stability State", summary["pathway_stability_state"]),
+            ("Transition History State", summary["transition_history_state"]),
+            ("Provenance State", summary["provenance_state"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage26_replay_table(
+    entries: list[dict[str, Any]],
+    *,
+    include_bases: bool,
+) -> str:
+    if include_bases:
+        columns = (
+            ("Replay ID", "replay_id", True),
+            ("Step", "replay_step", False),
+            ("Output Name", "output_name", False),
+            ("Output Value", "output_value", False),
+            ("Producing Stage", "producing_stage", False),
+            ("Producing Function or Helper", "producing_function_or_helper", True),
+            ("Visible Input Basis", "visible_input_basis", False),
+            ("Dependency Basis", "dependency_basis", False),
+            ("Stability Basis", "stability_basis", False),
+            ("Transition Basis", "transition_basis", False),
+            ("Provenance Basis", "provenance_basis", False),
+            ("Replay Result", "replay_result", False),
+            ("Replay Label", "replay_label", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Deterministic Replay"
+        class_name = "stage26-full-replay"
+    else:
+        columns = (
+            ("Replay ID", "replay_id", True),
+            ("Step", "replay_step", False),
+            ("Output Name", "output_name", False),
+            ("Output Value", "output_value", False),
+            ("Producing Stage", "producing_stage", False),
+            ("Producing Function or Helper", "producing_function_or_helper", True),
+            ("Replay Result", "replay_result", False),
+            ("Replay Label", "replay_label", False),
+        )
+        title = "Replay Summary Table"
+        class_name = "stage26-replay-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(entry.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{escape(_stage18a_display_value(entry.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for entry in entries
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No replay basis is available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage26_limitations(
+    replay: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = replay["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 9, 10, 17, 18)]
+    return f"""
+      <section class="stage26-replay-limitations">
+        <h3>Replay Limitations</h3>
+        {_render_stage19a_list(limitations, "No replay limitations available.")}
+      </section>"""
+
+
+def _render_deterministic_replay_mode(
+    replay: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Deterministic Replay Mode restates existing visible framework outputs
+          in a stable, inspectable sequence using their declared production and
+          provenance bases. It does not simulate alternate outcomes, reclassify
+          records, validate evidence, infer hidden inputs, or modify the record.
+        </p>"""
+    overview = _render_stage26_overview(replay)
+    if report_mode == "executive":
+        content = overview + _render_stage26_limitations(replay, concise=True)
+        mode_class = "stage26-replay-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage26_replay_table(
+                replay["replay_entries"], include_bases=False
+            )
+            + _render_stage26_limitations(replay)
+        )
+        mode_class = "stage26-replay-review"
+    else:
+        content = (
+            overview
+            + _render_stage26_replay_table(
+                replay["replay_entries"], include_bases=True
+            )
+            + _render_stage26_limitations(replay)
+        )
+        mode_class = "stage26-replay-full"
+    return f"""
+      <section class="management-section stage26-deterministic-replay-mode {mode_class}">
+        <h2>Deterministic Replay Mode</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -35337,6 +35658,16 @@ def render_admin_record_evidence_page(
         stage25_output_provenance,
         report_mode=report_structure["report_mode"],
     )
+    stage26_deterministic_replay = build_deterministic_replay(
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+    )
+    stage26_replay_section = _render_deterministic_replay_mode(
+        stage26_deterministic_replay,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -35378,6 +35709,7 @@ def render_admin_record_evidence_page(
             + stage23_stability_section
             + stage24_transition_section
             + stage25_provenance_section
+            + stage26_replay_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -35388,6 +35720,7 @@ def render_admin_record_evidence_page(
             + stage23_stability_section
             + stage24_transition_section
             + stage25_provenance_section
+            + stage26_replay_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -35403,6 +35736,7 @@ def render_admin_record_evidence_page(
             f"{stage23_stability_section}"
             f"{stage24_transition_section}"
             f"{stage25_provenance_section}"
+            f"{stage26_replay_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -35682,6 +36016,24 @@ def render_admin_record_evidence_page(
     .stage25-full-provenance table {{
       min-width: 1900px;
     }}
+    .stage26-deterministic-replay-mode table {{
+      table-layout: auto;
+    }}
+    .stage26-deterministic-replay-mode th,
+    .stage26-deterministic-replay-mode td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage26-replay-summary,
+    .stage26-full-replay {{
+      overflow-x: auto;
+    }}
+    .stage26-full-replay table {{
+      min-width: 2200px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -35704,6 +36056,7 @@ def render_admin_record_evidence_page(
       .stage23-stability-path table {{ min-width: 720px; }}
       .stage24-transition-summary table {{ min-width: 760px; }}
       .stage25-provenance-summary table {{ min-width: 900px; }}
+      .stage26-replay-summary table {{ min-width: 1120px; }}
     }}
     details {{
       break-inside: avoid;
