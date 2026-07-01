@@ -254,6 +254,22 @@ change classifications, or modify records.
 
 ---
 
+## Stage 26 — Deterministic Replay Mode
+
+Adds a deterministic replay sequence for fifteen visible framework outputs:
+the fourteen Stage 25 provenance entries and the provenance layer state itself.
+Each replay step preserves the existing output value, producing stage and
+declared helper, visible input basis, dependency basis, stability basis,
+transition basis, provenance basis, replay result, and limitation.
+
+Executive mode presents a concise replay overview; Review mode adds the replay
+summary table; Full Inspection mode exposes every replay basis. Stage 26
+restates existing outputs in stable order only. It does not simulate alternate
+outcomes, reclassify records, validate evidence, infer hidden inputs, write to
+the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

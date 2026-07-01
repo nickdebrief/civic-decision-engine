@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(15, len(review["section_index"]))
+        self.assertEqual(16, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 16)),
+            list(range(1, 17)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -6844,6 +6844,181 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Stability Basis</th>", full)
         self.assertIn("Transition Basis</th>", full)
 
+    def test_stage26_deterministic_replay_is_stable_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        original_inputs = copy.deepcopy(
+            (dependency_map, stability, transition_history, provenance)
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+
+        self.assertEqual("Deterministic Replay Available", replay["replay_state"])
+        self.assertEqual(15, len(replay["replay_entries"]))
+        self.assertEqual(
+            list(range(1, 16)),
+            [entry["replay_step"] for entry in replay["replay_entries"]],
+        )
+        required_fields = {
+            "replay_id",
+            "replay_step",
+            "output_name",
+            "output_value",
+            "producing_stage",
+            "producing_function_or_helper",
+            "visible_input_basis",
+            "dependency_basis",
+            "stability_basis",
+            "transition_basis",
+            "provenance_basis",
+            "replay_result",
+            "replay_label",
+            "limitation_statement",
+        }
+        for entry in replay["replay_entries"]:
+            self.assertEqual(required_fields, set(entry))
+        summary = replay["replay_summary"]
+        self.assertEqual(15, summary["total_replay_steps"])
+        self.assertEqual(15, summary["replayable_outputs"])
+        self.assertEqual(0, summary["non_replayable_outputs"])
+        self.assertEqual(
+            "Replayable Provenance-Derived Output",
+            replay["replay_entries"][-1]["replay_label"],
+        )
+        self.assertEqual(30, len(dependency_map["nodes"]))
+        self.assertEqual(8, len(stability["pathways"]))
+        self.assertEqual(11, len(transition_history["transitions"]))
+        self.assertEqual(14, len(provenance["provenance_entries"]))
+        self.assertEqual(
+            replay,
+            self.admin_session.build_deterministic_replay(
+                dependency_map, stability, transition_history, provenance
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            (dependency_map, stability, transition_history, provenance),
+        )
+
+    def test_stage26_missing_helper_and_replay_labels_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            {"Administrative Action": None},
+        )
+        administrative_action = next(
+            entry
+            for entry in replay["replay_entries"]
+            if entry["output_name"] == "Administrative Action"
+        )
+
+        self.assertEqual(
+            "Not Available",
+            administrative_action["producing_function_or_helper"],
+        )
+        self.assertEqual(
+            "Replay Basis Not Available",
+            administrative_action["replay_label"],
+        )
+        self.assertEqual("Partial Replay Available", replay["replay_state"])
+        labels = {entry["replay_label"] for entry in replay["replay_entries"]}
+        self.assertIn("Replayable Dependency-Derived Output", labels)
+        self.assertIn("Replayable Stability-Derived Output", labels)
+        self.assertIn("Replayable Transition-Derived Output", labels)
+        self.assertIn("Replayable Provenance-Derived Output", labels)
+        self.assertEqual(
+            "Replay Basis Not Available",
+            self.admin_session.build_deterministic_replay()["replay_state"],
+        )
+
+    def test_stage26_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        executive = self.admin_session._render_deterministic_replay_mode(
+            replay, report_mode="executive"
+        )
+        review = self.admin_session._render_deterministic_replay_mode(
+            replay, report_mode="review"
+        )
+        full = self.admin_session._render_deterministic_replay_mode(
+            replay, report_mode="full"
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Deterministic Replay Mode</h2>", rendered)
+            self.assertIn("<h3>Replay Overview</h3>", rendered)
+            self.assertIn("<h3>Replay Limitations</h3>", rendered)
+        self.assertIn("stage26-replay-executive", executive)
+        self.assertNotIn("Replay Summary Table", executive)
+        self.assertNotIn("Full Deterministic Replay", executive)
+        self.assertIn("stage26-replay-review", review)
+        self.assertIn("Replay Summary Table", review)
+        self.assertNotIn("Full Deterministic Replay", review)
+        self.assertNotIn("Visible Input Basis</th>", review)
+        self.assertIn("stage26-replay-full", full)
+        self.assertIn("Full Deterministic Replay", full)
+        self.assertIn("Visible Input Basis</th>", full)
+        self.assertIn("Dependency Basis</th>", full)
+        self.assertIn("Stability Basis</th>", full)
+        self.assertIn("Transition Basis</th>", full)
+        self.assertIn("Provenance Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -6929,6 +7104,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage25-provenance-executive", executive)
         self.assertIn("<h2>Output Provenance Layer</h2>", executive)
         self.assertNotIn("Provenance Summary Table", executive)
+        self.assertIn("stage26-replay-executive", executive)
+        self.assertIn("<h2>Deterministic Replay Mode</h2>", executive)
+        self.assertNotIn("Replay Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -6956,6 +7134,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage25-provenance-review", review)
         self.assertIn("Provenance Summary Table", review)
         self.assertNotIn("Full Output Provenance", review)
+        self.assertIn("stage26-replay-review", review)
+        self.assertIn("Replay Summary Table", review)
+        self.assertNotIn("Full Deterministic Replay", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -6978,6 +7159,7 @@ class AdminSessionTests(unittest.TestCase):
             "Pathway Stability Analysis",
             "Record State Transition History",
             "Output Provenance Layer",
+            "Deterministic Replay Mode",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -6988,6 +7170,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Transition History", explicit_full)
         self.assertIn("stage25-provenance-full", explicit_full)
         self.assertIn("Full Output Provenance", explicit_full)
+        self.assertIn("stage26-replay-full", explicit_full)
+        self.assertIn("Full Deterministic Replay", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -6999,6 +7183,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Record State Transition History"),
             explicit_full.index("Output Provenance Layer"),
+        )
+        self.assertLess(
+            explicit_full.index("Output Provenance Layer"),
+            explicit_full.index("Deterministic Replay Mode"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
