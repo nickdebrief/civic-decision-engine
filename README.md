@@ -270,6 +270,22 @@ the database, or modify records.
 
 ---
 
+## Stage 27 — Framework Integrity Verification
+
+Adds deterministic integrity verification for the visible framework inspection
+stack. Fourteen checks cover the Stage 21 report-mode contract, Stage 22–26
+preservation counts, replay coverage, current administrative output presence,
+declared limitation visibility, and non-mutating/public-API boundaries.
+
+Executive mode presents a concise integrity overview; Review mode adds the
+integrity summary table; Full Inspection mode exposes expected and observed
+states, verification results and bases, affected outputs, and limitations for
+every check. Stage 27 verifies framework structure only. It does not validate
+evidence, determine truth, reclassify outputs, infer hidden inputs, alter public
+APIs, write to the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

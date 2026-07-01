@@ -32140,6 +32140,7 @@ STAGE21_SECTION_INDEX = (
     ("Record State Transition History", "Overview", "Summary", "Detail"),
     ("Output Provenance Layer", "Overview", "Summary", "Detail"),
     ("Deterministic Replay Mode", "Overview", "Summary", "Detail"),
+    ("Framework Integrity Verification", "Overview", "Summary", "Detail"),
 )
 
 
@@ -35132,6 +35133,450 @@ def _render_deterministic_replay_mode(
       </section>"""
 
 
+STAGE27_LIMITATIONS = (
+    "Framework Integrity Verification does not validate evidence.",
+    "Framework Integrity Verification does not determine truth.",
+    "Framework Integrity Verification does not determine liability.",
+    "Framework Integrity Verification does not infer intent.",
+    "Framework Integrity Verification does not assign blame.",
+    "Framework Integrity Verification does not infer hidden inputs.",
+    "Framework Integrity Verification does not create evidence.",
+    "Framework Integrity Verification does not modify records.",
+    "Framework Integrity Verification does not change classifications.",
+    "Framework Integrity Verification does not change thresholds.",
+    "Framework Integrity Verification does not change dependencies.",
+    "Framework Integrity Verification does not change evidence relationships.",
+    "Framework Integrity Verification does not change transition history.",
+    "Framework Integrity Verification does not change provenance.",
+    "Framework Integrity Verification does not change replay outputs.",
+    "Framework Integrity Verification does not change report modes.",
+    "Framework Integrity Verification does not write to the database.",
+    "Framework Integrity Verification does not alter public API behaviour.",
+    "Framework Integrity Verification verifies framework structure only.",
+)
+
+
+def _stage27_integrity_check(
+    *,
+    integrity_check_id: str,
+    check_name: str,
+    check_category: str,
+    expected_state: Any,
+    observed_state: Any,
+    verification_basis: str,
+    affected_stage_or_output: str,
+    limitation_statement: str,
+    verified_with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_state == expected_state:
+        result = (
+            "Verified With Limitation"
+            if verified_with_limitation
+            else "Verified"
+        )
+    else:
+        result = "Integrity Gap Detected"
+    return {
+        "integrity_check_id": integrity_check_id,
+        "check_name": check_name,
+        "check_category": check_category,
+        "expected_state": expected_state,
+        "observed_state": observed_state,
+        "verification_result": result,
+        "verification_basis": verification_basis,
+        "affected_stage_or_output": affected_stage_or_output,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_integrity_verification(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_report = dict(report_structure or {})
+    normalized_dependency = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    normalized_replay = dict(deterministic_replay or {})
+    normalized_administrative = dict(administrative_outputs or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+        }
+    )
+    dependency_count = len(normalized_dependency.get("nodes") or [])
+    pathway_count = len(normalized_stability.get("pathways") or [])
+    transition_count = len(normalized_transition.get("transitions") or [])
+    provenance_count = len(normalized_provenance.get("provenance_entries") or [])
+    replay_count = len(normalized_replay.get("replay_entries") or [])
+    replay_summary = normalized_replay.get("replay_summary") or {}
+    administrative_keys = [
+        definition[1] for definition in STAGE25_OUTPUT_DEFINITIONS[:11]
+    ]
+    administrative_count = sum(
+        normalized_administrative.get(key) not in (None, "", [], {})
+        for key in administrative_keys
+    )
+    all_limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    report_mode_boundary_visible = any(
+        "does not change classifications" in str(value).lower()
+        for value in STAGE21_SUMMARY_LIMITATIONS
+    )
+    mutation_boundary_visible = any(
+        "does not modify records" in str(value).lower()
+        for value in STAGE26_LIMITATIONS
+    )
+    public_api_boundary_visible = any(
+        "does not alter public api behaviour" in str(value).lower()
+        for value in STAGE26_LIMITATIONS
+    )
+    checks = [
+        _stage27_integrity_check(
+            integrity_check_id="IV-001",
+            check_name="Full Inspection Default",
+            check_category="Report Mode Integrity",
+            expected_state="Full Inspection Report",
+            observed_state=classify_report_mode(None),
+            verification_basis="Stage 21 default mode normalization is evaluated without a report-mode query value.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="This verifies the implemented default label only; it does not change report selection.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-002",
+            check_name="Dependency Node Preservation",
+            check_category="Dependency Integrity",
+            expected_state=30,
+            observed_state=dependency_count if normalized_dependency else None,
+            verification_basis="Count of visible Stage 22 dependency nodes.",
+            affected_stage_or_output="Stage 22 Determination Dependency Mapping",
+            limitation_statement="Node count verifies structural preservation, not correctness of a dependency.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-003",
+            check_name="Pathway Preservation",
+            check_category="Pathway Integrity",
+            expected_state=8,
+            observed_state=pathway_count if normalized_stability else None,
+            verification_basis="Count of visible Stage 23 pathway entries.",
+            affected_stage_or_output="Stage 23 Pathway Stability Analysis",
+            limitation_statement="Pathway count verifies structural preservation, not real-world stability.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-004",
+            check_name="Transition Entry Preservation",
+            check_category="Transition Integrity",
+            expected_state=11,
+            observed_state=transition_count if normalized_transition else None,
+            verification_basis="Count of visible Stage 24 transition entries.",
+            affected_stage_or_output="Stage 24 Record State Transition History",
+            limitation_statement="Transition count does not infer missing prior states.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-005",
+            check_name="Provenance Entry Preservation",
+            check_category="Provenance Integrity",
+            expected_state=14,
+            observed_state=provenance_count if normalized_provenance else None,
+            verification_basis="Count of visible Stage 25 provenance entries.",
+            affected_stage_or_output="Stage 25 Output Provenance Layer",
+            limitation_statement="Provenance count does not validate producing helpers or output truth.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-006",
+            check_name="Replay Step Preservation",
+            check_category="Replay Integrity",
+            expected_state=15,
+            observed_state=replay_count if normalized_replay else None,
+            verification_basis="Count of visible Stage 26 replay entries.",
+            affected_stage_or_output="Stage 26 Deterministic Replay Mode",
+            limitation_statement="Replay step count does not recalculate or validate outputs.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-007",
+            check_name="Replayable Output Consistency",
+            check_category="Replay Integrity",
+            expected_state=replay_count if normalized_replay else None,
+            observed_state=replay_summary.get("replayable_outputs"),
+            verification_basis="Stage 26 replayable output count is compared with total visible replay steps.",
+            affected_stage_or_output="Stage 26 Replay Summary",
+            limitation_statement="Count equality verifies replay coverage only.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-008",
+            check_name="Non-Replayable Output Absence",
+            check_category="Replay Integrity",
+            expected_state=0,
+            observed_state=replay_summary.get("non_replayable_outputs"),
+            verification_basis="Visible Stage 26 non-replayable output count.",
+            affected_stage_or_output="Stage 26 Replay Summary",
+            limitation_statement="A zero count does not certify factual correctness.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-009",
+            check_name="Administrative Output Availability",
+            check_category="Boundary Integrity",
+            expected_state=11,
+            observed_state=administrative_count if normalized_administrative else None,
+            verification_basis="Presence count for the eleven current administrative outputs used by Stages 22–26.",
+            affected_stage_or_output="Current Administrative Outputs",
+            limitation_statement="Availability does not validate an administrative output.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-010",
+            check_name="Prior Limitation Visibility",
+            check_category="Limitation Integrity",
+            expected_state=True,
+            observed_state=all_limitations_visible,
+            verification_basis="Declared limitation sets for Stages 21 through 26 are present and non-empty.",
+            affected_stage_or_output="Stages 21–26 Limitations",
+            limitation_statement="Presence verifies visibility only, not enforcement outside the framework.",
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-011",
+            check_name="Report Mode Classification Boundary",
+            check_category="Report Mode Integrity",
+            expected_state=True,
+            observed_state=report_mode_boundary_visible,
+            verification_basis="Stage 21 declares that summary modes do not change classifications.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="This verifies the declared boundary and does not independently recompute every classification.",
+            verified_with_limitation=True,
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-012",
+            check_name="Record Mutation Boundary",
+            check_category="Boundary Integrity",
+            expected_state=True,
+            observed_state=mutation_boundary_visible,
+            verification_basis="Stage 26 declares that replay does not modify records.",
+            affected_stage_or_output="Stage 26 Deterministic Replay Mode",
+            limitation_statement="This verifies a declared methodological boundary, not external database activity.",
+            verified_with_limitation=True,
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-013",
+            check_name="Public API Boundary",
+            check_category="Boundary Integrity",
+            expected_state=True,
+            observed_state=public_api_boundary_visible,
+            verification_basis="Stage 26 declares that replay does not alter public API behaviour.",
+            affected_stage_or_output="Stage 26 Deterministic Replay Mode",
+            limitation_statement="This verifies a declared methodological boundary, not external API monitoring.",
+            verified_with_limitation=True,
+        ),
+        _stage27_integrity_check(
+            integrity_check_id="IV-014",
+            check_name="Report Mode Availability",
+            check_category="Report Mode Integrity",
+            expected_state=3,
+            observed_state=(
+                len(normalized_report.get("available_report_modes") or [])
+                if normalized_report
+                else None
+            ),
+            verification_basis="Count of visible Stage 21 Executive, Review, and Full Inspection report modes.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="Mode availability verifies presentation structure only.",
+        ),
+    ]
+    result_counts = {
+        result: sum(check["verification_result"] == result for check in checks)
+        for result in (
+            "Verified",
+            "Verified With Limitation",
+            "Not Available",
+            "Integrity Gap Detected",
+        )
+    }
+    if result_counts["Integrity Gap Detected"]:
+        integrity_state = "Framework Integrity Gap Detected"
+    elif result_counts["Not Available"]:
+        integrity_state = "Framework Integrity Not Fully Available"
+    elif result_counts["Verified With Limitation"]:
+        integrity_state = "Framework Integrity Verified With Limitations"
+    else:
+        integrity_state = "Framework Integrity Verified"
+    summary = {
+        "integrity_state": integrity_state,
+        "total_integrity_checks": len(checks),
+        "verified_checks": result_counts["Verified"],
+        "verified_with_limitation_checks": result_counts[
+            "Verified With Limitation"
+        ],
+        "unavailable_checks": result_counts["Not Available"],
+        "integrity_gap_checks": result_counts["Integrity Gap Detected"],
+        "dependency_node_count": dependency_count,
+        "pathway_count": pathway_count,
+        "transition_entry_count": transition_count,
+        "provenance_entry_count": provenance_count,
+        "replay_step_count": replay_count,
+        "limitation_summary": (
+            "Framework integrity verification checks visible structural preservation and declared boundaries only; it does not validate evidence or truth."
+        ),
+    }
+    return {
+        "integrity_state": integrity_state,
+        "integrity_summary": summary,
+        "integrity_checks": checks,
+        "limitations": list(STAGE27_LIMITATIONS),
+    }
+
+
+def _render_stage27_overview(verification: dict[str, Any]) -> str:
+    summary = verification["integrity_summary"]
+    return f"""
+      <section class="stage27-integrity-overview">
+        <h3>Integrity Overview</h3>
+        {_render_stage18a_table((
+            ("Integrity State", summary["integrity_state"]),
+            ("Total Integrity Checks", summary["total_integrity_checks"]),
+            ("Verified Checks", summary["verified_checks"]),
+            ("Verified With Limitation Checks", summary["verified_with_limitation_checks"]),
+            ("Unavailable Checks", summary["unavailable_checks"]),
+            ("Integrity Gap Checks", summary["integrity_gap_checks"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage27_integrity_table(
+    checks: list[dict[str, Any]],
+    *,
+    include_basis: bool,
+) -> str:
+    if include_basis:
+        columns = (
+            ("Check ID", "integrity_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "check_category", False),
+            ("Expected State", "expected_state", False),
+            ("Observed State", "observed_state", False),
+            ("Verification Result", "verification_result", False),
+            ("Verification Basis", "verification_basis", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Integrity Verification"
+        class_name = "stage27-full-integrity-verification"
+    else:
+        columns = (
+            ("Check ID", "integrity_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "check_category", False),
+            ("Expected State", "expected_state", False),
+            ("Observed State", "observed_state", False),
+            ("Verification Result", "verification_result", False),
+        )
+        title = "Integrity Summary Table"
+        class_name = "stage27-integrity-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(check.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{escape(_stage18a_display_value(check.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for check in checks
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No integrity checks are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage27_limitations(
+    verification: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = verification["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 7, 8, 16, 17, 18)]
+    return f"""
+      <section class="stage27-integrity-limitations">
+        <h3>Integrity Limitations</h3>
+        {_render_stage19a_list(limitations, "No integrity limitations available.")}
+      </section>"""
+
+
+def _render_framework_integrity_verification(
+    verification: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Integrity Verification is derived deterministically from
+          existing visible framework outputs, preservation counts, replay
+          coverage, and declared methodological boundaries only. It verifies
+          framework structure without validating evidence, determining truth,
+          reclassifying outputs, or modifying the record.
+        </p>"""
+    overview = _render_stage27_overview(verification)
+    if report_mode == "executive":
+        content = overview + _render_stage27_limitations(
+            verification, concise=True
+        )
+        mode_class = "stage27-integrity-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage27_integrity_table(
+                verification["integrity_checks"], include_basis=False
+            )
+            + _render_stage27_limitations(verification)
+        )
+        mode_class = "stage27-integrity-review"
+    else:
+        content = (
+            overview
+            + _render_stage27_integrity_table(
+                verification["integrity_checks"], include_basis=True
+            )
+            + _render_stage27_limitations(verification)
+        )
+        mode_class = "stage27-integrity-full"
+    return f"""
+      <section class="management-section stage27-framework-integrity-verification {mode_class}">
+        <h2>Framework Integrity Verification</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -35668,6 +36113,19 @@ def render_admin_record_evidence_page(
         stage26_deterministic_replay,
         report_mode=report_structure["report_mode"],
     )
+    stage27_integrity_verification = build_framework_integrity_verification(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage22_current_values,
+    )
+    stage27_integrity_section = _render_framework_integrity_verification(
+        stage27_integrity_verification,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -35710,6 +36168,7 @@ def render_admin_record_evidence_page(
             + stage24_transition_section
             + stage25_provenance_section
             + stage26_replay_section
+            + stage27_integrity_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -35721,6 +36180,7 @@ def render_admin_record_evidence_page(
             + stage24_transition_section
             + stage25_provenance_section
             + stage26_replay_section
+            + stage27_integrity_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -35737,6 +36197,7 @@ def render_admin_record_evidence_page(
             f"{stage24_transition_section}"
             f"{stage25_provenance_section}"
             f"{stage26_replay_section}"
+            f"{stage27_integrity_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -36034,6 +36495,24 @@ def render_admin_record_evidence_page(
     .stage26-full-replay table {{
       min-width: 2200px;
     }}
+    .stage27-framework-integrity-verification table {{
+      table-layout: auto;
+    }}
+    .stage27-framework-integrity-verification th,
+    .stage27-framework-integrity-verification td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage27-integrity-summary,
+    .stage27-full-integrity-verification {{
+      overflow-x: auto;
+    }}
+    .stage27-full-integrity-verification table {{
+      min-width: 1680px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -36057,6 +36536,7 @@ def render_admin_record_evidence_page(
       .stage24-transition-summary table {{ min-width: 760px; }}
       .stage25-provenance-summary table {{ min-width: 900px; }}
       .stage26-replay-summary table {{ min-width: 1120px; }}
+      .stage27-integrity-summary table {{ min-width: 900px; }}
     }}
     details {{
       break-inside: avoid;
