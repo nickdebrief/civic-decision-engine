@@ -32137,6 +32137,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Self-Description", "Limitations", "Summary", "Detail"),
     ("Determination Dependency Mapping", "Summary", "Overview and Paths", "Detail"),
     ("Pathway Stability Analysis", "Summary", "Overview and Paths", "Detail"),
+    ("Record State Transition History", "Overview", "Summary", "Detail"),
 )
 
 
@@ -34049,6 +34050,354 @@ def _render_pathway_stability_analysis(
       </section>"""
 
 
+STAGE24_LIMITATIONS = (
+    "Record State Transition History does not create transition history.",
+    "Record State Transition History does not infer missing prior states.",
+    "Record State Transition History does not determine truth.",
+    "Record State Transition History does not determine liability.",
+    "Record State Transition History does not infer intent.",
+    "Record State Transition History does not assign blame.",
+    "Record State Transition History does not validate evidence.",
+    "Record State Transition History does not predict future states.",
+    "Record State Transition History does not forecast outcomes.",
+    "Record State Transition History does not modify records.",
+    "Record State Transition History does not change classifications.",
+    "Record State Transition History does not change thresholds.",
+    "Record State Transition History does not change dependencies.",
+    "Record State Transition History does not change evidence relationships.",
+    "Record State Transition History does not change report modes.",
+)
+
+
+STAGE24_TRANSITION_DEFINITIONS = (
+    ("TH-001", "evidence_readiness", "Evidence Readiness", "Stage 7G", "PW-002"),
+    ("TH-002", "administrative_action", "Administrative Action", "Stage 8A", "PW-001"),
+    ("TH-003", "workflow_state", "Workflow State", "Stage 8D", "PW-001"),
+    ("TH-004", "administrative_disposition", "Administrative Disposition", "Stage 9A", "PW-001"),
+    ("TH-005", "review_eligibility", "Review Eligibility", "Stage 9C", "PW-001"),
+    ("TH-006", "administrative_status", "Administrative Status", "Stage 9E", "PW-001"),
+    ("TH-007", "effective_state", "Effective State", "Stage 10C", "PW-001"),
+    ("TH-008", "outcome_classification", "Outcome Classification", "Stage 11A", "PW-003"),
+    ("TH-009", "resolution_classification", "Resolution Classification", "Stage 12A", "PW-004"),
+    ("TH-010", "closure_classification", "Closure Classification", "Stage 13A", "PW-005"),
+    ("TH-011", "archive_classification", "Archive Classification", "Stage 14A", "PW-006"),
+)
+
+
+def classify_record_state_transition(
+    *,
+    output_key: str,
+    prior_state: Any,
+    current_state: Any,
+    pathway_stability: str | None = None,
+) -> str:
+    if current_state in (None, "", [], {}):
+        return "Transition History Not Available"
+    if prior_state in (None, "", [], {}, "Not Available"):
+        return "Current State Only"
+    if output_key == "archive_classification":
+        return "Archive-Dependent Progression"
+    if output_key == "closure_classification":
+        return "Closure-Dependent Progression"
+    if output_key == "resolution_classification":
+        return "Resolution-Dependent Progression"
+    if output_key in {
+        "review_eligibility",
+        "administrative_status",
+        "effective_state",
+        "outcome_classification",
+    }:
+        return "Review-Dependent Progression"
+    if pathway_stability == "Evidence-Sensitive Pathway":
+        return "Evidence-Sensitive Progression"
+    return "Structural Progression Visible"
+
+
+def build_record_state_transition_history(
+    current_values: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    prior_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_current = dict(current_values or {})
+    normalized_dependency_map = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_prior = dict(prior_values or {})
+    dependency_nodes = {
+        str(node.get("node_key")): node
+        for node in normalized_dependency_map.get("nodes") or []
+    }
+    pathways = {
+        str(pathway.get("pathway_id")): pathway
+        for pathway in normalized_stability.get("pathways") or []
+    }
+    transitions = []
+    for transition_id, output_key, output_name, source_stage, pathway_id in STAGE24_TRANSITION_DEFINITIONS:
+        current_state = normalized_current.get(output_key)
+        if current_state in (None, "", [], {}):
+            continue
+        prior_available = (
+            output_key in normalized_prior
+            and normalized_prior.get(output_key) not in (None, "", [], {})
+        )
+        prior_state = (
+            normalized_prior.get(output_key) if prior_available else "Not Available"
+        )
+        pathway = pathways.get(pathway_id) or {}
+        transition_label = classify_record_state_transition(
+            output_key=output_key,
+            prior_state=prior_state,
+            current_state=current_state,
+            pathway_stability=pathway.get("pathway_stability_classification"),
+        )
+        if not prior_available:
+            transition_basis = (
+                "No prior state is available in visible record-derived outputs; the current state is shown without inference."
+            )
+        elif prior_state == current_state:
+            transition_basis = (
+                "Visible prior and current outputs are available and show no state change."
+            )
+        else:
+            transition_basis = (
+                f"Visible prior and current outputs show progression from {prior_state} to {current_state}."
+            )
+        dependency_node = dependency_nodes.get(output_key) or {}
+        upstream_dependencies = list(
+            dependency_node.get("upstream_dependencies") or []
+        )
+        if dependency_node:
+            dependency_basis = (
+                f'Stage 22 mapping state: {dependency_node.get("mapping_state", "Not Available")}; '
+                + (
+                    "upstream dependency nodes: "
+                    + ", ".join(str(value) for value in upstream_dependencies)
+                    if upstream_dependencies
+                    else "no upstream dependency nodes are declared"
+                )
+                + "."
+            )
+        else:
+            dependency_basis = "Stage 22 dependency mapping is not available for this output."
+        if pathway:
+            stability_basis = (
+                f'{pathway.get("pathway_name", "Pathway")}: '
+                f'{pathway.get("pathway_stability_classification", "Stability Not Available")}. '
+                f'{pathway.get("stability_basis", "No stability basis available.")}'
+            )
+        else:
+            stability_basis = "Stage 23 pathway stability is not available for this output."
+        transitions.append(
+            {
+                "transition_id": transition_id,
+                "source_stage": source_stage,
+                "output_name": output_name,
+                "prior_state": prior_state,
+                "current_state": current_state,
+                "transition_label": transition_label,
+                "transition_basis": transition_basis,
+                "dependency_basis": dependency_basis,
+                "stability_basis": stability_basis,
+                "limitation_statement": (
+                    "This transition entry describes visible framework outputs only and does not infer a missing state or predict a future state."
+                ),
+            }
+        )
+
+    label_order = (
+        "Evidence-Sensitive Progression",
+        "Archive-Dependent Progression",
+        "Closure-Dependent Progression",
+        "Resolution-Dependent Progression",
+        "Review-Dependent Progression",
+        "Structural Progression Visible",
+    )
+    labels = [str(transition["transition_label"]) for transition in transitions]
+    if not transitions:
+        transition_state = "Transition History Not Available"
+    elif all(label == "Current State Only" for label in labels):
+        transition_state = "Current State Only"
+    else:
+        transition_state = next(
+            (label for label in label_order if label in labels),
+            "Structural Progression Visible",
+        )
+    prior_states_available = sum(
+        1 for transition in transitions if transition["prior_state"] != "Not Available"
+    )
+    summary = {
+        "transition_state": transition_state,
+        "total_transition_entries": len(transitions),
+        "prior_states_available": prior_states_available,
+        "current_state_only_entries": sum(
+            1
+            for transition in transitions
+            if transition["transition_label"] == "Current State Only"
+        ),
+        "visible_progression_entries": sum(
+            1
+            for transition in transitions
+            if transition["transition_label"]
+            not in {"Current State Only", "Transition History Not Available"}
+        ),
+        "dependency_mapping_state": normalized_dependency_map.get(
+            "dependency_mapping_state", "Not Available"
+        ),
+        "pathway_stability_state": normalized_stability.get(
+            "stability_state", "Stability Not Available"
+        ),
+        "limitation_summary": (
+            "Transition history describes visible current and prior framework outputs only; missing prior states remain unavailable."
+        ),
+    }
+    return {
+        "transition_state": transition_state,
+        "transition_summary": summary,
+        "transitions": transitions,
+        "limitations": list(STAGE24_LIMITATIONS),
+    }
+
+
+def _render_stage24_overview(history: dict[str, Any]) -> str:
+    summary = history["transition_summary"]
+    return f"""
+      <section class="stage24-transition-overview">
+        <h3>Transition Overview</h3>
+        {_render_stage18a_table((
+            ("Current Transition State", summary["transition_state"]),
+            ("Total Transition Entries", summary["total_transition_entries"]),
+            ("Prior States Available", summary["prior_states_available"]),
+            ("Current State Only Entries", summary["current_state_only_entries"]),
+            ("Dependency Mapping State", summary["dependency_mapping_state"]),
+            ("Pathway Stability State", summary["pathway_stability_state"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage24_transition_table(
+    transitions: list[dict[str, Any]],
+    *,
+    include_bases: bool,
+) -> str:
+    if include_bases:
+        headers = (
+            "<th>Transition ID</th><th>Source Stage</th><th>Output Name</th>"
+            "<th>Prior State</th><th>Current State</th><th>Transition Label</th>"
+            "<th>Transition Basis</th><th>Dependency Basis</th>"
+            "<th>Stability Basis</th><th>Limitation Statement</th>"
+        )
+        rows = "".join(
+            "<tr>"
+            f'<td><code>{escape(str(transition["transition_id"]))}</code></td>'
+            f'<td>{escape(str(transition["source_stage"]))}</td>'
+            f'<td>{escape(str(transition["output_name"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(transition.get("prior_state")))}</td>'
+            f'<td>{escape(_stage18a_display_value(transition.get("current_state")))}</td>'
+            f'<td>{escape(str(transition["transition_label"]))}</td>'
+            f'<td>{escape(str(transition["transition_basis"]))}</td>'
+            f'<td>{escape(str(transition["dependency_basis"]))}</td>'
+            f'<td>{escape(str(transition["stability_basis"]))}</td>'
+            f'<td>{escape(str(transition["limitation_statement"]))}</td>'
+            "</tr>"
+            for transition in transitions
+        )
+        colspan = 10
+        class_name = "stage24-full-transition-history"
+        title = "Full Transition History"
+    else:
+        headers = (
+            "<th>Transition ID</th><th>Source Stage</th><th>Output Name</th>"
+            "<th>Prior State</th><th>Current State</th><th>Transition Label</th>"
+        )
+        rows = "".join(
+            "<tr>"
+            f'<td><code>{escape(str(transition["transition_id"]))}</code></td>'
+            f'<td>{escape(str(transition["source_stage"]))}</td>'
+            f'<td>{escape(str(transition["output_name"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(transition.get("prior_state")))}</td>'
+            f'<td>{escape(_stage18a_display_value(transition.get("current_state")))}</td>'
+            f'<td>{escape(str(transition["transition_label"]))}</td>'
+            "</tr>"
+            for transition in transitions
+        )
+        colspan = 6
+        class_name = "stage24-transition-summary"
+        title = "Transition Summary Table"
+    if not rows:
+        rows = f'<tr><td colspan="{colspan}">No transition history is available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage24_limitations(
+    history: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = history["limitations"]
+    if concise:
+        limitations = [
+            limitations[index] for index in (0, 1, 7, 9, 10)
+        ]
+    return f"""
+      <section class="stage24-transition-limitations">
+        <h3>Transition Limitations</h3>
+        {_render_stage19a_list(limitations, "No transition limitations available.")}
+      </section>"""
+
+
+def _render_record_state_transition_history(
+    history: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Record State Transition History is derived deterministically from
+          existing visible framework outputs, Stage 22 dependency mappings,
+          and Stage 23 pathway stability only. It does not infer missing prior
+          states, predict future states, validate evidence, change a
+          classification, or modify the record.
+        </p>"""
+    overview = _render_stage24_overview(history)
+    if report_mode == "executive":
+        content = overview + _render_stage24_limitations(history, concise=True)
+        mode_class = "stage24-transition-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage24_transition_table(
+                history["transitions"],
+                include_bases=False,
+            )
+            + _render_stage24_limitations(history)
+        )
+        mode_class = "stage24-transition-review"
+    else:
+        content = (
+            overview
+            + _render_stage24_transition_table(
+                history["transitions"],
+                include_bases=True,
+            )
+            + _render_stage24_limitations(history)
+        )
+        mode_class = "stage24-transition-full"
+    return f"""
+      <section class="management-section stage24-record-state-transition-history {mode_class}">
+        <h2>Record State Transition History</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -34556,6 +34905,15 @@ def render_admin_record_evidence_page(
         stage23_stability_analysis,
         report_mode=report_structure["report_mode"],
     )
+    stage24_transition_history = build_record_state_transition_history(
+        stage22_current_values,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+    )
+    stage24_transition_section = _render_record_state_transition_history(
+        stage24_transition_history,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -34595,6 +34953,7 @@ def render_admin_record_evidence_page(
             stage21_executive_core
             + stage22_dependency_section
             + stage23_stability_section
+            + stage24_transition_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -34603,6 +34962,7 @@ def render_admin_record_evidence_page(
             + stage21_review_detail
             + stage22_dependency_section
             + stage23_stability_section
+            + stage24_transition_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -34616,6 +34976,7 @@ def render_admin_record_evidence_page(
             f"{evidence_coverage_group}"
             f"{stage22_dependency_section}"
             f"{stage23_stability_section}"
+            f"{stage24_transition_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -34859,6 +35220,24 @@ def render_admin_record_evidence_page(
     .stage23-stability-path h4 {{
       margin: 16px 0 6px;
     }}
+    .stage24-record-state-transition-history table {{
+      table-layout: auto;
+    }}
+    .stage24-record-state-transition-history th,
+    .stage24-record-state-transition-history td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage24-transition-summary,
+    .stage24-full-transition-history {{
+      overflow-x: auto;
+    }}
+    .stage24-full-transition-history table {{
+      min-width: 1720px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -34879,6 +35258,7 @@ def render_admin_record_evidence_page(
       .stage23-pathway-level-stability table {{ min-width: 1640px; }}
       .stage23-evidence-sensitivity-indicators table {{ min-width: 860px; }}
       .stage23-stability-path table {{ min-width: 720px; }}
+      .stage24-transition-summary table {{ min-width: 760px; }}
     }}
     details {{
       break-inside: avoid;
