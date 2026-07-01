@@ -32138,6 +32138,7 @@ STAGE21_SECTION_INDEX = (
     ("Determination Dependency Mapping", "Summary", "Overview and Paths", "Detail"),
     ("Pathway Stability Analysis", "Summary", "Overview and Paths", "Detail"),
     ("Record State Transition History", "Overview", "Summary", "Detail"),
+    ("Output Provenance Layer", "Overview", "Summary", "Detail"),
 )
 
 
@@ -34398,6 +34399,418 @@ def _render_record_state_transition_history(
       </section>"""
 
 
+STAGE25_LIMITATIONS = (
+    "Output Provenance Layer does not create provenance.",
+    "Output Provenance Layer does not infer hidden inputs.",
+    "Output Provenance Layer does not infer missing helper functions.",
+    "Output Provenance Layer does not determine truth.",
+    "Output Provenance Layer does not determine liability.",
+    "Output Provenance Layer does not infer intent.",
+    "Output Provenance Layer does not assign blame.",
+    "Output Provenance Layer does not validate evidence.",
+    "Output Provenance Layer does not predict outcomes.",
+    "Output Provenance Layer does not modify records.",
+    "Output Provenance Layer does not change classifications.",
+    "Output Provenance Layer does not change thresholds.",
+    "Output Provenance Layer does not change dependencies.",
+    "Output Provenance Layer does not change evidence relationships.",
+    "Output Provenance Layer does not change transition history.",
+    "Output Provenance Layer does not change report modes.",
+)
+
+
+STAGE25_OUTPUT_DEFINITIONS = (
+    ("OP-001", "evidence_readiness", "Evidence Readiness", "Stage 7G", "classify_evidence_readiness", "PW-002"),
+    ("OP-002", "administrative_action", "Administrative Action", "Stage 8A", "classify_administrative_action", "PW-001"),
+    ("OP-003", "workflow_state", "Workflow State", "Stage 8D", "classify_workflow_state", "PW-001"),
+    ("OP-004", "administrative_disposition", "Administrative Disposition", "Stage 9A", "classify_administrative_disposition", "PW-001"),
+    ("OP-005", "review_eligibility", "Review Eligibility", "Stage 9C", "classify_review_eligibility", "PW-001"),
+    ("OP-006", "administrative_status", "Administrative Status", "Stage 9E", "build_administrative_status_summary", "PW-001"),
+    ("OP-007", "effective_state", "Effective State", "Stage 10C", "classify_effective_state", "PW-001"),
+    ("OP-008", "outcome_classification", "Outcome Classification", "Stage 11A", "classify_outcome", "PW-003"),
+    ("OP-009", "resolution_classification", "Resolution Classification", "Stage 12A", "classify_resolution", "PW-004"),
+    ("OP-010", "closure_classification", "Closure Classification", "Stage 13A", "_classify_closure", "PW-005"),
+    ("OP-011", "archive_classification", "Archive Classification", "Stage 14A", "_archive_classification", "PW-006"),
+    ("OP-012", "dependency_mapping", "Determination Dependency Mapping", "Stage 22", "build_determination_dependency_map", None),
+    ("OP-013", "pathway_stability", "Pathway Stability Analysis", "Stage 23", "build_pathway_stability_analysis", None),
+    ("OP-014", "transition_history", "Record State Transition History", "Stage 24", "build_record_state_transition_history", None),
+)
+
+
+def classify_output_provenance(
+    *,
+    output_key: str,
+    output_value: Any,
+    producing_helper: Any,
+    has_dependencies: bool,
+    transition_label: str | None = None,
+) -> str:
+    if output_value in (None, "", [], {}):
+        return "Provenance Not Available"
+    if output_key == "dependency_mapping":
+        return "Dependency-Derived Output"
+    if output_key == "pathway_stability":
+        return "Stability-Derived Output"
+    if output_key == "transition_history":
+        return "Transition-Derived Output"
+    if transition_label == "Current State Only":
+        return "Current-State Output"
+    if has_dependencies:
+        return "Dependency-Derived Output"
+    if producing_helper not in (None, "", "Not Available"):
+        return "Direct Framework Output"
+    return "Provenance Not Available"
+
+
+def _stage25_helper_name(helper_name: Any) -> str:
+    return str(helper_name) if helper_name not in (None, "") else "Not Available"
+
+
+def build_output_provenance_layer(
+    current_values: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    producing_helper_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_current = dict(current_values or {})
+    normalized_dependency_map = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition_history = dict(transition_history or {})
+    helper_overrides = dict(producing_helper_overrides or {})
+    dependency_nodes = {
+        str(node.get("node_key")): node
+        for node in normalized_dependency_map.get("nodes") or []
+    }
+    dependency_nodes_by_id = {
+        str(node.get("node_id")): node
+        for node in normalized_dependency_map.get("nodes") or []
+    }
+    pathways = {
+        str(pathway.get("pathway_id")): pathway
+        for pathway in normalized_stability.get("pathways") or []
+    }
+    transitions = {
+        str(transition.get("output_name")): transition
+        for transition in normalized_transition_history.get("transitions") or []
+    }
+    layer_values = {
+        "dependency_mapping": normalized_dependency_map.get(
+            "dependency_mapping_state"
+        ),
+        "pathway_stability": normalized_stability.get("stability_state"),
+        "transition_history": normalized_transition_history.get(
+            "transition_state"
+        ),
+    }
+    entries = []
+    for provenance_id, output_key, output_name, producing_stage, declared_helper, pathway_id in STAGE25_OUTPUT_DEFINITIONS:
+        output_value = (
+            layer_values.get(output_key)
+            if output_key in layer_values
+            else normalized_current.get(output_key)
+        )
+        if output_value in (None, "", [], {}):
+            continue
+        helper_name = (
+            helper_overrides[output_key]
+            if output_key in helper_overrides
+            else declared_helper
+        )
+        producing_helper = _stage25_helper_name(helper_name)
+        dependency_node = dependency_nodes.get(output_key) or {}
+        upstream_ids = list(dependency_node.get("upstream_dependencies") or [])
+        upstream_values = [
+            (
+                dependency_nodes_by_id[upstream_id].get("output_name"),
+                dependency_nodes_by_id[upstream_id].get("current_value"),
+            )
+            for upstream_id in upstream_ids
+            if upstream_id in dependency_nodes_by_id
+        ]
+        if output_key == "dependency_mapping":
+            visible_input_basis = (
+                f'{len(normalized_dependency_map.get("nodes") or [])} declared dependency nodes and their visible current values.'
+            )
+            dependency_basis = (
+                f'Dependency completeness: {(normalized_dependency_map.get("dependency_completeness") or {}).get("classification", "Not Available")}.'
+            )
+        elif output_key == "pathway_stability":
+            stability_inputs = normalized_stability.get("stability_inputs") or {}
+            visible_input_basis = (
+                f'{len(stability_inputs)} visible stability inputs and the existing Stage 22 dependency map.'
+            )
+            dependency_basis = (
+                f'Stage 22 dependency state: {normalized_dependency_map.get("dependency_mapping_state", "Not Available")}.'
+            )
+        elif output_key == "transition_history":
+            visible_input_basis = (
+                f'{len(normalized_transition_history.get("transitions") or [])} visible transition entries and their current/prior state availability.'
+            )
+            dependency_basis = (
+                f'Stage 22 dependency state: {normalized_dependency_map.get("dependency_mapping_state", "Not Available")}; '
+                f'Stage 23 stability state: {normalized_stability.get("stability_state", "Stability Not Available")}.'
+            )
+        elif upstream_values:
+            visible_input_basis = "; ".join(
+                f"{name}: {_stage18a_display_value(value)}"
+                for name, value in upstream_values
+            )
+            dependency_basis = (
+                f'Stage 22 mapping state: {dependency_node.get("mapping_state", "Not Available")}; '
+                f'upstream dependency nodes: {", ".join(str(value) for value in upstream_ids)}.'
+            )
+        else:
+            visible_input_basis = "No visible upstream input values are declared for this output."
+            dependency_basis = (
+                "Stage 22 dependency mapping is not available for this output."
+            )
+        pathway = pathways.get(str(pathway_id)) if pathway_id else None
+        if pathway:
+            stability_basis = (
+                f'{pathway.get("pathway_name", "Pathway")}: '
+                f'{pathway.get("pathway_stability_classification", "Stability Not Available")}. '
+                f'{pathway.get("stability_basis", "No stability basis available.")}'
+            )
+        elif output_key == "pathway_stability":
+            summary = normalized_stability.get("pathway_stability_summary") or {}
+            stability_basis = str(
+                summary.get("primary_stability_basis")
+                or "No stability basis available."
+            )
+        else:
+            stability_basis = (
+                f'Overall Stage 23 stability state: {normalized_stability.get("stability_state", "Stability Not Available")}.'
+            )
+        transition = transitions.get(output_name) or {}
+        if transition:
+            transition_basis = str(
+                transition.get("transition_basis")
+                or "No transition basis available."
+            )
+            transition_label = transition.get("transition_label")
+        elif output_key == "transition_history":
+            transition_basis = (
+                f'Stage 24 transition state: {normalized_transition_history.get("transition_state", "Transition History Not Available")}.'
+            )
+            transition_label = normalized_transition_history.get(
+                "transition_state"
+            )
+        else:
+            transition_basis = (
+                "No Stage 24 transition entry is declared for this output."
+            )
+            transition_label = None
+        provenance_label = classify_output_provenance(
+            output_key=output_key,
+            output_value=output_value,
+            producing_helper=producing_helper,
+            has_dependencies=bool(upstream_ids),
+            transition_label=(
+                str(transition_label) if transition_label is not None else None
+            ),
+        )
+        entries.append(
+            {
+                "provenance_id": provenance_id,
+                "output_name": output_name,
+                "output_value": output_value,
+                "producing_stage": producing_stage,
+                "producing_function_or_helper": producing_helper,
+                "visible_input_basis": visible_input_basis,
+                "dependency_basis": dependency_basis,
+                "stability_basis": stability_basis,
+                "transition_basis": transition_basis,
+                "provenance_label": provenance_label,
+                "limitation_statement": (
+                    "Provenance describes declared framework production and visible inputs only; it does not validate the output or infer hidden inputs."
+                ),
+            }
+        )
+    expected_entries = len(STAGE25_OUTPUT_DEFINITIONS)
+    helper_available = sum(
+        1
+        for entry in entries
+        if entry["producing_function_or_helper"] != "Not Available"
+    )
+    if not entries:
+        provenance_state = "Provenance Not Available"
+    elif len(entries) == expected_entries and helper_available == len(entries):
+        provenance_state = "Output Provenance Available"
+    else:
+        provenance_state = "Partial Output Provenance"
+    summary = {
+        "provenance_state": provenance_state,
+        "total_provenance_entries": len(entries),
+        "expected_provenance_entries": expected_entries,
+        "producing_helpers_available": helper_available,
+        "producing_helpers_not_available": len(entries) - helper_available,
+        "dependency_mapping_state": normalized_dependency_map.get(
+            "dependency_mapping_state", "Not Available"
+        ),
+        "pathway_stability_state": normalized_stability.get(
+            "stability_state", "Stability Not Available"
+        ),
+        "transition_history_state": normalized_transition_history.get(
+            "transition_state", "Transition History Not Available"
+        ),
+        "limitation_summary": (
+            "Output provenance identifies declared framework production and visible input bases only; it does not establish truth or correctness."
+        ),
+    }
+    return {
+        "provenance_state": provenance_state,
+        "provenance_summary": summary,
+        "provenance_entries": entries,
+        "limitations": list(STAGE25_LIMITATIONS),
+    }
+
+
+def _render_stage25_overview(provenance: dict[str, Any]) -> str:
+    summary = provenance["provenance_summary"]
+    return f"""
+      <section class="stage25-provenance-overview">
+        <h3>Provenance Overview</h3>
+        {_render_stage18a_table((
+            ("Provenance State", summary["provenance_state"]),
+            ("Total Provenance Entries", summary["total_provenance_entries"]),
+            ("Producing Helpers Available", summary["producing_helpers_available"]),
+            ("Producing Helpers Not Available", summary["producing_helpers_not_available"]),
+            ("Dependency Mapping State", summary["dependency_mapping_state"]),
+            ("Pathway Stability State", summary["pathway_stability_state"]),
+            ("Transition History State", summary["transition_history_state"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage25_provenance_table(
+    entries: list[dict[str, Any]],
+    *,
+    include_bases: bool,
+) -> str:
+    if include_bases:
+        headers = (
+            "<th>Provenance ID</th><th>Output Name</th><th>Output Value</th>"
+            "<th>Producing Stage</th><th>Producing Function or Helper</th>"
+            "<th>Visible Input Basis</th><th>Dependency Basis</th>"
+            "<th>Stability Basis</th><th>Transition Basis</th>"
+            "<th>Provenance Label</th><th>Limitation Statement</th>"
+        )
+        rows = "".join(
+            "<tr>"
+            f'<td><code>{escape(str(entry["provenance_id"]))}</code></td>'
+            f'<td>{escape(str(entry["output_name"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(entry.get("output_value")))}</td>'
+            f'<td>{escape(str(entry["producing_stage"]))}</td>'
+            f'<td><code>{escape(str(entry["producing_function_or_helper"]))}</code></td>'
+            f'<td>{escape(str(entry["visible_input_basis"]))}</td>'
+            f'<td>{escape(str(entry["dependency_basis"]))}</td>'
+            f'<td>{escape(str(entry["stability_basis"]))}</td>'
+            f'<td>{escape(str(entry["transition_basis"]))}</td>'
+            f'<td>{escape(str(entry["provenance_label"]))}</td>'
+            f'<td>{escape(str(entry["limitation_statement"]))}</td>'
+            "</tr>"
+            for entry in entries
+        )
+        colspan = 11
+        class_name = "stage25-full-provenance"
+        title = "Full Output Provenance"
+    else:
+        headers = (
+            "<th>Provenance ID</th><th>Output Name</th><th>Output Value</th>"
+            "<th>Producing Stage</th><th>Producing Function or Helper</th>"
+            "<th>Provenance Label</th>"
+        )
+        rows = "".join(
+            "<tr>"
+            f'<td><code>{escape(str(entry["provenance_id"]))}</code></td>'
+            f'<td>{escape(str(entry["output_name"]))}</td>'
+            f'<td>{escape(_stage18a_display_value(entry.get("output_value")))}</td>'
+            f'<td>{escape(str(entry["producing_stage"]))}</td>'
+            f'<td><code>{escape(str(entry["producing_function_or_helper"]))}</code></td>'
+            f'<td>{escape(str(entry["provenance_label"]))}</td>'
+            "</tr>"
+            for entry in entries
+        )
+        colspan = 6
+        class_name = "stage25-provenance-summary"
+        title = "Provenance Summary Table"
+    if not rows:
+        rows = f'<tr><td colspan="{colspan}">No output provenance is available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage25_limitations(
+    provenance: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = provenance["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 8, 9, 10)]
+    return f"""
+      <section class="stage25-provenance-limitations">
+        <h3>Provenance Limitations</h3>
+        {_render_stage19a_list(limitations, "No provenance limitations available.")}
+      </section>"""
+
+
+def _render_output_provenance_layer(
+    provenance: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Output Provenance Layer is derived deterministically from existing
+          visible framework outputs and implemented production metadata only.
+          It identifies producing stages, declared helpers, visible inputs,
+          dependencies, stability, and transition bases without inferring
+          hidden inputs, validating evidence, or modifying any output.
+        </p>"""
+    overview = _render_stage25_overview(provenance)
+    if report_mode == "executive":
+        content = overview + _render_stage25_limitations(
+            provenance,
+            concise=True,
+        )
+        mode_class = "stage25-provenance-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage25_provenance_table(
+                provenance["provenance_entries"],
+                include_bases=False,
+            )
+            + _render_stage25_limitations(provenance)
+        )
+        mode_class = "stage25-provenance-review"
+    else:
+        content = (
+            overview
+            + _render_stage25_provenance_table(
+                provenance["provenance_entries"],
+                include_bases=True,
+            )
+            + _render_stage25_limitations(provenance)
+        )
+        mode_class = "stage25-provenance-full"
+    return f"""
+      <section class="management-section stage25-output-provenance-layer {mode_class}">
+        <h2>Output Provenance Layer</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -34914,6 +35327,16 @@ def render_admin_record_evidence_page(
         stage24_transition_history,
         report_mode=report_structure["report_mode"],
     )
+    stage25_output_provenance = build_output_provenance_layer(
+        stage22_current_values,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+    )
+    stage25_provenance_section = _render_output_provenance_layer(
+        stage25_output_provenance,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -34954,6 +35377,7 @@ def render_admin_record_evidence_page(
             + stage22_dependency_section
             + stage23_stability_section
             + stage24_transition_section
+            + stage25_provenance_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -34963,6 +35387,7 @@ def render_admin_record_evidence_page(
             + stage22_dependency_section
             + stage23_stability_section
             + stage24_transition_section
+            + stage25_provenance_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -34977,6 +35402,7 @@ def render_admin_record_evidence_page(
             f"{stage22_dependency_section}"
             f"{stage23_stability_section}"
             f"{stage24_transition_section}"
+            f"{stage25_provenance_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -35238,6 +35664,24 @@ def render_admin_record_evidence_page(
     .stage24-full-transition-history table {{
       min-width: 1720px;
     }}
+    .stage25-output-provenance-layer table {{
+      table-layout: auto;
+    }}
+    .stage25-output-provenance-layer th,
+    .stage25-output-provenance-layer td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage25-provenance-summary,
+    .stage25-full-provenance {{
+      overflow-x: auto;
+    }}
+    .stage25-full-provenance table {{
+      min-width: 1900px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -35259,6 +35703,7 @@ def render_admin_record_evidence_page(
       .stage23-evidence-sensitivity-indicators table {{ min-width: 860px; }}
       .stage23-stability-path table {{ min-width: 720px; }}
       .stage24-transition-summary table {{ min-width: 760px; }}
+      .stage25-provenance-summary table {{ min-width: 900px; }}
     }}
     details {{
       break-inside: avoid;

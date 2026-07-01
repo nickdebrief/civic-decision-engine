@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(14, len(review["section_index"]))
+        self.assertEqual(15, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 15)),
+            list(range(1, 16)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -6625,6 +6625,225 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Dependency Basis</th>", full)
         self.assertIn("Stability Basis</th>", full)
 
+    def test_stage25_output_provenance_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map,
+            {
+                "coverage": {"unsupported_targets": 1},
+                "sufficiency": {"overall": "Partial"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 1,
+                },
+                "requirements": {"additional_required": 1},
+            },
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values,
+                dependency_map,
+                stability,
+            )
+        )
+        original_values = copy.deepcopy(current_values)
+        original_map = copy.deepcopy(dependency_map)
+        original_stability = copy.deepcopy(stability)
+        original_history = copy.deepcopy(transition_history)
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+        )
+
+        self.assertEqual(
+            "Output Provenance Available",
+            provenance["provenance_state"],
+        )
+        self.assertEqual(14, len(provenance["provenance_entries"]))
+        self.assertEqual(30, len(dependency_map["nodes"]))
+        self.assertEqual(8, len(stability["pathways"]))
+        self.assertEqual(11, len(transition_history["transitions"]))
+        required_fields = {
+            "provenance_id",
+            "output_name",
+            "output_value",
+            "producing_stage",
+            "producing_function_or_helper",
+            "visible_input_basis",
+            "dependency_basis",
+            "stability_basis",
+            "transition_basis",
+            "provenance_label",
+            "limitation_statement",
+        }
+        for entry in provenance["provenance_entries"]:
+            self.assertEqual(required_fields, set(entry))
+            self.assertNotEqual(
+                "Not Available",
+                entry["producing_function_or_helper"],
+            )
+        entries = {
+            entry["output_name"]: entry
+            for entry in provenance["provenance_entries"]
+        }
+        self.assertEqual(
+            "Current-State Output",
+            entries["Administrative Status"]["provenance_label"],
+        )
+        self.assertEqual(
+            "Dependency-Derived Output",
+            entries["Determination Dependency Mapping"]["provenance_label"],
+        )
+        self.assertEqual(
+            "Stability-Derived Output",
+            entries["Pathway Stability Analysis"]["provenance_label"],
+        )
+        self.assertEqual(
+            "Transition-Derived Output",
+            entries["Record State Transition History"]["provenance_label"],
+        )
+        self.assertEqual(
+            provenance,
+            self.admin_session.build_output_provenance_layer(
+                current_values,
+                dependency_map,
+                stability,
+                transition_history,
+            ),
+        )
+        self.assertEqual(original_values, current_values)
+        self.assertEqual(original_map, dependency_map)
+        self.assertEqual(original_stability, stability)
+        self.assertEqual(original_history, transition_history)
+
+    def test_stage25_missing_helper_and_provenance_labels_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values,
+                dependency_map,
+                stability,
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            {"administrative_action": None},
+        )
+        administrative_action = next(
+            entry
+            for entry in provenance["provenance_entries"]
+            if entry["output_name"] == "Administrative Action"
+        )
+
+        self.assertEqual(
+            "Not Available",
+            administrative_action["producing_function_or_helper"],
+        )
+        self.assertEqual(
+            "Partial Output Provenance",
+            provenance["provenance_state"],
+        )
+        classify = self.admin_session.classify_output_provenance
+        self.assertEqual(
+            "Direct Framework Output",
+            classify(
+                output_key="visible_output",
+                output_value="Available",
+                producing_helper="declared_helper",
+                has_dependencies=False,
+            ),
+        )
+        self.assertEqual(
+            "Provenance Not Available",
+            classify(
+                output_key="visible_output",
+                output_value=None,
+                producing_helper=None,
+                has_dependencies=False,
+            ),
+        )
+        self.assertEqual(
+            "Provenance Not Available",
+            self.admin_session.build_output_provenance_layer()[
+                "provenance_state"
+            ],
+        )
+
+    def test_stage25_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values,
+                dependency_map,
+                stability,
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+        )
+        executive = self.admin_session._render_output_provenance_layer(
+            provenance,
+            report_mode="executive",
+        )
+        review = self.admin_session._render_output_provenance_layer(
+            provenance,
+            report_mode="review",
+        )
+        full = self.admin_session._render_output_provenance_layer(
+            provenance,
+            report_mode="full",
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Output Provenance Layer</h2>", rendered)
+            self.assertIn("<h3>Provenance Overview</h3>", rendered)
+            self.assertIn("<h3>Provenance Limitations</h3>", rendered)
+        self.assertIn("stage25-provenance-executive", executive)
+        self.assertNotIn("Provenance Summary Table", executive)
+        self.assertNotIn("Full Output Provenance", executive)
+        self.assertIn("stage25-provenance-review", review)
+        self.assertIn("Provenance Summary Table", review)
+        self.assertNotIn("Full Output Provenance", review)
+        self.assertNotIn("Visible Input Basis</th>", review)
+        self.assertIn("stage25-provenance-full", full)
+        self.assertIn("Full Output Provenance", full)
+        self.assertIn("Visible Input Basis</th>", full)
+        self.assertIn("Dependency Basis</th>", full)
+        self.assertIn("Stability Basis</th>", full)
+        self.assertIn("Transition Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -6707,6 +6926,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage24-transition-executive", executive)
         self.assertIn("<h2>Record State Transition History</h2>", executive)
         self.assertNotIn("Transition Summary Table", executive)
+        self.assertIn("stage25-provenance-executive", executive)
+        self.assertIn("<h2>Output Provenance Layer</h2>", executive)
+        self.assertNotIn("Provenance Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -6731,6 +6953,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage24-transition-review", review)
         self.assertIn("Transition Summary Table", review)
         self.assertNotIn("Full Transition History", review)
+        self.assertIn("stage25-provenance-review", review)
+        self.assertIn("Provenance Summary Table", review)
+        self.assertNotIn("Full Output Provenance", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -6752,6 +6977,7 @@ class AdminSessionTests(unittest.TestCase):
             "Determination Dependency Mapping",
             "Pathway Stability Analysis",
             "Record State Transition History",
+            "Output Provenance Layer",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -6760,6 +6986,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h3>Pathway-Level Stability</h3>", explicit_full)
         self.assertIn("stage24-transition-full", explicit_full)
         self.assertIn("Full Transition History", explicit_full)
+        self.assertIn("stage25-provenance-full", explicit_full)
+        self.assertIn("Full Output Provenance", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -6767,6 +6995,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Pathway Stability Analysis"),
             explicit_full.index("Record State Transition History"),
+        )
+        self.assertLess(
+            explicit_full.index("Record State Transition History"),
+            explicit_full.index("Output Provenance Layer"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(

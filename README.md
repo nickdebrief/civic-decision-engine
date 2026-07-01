@@ -239,6 +239,21 @@ states, change classifications, or modify records.
 
 ---
 
+## Stage 25 — Output Provenance Layer
+
+Adds deterministic provenance for fourteen visible framework outputs: eleven
+administrative states plus dependency mapping, pathway stability, and
+transition history. Each entry identifies its producing stage and declared
+helper, visible input basis, dependency basis, stability basis, transition
+basis, provenance label, and methodological limitation.
+
+Executive mode presents a concise provenance overview; Review mode adds the
+provenance summary table; Full Inspection mode exposes every provenance basis.
+Stage 25 does not infer hidden inputs or missing helpers, validate evidence,
+change classifications, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
