@@ -224,6 +224,21 @@ predict outcomes, validate evidence, change dependencies, or modify records.
 
 ---
 
+## Stage 24 — Record State Transition History
+
+Adds a deterministic history view for eleven existing administrative outputs,
+from evidence readiness through archive classification. Each entry shows its
+current state, any explicitly visible prior state, Stage 22 dependency basis,
+and Stage 23 stability basis. Missing prior states remain `Not Available` and
+are labelled `Current State Only`.
+
+Executive mode presents a concise transition overview; Review mode adds the
+transition summary table; Full Inspection mode presents every transition basis
+and limitation. Stage 24 does not reconstruct missing history, predict future
+states, change classifications, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

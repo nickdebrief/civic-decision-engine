@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(13, len(review["section_index"]))
+        self.assertEqual(14, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 14)),
+            list(range(1, 15)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -6440,6 +6440,191 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("PW-008", full)
         self.assertIn("<h3>Pathway Stability Summary</h3>", full)
 
+    def test_stage24_transition_history_is_deterministic_and_does_not_infer_prior_states(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map,
+            {
+                "coverage": {"unsupported_targets": 0},
+                "sufficiency": {"overall": "Sufficient"},
+                "completeness": {
+                    "overall": "Complete",
+                    "incomplete_targets": 0,
+                },
+                "requirements": {"additional_required": 0},
+            },
+        )
+        original_values = copy.deepcopy(current_values)
+        original_map = copy.deepcopy(dependency_map)
+        original_stability = copy.deepcopy(stability)
+        history = self.admin_session.build_record_state_transition_history(
+            current_values,
+            dependency_map,
+            stability,
+        )
+
+        self.assertEqual("Current State Only", history["transition_state"])
+        self.assertEqual(11, len(history["transitions"]))
+        self.assertEqual(30, len(dependency_map["nodes"]))
+        self.assertEqual(8, len(stability["pathways"]))
+        required_fields = {
+            "transition_id",
+            "source_stage",
+            "output_name",
+            "prior_state",
+            "current_state",
+            "transition_label",
+            "transition_basis",
+            "dependency_basis",
+            "stability_basis",
+            "limitation_statement",
+        }
+        for transition in history["transitions"]:
+            self.assertEqual(required_fields, set(transition))
+            self.assertEqual("Not Available", transition["prior_state"])
+            self.assertEqual("Current State Only", transition["transition_label"])
+            self.assertIn("Stage 22 mapping state", transition["dependency_basis"])
+            self.assertIn("Path", transition["stability_basis"])
+        self.assertIn(
+            "Record State Transition History does not infer missing prior states.",
+            history["limitations"],
+        )
+        self.assertEqual(
+            history,
+            self.admin_session.build_record_state_transition_history(
+                current_values,
+                dependency_map,
+                stability,
+            ),
+        )
+        self.assertEqual(original_values, current_values)
+        self.assertEqual(original_map, dependency_map)
+        self.assertEqual(original_stability, stability)
+
+    def test_stage24_transition_history_uses_only_explicit_prior_outputs(self):
+        current_values = {
+            definition[1]: f"Current {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map,
+            {
+                "coverage": {"unsupported_targets": 1},
+                "sufficiency": {"overall": "Partial"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 1,
+                },
+                "requirements": {"additional_required": 1},
+            },
+        )
+        prior_values = {
+            definition[1]: f"Prior {definition[2]}"
+            for definition in self.admin_session.STAGE24_TRANSITION_DEFINITIONS
+        }
+        history = self.admin_session.build_record_state_transition_history(
+            current_values,
+            dependency_map,
+            stability,
+            prior_values,
+        )
+        labels = {
+            transition["output_name"]: transition["transition_label"]
+            for transition in history["transitions"]
+        }
+
+        self.assertEqual(
+            "Evidence-Sensitive Progression",
+            labels["Evidence Readiness"],
+        )
+        self.assertEqual(
+            "Review-Dependent Progression",
+            labels["Administrative Status"],
+        )
+        self.assertEqual(
+            "Resolution-Dependent Progression",
+            labels["Resolution Classification"],
+        )
+        self.assertEqual(
+            "Closure-Dependent Progression",
+            labels["Closure Classification"],
+        )
+        self.assertEqual(
+            "Archive-Dependent Progression",
+            labels["Archive Classification"],
+        )
+        self.assertEqual(11, history["transition_summary"]["prior_states_available"])
+        self.assertEqual(
+            "Transition History Not Available",
+            self.admin_session.build_record_state_transition_history()[
+                "transition_state"
+            ],
+        )
+
+    def test_stage24_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map,
+            {
+                "coverage": {"unsupported_targets": 1},
+                "sufficiency": {"overall": "Partial"},
+                "completeness": {
+                    "overall": "Incomplete",
+                    "incomplete_targets": 1,
+                },
+                "requirements": {"additional_required": 1},
+            },
+        )
+        history = self.admin_session.build_record_state_transition_history(
+            current_values,
+            dependency_map,
+            stability,
+        )
+        executive = self.admin_session._render_record_state_transition_history(
+            history,
+            report_mode="executive",
+        )
+        review = self.admin_session._render_record_state_transition_history(
+            history,
+            report_mode="review",
+        )
+        full = self.admin_session._render_record_state_transition_history(
+            history,
+            report_mode="full",
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Record State Transition History</h2>", rendered)
+            self.assertIn("<h3>Transition Overview</h3>", rendered)
+            self.assertIn("<h3>Transition Limitations</h3>", rendered)
+        self.assertIn("stage24-transition-executive", executive)
+        self.assertNotIn("Transition Summary Table", executive)
+        self.assertNotIn("Full Transition History", executive)
+        self.assertIn("stage24-transition-review", review)
+        self.assertIn("Transition Summary Table", review)
+        self.assertNotIn("Full Transition History", review)
+        self.assertNotIn("Dependency Basis</th>", review)
+        self.assertIn("stage24-transition-full", full)
+        self.assertIn("Full Transition History", full)
+        self.assertIn("Transition Basis</th>", full)
+        self.assertIn("Dependency Basis</th>", full)
+        self.assertIn("Stability Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -6519,6 +6704,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage23-stability-summary", executive)
         self.assertIn("<h2>Pathway Stability Analysis</h2>", executive)
         self.assertNotIn("<h3>Pathway-Level Stability</h3>", executive)
+        self.assertIn("stage24-transition-executive", executive)
+        self.assertIn("<h2>Record State Transition History</h2>", executive)
+        self.assertNotIn("Transition Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -6540,6 +6728,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage23-stability-review", review)
         self.assertIn("<h3>Stability Input Summary</h3>", review)
         self.assertIn("<h3>Stability Path View</h3>", review)
+        self.assertIn("stage24-transition-review", review)
+        self.assertIn("Transition Summary Table", review)
+        self.assertNotIn("Full Transition History", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -6560,15 +6751,22 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Self-Description",
             "Determination Dependency Mapping",
             "Pathway Stability Analysis",
+            "Record State Transition History",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
         self.assertIn("<h3>Dependency Nodes</h3>", explicit_full)
         self.assertIn("stage23-stability-full", explicit_full)
         self.assertIn("<h3>Pathway-Level Stability</h3>", explicit_full)
+        self.assertIn("stage24-transition-full", explicit_full)
+        self.assertIn("Full Transition History", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
+        )
+        self.assertLess(
+            explicit_full.index("Pathway Stability Analysis"),
+            explicit_full.index("Record State Transition History"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
