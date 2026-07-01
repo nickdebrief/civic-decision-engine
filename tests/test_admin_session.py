@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(16, len(review["section_index"]))
+        self.assertEqual(17, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 17)),
+            list(range(1, 18)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -7019,6 +7019,234 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Transition Basis</th>", full)
         self.assertIn("Provenance Basis</th>", full)
 
+    def test_stage27_integrity_verification_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        original_inputs = copy.deepcopy(
+            (
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                current_values,
+            )
+        )
+        verification = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+
+        self.assertEqual(
+            "Framework Integrity Verified With Limitations",
+            verification["integrity_state"],
+        )
+        self.assertEqual(14, len(verification["integrity_checks"]))
+        required_fields = {
+            "integrity_check_id",
+            "check_name",
+            "check_category",
+            "expected_state",
+            "observed_state",
+            "verification_result",
+            "verification_basis",
+            "affected_stage_or_output",
+            "limitation_statement",
+        }
+        for check in verification["integrity_checks"]:
+            self.assertEqual(required_fields, set(check))
+        summary = verification["integrity_summary"]
+        self.assertEqual(14, summary["total_integrity_checks"])
+        self.assertEqual(11, summary["verified_checks"])
+        self.assertEqual(3, summary["verified_with_limitation_checks"])
+        self.assertEqual(0, summary["unavailable_checks"])
+        self.assertEqual(0, summary["integrity_gap_checks"])
+        self.assertEqual(30, summary["dependency_node_count"])
+        self.assertEqual(8, summary["pathway_count"])
+        self.assertEqual(11, summary["transition_entry_count"])
+        self.assertEqual(14, summary["provenance_entry_count"])
+        self.assertEqual(15, summary["replay_step_count"])
+        check_names = {
+            check["check_name"] for check in verification["integrity_checks"]
+        }
+        for required_name in (
+            "Full Inspection Default",
+            "Dependency Node Preservation",
+            "Pathway Preservation",
+            "Transition Entry Preservation",
+            "Provenance Entry Preservation",
+            "Replay Step Preservation",
+            "Replayable Output Consistency",
+            "Non-Replayable Output Absence",
+            "Prior Limitation Visibility",
+            "Report Mode Classification Boundary",
+            "Record Mutation Boundary",
+            "Public API Boundary",
+        ):
+            self.assertIn(required_name, check_names)
+        self.assertEqual(
+            verification,
+            self.admin_session.build_framework_integrity_verification(
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                current_values,
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            (
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                current_values,
+            ),
+        )
+
+    def test_stage27_integrity_gap_and_unavailable_states_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        gap_dependency_map = copy.deepcopy(dependency_map)
+        gap_dependency_map["nodes"] = gap_dependency_map["nodes"][:-1]
+        gap = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            gap_dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+
+        self.assertEqual(
+            "Framework Integrity Gap Detected", gap["integrity_state"]
+        )
+        dependency_check = next(
+            check
+            for check in gap["integrity_checks"]
+            if check["check_name"] == "Dependency Node Preservation"
+        )
+        self.assertEqual("Integrity Gap Detected", dependency_check["verification_result"])
+        unavailable = self.admin_session.build_framework_integrity_verification()
+        self.assertEqual(
+            "Framework Integrity Not Fully Available",
+            unavailable["integrity_state"],
+        )
+        self.assertGreater(
+            unavailable["integrity_summary"]["unavailable_checks"], 0
+        )
+
+    def test_stage27_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        verification = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        executive = self.admin_session._render_framework_integrity_verification(
+            verification, report_mode="executive"
+        )
+        review = self.admin_session._render_framework_integrity_verification(
+            verification, report_mode="review"
+        )
+        full = self.admin_session._render_framework_integrity_verification(
+            verification, report_mode="full"
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Integrity Verification</h2>", rendered)
+            self.assertIn("<h3>Integrity Overview</h3>", rendered)
+            self.assertIn("<h3>Integrity Limitations</h3>", rendered)
+        self.assertIn("stage27-integrity-executive", executive)
+        self.assertNotIn("Integrity Summary Table", executive)
+        self.assertNotIn("Full Integrity Verification", executive)
+        self.assertIn("stage27-integrity-review", review)
+        self.assertIn("Integrity Summary Table", review)
+        self.assertNotIn("Full Integrity Verification", review)
+        self.assertNotIn("Verification Basis</th>", review)
+        self.assertIn("stage27-integrity-full", full)
+        self.assertIn("Full Integrity Verification", full)
+        self.assertIn("Verification Basis</th>", full)
+        self.assertIn("Affected Stage or Output</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -7107,6 +7335,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage26-replay-executive", executive)
         self.assertIn("<h2>Deterministic Replay Mode</h2>", executive)
         self.assertNotIn("Replay Summary Table", executive)
+        self.assertIn("stage27-integrity-executive", executive)
+        self.assertIn("<h2>Framework Integrity Verification</h2>", executive)
+        self.assertNotIn("Integrity Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -7137,6 +7368,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage26-replay-review", review)
         self.assertIn("Replay Summary Table", review)
         self.assertNotIn("Full Deterministic Replay", review)
+        self.assertIn("stage27-integrity-review", review)
+        self.assertIn("Integrity Summary Table", review)
+        self.assertNotIn("Full Integrity Verification", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -7160,6 +7394,7 @@ class AdminSessionTests(unittest.TestCase):
             "Record State Transition History",
             "Output Provenance Layer",
             "Deterministic Replay Mode",
+            "Framework Integrity Verification",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -7172,6 +7407,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Output Provenance", explicit_full)
         self.assertIn("stage26-replay-full", explicit_full)
         self.assertIn("Full Deterministic Replay", explicit_full)
+        self.assertIn("stage27-integrity-full", explicit_full)
+        self.assertIn("Full Integrity Verification", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -7187,6 +7424,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Output Provenance Layer"),
             explicit_full.index("Deterministic Replay Mode"),
+        )
+        self.assertLess(
+            explicit_full.index("Deterministic Replay Mode"),
+            explicit_full.index("Framework Integrity Verification"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
