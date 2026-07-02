@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(17, len(review["section_index"]))
+        self.assertEqual(18, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 18)),
+            list(range(1, 19)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -7247,6 +7247,219 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Affected Stage or Output</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage28_audit_package_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        original_inputs = copy.deepcopy(
+            (
+                current_values,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+            )
+        )
+        audit_package = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE28-001",
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            integrity,
+        )
+
+        self.assertEqual(
+            "Administrative Audit Package Available With Limitations",
+            audit_package["audit_package_state"],
+        )
+        self.assertEqual(10, len(audit_package["audit_sections"]))
+        required_fields = {
+            "audit_section_id",
+            "section_name",
+            "section_category",
+            "source_stage_or_output",
+            "section_state",
+            "visible_basis",
+            "included_outputs",
+            "preservation_basis",
+            "limitation_statement",
+        }
+        for section in audit_package["audit_sections"]:
+            self.assertEqual(required_fields, set(section))
+        section_names = {
+            section["section_name"] for section in audit_package["audit_sections"]
+        }
+        for required_name in (
+            "Record Identifier",
+            "Current Administrative Outputs",
+            "Evidence Readiness",
+            "Dependency Mapping",
+            "Pathway Stability",
+            "Transition History",
+            "Output Provenance",
+            "Deterministic Replay",
+            "Framework Integrity Verification",
+            "Methodological Limitations",
+        ):
+            self.assertIn(required_name, section_names)
+        summary = audit_package["audit_package_summary"]
+        self.assertEqual(10, summary["total_audit_sections"])
+        self.assertEqual(10, summary["included_sections"])
+        self.assertEqual(0, summary["unavailable_sections"])
+        self.assertEqual(30, summary["dependency_node_count"])
+        self.assertEqual(8, summary["pathway_count"])
+        self.assertEqual(11, summary["transition_entry_count"])
+        self.assertEqual(14, summary["provenance_entry_count"])
+        self.assertEqual(15, summary["replay_step_count"])
+        self.assertEqual(14, summary["integrity_check_count"])
+        self.assertEqual(0, summary["integrity_gap_count"])
+        self.assertEqual(
+            audit_package,
+            self.admin_session.build_administrative_audit_package(
+                "CREF-STAGE28-001",
+                current_values,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            (
+                current_values,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+            ),
+        )
+
+    def test_stage28_audit_package_states_are_deterministic(self):
+        self.assertEqual(
+            "Administrative Audit Package Not Available",
+            self.admin_session.build_administrative_audit_package()[
+                "audit_package_state"
+            ],
+        )
+        partial = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE28-PARTIAL"
+        )
+        self.assertEqual(
+            "Administrative Audit Package Partially Available",
+            partial["audit_package_state"],
+        )
+        self.assertGreater(
+            partial["audit_package_summary"]["unavailable_sections"], 0
+        )
+
+    def test_stage28_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        audit_package = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE28-001",
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            integrity,
+        )
+        executive = self.admin_session._render_administrative_audit_package(
+            audit_package, report_mode="executive"
+        )
+        review = self.admin_session._render_administrative_audit_package(
+            audit_package, report_mode="review"
+        )
+        full = self.admin_session._render_administrative_audit_package(
+            audit_package, report_mode="full"
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Administrative Audit Package</h2>", rendered)
+            self.assertIn("<h3>Audit Package Overview</h3>", rendered)
+            self.assertIn("<h3>Audit Package Limitations</h3>", rendered)
+        self.assertIn("stage28-audit-executive", executive)
+        self.assertNotIn("Audit Package Summary Table", executive)
+        self.assertNotIn("Full Administrative Audit Package", executive)
+        self.assertIn("stage28-audit-review", review)
+        self.assertIn("Audit Package Summary Table", review)
+        self.assertNotIn("Full Administrative Audit Package", review)
+        self.assertNotIn("Visible Basis</th>", review)
+        self.assertIn("stage28-audit-full", full)
+        self.assertIn("Full Administrative Audit Package", full)
+        self.assertIn("Visible Basis</th>", full)
+        self.assertIn("Included Outputs</th>", full)
+        self.assertIn("Preservation Basis</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -7338,6 +7551,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage27-integrity-executive", executive)
         self.assertIn("<h2>Framework Integrity Verification</h2>", executive)
         self.assertNotIn("Integrity Summary Table", executive)
+        self.assertIn("stage28-audit-executive", executive)
+        self.assertIn("<h2>Administrative Audit Package</h2>", executive)
+        self.assertNotIn("Audit Package Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -7371,6 +7587,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage27-integrity-review", review)
         self.assertIn("Integrity Summary Table", review)
         self.assertNotIn("Full Integrity Verification", review)
+        self.assertIn("stage28-audit-review", review)
+        self.assertIn("Audit Package Summary Table", review)
+        self.assertNotIn("Full Administrative Audit Package", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -7395,6 +7614,7 @@ class AdminSessionTests(unittest.TestCase):
             "Output Provenance Layer",
             "Deterministic Replay Mode",
             "Framework Integrity Verification",
+            "Administrative Audit Package",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -7409,6 +7629,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Deterministic Replay", explicit_full)
         self.assertIn("stage27-integrity-full", explicit_full)
         self.assertIn("Full Integrity Verification", explicit_full)
+        self.assertIn("stage28-audit-full", explicit_full)
+        self.assertIn("Full Administrative Audit Package", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -7428,6 +7650,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Deterministic Replay Mode"),
             explicit_full.index("Framework Integrity Verification"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Integrity Verification"),
+            explicit_full.index("Administrative Audit Package"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
