@@ -32142,6 +32142,7 @@ STAGE21_SECTION_INDEX = (
     ("Deterministic Replay Mode", "Overview", "Summary", "Detail"),
     ("Framework Integrity Verification", "Overview", "Summary", "Detail"),
     ("Administrative Audit Package", "Overview", "Summary", "Detail"),
+    ("Methodological Conformance Certification", "Overview", "Summary", "Detail"),
 )
 
 
@@ -36025,6 +36026,534 @@ def _render_administrative_audit_package(
       </section>"""
 
 
+STAGE29_LIMITATIONS = (
+    "Methodological Conformance Certification is not a legal certification.",
+    "Methodological Conformance Certification is not an external compliance audit.",
+    "Methodological Conformance Certification does not validate evidence.",
+    "Methodological Conformance Certification does not determine truth.",
+    "Methodological Conformance Certification does not determine liability.",
+    "Methodological Conformance Certification does not infer intent.",
+    "Methodological Conformance Certification does not assign blame.",
+    "Methodological Conformance Certification does not infer hidden inputs.",
+    "Methodological Conformance Certification does not create evidence.",
+    "Methodological Conformance Certification does not modify records.",
+    "Methodological Conformance Certification does not change classifications.",
+    "Methodological Conformance Certification does not change thresholds.",
+    "Methodological Conformance Certification does not change dependencies.",
+    "Methodological Conformance Certification does not change evidence relationships.",
+    "Methodological Conformance Certification does not change transition history.",
+    "Methodological Conformance Certification does not change provenance.",
+    "Methodological Conformance Certification does not change replay outputs.",
+    "Methodological Conformance Certification does not change integrity checks.",
+    "Methodological Conformance Certification does not change audit package sections.",
+    "Methodological Conformance Certification does not change report modes.",
+    "Methodological Conformance Certification does not write to the database.",
+    "Methodological Conformance Certification does not alter public API behaviour.",
+    "Methodological Conformance Certification certifies visible methodological conformance only.",
+)
+
+
+def _stage29_conformance_check(
+    *,
+    certification_check_id: str,
+    check_name: str,
+    conformance_category: str,
+    declared_methodological_requirement: Any,
+    observed_framework_state: Any,
+    conformance_basis: str,
+    affected_stage_or_output: str,
+    limitation_statement: str,
+    conforms_with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_framework_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_framework_state == declared_methodological_requirement:
+        result = (
+            "Conforms With Limitation"
+            if conforms_with_limitation
+            else "Conforms"
+        )
+    else:
+        result = "Non-Conformance Detected"
+    return {
+        "certification_check_id": certification_check_id,
+        "check_name": check_name,
+        "conformance_category": conformance_category,
+        "declared_methodological_requirement": declared_methodological_requirement,
+        "observed_framework_state": observed_framework_state,
+        "conformance_result": result,
+        "conformance_basis": conformance_basis,
+        "affected_stage_or_output": affected_stage_or_output,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_methodological_conformance_certification(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_report = dict(report_structure or {})
+    normalized_dependency = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    normalized_replay = dict(deterministic_replay or {})
+    normalized_integrity = dict(integrity_verification or {})
+    normalized_audit = dict(audit_package or {})
+    normalized_administrative = dict(administrative_outputs or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+        }
+    )
+    dependency_count = len(normalized_dependency.get("nodes") or [])
+    pathway_count = len(normalized_stability.get("pathways") or [])
+    transition_count = len(normalized_transition.get("transitions") or [])
+    provenance_count = len(normalized_provenance.get("provenance_entries") or [])
+    replay_count = len(normalized_replay.get("replay_entries") or [])
+    integrity_count = len(normalized_integrity.get("integrity_checks") or [])
+    audit_section_count = len(normalized_audit.get("audit_sections") or [])
+    replay_summary = normalized_replay.get("replay_summary") or {}
+    integrity_summary = normalized_integrity.get("integrity_summary") or {}
+    audit_summary = normalized_audit.get("audit_package_summary") or {}
+    integrity_gap_count = integrity_summary.get("integrity_gap_checks")
+    audit_unavailable_count = audit_summary.get("unavailable_sections")
+    administrative_keys = [
+        definition[1] for definition in STAGE25_OUTPUT_DEFINITIONS[:11]
+    ]
+    administrative_count = sum(
+        normalized_administrative.get(key) not in (None, "", [], {})
+        for key in administrative_keys
+    )
+    all_limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    classification_boundary_visible = any(
+        "does not change classifications" in str(value).lower()
+        for value in STAGE21_SUMMARY_LIMITATIONS
+    )
+    mutation_boundary_visible = any(
+        "does not modify records" in str(value).lower()
+        for value in STAGE28_LIMITATIONS
+    )
+    database_boundary_visible = any(
+        "does not write to the database" in str(value).lower()
+        for value in STAGE28_LIMITATIONS
+    )
+    public_api_boundary_visible = any(
+        "does not alter public api behaviour" in str(value).lower()
+        for value in STAGE28_LIMITATIONS
+    )
+    checks = [
+        _stage29_conformance_check(
+            certification_check_id="MC-001",
+            check_name="Full Inspection Default",
+            conformance_category="Report Mode Boundary",
+            declared_methodological_requirement="Full Inspection Report",
+            observed_framework_state=classify_report_mode(None),
+            conformance_basis="Stage 21 default mode normalization is evaluated without a query value.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="This certifies the implemented default label only.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-002",
+            check_name="Report Mode Availability",
+            conformance_category="Report Mode Boundary",
+            declared_methodological_requirement=3,
+            observed_framework_state=(
+                len(normalized_report.get("available_report_modes") or [])
+                if normalized_report
+                else None
+            ),
+            conformance_basis="Visible Executive, Review, and Full Inspection mode count.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="Mode availability concerns presentation structure only.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-003",
+            check_name="Dependency Node Preservation",
+            conformance_category="Dependency Preservation",
+            declared_methodological_requirement=30,
+            observed_framework_state=dependency_count if normalized_dependency else None,
+            conformance_basis="Visible Stage 22 dependency node count.",
+            affected_stage_or_output="Stage 22 Determination Dependency Mapping",
+            limitation_statement="Count conformance does not validate dependency correctness.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-004",
+            check_name="Pathway Preservation",
+            conformance_category="Dependency Preservation",
+            declared_methodological_requirement=8,
+            observed_framework_state=pathway_count if normalized_stability else None,
+            conformance_basis="Visible Stage 23 pathway count.",
+            affected_stage_or_output="Stage 23 Pathway Stability Analysis",
+            limitation_statement="Pathway count does not predict stability or outcomes.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-005",
+            check_name="Transition Entry Preservation",
+            conformance_category="Dependency Preservation",
+            declared_methodological_requirement=11,
+            observed_framework_state=transition_count if normalized_transition else None,
+            conformance_basis="Visible Stage 24 transition entry count.",
+            affected_stage_or_output="Stage 24 Record State Transition History",
+            limitation_statement="Count conformance does not infer prior states.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-006",
+            check_name="Provenance Entry Preservation",
+            conformance_category="Provenance Preservation",
+            declared_methodological_requirement=14,
+            observed_framework_state=provenance_count if normalized_provenance else None,
+            conformance_basis="Visible Stage 25 provenance entry count.",
+            affected_stage_or_output="Stage 25 Output Provenance Layer",
+            limitation_statement="Count conformance does not validate provenance truth.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-007",
+            check_name="Replay Step Preservation",
+            conformance_category="Replay Preservation",
+            declared_methodological_requirement=15,
+            observed_framework_state=replay_count if normalized_replay else None,
+            conformance_basis="Visible Stage 26 replay step count.",
+            affected_stage_or_output="Stage 26 Deterministic Replay Mode",
+            limitation_statement="Replay count does not recalculate output correctness.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-008",
+            check_name="Integrity Check Preservation",
+            conformance_category="Integrity Preservation",
+            declared_methodological_requirement=14,
+            observed_framework_state=integrity_count if normalized_integrity else None,
+            conformance_basis="Visible Stage 27 integrity check count.",
+            affected_stage_or_output="Stage 27 Framework Integrity Verification",
+            limitation_statement="Integrity count verifies structure only.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-009",
+            check_name="Integrity Gap Absence",
+            conformance_category="Integrity Preservation",
+            declared_methodological_requirement=0,
+            observed_framework_state=integrity_gap_count,
+            conformance_basis="Visible Stage 27 integrity gap count.",
+            affected_stage_or_output="Stage 27 Integrity Summary",
+            limitation_statement="Zero visible gaps does not certify truth or external operation.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-010",
+            check_name="Audit Section Preservation",
+            conformance_category="Audit Package Preservation",
+            declared_methodological_requirement=10,
+            observed_framework_state=audit_section_count if normalized_audit else None,
+            conformance_basis="Visible Stage 28 audit section count.",
+            affected_stage_or_output="Stage 28 Administrative Audit Package",
+            limitation_statement="Section count does not make the package a legal audit.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-011",
+            check_name="Audit Section Availability",
+            conformance_category="Audit Package Preservation",
+            declared_methodological_requirement=0,
+            observed_framework_state=audit_unavailable_count,
+            conformance_basis="Visible Stage 28 unavailable section count.",
+            affected_stage_or_output="Stage 28 Audit Package Summary",
+            limitation_statement="Section availability does not validate included outputs.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-012",
+            check_name="Replayable Output Consistency",
+            conformance_category="Determinism",
+            declared_methodological_requirement=(
+                replay_count if normalized_replay else None
+            ),
+            observed_framework_state=replay_summary.get("replayable_outputs"),
+            conformance_basis="Replayable output count is compared with total visible replay steps.",
+            affected_stage_or_output="Stage 26 Replay Summary",
+            limitation_statement="Count equality certifies visible replay coverage only.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-013",
+            check_name="Non-Replayable Output Absence",
+            conformance_category="Determinism",
+            declared_methodological_requirement=0,
+            observed_framework_state=replay_summary.get("non_replayable_outputs"),
+            conformance_basis="Visible Stage 26 non-replayable output count.",
+            affected_stage_or_output="Stage 26 Replay Summary",
+            limitation_statement="Zero non-replayable outputs does not certify factual correctness.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-014",
+            check_name="Methodological Limitation Visibility",
+            conformance_category="Evidence Limitation",
+            declared_methodological_requirement=True,
+            observed_framework_state=all_limitations_visible,
+            conformance_basis="Declared limitation sets for Stages 21 through 28 are present and non-empty.",
+            affected_stage_or_output="Stages 21–28 Limitations",
+            limitation_statement="Visibility does not extend, waive, or externally enforce limitations.",
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-015",
+            check_name="Classification Boundary",
+            conformance_category="Classification Boundary",
+            declared_methodological_requirement=True,
+            observed_framework_state=classification_boundary_visible,
+            conformance_basis="Stage 21 declares that report modes do not change classifications.",
+            affected_stage_or_output="Stage 21 Report Modes",
+            limitation_statement="This certifies a visible declaration, not independent recomputation of every classification.",
+            conforms_with_limitation=True,
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-016",
+            check_name="Record Mutation Boundary",
+            conformance_category="Non-Mutation",
+            declared_methodological_requirement=True,
+            observed_framework_state=mutation_boundary_visible,
+            conformance_basis="Stage 28 declares that packaging does not modify records.",
+            affected_stage_or_output="Stage 28 Administrative Audit Package",
+            limitation_statement="This certifies a declared boundary, not external database monitoring.",
+            conforms_with_limitation=True,
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-017",
+            check_name="Database Write Boundary",
+            conformance_category="Database Boundary",
+            declared_methodological_requirement=True,
+            observed_framework_state=database_boundary_visible,
+            conformance_basis="Stage 28 declares that packaging does not write to the database.",
+            affected_stage_or_output="Stage 28 Administrative Audit Package",
+            limitation_statement="This certifies a declared boundary, not external database monitoring.",
+            conforms_with_limitation=True,
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-018",
+            check_name="Public API Boundary",
+            conformance_category="Public API Boundary",
+            declared_methodological_requirement=True,
+            observed_framework_state=public_api_boundary_visible,
+            conformance_basis="Stage 28 declares that packaging does not alter public API behaviour.",
+            affected_stage_or_output="Stage 28 Administrative Audit Package",
+            limitation_statement="This certifies a declared boundary, not external API monitoring.",
+            conforms_with_limitation=True,
+        ),
+        _stage29_conformance_check(
+            certification_check_id="MC-019",
+            check_name="Visible Administrative Input Availability",
+            conformance_category="Visible Input Boundary",
+            declared_methodological_requirement=11,
+            observed_framework_state=(
+                administrative_count if normalized_administrative else None
+            ),
+            conformance_basis="Presence count for the eleven current administrative outputs used by Stages 22–28.",
+            affected_stage_or_output="Current Administrative Outputs",
+            limitation_statement="Visible availability does not validate an administrative output.",
+        ),
+    ]
+    results = (
+        "Conforms",
+        "Conforms With Limitation",
+        "Not Available",
+        "Non-Conformance Detected",
+    )
+    result_counts = {
+        result: sum(check["conformance_result"] == result for check in checks)
+        for result in results
+    }
+    if result_counts["Non-Conformance Detected"]:
+        certification_state = "Methodological Non-Conformance Detected"
+    elif result_counts["Not Available"]:
+        certification_state = "Methodological Conformance Partially Available"
+    elif result_counts["Conforms With Limitation"]:
+        certification_state = "Methodological Conformance Certified With Limitations"
+    else:
+        certification_state = "Methodological Conformance Certified"
+    summary = {
+        "certification_state": certification_state,
+        "total_certification_checks": len(checks),
+        "conforming_checks": result_counts["Conforms"],
+        "conforming_with_limitation_checks": result_counts[
+            "Conforms With Limitation"
+        ],
+        "unavailable_checks": result_counts["Not Available"],
+        "non_conformance_checks": result_counts["Non-Conformance Detected"],
+        "dependency_node_count": dependency_count,
+        "pathway_count": pathway_count,
+        "transition_entry_count": transition_count,
+        "provenance_entry_count": provenance_count,
+        "replay_step_count": replay_count,
+        "integrity_check_count": integrity_count,
+        "audit_section_count": audit_section_count,
+        "integrity_gap_count": int(integrity_gap_count or 0),
+        "audit_unavailable_section_count": int(audit_unavailable_count or 0),
+        "limitation_summary": (
+            "Methodological conformance certification concerns visible framework boundaries only and is not legal certification or external compliance audit."
+        ),
+    }
+    return {
+        "certification_state": certification_state,
+        "certification_summary": summary,
+        "certification_checks": checks,
+        "limitations": list(STAGE29_LIMITATIONS),
+    }
+
+
+def _render_stage29_overview(certification: dict[str, Any]) -> str:
+    summary = certification["certification_summary"]
+    return f"""
+      <section class="stage29-conformance-overview">
+        <h3>Conformance Certification Overview</h3>
+        {_render_stage18a_table((
+            ("Certification State", summary["certification_state"]),
+            ("Total Certification Checks", summary["total_certification_checks"]),
+            ("Conforming Checks", summary["conforming_checks"]),
+            ("Conforming With Limitation Checks", summary["conforming_with_limitation_checks"]),
+            ("Unavailable Checks", summary["unavailable_checks"]),
+            ("Non-Conformance Checks", summary["non_conformance_checks"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Integrity Check Count", summary["integrity_check_count"]),
+            ("Audit Section Count", summary["audit_section_count"]),
+            ("Integrity Gap Count", summary["integrity_gap_count"]),
+            ("Audit Unavailable Section Count", summary["audit_unavailable_section_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage29_certification_table(
+    checks: list[dict[str, Any]],
+    *,
+    include_basis: bool,
+) -> str:
+    if include_basis:
+        columns = (
+            ("Check ID", "certification_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "conformance_category", False),
+            ("Declared Methodological Requirement", "declared_methodological_requirement", False),
+            ("Observed Framework State", "observed_framework_state", False),
+            ("Conformance Result", "conformance_result", False),
+            ("Conformance Basis", "conformance_basis", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Methodological Conformance Certification"
+        class_name = "stage29-full-conformance-certification"
+    else:
+        columns = (
+            ("Check ID", "certification_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "conformance_category", False),
+            ("Declared Requirement", "declared_methodological_requirement", False),
+            ("Observed State", "observed_framework_state", False),
+            ("Conformance Result", "conformance_result", False),
+        )
+        title = "Conformance Certification Summary Table"
+        class_name = "stage29-conformance-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(check.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{escape(_stage18a_display_value(check.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for check in checks
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No certification checks are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage29_limitations(
+    certification: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = certification["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 9, 20, 21, 22)]
+    return f"""
+      <section class="stage29-conformance-limitations">
+        <h3>Certification Limitations</h3>
+        {_render_stage19a_list(limitations, "No certification limitations available.")}
+      </section>"""
+
+
+def _render_methodological_conformance_certification(
+    certification: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Methodological Conformance Certification is derived deterministically
+          from existing visible framework outputs and declared boundaries only.
+          It certifies visible internal conformance and is not legal
+          certification, external compliance audit, evidence validation, truth
+          determination, prediction, or reclassification.
+        </p>"""
+    overview = _render_stage29_overview(certification)
+    if report_mode == "executive":
+        content = overview + _render_stage29_limitations(
+            certification, concise=True
+        )
+        mode_class = "stage29-conformance-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage29_certification_table(
+                certification["certification_checks"], include_basis=False
+            )
+            + _render_stage29_limitations(certification)
+        )
+        mode_class = "stage29-conformance-review"
+    else:
+        content = (
+            overview
+            + _render_stage29_certification_table(
+                certification["certification_checks"], include_basis=True
+            )
+            + _render_stage29_limitations(certification)
+        )
+        mode_class = "stage29-conformance-full"
+    return f"""
+      <section class="management-section stage29-methodological-conformance-certification {mode_class}">
+        <h2>Methodological Conformance Certification</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -36588,6 +37117,25 @@ def render_admin_record_evidence_page(
         stage28_audit_package,
         report_mode=report_structure["report_mode"],
     )
+    stage29_conformance_certification = (
+        build_methodological_conformance_certification(
+            report_structure,
+            stage22_dependency_map,
+            stage23_stability_analysis,
+            stage24_transition_history,
+            stage25_output_provenance,
+            stage26_deterministic_replay,
+            stage27_integrity_verification,
+            stage28_audit_package,
+            stage22_current_values,
+        )
+    )
+    stage29_conformance_section = (
+        _render_methodological_conformance_certification(
+            stage29_conformance_certification,
+            report_mode=report_structure["report_mode"],
+        )
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -36632,6 +37180,7 @@ def render_admin_record_evidence_page(
             + stage26_replay_section
             + stage27_integrity_section
             + stage28_audit_section
+            + stage29_conformance_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -36645,6 +37194,7 @@ def render_admin_record_evidence_page(
             + stage26_replay_section
             + stage27_integrity_section
             + stage28_audit_section
+            + stage29_conformance_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -36663,6 +37213,7 @@ def render_admin_record_evidence_page(
             f"{stage26_replay_section}"
             f"{stage27_integrity_section}"
             f"{stage28_audit_section}"
+            f"{stage29_conformance_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -36996,6 +37547,24 @@ def render_admin_record_evidence_page(
     .stage28-full-audit-package table {{
       min-width: 1780px;
     }}
+    .stage29-methodological-conformance-certification table {{
+      table-layout: auto;
+    }}
+    .stage29-methodological-conformance-certification th,
+    .stage29-methodological-conformance-certification td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage29-conformance-summary,
+    .stage29-full-conformance-certification {{
+      overflow-x: auto;
+    }}
+    .stage29-full-conformance-certification table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -37021,6 +37590,7 @@ def render_admin_record_evidence_page(
       .stage26-replay-summary table {{ min-width: 1120px; }}
       .stage27-integrity-summary table {{ min-width: 900px; }}
       .stage28-audit-summary table {{ min-width: 840px; }}
+      .stage29-conformance-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;

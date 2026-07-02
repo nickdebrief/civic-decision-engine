@@ -303,6 +303,24 @@ write to the database, or modify records.
 
 ---
 
+## Stage 29 — Methodological Conformance Certification
+
+Adds deterministic certification of the visible framework stack against its
+declared methodological boundaries. Nineteen checks cover report modes,
+preservation counts, replay consistency, integrity and audit-package state,
+visible administrative inputs, limitation visibility, and classification,
+non-mutation, database, and public-API boundaries.
+
+Executive mode presents a concise certification overview; Review mode adds the
+certification summary table; Full Inspection mode exposes every declared
+requirement, observed state, conformance result and basis, affected output, and
+limitation. Stage 29 certifies visible internal conformance only. It is not a
+legal certification or external compliance audit and does not validate
+evidence, reclassify outputs, alter public APIs, write to the database, or
+modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
