@@ -321,6 +321,23 @@ modify records.
 
 ---
 
+## Stage 30 — Reflexive Closure
+
+Adds a deterministic endpoint for the visible framework inspection sequence.
+Twenty-three checks confirm report-mode preservation, Stage 22–29 structure,
+replay coverage, visible administrative inputs, methodological boundaries, and
+the explicit distinction between reflexive inspection closure and underlying
+case or legal closure.
+
+Executive mode presents a concise closure overview; Review mode adds the
+closure summary table; Full Inspection mode exposes every expected and observed
+state, closure result and basis, affected output, and limitation. Stage 30
+closes only the visible inspection sequence. It does not close the case,
+determine legal or evidential sufficiency, validate evidence, reclassify
+outputs, alter public APIs, write to the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

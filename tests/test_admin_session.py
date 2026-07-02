@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(19, len(review["section_index"]))
+        self.assertEqual(20, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 20)),
+            list(range(1, 21)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -7790,6 +7790,325 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Affected Stage or Output</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage30_reflexive_closure_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(
+            current_values, dependency, stability
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency, stability, transitions
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency, stability, transitions, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report, dependency, stability, transitions, provenance, replay, current_values
+        )
+        audit = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE30-001",
+            current_values,
+            dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+        )
+        certification = (
+            self.admin_session.build_methodological_conformance_certification(
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                current_values,
+            )
+        )
+        original_inputs = copy.deepcopy(
+            (
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                certification,
+                current_values,
+            )
+        )
+        closure = self.admin_session.build_reflexive_closure(
+            report,
+            dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+            audit,
+            certification,
+            current_values,
+        )
+
+        self.assertEqual(
+            "Reflexive Closure Reached With Limitations",
+            closure["reflexive_closure_state"],
+        )
+        self.assertEqual(23, len(closure["closure_checks"]))
+        required_fields = {
+            "closure_check_id",
+            "check_name",
+            "closure_category",
+            "expected_visible_state",
+            "observed_visible_state",
+            "closure_result",
+            "closure_basis",
+            "affected_stage_or_output",
+            "limitation_statement",
+        }
+        for check in closure["closure_checks"]:
+            self.assertEqual(required_fields, set(check))
+        summary = closure["reflexive_closure_summary"]
+        self.assertEqual(23, summary["total_closure_checks"])
+        self.assertEqual(17, summary["closure_conditions_met"])
+        self.assertEqual(6, summary["closure_conditions_met_with_limitation"])
+        self.assertEqual(0, summary["unavailable_closure_conditions"])
+        self.assertEqual(0, summary["closure_gap_count"])
+        self.assertEqual(30, summary["dependency_node_count"])
+        self.assertEqual(8, summary["pathway_count"])
+        self.assertEqual(11, summary["transition_entry_count"])
+        self.assertEqual(14, summary["provenance_entry_count"])
+        self.assertEqual(15, summary["replay_step_count"])
+        self.assertEqual(14, summary["integrity_check_count"])
+        self.assertEqual(10, summary["audit_section_count"])
+        self.assertEqual(19, summary["certification_check_count"])
+        self.assertEqual(0, summary["integrity_gap_count"])
+        self.assertEqual(0, summary["audit_unavailable_section_count"])
+        self.assertEqual(0, summary["certification_non_conformance_count"])
+        check_names = {check["check_name"] for check in closure["closure_checks"]}
+        for required_name in (
+            "Full Inspection Default",
+            "Report Mode Availability",
+            "Dependency Node Preservation",
+            "Pathway Preservation",
+            "Transition Entry Preservation",
+            "Provenance Entry Preservation",
+            "Replay Step Preservation",
+            "Integrity Check Preservation",
+            "Integrity Gap Absence",
+            "Audit Section Preservation",
+            "Audit Section Availability",
+            "Certification Check Preservation",
+            "Certification Non-Conformance Absence",
+            "Replayable Output Consistency",
+            "Non-Replayable Output Absence",
+            "Methodological Limitation Visibility",
+            "Classification Boundary",
+            "Record Mutation Boundary",
+            "Database Write Boundary",
+            "Public API Boundary",
+            "Underlying Case Closure Boundary",
+            "Legal and Evidential Sufficiency Boundary",
+        ):
+            self.assertIn(required_name, check_names)
+        self.assertEqual(
+            closure,
+            self.admin_session.build_reflexive_closure(
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                certification,
+                current_values,
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            (
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                certification,
+                current_values,
+            ),
+        )
+
+    def test_stage30_gap_and_unavailable_states_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(
+            current_values, dependency, stability
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency, stability, transitions
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency, stability, transitions, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report, dependency, stability, transitions, provenance, replay, current_values
+        )
+        audit = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE30-001",
+            current_values,
+            dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+        )
+        certification = (
+            self.admin_session.build_methodological_conformance_certification(
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                current_values,
+            )
+        )
+        gap_dependency = copy.deepcopy(dependency)
+        gap_dependency["nodes"] = gap_dependency["nodes"][:-1]
+        gap = self.admin_session.build_reflexive_closure(
+            report,
+            gap_dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+            audit,
+            certification,
+            current_values,
+        )
+        self.assertEqual("Reflexive Closure Gap Detected", gap["reflexive_closure_state"])
+        unavailable = self.admin_session.build_reflexive_closure()
+        self.assertEqual(
+            "Reflexive Closure Partially Available",
+            unavailable["reflexive_closure_state"],
+        )
+        self.assertGreater(
+            unavailable["reflexive_closure_summary"]["unavailable_closure_conditions"],
+            0,
+        )
+
+    def test_stage30_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(
+            current_values, dependency, stability
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency, stability, transitions
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency, stability, transitions, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report, dependency, stability, transitions, provenance, replay, current_values
+        )
+        audit = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE30-001",
+            current_values,
+            dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+        )
+        certification = (
+            self.admin_session.build_methodological_conformance_certification(
+                report,
+                dependency,
+                stability,
+                transitions,
+                provenance,
+                replay,
+                integrity,
+                audit,
+                current_values,
+            )
+        )
+        closure = self.admin_session.build_reflexive_closure(
+            report,
+            dependency,
+            stability,
+            transitions,
+            provenance,
+            replay,
+            integrity,
+            audit,
+            certification,
+            current_values,
+        )
+        executive = self.admin_session._render_reflexive_closure(
+            closure, report_mode="executive"
+        )
+        review = self.admin_session._render_reflexive_closure(
+            closure, report_mode="review"
+        )
+        full = self.admin_session._render_reflexive_closure(
+            closure, report_mode="full"
+        )
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Reflexive Closure</h2>", rendered)
+            self.assertIn("<h3>Reflexive Closure Overview</h3>", rendered)
+            self.assertIn("<h3>Reflexive Closure Limitations</h3>", rendered)
+        self.assertIn("stage30-closure-executive", executive)
+        self.assertNotIn("Reflexive Closure Summary Table", executive)
+        self.assertNotIn("Full Reflexive Closure", executive)
+        self.assertIn("stage30-closure-review", review)
+        self.assertIn("Reflexive Closure Summary Table", review)
+        self.assertNotIn("Full Reflexive Closure", review)
+        self.assertNotIn("Closure Basis</th>", review)
+        self.assertIn("stage30-closure-full", full)
+        self.assertIn("Full Reflexive Closure", full)
+        self.assertIn("Expected Visible State</th>", full)
+        self.assertIn("Observed Visible State</th>", full)
+        self.assertIn("Closure Basis</th>", full)
+        self.assertIn("Affected Stage or Output</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -7889,6 +8208,9 @@ class AdminSessionTests(unittest.TestCase):
             "<h2>Methodological Conformance Certification</h2>", executive
         )
         self.assertNotIn("Conformance Certification Summary Table", executive)
+        self.assertIn("stage30-closure-executive", executive)
+        self.assertIn("<h2>Reflexive Closure</h2>", executive)
+        self.assertNotIn("Reflexive Closure Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -7928,6 +8250,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage29-conformance-review", review)
         self.assertIn("Conformance Certification Summary Table", review)
         self.assertNotIn("Full Methodological Conformance Certification", review)
+        self.assertIn("stage30-closure-review", review)
+        self.assertIn("Reflexive Closure Summary Table", review)
+        self.assertNotIn("Full Reflexive Closure", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -7954,6 +8279,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Integrity Verification",
             "Administrative Audit Package",
             "Methodological Conformance Certification",
+            "Reflexive Closure",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -7972,6 +8298,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Administrative Audit Package", explicit_full)
         self.assertIn("stage29-conformance-full", explicit_full)
         self.assertIn("Full Methodological Conformance Certification", explicit_full)
+        self.assertIn("stage30-closure-full", explicit_full)
+        self.assertIn("Full Reflexive Closure", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -7999,6 +8327,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Administrative Audit Package"),
             explicit_full.index("Methodological Conformance Certification"),
+        )
+        self.assertLess(
+            explicit_full.index("Methodological Conformance Certification"),
+            explicit_full.index("Reflexive Closure"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
