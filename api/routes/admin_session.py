@@ -32141,6 +32141,7 @@ STAGE21_SECTION_INDEX = (
     ("Output Provenance Layer", "Overview", "Summary", "Detail"),
     ("Deterministic Replay Mode", "Overview", "Summary", "Detail"),
     ("Framework Integrity Verification", "Overview", "Summary", "Detail"),
+    ("Administrative Audit Package", "Overview", "Summary", "Detail"),
 )
 
 
@@ -35577,6 +35578,453 @@ def _render_framework_integrity_verification(
       </section>"""
 
 
+STAGE28_LIMITATIONS = (
+    "Administrative Audit Package is not a legal audit.",
+    "Administrative Audit Package does not validate evidence.",
+    "Administrative Audit Package does not determine truth.",
+    "Administrative Audit Package does not determine liability.",
+    "Administrative Audit Package does not infer intent.",
+    "Administrative Audit Package does not assign blame.",
+    "Administrative Audit Package does not infer hidden inputs.",
+    "Administrative Audit Package does not create evidence.",
+    "Administrative Audit Package does not modify records.",
+    "Administrative Audit Package does not change classifications.",
+    "Administrative Audit Package does not change thresholds.",
+    "Administrative Audit Package does not change dependencies.",
+    "Administrative Audit Package does not change evidence relationships.",
+    "Administrative Audit Package does not change transition history.",
+    "Administrative Audit Package does not change provenance.",
+    "Administrative Audit Package does not change replay outputs.",
+    "Administrative Audit Package does not change integrity checks.",
+    "Administrative Audit Package does not change report modes.",
+    "Administrative Audit Package does not write to the database.",
+    "Administrative Audit Package does not alter public API behaviour.",
+    "Administrative Audit Package packages visible framework outputs only.",
+)
+
+
+def _stage28_audit_section(
+    *,
+    audit_section_id: str,
+    section_name: str,
+    section_category: str,
+    source_stage_or_output: str,
+    section_state: str,
+    visible_basis: str,
+    included_outputs: list[str],
+    preservation_basis: str,
+    limitation_statement: str,
+) -> dict[str, Any]:
+    return {
+        "audit_section_id": audit_section_id,
+        "section_name": section_name,
+        "section_category": section_category,
+        "source_stage_or_output": source_stage_or_output,
+        "section_state": section_state,
+        "visible_basis": visible_basis,
+        "included_outputs": list(included_outputs),
+        "preservation_basis": preservation_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_administrative_audit_package(
+    record_reference: Any = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    reference = str(record_reference or "").strip()
+    normalized_administrative = dict(administrative_outputs or {})
+    normalized_dependency = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    normalized_replay = dict(deterministic_replay or {})
+    normalized_integrity = dict(integrity_verification or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+        }
+    )
+    administrative_definitions = STAGE25_OUTPUT_DEFINITIONS[:11]
+    administrative_entries = [
+        f"{output_name}: {_stage18a_display_value(normalized_administrative.get(output_key))}"
+        for _, output_key, output_name, _, _, _ in administrative_definitions
+        if normalized_administrative.get(output_key) not in (None, "", [], {})
+    ]
+    administrative_count = len(administrative_entries)
+    evidence_readiness = normalized_administrative.get("evidence_readiness")
+    dependency_nodes = normalized_dependency.get("nodes") or []
+    pathways = normalized_stability.get("pathways") or []
+    transitions = normalized_transition.get("transitions") or []
+    provenance_entries = normalized_provenance.get("provenance_entries") or []
+    replay_entries = normalized_replay.get("replay_entries") or []
+    integrity_checks = normalized_integrity.get("integrity_checks") or []
+    integrity_summary = normalized_integrity.get("integrity_summary") or {}
+    integrity_gap_count = int(integrity_summary.get("integrity_gap_checks") or 0)
+    limitation_count = sum(len(tuple(values or ())) for values in limitation_sets.values())
+
+    sections = [
+        _stage28_audit_section(
+            audit_section_id="AP-001",
+            section_name="Record Identifier",
+            section_category="Record Summary",
+            source_stage_or_output="Visible Record",
+            section_state="Included" if reference else "Unavailable",
+            visible_basis=(
+                f"Record reference: {reference}."
+                if reference
+                else "No visible record reference is available."
+            ),
+            included_outputs=([f"Record Reference: {reference}"] if reference else []),
+            preservation_basis="The visible record identifier is copied without alteration.",
+            limitation_statement="Record identification does not establish truth or ownership.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-002",
+            section_name="Current Administrative Outputs",
+            section_category="Administrative State",
+            source_stage_or_output="Stages 7G–14A Administrative Outputs",
+            section_state=(
+                "Included"
+                if administrative_count == 11
+                else "Included With Limitations"
+                if administrative_count
+                else "Unavailable"
+            ),
+            visible_basis=f"{administrative_count} of 11 declared administrative outputs are visibly available.",
+            included_outputs=administrative_entries,
+            preservation_basis="Current output values are copied from the existing administrative analysis flow.",
+            limitation_statement="Included administrative values are not reclassified or validated.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-003",
+            section_name="Evidence Readiness",
+            section_category="Evidence Readiness",
+            source_stage_or_output="Stage 7G Evidence Readiness",
+            section_state=(
+                "Included"
+                if evidence_readiness not in (None, "", [], {})
+                else "Unavailable"
+            ),
+            visible_basis=(
+                f"Visible evidence readiness: {_stage18a_display_value(evidence_readiness)}."
+                if evidence_readiness not in (None, "", [], {})
+                else "Evidence readiness is not visibly available."
+            ),
+            included_outputs=(
+                [f"Evidence Readiness: {_stage18a_display_value(evidence_readiness)}"]
+                if evidence_readiness not in (None, "", [], {})
+                else []
+            ),
+            preservation_basis="The existing evidence readiness output is included without recalculation.",
+            limitation_statement="Evidence readiness does not validate evidence or determine real-world sufficiency.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-004",
+            section_name="Dependency Mapping",
+            section_category="Dependency Mapping",
+            source_stage_or_output="Stage 22 Determination Dependency Mapping",
+            section_state="Included" if dependency_nodes else "Unavailable",
+            visible_basis=f"{len(dependency_nodes)} visible dependency nodes are packaged.",
+            included_outputs=[
+                f'Dependency Mapping State: {normalized_dependency.get("dependency_mapping_state", "Not Available")}',
+                f"Dependency Nodes: {len(dependency_nodes)}",
+            ] if dependency_nodes else [],
+            preservation_basis="Stage 22 node count and mapping state are copied without changing dependencies.",
+            limitation_statement="Dependency inclusion does not establish correctness of a dependency.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-005",
+            section_name="Pathway Stability",
+            section_category="Pathway Stability",
+            source_stage_or_output="Stage 23 Pathway Stability Analysis",
+            section_state="Included" if pathways else "Unavailable",
+            visible_basis=f"{len(pathways)} visible pathway entries are packaged.",
+            included_outputs=[
+                f'Stability State: {normalized_stability.get("stability_state", "Stability Not Available")}',
+                f"Pathways: {len(pathways)}",
+            ] if pathways else [],
+            preservation_basis="Stage 23 pathway count and state are copied without forecasting.",
+            limitation_statement="Pathway stability remains structural and does not predict outcomes.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-006",
+            section_name="Transition History",
+            section_category="Transition History",
+            source_stage_or_output="Stage 24 Record State Transition History",
+            section_state="Included" if transitions else "Unavailable",
+            visible_basis=f"{len(transitions)} visible transition entries are packaged.",
+            included_outputs=[
+                f'Transition State: {normalized_transition.get("transition_state", "Transition History Not Available")}',
+                f"Transition Entries: {len(transitions)}",
+            ] if transitions else [],
+            preservation_basis="Stage 24 transition count and state are copied without inferring prior states.",
+            limitation_statement="Transition history does not recreate missing events.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-007",
+            section_name="Output Provenance",
+            section_category="Output Provenance",
+            source_stage_or_output="Stage 25 Output Provenance Layer",
+            section_state="Included" if provenance_entries else "Unavailable",
+            visible_basis=f"{len(provenance_entries)} visible provenance entries are packaged.",
+            included_outputs=[
+                f'Provenance State: {normalized_provenance.get("provenance_state", "Provenance Not Available")}',
+                f"Provenance Entries: {len(provenance_entries)}",
+            ] if provenance_entries else [],
+            preservation_basis="Stage 25 provenance count and state are copied without inferring hidden production details.",
+            limitation_statement="Provenance inclusion does not validate an output or producing helper.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-008",
+            section_name="Deterministic Replay",
+            section_category="Deterministic Replay",
+            source_stage_or_output="Stage 26 Deterministic Replay Mode",
+            section_state="Included" if replay_entries else "Unavailable",
+            visible_basis=f"{len(replay_entries)} visible replay steps are packaged.",
+            included_outputs=[
+                f'Replay State: {normalized_replay.get("replay_state", "Replay Basis Not Available")}',
+                f"Replay Steps: {len(replay_entries)}",
+            ] if replay_entries else [],
+            preservation_basis="Stage 26 replay count and state are copied without simulation or recalculation.",
+            limitation_statement="Replay inclusion does not predict or certify output correctness.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-009",
+            section_name="Framework Integrity Verification",
+            section_category="Framework Integrity",
+            source_stage_or_output="Stage 27 Framework Integrity Verification",
+            section_state=(
+                "Included With Limitations"
+                if integrity_checks
+                and normalized_integrity.get("integrity_state")
+                == "Framework Integrity Verified With Limitations"
+                else "Included"
+                if integrity_checks
+                else "Unavailable"
+            ),
+            visible_basis=f"{len(integrity_checks)} visible integrity checks with {integrity_gap_count} gaps are packaged.",
+            included_outputs=[
+                f'Integrity State: {normalized_integrity.get("integrity_state", "Framework Integrity Not Fully Available")}',
+                f"Integrity Checks: {len(integrity_checks)}",
+                f"Integrity Gaps: {integrity_gap_count}",
+            ] if integrity_checks else [],
+            preservation_basis="Stage 27 integrity counts and state are copied without changing checks.",
+            limitation_statement="Integrity verification remains limited to visible framework structure.",
+        ),
+        _stage28_audit_section(
+            audit_section_id="AP-010",
+            section_name="Methodological Limitations",
+            section_category="Methodological Limitations",
+            source_stage_or_output="Stages 21–27 Declared Limitations",
+            section_state="Included" if limitation_count else "Unavailable",
+            visible_basis=f"{limitation_count} declared methodological limitation statements are available.",
+            included_outputs=[
+                f"{stage}: {len(tuple(values or ()))} limitations"
+                for stage, values in limitation_sets.items()
+                if values
+            ],
+            preservation_basis="Declared limitations are counted and identified by source stage without alteration.",
+            limitation_statement="Packaging limitations does not extend or waive them.",
+        ),
+    ]
+    included_sections = sum(
+        section["section_state"] != "Unavailable" for section in sections
+    )
+    unavailable_sections = len(sections) - included_sections
+    substantive_sections = sum(
+        section["section_state"] != "Unavailable"
+        for section in sections
+        if section["audit_section_id"] != "AP-010"
+    )
+    has_limited_section = any(
+        section["section_state"] == "Included With Limitations"
+        for section in sections
+    )
+    if not substantive_sections:
+        audit_package_state = "Administrative Audit Package Not Available"
+    elif unavailable_sections:
+        audit_package_state = "Administrative Audit Package Partially Available"
+    elif integrity_gap_count or has_limited_section:
+        audit_package_state = "Administrative Audit Package Available With Limitations"
+    else:
+        audit_package_state = "Administrative Audit Package Available"
+    summary = {
+        "audit_package_state": audit_package_state,
+        "total_audit_sections": len(sections),
+        "included_sections": included_sections,
+        "unavailable_sections": unavailable_sections,
+        "dependency_node_count": len(dependency_nodes),
+        "pathway_count": len(pathways),
+        "transition_entry_count": len(transitions),
+        "provenance_entry_count": len(provenance_entries),
+        "replay_step_count": len(replay_entries),
+        "integrity_check_count": len(integrity_checks),
+        "integrity_gap_count": integrity_gap_count,
+        "limitation_summary": (
+            "The administrative audit package assembles visible framework outputs only and is not a legal audit or evidence validation."
+        ),
+    }
+    return {
+        "audit_package_state": audit_package_state,
+        "audit_package_summary": summary,
+        "audit_sections": sections,
+        "limitations": list(STAGE28_LIMITATIONS),
+    }
+
+
+def _render_stage28_overview(audit_package: dict[str, Any]) -> str:
+    summary = audit_package["audit_package_summary"]
+    return f"""
+      <section class="stage28-audit-overview">
+        <h3>Audit Package Overview</h3>
+        {_render_stage18a_table((
+            ("Audit Package State", summary["audit_package_state"]),
+            ("Total Audit Sections", summary["total_audit_sections"]),
+            ("Included Sections", summary["included_sections"]),
+            ("Unavailable Sections", summary["unavailable_sections"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Integrity Check Count", summary["integrity_check_count"]),
+            ("Integrity Gap Count", summary["integrity_gap_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage28_audit_table(
+    sections: list[dict[str, Any]],
+    *,
+    include_bases: bool,
+) -> str:
+    if include_bases:
+        columns = (
+            ("Section ID", "audit_section_id", True),
+            ("Section Name", "section_name", False),
+            ("Category", "section_category", False),
+            ("Source Stage or Output", "source_stage_or_output", False),
+            ("Section State", "section_state", False),
+            ("Visible Basis", "visible_basis", False),
+            ("Included Outputs", "included_outputs", False),
+            ("Preservation Basis", "preservation_basis", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Administrative Audit Package"
+        class_name = "stage28-full-audit-package"
+    else:
+        columns = (
+            ("Section ID", "audit_section_id", True),
+            ("Section Name", "section_name", False),
+            ("Category", "section_category", False),
+            ("Source Stage or Output", "source_stage_or_output", False),
+            ("Section State", "section_state", False),
+        )
+        title = "Audit Package Summary Table"
+        class_name = "stage28-audit-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(section.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{_render_stage19c_compact_items(section.get(key))}</td>"
+                if key == "included_outputs"
+                else f"<td>{escape(_stage18a_display_value(section.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for section in sections
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No audit package sections are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage28_limitations(
+    audit_package: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = audit_package["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 8, 9, 18, 19, 20)]
+    return f"""
+      <section class="stage28-audit-limitations">
+        <h3>Audit Package Limitations</h3>
+        {_render_stage19a_list(limitations, "No audit package limitations available.")}
+      </section>"""
+
+
+def _render_administrative_audit_package(
+    audit_package: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Administrative Audit Package is assembled deterministically from
+          existing visible framework outputs and declared limitations only. It
+          is an inspectable administrative bundle, not a legal audit, evidence
+          validation, truth determination, prediction, or reclassification.
+        </p>"""
+    overview = _render_stage28_overview(audit_package)
+    if report_mode == "executive":
+        content = overview + _render_stage28_limitations(
+            audit_package, concise=True
+        )
+        mode_class = "stage28-audit-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage28_audit_table(
+                audit_package["audit_sections"], include_bases=False
+            )
+            + _render_stage28_limitations(audit_package)
+        )
+        mode_class = "stage28-audit-review"
+    else:
+        content = (
+            overview
+            + _render_stage28_audit_table(
+                audit_package["audit_sections"], include_bases=True
+            )
+            + _render_stage28_limitations(audit_package)
+        )
+        mode_class = "stage28-audit-full"
+    return f"""
+      <section class="management-section stage28-administrative-audit-package {mode_class}">
+        <h2>Administrative Audit Package</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -36126,6 +36574,20 @@ def render_admin_record_evidence_page(
         stage27_integrity_verification,
         report_mode=report_structure["report_mode"],
     )
+    stage28_audit_package = build_administrative_audit_package(
+        reference,
+        stage22_current_values,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+    )
+    stage28_audit_section = _render_administrative_audit_package(
+        stage28_audit_package,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -36169,6 +36631,7 @@ def render_admin_record_evidence_page(
             + stage25_provenance_section
             + stage26_replay_section
             + stage27_integrity_section
+            + stage28_audit_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -36181,6 +36644,7 @@ def render_admin_record_evidence_page(
             + stage25_provenance_section
             + stage26_replay_section
             + stage27_integrity_section
+            + stage28_audit_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -36198,6 +36662,7 @@ def render_admin_record_evidence_page(
             f"{stage25_provenance_section}"
             f"{stage26_replay_section}"
             f"{stage27_integrity_section}"
+            f"{stage28_audit_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -36513,6 +36978,24 @@ def render_admin_record_evidence_page(
     .stage27-full-integrity-verification table {{
       min-width: 1680px;
     }}
+    .stage28-administrative-audit-package table {{
+      table-layout: auto;
+    }}
+    .stage28-administrative-audit-package th,
+    .stage28-administrative-audit-package td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage28-audit-summary,
+    .stage28-full-audit-package {{
+      overflow-x: auto;
+    }}
+    .stage28-full-audit-package table {{
+      min-width: 1780px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -36537,6 +37020,7 @@ def render_admin_record_evidence_page(
       .stage25-provenance-summary table {{ min-width: 900px; }}
       .stage26-replay-summary table {{ min-width: 1120px; }}
       .stage27-integrity-summary table {{ min-width: 900px; }}
+      .stage28-audit-summary table {{ min-width: 840px; }}
     }}
     details {{
       break-inside: avoid;

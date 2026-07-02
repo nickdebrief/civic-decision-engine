@@ -286,6 +286,23 @@ APIs, write to the database, or modify records.
 
 ---
 
+## Stage 28 — Administrative Audit Package
+
+Adds a deterministic ten-section administrative package containing the visible
+record identifier, current administrative outputs, evidence readiness,
+dependency mapping, pathway stability, transition history, output provenance,
+deterministic replay, framework integrity verification, and methodological
+limitations.
+
+Executive mode presents a concise package overview; Review mode adds the audit
+package summary table; Full Inspection mode exposes every visible basis,
+included output, preservation basis, and limitation. Stage 28 packages existing
+visible outputs only. It is not a legal audit and does not validate evidence,
+determine truth, reclassify outputs, infer hidden inputs, alter public APIs,
+write to the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
