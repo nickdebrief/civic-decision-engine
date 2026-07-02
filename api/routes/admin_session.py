@@ -32143,6 +32143,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Integrity Verification", "Overview", "Summary", "Detail"),
     ("Administrative Audit Package", "Overview", "Summary", "Detail"),
     ("Methodological Conformance Certification", "Overview", "Summary", "Detail"),
+    ("Reflexive Closure", "Overview", "Summary", "Detail"),
 )
 
 
@@ -36554,6 +36555,395 @@ def _render_methodological_conformance_certification(
       </section>"""
 
 
+STAGE30_LIMITATIONS = (
+    "Reflexive Closure is not case closure.",
+    "Reflexive Closure is not legal closure.",
+    "Reflexive Closure is not evidence validation.",
+    "Reflexive Closure is not truth determination.",
+    "Reflexive Closure is not external compliance certification.",
+    "Reflexive Closure does not determine liability.",
+    "Reflexive Closure does not infer intent.",
+    "Reflexive Closure does not assign blame.",
+    "Reflexive Closure does not infer hidden inputs.",
+    "Reflexive Closure does not create evidence.",
+    "Reflexive Closure does not modify records.",
+    "Reflexive Closure does not change classifications.",
+    "Reflexive Closure does not change thresholds.",
+    "Reflexive Closure does not change dependencies.",
+    "Reflexive Closure does not change evidence relationships.",
+    "Reflexive Closure does not change transition history.",
+    "Reflexive Closure does not change provenance.",
+    "Reflexive Closure does not change replay outputs.",
+    "Reflexive Closure does not change integrity checks.",
+    "Reflexive Closure does not change audit package sections.",
+    "Reflexive Closure does not change certification checks.",
+    "Reflexive Closure does not change report modes.",
+    "Reflexive Closure does not write to the database.",
+    "Reflexive Closure does not alter public API behaviour.",
+    "Reflexive Closure does not determine evidential or legal sufficiency.",
+    "Reflexive Closure closes only the visible reflexive inspection sequence.",
+)
+
+
+def _stage30_closure_check(
+    *,
+    closure_check_id: str,
+    check_name: str,
+    closure_category: str,
+    expected_visible_state: Any,
+    observed_visible_state: Any,
+    closure_basis: str,
+    affected_stage_or_output: str,
+    limitation_statement: str,
+    met_with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_visible_state in (None, "", "Not Available"):
+        result = "Closure Condition Not Available"
+    elif observed_visible_state == expected_visible_state:
+        result = (
+            "Closure Condition Met With Limitation"
+            if met_with_limitation
+            else "Closure Condition Met"
+        )
+    else:
+        result = "Closure Gap Detected"
+    return {
+        "closure_check_id": closure_check_id,
+        "check_name": check_name,
+        "closure_category": closure_category,
+        "expected_visible_state": expected_visible_state,
+        "observed_visible_state": observed_visible_state,
+        "closure_result": result,
+        "closure_basis": closure_basis,
+        "affected_stage_or_output": affected_stage_or_output,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_reflexive_closure(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_report = dict(report_structure or {})
+    normalized_dependency = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    normalized_replay = dict(deterministic_replay or {})
+    normalized_integrity = dict(integrity_verification or {})
+    normalized_audit = dict(audit_package or {})
+    normalized_certification = dict(conformance_certification or {})
+    normalized_administrative = dict(administrative_outputs or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+        }
+    )
+    dependency_count = len(normalized_dependency.get("nodes") or [])
+    pathway_count = len(normalized_stability.get("pathways") or [])
+    transition_count = len(normalized_transition.get("transitions") or [])
+    provenance_count = len(normalized_provenance.get("provenance_entries") or [])
+    replay_count = len(normalized_replay.get("replay_entries") or [])
+    integrity_count = len(normalized_integrity.get("integrity_checks") or [])
+    audit_section_count = len(normalized_audit.get("audit_sections") or [])
+    certification_count = len(
+        normalized_certification.get("certification_checks") or []
+    )
+    replay_summary = normalized_replay.get("replay_summary") or {}
+    integrity_summary = normalized_integrity.get("integrity_summary") or {}
+    audit_summary = normalized_audit.get("audit_package_summary") or {}
+    certification_summary = normalized_certification.get(
+        "certification_summary"
+    ) or {}
+    integrity_gap_count = integrity_summary.get("integrity_gap_checks")
+    audit_unavailable_count = audit_summary.get("unavailable_sections")
+    certification_non_conformance_count = certification_summary.get(
+        "non_conformance_checks"
+    )
+    administrative_count = sum(
+        normalized_administrative.get(definition[1]) not in (None, "", [], {})
+        for definition in STAGE25_OUTPUT_DEFINITIONS[:11]
+    )
+    all_limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    classification_boundary_visible = any(
+        "does not change classifications" in str(value).lower()
+        for value in STAGE21_SUMMARY_LIMITATIONS
+    )
+    mutation_boundary_visible = any(
+        "does not modify records" in str(value).lower()
+        for value in STAGE29_LIMITATIONS
+    )
+    database_boundary_visible = any(
+        "does not write to the database" in str(value).lower()
+        for value in STAGE29_LIMITATIONS
+    )
+    public_api_boundary_visible = any(
+        "does not alter public api behaviour" in str(value).lower()
+        for value in STAGE29_LIMITATIONS
+    )
+    case_closure_boundary_visible = any(
+        "not case closure" in str(value).lower() for value in STAGE30_LIMITATIONS
+    )
+    sufficiency_boundary_visible = any(
+        "does not determine evidential or legal sufficiency" in str(value).lower()
+        for value in STAGE30_LIMITATIONS
+    )
+    check_specs = (
+        ("RC-001", "Full Inspection Default", "Report Mode Preservation", "Full Inspection Report", classify_report_mode(None), "Stage 21 default mode normalization remains Full Inspection.", "Stage 21 Report Modes", "This closes the visible mode check only.", False),
+        ("RC-002", "Report Mode Availability", "Report Mode Preservation", 3, len(normalized_report.get("available_report_modes") or []) if normalized_report else None, "Three visible Stage 21 report modes remain available.", "Stage 21 Report Modes", "Mode availability concerns presentation only.", False),
+        ("RC-003", "Dependency Node Preservation", "Structural Preservation", 30, dependency_count if normalized_dependency else None, "Visible Stage 22 dependency node count.", "Stage 22 Determination Dependency Mapping", "Count preservation does not validate dependencies.", False),
+        ("RC-004", "Pathway Preservation", "Structural Preservation", 8, pathway_count if normalized_stability else None, "Visible Stage 23 pathway count.", "Stage 23 Pathway Stability Analysis", "Count preservation does not predict outcomes.", False),
+        ("RC-005", "Transition Entry Preservation", "Structural Preservation", 11, transition_count if normalized_transition else None, "Visible Stage 24 transition entry count.", "Stage 24 Record State Transition History", "Count preservation does not infer prior states.", False),
+        ("RC-006", "Provenance Entry Preservation", "Structural Preservation", 14, provenance_count if normalized_provenance else None, "Visible Stage 25 provenance entry count.", "Stage 25 Output Provenance Layer", "Count preservation does not validate provenance truth.", False),
+        ("RC-007", "Replay Step Preservation", "Replay Availability", 15, replay_count if normalized_replay else None, "Visible Stage 26 replay step count.", "Stage 26 Deterministic Replay Mode", "Replay count does not recalculate outputs.", False),
+        ("RC-008", "Integrity Check Preservation", "Integrity Availability", 14, integrity_count if normalized_integrity else None, "Visible Stage 27 integrity check count.", "Stage 27 Framework Integrity Verification", "Integrity count concerns framework structure only.", False),
+        ("RC-009", "Integrity Gap Absence", "Integrity Availability", 0, integrity_gap_count, "Visible Stage 27 integrity gap count.", "Stage 27 Integrity Summary", "Zero visible gaps does not determine truth.", False),
+        ("RC-010", "Audit Section Preservation", "Audit Package Availability", 10, audit_section_count if normalized_audit else None, "Visible Stage 28 audit section count.", "Stage 28 Administrative Audit Package", "Section count does not make this a legal audit.", False),
+        ("RC-011", "Audit Section Availability", "Audit Package Availability", 0, audit_unavailable_count, "Visible Stage 28 unavailable section count.", "Stage 28 Audit Package Summary", "Availability does not validate packaged outputs.", False),
+        ("RC-012", "Certification Check Preservation", "Methodological Conformance", 19, certification_count if normalized_certification else None, "Visible Stage 29 certification check count.", "Stage 29 Methodological Conformance Certification", "Check count does not create external compliance certification.", False),
+        ("RC-013", "Certification Non-Conformance Absence", "Methodological Conformance", 0, certification_non_conformance_count, "Visible Stage 29 non-conformance count.", "Stage 29 Certification Summary", "Zero visible non-conformance does not establish legal compliance.", False),
+        ("RC-014", "Replayable Output Consistency", "Replay Availability", replay_count if normalized_replay else None, replay_summary.get("replayable_outputs"), "Replayable outputs are compared with total visible replay steps.", "Stage 26 Replay Summary", "Count equality closes replay coverage only.", False),
+        ("RC-015", "Non-Replayable Output Absence", "Replay Availability", 0, replay_summary.get("non_replayable_outputs"), "Visible Stage 26 non-replayable output count.", "Stage 26 Replay Summary", "Zero does not certify factual correctness.", False),
+        ("RC-016", "Methodological Limitation Visibility", "Boundary Preservation", True, all_limitations_visible, "Declared Stage 21–30 limitation sets are present and non-empty.", "Stages 21–30 Limitations", "Visibility does not externally enforce limitations.", False),
+        ("RC-017", "Classification Boundary", "Boundary Preservation", True, classification_boundary_visible, "Stage 21 declares report modes do not change classifications.", "Stage 21 Report Modes", "This verifies a visible declaration only.", True),
+        ("RC-018", "Record Mutation Boundary", "Non-Mutation", True, mutation_boundary_visible, "Stage 29 declares certification does not modify records.", "Stage 29 Methodological Conformance Certification", "This does not monitor external database activity.", True),
+        ("RC-019", "Database Write Boundary", "Non-Mutation", True, database_boundary_visible, "Stage 29 declares certification does not write to the database.", "Stage 29 Methodological Conformance Certification", "This verifies a declared boundary only.", True),
+        ("RC-020", "Public API Boundary", "Boundary Preservation", True, public_api_boundary_visible, "Stage 29 declares certification does not alter public API behaviour.", "Stage 29 Methodological Conformance Certification", "This verifies a declared boundary only.", True),
+        ("RC-021", "Underlying Case Closure Boundary", "Boundary Preservation", True, case_closure_boundary_visible, "Stage 30 explicitly declares that reflexive closure is not case closure.", "Stage 30 Reflexive Closure", "This closes only the visible inspection sequence.", True),
+        ("RC-022", "Legal and Evidential Sufficiency Boundary", "Boundary Preservation", True, sufficiency_boundary_visible, "Stage 30 explicitly declines legal and evidential sufficiency determination.", "Stage 30 Reflexive Closure", "No legal or evidential sufficiency conclusion is produced.", True),
+        ("RC-023", "Visible Administrative Input Availability", "Visible Input Boundary", 11, administrative_count if normalized_administrative else None, "Presence count for the eleven current administrative outputs used by Stages 22–30.", "Current Administrative Outputs", "Availability does not validate an output.", False),
+    )
+    checks = [
+        _stage30_closure_check(
+            closure_check_id=check_id,
+            check_name=name,
+            closure_category=category,
+            expected_visible_state=expected,
+            observed_visible_state=observed,
+            closure_basis=basis,
+            affected_stage_or_output=affected,
+            limitation_statement=limitation,
+            met_with_limitation=limited,
+        )
+        for check_id, name, category, expected, observed, basis, affected, limitation, limited in check_specs
+    ]
+    results = (
+        "Closure Condition Met",
+        "Closure Condition Met With Limitation",
+        "Closure Condition Not Available",
+        "Closure Gap Detected",
+    )
+    result_counts = {
+        result: sum(check["closure_result"] == result for check in checks)
+        for result in results
+    }
+    if result_counts["Closure Gap Detected"]:
+        closure_state = "Reflexive Closure Gap Detected"
+    elif result_counts["Closure Condition Not Available"]:
+        closure_state = "Reflexive Closure Partially Available"
+    elif result_counts["Closure Condition Met With Limitation"]:
+        closure_state = "Reflexive Closure Reached With Limitations"
+    else:
+        closure_state = "Reflexive Closure Reached"
+    summary = {
+        "reflexive_closure_state": closure_state,
+        "total_closure_checks": len(checks),
+        "closure_conditions_met": result_counts["Closure Condition Met"],
+        "closure_conditions_met_with_limitation": result_counts[
+            "Closure Condition Met With Limitation"
+        ],
+        "unavailable_closure_conditions": result_counts[
+            "Closure Condition Not Available"
+        ],
+        "closure_gap_count": result_counts["Closure Gap Detected"],
+        "dependency_node_count": dependency_count,
+        "pathway_count": pathway_count,
+        "transition_entry_count": transition_count,
+        "provenance_entry_count": provenance_count,
+        "replay_step_count": replay_count,
+        "integrity_check_count": integrity_count,
+        "audit_section_count": audit_section_count,
+        "certification_check_count": certification_count,
+        "integrity_gap_count": int(integrity_gap_count or 0),
+        "audit_unavailable_section_count": int(audit_unavailable_count or 0),
+        "certification_non_conformance_count": int(
+            certification_non_conformance_count or 0
+        ),
+        "limitation_summary": (
+            "Reflexive closure marks only the endpoint of visible framework inspection; it is not case closure or a legal or evidential determination."
+        ),
+    }
+    return {
+        "reflexive_closure_state": closure_state,
+        "reflexive_closure_summary": summary,
+        "closure_checks": checks,
+        "limitations": list(STAGE30_LIMITATIONS),
+    }
+
+
+def _render_stage30_overview(closure: dict[str, Any]) -> str:
+    summary = closure["reflexive_closure_summary"]
+    return f"""
+      <section class="stage30-closure-overview">
+        <h3>Reflexive Closure Overview</h3>
+        {_render_stage18a_table((
+            ("Reflexive Closure State", summary["reflexive_closure_state"]),
+            ("Total Closure Checks", summary["total_closure_checks"]),
+            ("Closure Conditions Met", summary["closure_conditions_met"]),
+            ("Closure Conditions Met With Limitation", summary["closure_conditions_met_with_limitation"]),
+            ("Unavailable Closure Conditions", summary["unavailable_closure_conditions"]),
+            ("Closure Gap Count", summary["closure_gap_count"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Integrity Check Count", summary["integrity_check_count"]),
+            ("Audit Section Count", summary["audit_section_count"]),
+            ("Certification Check Count", summary["certification_check_count"]),
+            ("Integrity Gap Count", summary["integrity_gap_count"]),
+            ("Audit Unavailable Section Count", summary["audit_unavailable_section_count"]),
+            ("Certification Non-Conformance Count", summary["certification_non_conformance_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage30_closure_table(
+    checks: list[dict[str, Any]],
+    *,
+    include_basis: bool,
+) -> str:
+    if include_basis:
+        columns = (
+            ("Check ID", "closure_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "closure_category", False),
+            ("Expected Visible State", "expected_visible_state", False),
+            ("Observed Visible State", "observed_visible_state", False),
+            ("Closure Result", "closure_result", False),
+            ("Closure Basis", "closure_basis", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Reflexive Closure"
+        class_name = "stage30-full-reflexive-closure"
+    else:
+        columns = (
+            ("Check ID", "closure_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "closure_category", False),
+            ("Expected State", "expected_visible_state", False),
+            ("Observed State", "observed_visible_state", False),
+            ("Closure Result", "closure_result", False),
+        )
+        title = "Reflexive Closure Summary Table"
+        class_name = "stage30-closure-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(check.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{escape(_stage18a_display_value(check.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for check in checks
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No reflexive closure checks are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table>
+          <thead><tr>{headers}</tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </section>"""
+
+
+def _render_stage30_limitations(
+    closure: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = closure["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 10, 22, 23, 25)]
+    return f"""
+      <section class="stage30-closure-limitations">
+        <h3>Reflexive Closure Limitations</h3>
+        {_render_stage19a_list(limitations, "No reflexive closure limitations available.")}
+      </section>"""
+
+
+def _render_reflexive_closure(
+    closure: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Reflexive Closure is derived deterministically from the complete
+          visible framework inspection stack and declared boundaries only. It
+          marks an inspection endpoint for the current visible record state and
+          is not case closure, legal closure, evidence validation, truth
+          determination, prediction, or reclassification.
+        </p>"""
+    overview = _render_stage30_overview(closure)
+    if report_mode == "executive":
+        content = overview + _render_stage30_limitations(closure, concise=True)
+        mode_class = "stage30-closure-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage30_closure_table(
+                closure["closure_checks"], include_basis=False
+            )
+            + _render_stage30_limitations(closure)
+        )
+        mode_class = "stage30-closure-review"
+    else:
+        content = (
+            overview
+            + _render_stage30_closure_table(
+                closure["closure_checks"], include_basis=True
+            )
+            + _render_stage30_limitations(closure)
+        )
+        mode_class = "stage30-closure-full"
+    return f"""
+      <section class="management-section stage30-reflexive-closure {mode_class}">
+        <h2>Reflexive Closure</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -37136,6 +37526,22 @@ def render_admin_record_evidence_page(
             report_mode=report_structure["report_mode"],
         )
     )
+    stage30_reflexive_closure = build_reflexive_closure(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage22_current_values,
+    )
+    stage30_closure_section = _render_reflexive_closure(
+        stage30_reflexive_closure,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -37181,6 +37587,7 @@ def render_admin_record_evidence_page(
             + stage27_integrity_section
             + stage28_audit_section
             + stage29_conformance_section
+            + stage30_closure_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -37195,6 +37602,7 @@ def render_admin_record_evidence_page(
             + stage27_integrity_section
             + stage28_audit_section
             + stage29_conformance_section
+            + stage30_closure_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -37214,6 +37622,7 @@ def render_admin_record_evidence_page(
             f"{stage27_integrity_section}"
             f"{stage28_audit_section}"
             f"{stage29_conformance_section}"
+            f"{stage30_closure_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -37565,6 +37974,24 @@ def render_admin_record_evidence_page(
     .stage29-full-conformance-certification table {{
       min-width: 1860px;
     }}
+    .stage30-reflexive-closure table {{
+      table-layout: auto;
+    }}
+    .stage30-reflexive-closure th,
+    .stage30-reflexive-closure td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage30-closure-summary,
+    .stage30-full-reflexive-closure {{
+      overflow-x: auto;
+    }}
+    .stage30-full-reflexive-closure table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -37591,6 +38018,7 @@ def render_admin_record_evidence_page(
       .stage27-integrity-summary table {{ min-width: 900px; }}
       .stage28-audit-summary table {{ min-width: 840px; }}
       .stage29-conformance-summary table {{ min-width: 920px; }}
+      .stage30-closure-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;
