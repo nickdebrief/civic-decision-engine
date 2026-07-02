@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(18, len(review["section_index"]))
+        self.assertEqual(19, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 19)),
+            list(range(1, 20)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -7460,6 +7460,336 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Preservation Basis</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage29_conformance_certification_is_deterministic_and_complete(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        audit_package = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE29-001",
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            integrity,
+        )
+        original_inputs = copy.deepcopy(
+            (
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            )
+        )
+        certification = (
+            self.admin_session.build_methodological_conformance_certification(
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            )
+        )
+
+        self.assertEqual(
+            "Methodological Conformance Certified With Limitations",
+            certification["certification_state"],
+        )
+        self.assertEqual(19, len(certification["certification_checks"]))
+        required_fields = {
+            "certification_check_id",
+            "check_name",
+            "conformance_category",
+            "declared_methodological_requirement",
+            "observed_framework_state",
+            "conformance_result",
+            "conformance_basis",
+            "affected_stage_or_output",
+            "limitation_statement",
+        }
+        for check in certification["certification_checks"]:
+            self.assertEqual(required_fields, set(check))
+        summary = certification["certification_summary"]
+        self.assertEqual(19, summary["total_certification_checks"])
+        self.assertEqual(15, summary["conforming_checks"])
+        self.assertEqual(4, summary["conforming_with_limitation_checks"])
+        self.assertEqual(0, summary["unavailable_checks"])
+        self.assertEqual(0, summary["non_conformance_checks"])
+        self.assertEqual(30, summary["dependency_node_count"])
+        self.assertEqual(8, summary["pathway_count"])
+        self.assertEqual(11, summary["transition_entry_count"])
+        self.assertEqual(14, summary["provenance_entry_count"])
+        self.assertEqual(15, summary["replay_step_count"])
+        self.assertEqual(14, summary["integrity_check_count"])
+        self.assertEqual(10, summary["audit_section_count"])
+        self.assertEqual(0, summary["integrity_gap_count"])
+        self.assertEqual(0, summary["audit_unavailable_section_count"])
+        check_names = {
+            check["check_name"] for check in certification["certification_checks"]
+        }
+        for required_name in (
+            "Full Inspection Default",
+            "Report Mode Availability",
+            "Dependency Node Preservation",
+            "Pathway Preservation",
+            "Transition Entry Preservation",
+            "Provenance Entry Preservation",
+            "Replay Step Preservation",
+            "Integrity Check Preservation",
+            "Integrity Gap Absence",
+            "Audit Section Preservation",
+            "Audit Section Availability",
+            "Replayable Output Consistency",
+            "Non-Replayable Output Absence",
+            "Methodological Limitation Visibility",
+            "Classification Boundary",
+            "Record Mutation Boundary",
+            "Database Write Boundary",
+            "Public API Boundary",
+        ):
+            self.assertIn(required_name, check_names)
+        self.assertEqual(
+            certification,
+            self.admin_session.build_methodological_conformance_certification(
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            ),
+        )
+        self.assertEqual(
+            original_inputs,
+            (
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            ),
+        )
+
+    def test_stage29_non_conformance_and_unavailable_states_are_deterministic(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        audit_package = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE29-001",
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            integrity,
+        )
+        gap_dependency_map = copy.deepcopy(dependency_map)
+        gap_dependency_map["nodes"] = gap_dependency_map["nodes"][:-1]
+        non_conformance = (
+            self.admin_session.build_methodological_conformance_certification(
+                report_structure,
+                gap_dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            )
+        )
+
+        self.assertEqual(
+            "Methodological Non-Conformance Detected",
+            non_conformance["certification_state"],
+        )
+        dependency_check = next(
+            check
+            for check in non_conformance["certification_checks"]
+            if check["check_name"] == "Dependency Node Preservation"
+        )
+        self.assertEqual(
+            "Non-Conformance Detected", dependency_check["conformance_result"]
+        )
+        unavailable = (
+            self.admin_session.build_methodological_conformance_certification()
+        )
+        self.assertEqual(
+            "Methodological Conformance Partially Available",
+            unavailable["certification_state"],
+        )
+        self.assertGreater(
+            unavailable["certification_summary"]["unavailable_checks"], 0
+        )
+
+    def test_stage29_rendering_depth_matches_report_mode(self):
+        current_values = {
+            definition[1]: f"Visible value for {definition[2]}"
+            for definition in self.admin_session.STAGE22_NODE_DEFINITIONS
+        }
+        report_structure = self.admin_session.build_stage21_report_structure()
+        dependency_map = self.admin_session.build_determination_dependency_map(
+            current_values
+        )
+        stability = self.admin_session.build_pathway_stability_analysis(
+            dependency_map
+        )
+        transition_history = (
+            self.admin_session.build_record_state_transition_history(
+                current_values, dependency_map, stability
+            )
+        )
+        provenance = self.admin_session.build_output_provenance_layer(
+            current_values, dependency_map, stability, transition_history
+        )
+        replay = self.admin_session.build_deterministic_replay(
+            dependency_map, stability, transition_history, provenance
+        )
+        integrity = self.admin_session.build_framework_integrity_verification(
+            report_structure,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            current_values,
+        )
+        audit_package = self.admin_session.build_administrative_audit_package(
+            "CREF-STAGE29-001",
+            current_values,
+            dependency_map,
+            stability,
+            transition_history,
+            provenance,
+            replay,
+            integrity,
+        )
+        certification = (
+            self.admin_session.build_methodological_conformance_certification(
+                report_structure,
+                dependency_map,
+                stability,
+                transition_history,
+                provenance,
+                replay,
+                integrity,
+                audit_package,
+                current_values,
+            )
+        )
+        executive = (
+            self.admin_session._render_methodological_conformance_certification(
+                certification, report_mode="executive"
+            )
+        )
+        review = (
+            self.admin_session._render_methodological_conformance_certification(
+                certification, report_mode="review"
+            )
+        )
+        full = (
+            self.admin_session._render_methodological_conformance_certification(
+                certification, report_mode="full"
+            )
+        )
+
+        for rendered in (executive, review, full):
+            self.assertIn(
+                "<h2>Methodological Conformance Certification</h2>", rendered
+            )
+            self.assertIn(
+                "<h3>Conformance Certification Overview</h3>", rendered
+            )
+            self.assertIn("<h3>Certification Limitations</h3>", rendered)
+        self.assertIn("stage29-conformance-executive", executive)
+        self.assertNotIn("Conformance Certification Summary Table", executive)
+        self.assertNotIn("Full Methodological Conformance Certification", executive)
+        self.assertIn("stage29-conformance-review", review)
+        self.assertIn("Conformance Certification Summary Table", review)
+        self.assertNotIn("Full Methodological Conformance Certification", review)
+        self.assertNotIn("Conformance Basis</th>", review)
+        self.assertIn("stage29-conformance-full", full)
+        self.assertIn("Full Methodological Conformance Certification", full)
+        self.assertIn("Declared Methodological Requirement</th>", full)
+        self.assertIn("Observed Framework State</th>", full)
+        self.assertIn("Conformance Basis</th>", full)
+        self.assertIn("Affected Stage or Output</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -7554,6 +7884,11 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage28-audit-executive", executive)
         self.assertIn("<h2>Administrative Audit Package</h2>", executive)
         self.assertNotIn("Audit Package Summary Table", executive)
+        self.assertIn("stage29-conformance-executive", executive)
+        self.assertIn(
+            "<h2>Methodological Conformance Certification</h2>", executive
+        )
+        self.assertNotIn("Conformance Certification Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -7590,6 +7925,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage28-audit-review", review)
         self.assertIn("Audit Package Summary Table", review)
         self.assertNotIn("Full Administrative Audit Package", review)
+        self.assertIn("stage29-conformance-review", review)
+        self.assertIn("Conformance Certification Summary Table", review)
+        self.assertNotIn("Full Methodological Conformance Certification", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -7615,6 +7953,7 @@ class AdminSessionTests(unittest.TestCase):
             "Deterministic Replay Mode",
             "Framework Integrity Verification",
             "Administrative Audit Package",
+            "Methodological Conformance Certification",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -7631,6 +7970,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Integrity Verification", explicit_full)
         self.assertIn("stage28-audit-full", explicit_full)
         self.assertIn("Full Administrative Audit Package", explicit_full)
+        self.assertIn("stage29-conformance-full", explicit_full)
+        self.assertIn("Full Methodological Conformance Certification", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -7654,6 +7995,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Framework Integrity Verification"),
             explicit_full.index("Administrative Audit Package"),
+        )
+        self.assertLess(
+            explicit_full.index("Administrative Audit Package"),
+            explicit_full.index("Methodological Conformance Certification"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
