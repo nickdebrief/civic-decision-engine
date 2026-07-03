@@ -338,6 +338,22 @@ outputs, alter public APIs, write to the database, or modify records.
 
 ---
 
+## Stage 31 — Framework Continuity
+
+Begins the CREF governance phase with deterministic continuity inspection across
+the implemented framework stack. Twenty-three checks preserve report modes,
+Stage 22–30 structures and gap states, replay coverage, current administrative
+inputs, methodological limitations, and non-mutating operational boundaries.
+
+Executive mode presents a concise continuity overview; Review mode adds the
+continuity summary table; Full Inspection mode exposes every expected and
+observed continuity state, result and basis, affected output, and limitation.
+Stage 31 verifies visible framework continuity only. It does not validate
+evidence, create a new evaluation, reclassify outputs, alter public APIs, write
+to the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

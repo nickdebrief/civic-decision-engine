@@ -32144,6 +32144,7 @@ STAGE21_SECTION_INDEX = (
     ("Administrative Audit Package", "Overview", "Summary", "Detail"),
     ("Methodological Conformance Certification", "Overview", "Summary", "Detail"),
     ("Reflexive Closure", "Overview", "Summary", "Detail"),
+    ("Framework Continuity", "Overview", "Summary", "Detail"),
 )
 
 
@@ -36944,6 +36945,390 @@ def _render_reflexive_closure(
       </section>"""
 
 
+STAGE31_LIMITATIONS = (
+    "Framework Continuity does not validate evidence.",
+    "Framework Continuity does not determine truth.",
+    "Framework Continuity does not determine liability.",
+    "Framework Continuity does not infer intent.",
+    "Framework Continuity does not assign blame.",
+    "Framework Continuity does not infer hidden inputs.",
+    "Framework Continuity does not create evidence.",
+    "Framework Continuity does not modify records.",
+    "Framework Continuity does not change classifications.",
+    "Framework Continuity does not change thresholds.",
+    "Framework Continuity does not change dependencies.",
+    "Framework Continuity does not change evidence relationships.",
+    "Framework Continuity does not change transition history.",
+    "Framework Continuity does not change provenance.",
+    "Framework Continuity does not change replay outputs.",
+    "Framework Continuity does not change integrity checks.",
+    "Framework Continuity does not change audit package sections.",
+    "Framework Continuity does not change certification checks.",
+    "Framework Continuity does not change reflexive closure checks.",
+    "Framework Continuity does not change report modes.",
+    "Framework Continuity does not write to the database.",
+    "Framework Continuity does not alter public API behaviour.",
+    "Framework Continuity verifies visible framework continuity only.",
+)
+
+
+def _stage31_continuity_check(
+    *,
+    continuity_check_id: str,
+    check_name: str,
+    continuity_category: str,
+    expected_continuity_state: Any,
+    observed_continuity_state: Any,
+    continuity_basis: str,
+    affected_stage_or_output: str,
+    limitation_statement: str,
+    continuous_with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_continuity_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_continuity_state == expected_continuity_state:
+        result = (
+            "Continuous With Limitation"
+            if continuous_with_limitation
+            else "Continuous"
+        )
+    else:
+        result = "Continuity Gap Detected"
+    return {
+        "continuity_check_id": continuity_check_id,
+        "check_name": check_name,
+        "continuity_category": continuity_category,
+        "expected_continuity_state": expected_continuity_state,
+        "observed_continuity_state": observed_continuity_state,
+        "continuity_result": result,
+        "continuity_basis": continuity_basis,
+        "affected_stage_or_output": affected_stage_or_output,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_continuity(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_report = dict(report_structure or {})
+    normalized_dependency = dict(dependency_map or {})
+    normalized_stability = dict(stability_analysis or {})
+    normalized_transition = dict(transition_history or {})
+    normalized_provenance = dict(output_provenance or {})
+    normalized_replay = dict(deterministic_replay or {})
+    normalized_integrity = dict(integrity_verification or {})
+    normalized_audit = dict(audit_package or {})
+    normalized_certification = dict(conformance_certification or {})
+    normalized_closure = dict(reflexive_closure or {})
+    normalized_administrative = dict(administrative_outputs or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+        }
+    )
+    dependency_count = len(normalized_dependency.get("nodes") or [])
+    pathway_count = len(normalized_stability.get("pathways") or [])
+    transition_count = len(normalized_transition.get("transitions") or [])
+    provenance_count = len(normalized_provenance.get("provenance_entries") or [])
+    replay_count = len(normalized_replay.get("replay_entries") or [])
+    integrity_count = len(normalized_integrity.get("integrity_checks") or [])
+    audit_count = len(normalized_audit.get("audit_sections") or [])
+    certification_count = len(
+        normalized_certification.get("certification_checks") or []
+    )
+    closure_count = len(normalized_closure.get("closure_checks") or [])
+    replay_summary = normalized_replay.get("replay_summary") or {}
+    integrity_summary = normalized_integrity.get("integrity_summary") or {}
+    audit_summary = normalized_audit.get("audit_package_summary") or {}
+    certification_summary = normalized_certification.get(
+        "certification_summary"
+    ) or {}
+    closure_summary = normalized_closure.get("reflexive_closure_summary") or {}
+    integrity_gaps = integrity_summary.get("integrity_gap_checks")
+    audit_unavailable = audit_summary.get("unavailable_sections")
+    certification_non_conformance = certification_summary.get(
+        "non_conformance_checks"
+    )
+    closure_gaps = closure_summary.get("closure_gap_count")
+    administrative_count = sum(
+        normalized_administrative.get(definition[1]) not in (None, "", [], {})
+        for definition in STAGE25_OUTPUT_DEFINITIONS[:11]
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    classification_boundary = any(
+        "does not change classifications" in str(value).lower()
+        for value in STAGE21_SUMMARY_LIMITATIONS
+    )
+    mutation_boundary = any(
+        "does not modify records" in str(value).lower()
+        for value in STAGE30_LIMITATIONS
+    )
+    database_boundary = any(
+        "does not write to the database" in str(value).lower()
+        for value in STAGE30_LIMITATIONS
+    )
+    public_api_boundary = any(
+        "does not alter public api behaviour" in str(value).lower()
+        for value in STAGE30_LIMITATIONS
+    )
+    check_specs = (
+        ("FC-001", "Full Inspection Default", "Report Mode Continuity", "Full Inspection Report", classify_report_mode(None), "Stage 21 default mode remains Full Inspection.", "Stage 21 Report Modes", "This verifies the visible default mode only.", False),
+        ("FC-002", "Report Mode Availability", "Report Mode Continuity", 3, len(normalized_report.get("available_report_modes") or []) if normalized_report else None, "Executive, Review, and Full Inspection modes remain available.", "Stage 21 Report Modes", "Mode continuity concerns presentation only.", False),
+        ("FC-003", "Dependency Node Continuity", "Dependency Continuity", 30, dependency_count if normalized_dependency else None, "Visible Stage 22 dependency node count.", "Stage 22 Determination Dependency Mapping", "Count continuity does not validate dependencies.", False),
+        ("FC-004", "Pathway Continuity", "Pathway Continuity", 8, pathway_count if normalized_stability else None, "Visible Stage 23 pathway count.", "Stage 23 Pathway Stability Analysis", "Count continuity does not predict outcomes.", False),
+        ("FC-005", "Transition Entry Continuity", "Transition Continuity", 11, transition_count if normalized_transition else None, "Visible Stage 24 transition entry count.", "Stage 24 Record State Transition History", "Count continuity does not infer prior states.", False),
+        ("FC-006", "Provenance Entry Continuity", "Provenance Continuity", 14, provenance_count if normalized_provenance else None, "Visible Stage 25 provenance entry count.", "Stage 25 Output Provenance Layer", "Count continuity does not validate provenance truth.", False),
+        ("FC-007", "Replay Step Continuity", "Replay Continuity", 15, replay_count if normalized_replay else None, "Visible Stage 26 replay step count.", "Stage 26 Deterministic Replay Mode", "Replay continuity does not recalculate outputs.", False),
+        ("FC-008", "Integrity Check Continuity", "Integrity Continuity", 14, integrity_count if normalized_integrity else None, "Visible Stage 27 integrity check count.", "Stage 27 Framework Integrity Verification", "Integrity continuity concerns visible structure only.", False),
+        ("FC-009", "Integrity Gap Absence", "Integrity Continuity", 0, integrity_gaps, "Visible Stage 27 integrity gap count.", "Stage 27 Integrity Summary", "Zero visible gaps does not determine truth.", False),
+        ("FC-010", "Audit Section Continuity", "Audit Package Continuity", 10, audit_count if normalized_audit else None, "Visible Stage 28 audit section count.", "Stage 28 Administrative Audit Package", "Section continuity does not create legal audit status.", False),
+        ("FC-011", "Audit Section Availability", "Audit Package Continuity", 0, audit_unavailable, "Visible Stage 28 unavailable section count.", "Stage 28 Audit Package Summary", "Availability does not validate outputs.", False),
+        ("FC-012", "Certification Check Continuity", "Certification Continuity", 19, certification_count if normalized_certification else None, "Visible Stage 29 certification check count.", "Stage 29 Methodological Conformance Certification", "Continuity does not create external compliance status.", False),
+        ("FC-013", "Certification Non-Conformance Absence", "Certification Continuity", 0, certification_non_conformance, "Visible Stage 29 non-conformance count.", "Stage 29 Certification Summary", "Zero visible non-conformance does not establish legal compliance.", False),
+        ("FC-014", "Reflexive Closure Check Continuity", "Reflexive Closure Continuity", 23, closure_count if normalized_closure else None, "Visible Stage 30 reflexive closure check count.", "Stage 30 Reflexive Closure", "Continuity does not close the underlying case.", False),
+        ("FC-015", "Reflexive Closure Gap Absence", "Reflexive Closure Continuity", 0, closure_gaps, "Visible Stage 30 closure gap count.", "Stage 30 Reflexive Closure Summary", "Zero visible gaps closes only inspection continuity.", False),
+        ("FC-016", "Replayable Output Continuity", "Replay Continuity", replay_count if normalized_replay else None, replay_summary.get("replayable_outputs"), "Replayable outputs remain equal to total replay steps.", "Stage 26 Replay Summary", "Count equality verifies visible replay continuity only.", False),
+        ("FC-017", "Non-Replayable Output Absence", "Replay Continuity", 0, replay_summary.get("non_replayable_outputs"), "Visible non-replayable output count remains zero.", "Stage 26 Replay Summary", "Zero does not certify factual correctness.", False),
+        ("FC-018", "Methodological Limitation Continuity", "Boundary Continuity", True, limitations_visible, "Declared Stage 21–31 limitation sets remain visible.", "Stages 21–31 Limitations", "Visibility does not externally enforce limitations.", False),
+        ("FC-019", "Classification Boundary Continuity", "Boundary Continuity", True, classification_boundary, "Stage 21 continues to declare unchanged classifications across report modes.", "Stage 21 Report Modes", "This verifies a visible declaration only.", True),
+        ("FC-020", "Record Mutation Boundary Continuity", "Non-Mutation Continuity", True, mutation_boundary, "Stage 30 declares reflexive closure does not modify records.", "Stage 30 Reflexive Closure", "This does not monitor external database activity.", True),
+        ("FC-021", "Database Write Boundary Continuity", "Non-Mutation Continuity", True, database_boundary, "Stage 30 declares reflexive closure does not write to the database.", "Stage 30 Reflexive Closure", "This verifies a declared boundary only.", True),
+        ("FC-022", "Public API Boundary Continuity", "Boundary Continuity", True, public_api_boundary, "Stage 30 declares reflexive closure does not alter public API behaviour.", "Stage 30 Reflexive Closure", "This verifies a declared boundary only.", True),
+        ("FC-023", "Visible Administrative Input Continuity", "Stage Preservation", 11, administrative_count if normalized_administrative else None, "Eleven current administrative outputs remain visibly available.", "Current Administrative Outputs", "Availability does not validate an output.", False),
+    )
+    checks = [
+        _stage31_continuity_check(
+            continuity_check_id=check_id,
+            check_name=name,
+            continuity_category=category,
+            expected_continuity_state=expected,
+            observed_continuity_state=observed,
+            continuity_basis=basis,
+            affected_stage_or_output=affected,
+            limitation_statement=limitation,
+            continuous_with_limitation=limited,
+        )
+        for check_id, name, category, expected, observed, basis, affected, limitation, limited in check_specs
+    ]
+    results = (
+        "Continuous",
+        "Continuous With Limitation",
+        "Not Available",
+        "Continuity Gap Detected",
+    )
+    result_counts = {
+        result: sum(check["continuity_result"] == result for check in checks)
+        for result in results
+    }
+    if result_counts["Continuity Gap Detected"]:
+        continuity_state = "Framework Continuity Gap Detected"
+    elif result_counts["Not Available"]:
+        continuity_state = "Framework Continuity Partially Available"
+    elif result_counts["Continuous With Limitation"]:
+        continuity_state = "Framework Continuity Preserved With Limitations"
+    else:
+        continuity_state = "Framework Continuity Preserved"
+    summary = {
+        "continuity_state": continuity_state,
+        "total_continuity_checks": len(checks),
+        "continuous_checks": result_counts["Continuous"],
+        "continuous_with_limitation_checks": result_counts[
+            "Continuous With Limitation"
+        ],
+        "unavailable_checks": result_counts["Not Available"],
+        "continuity_gap_checks": result_counts["Continuity Gap Detected"],
+        "dependency_node_count": dependency_count,
+        "pathway_count": pathway_count,
+        "transition_entry_count": transition_count,
+        "provenance_entry_count": provenance_count,
+        "replay_step_count": replay_count,
+        "integrity_check_count": integrity_count,
+        "audit_section_count": audit_count,
+        "certification_check_count": certification_count,
+        "reflexive_closure_check_count": closure_count,
+        "integrity_gap_count": int(integrity_gaps or 0),
+        "audit_unavailable_section_count": int(audit_unavailable or 0),
+        "certification_non_conformance_count": int(
+            certification_non_conformance or 0
+        ),
+        "reflexive_closure_gap_count": int(closure_gaps or 0),
+        "limitation_summary": (
+            "Framework continuity verifies visible structural continuity across implemented stages only and does not evaluate evidence, truth, or external operation."
+        ),
+    }
+    return {
+        "continuity_state": continuity_state,
+        "continuity_summary": summary,
+        "continuity_checks": checks,
+        "limitations": list(STAGE31_LIMITATIONS),
+    }
+
+
+def _render_stage31_overview(continuity: dict[str, Any]) -> str:
+    summary = continuity["continuity_summary"]
+    return f"""
+      <section class="stage31-continuity-overview">
+        <h3>Framework Continuity Overview</h3>
+        {_render_stage18a_table((
+            ("Continuity State", summary["continuity_state"]),
+            ("Total Continuity Checks", summary["total_continuity_checks"]),
+            ("Continuous Checks", summary["continuous_checks"]),
+            ("Continuous With Limitation Checks", summary["continuous_with_limitation_checks"]),
+            ("Unavailable Checks", summary["unavailable_checks"]),
+            ("Continuity Gap Checks", summary["continuity_gap_checks"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Integrity Check Count", summary["integrity_check_count"]),
+            ("Audit Section Count", summary["audit_section_count"]),
+            ("Certification Check Count", summary["certification_check_count"]),
+            ("Reflexive Closure Check Count", summary["reflexive_closure_check_count"]),
+            ("Integrity Gap Count", summary["integrity_gap_count"]),
+            ("Audit Unavailable Section Count", summary["audit_unavailable_section_count"]),
+            ("Certification Non-Conformance Count", summary["certification_non_conformance_count"]),
+            ("Reflexive Closure Gap Count", summary["reflexive_closure_gap_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage31_continuity_table(
+    checks: list[dict[str, Any]],
+    *,
+    include_basis: bool,
+) -> str:
+    if include_basis:
+        columns = (
+            ("Check ID", "continuity_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "continuity_category", False),
+            ("Expected Continuity State", "expected_continuity_state", False),
+            ("Observed Continuity State", "observed_continuity_state", False),
+            ("Continuity Result", "continuity_result", False),
+            ("Continuity Basis", "continuity_basis", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Framework Continuity"
+        class_name = "stage31-full-framework-continuity"
+    else:
+        columns = (
+            ("Check ID", "continuity_check_id", True),
+            ("Check Name", "check_name", False),
+            ("Category", "continuity_category", False),
+            ("Expected State", "expected_continuity_state", False),
+            ("Observed State", "observed_continuity_state", False),
+            ("Continuity Result", "continuity_result", False),
+        )
+        title = "Framework Continuity Summary Table"
+        class_name = "stage31-continuity-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            (
+                f"<td><code>{escape(_stage18a_display_value(check.get(key)))}</code></td>"
+                if use_code
+                else f"<td>{escape(_stage18a_display_value(check.get(key)))}</td>"
+            )
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for check in checks
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No framework continuity checks are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage31_limitations(
+    continuity: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = continuity["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 7, 8, 20, 21, 22)]
+    return f"""
+      <section class="stage31-continuity-limitations">
+        <h3>Framework Continuity Limitations</h3>
+        {_render_stage19a_list(limitations, "No framework continuity limitations available.")}
+      </section>"""
+
+
+def _render_framework_continuity(
+    continuity: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Continuity is derived deterministically from existing
+          visible framework outputs and declared boundaries only. It verifies
+          continuity across implemented stages without creating a new record
+          evaluation, validating evidence, determining truth, predicting an
+          outcome, reclassifying an output, or modifying the record.
+        </p>"""
+    overview = _render_stage31_overview(continuity)
+    if report_mode == "executive":
+        content = overview + _render_stage31_limitations(continuity, concise=True)
+        mode_class = "stage31-continuity-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage31_continuity_table(
+                continuity["continuity_checks"], include_basis=False
+            )
+            + _render_stage31_limitations(continuity)
+        )
+        mode_class = "stage31-continuity-review"
+    else:
+        content = (
+            overview
+            + _render_stage31_continuity_table(
+                continuity["continuity_checks"], include_basis=True
+            )
+            + _render_stage31_limitations(continuity)
+        )
+        mode_class = "stage31-continuity-full"
+    return f"""
+      <section class="management-section stage31-framework-continuity {mode_class}">
+        <h2>Framework Continuity</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -37542,6 +37927,23 @@ def render_admin_record_evidence_page(
         stage30_reflexive_closure,
         report_mode=report_structure["report_mode"],
     )
+    stage31_framework_continuity = build_framework_continuity(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage22_current_values,
+    )
+    stage31_continuity_section = _render_framework_continuity(
+        stage31_framework_continuity,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -37588,6 +37990,7 @@ def render_admin_record_evidence_page(
             + stage28_audit_section
             + stage29_conformance_section
             + stage30_closure_section
+            + stage31_continuity_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -37603,6 +38006,7 @@ def render_admin_record_evidence_page(
             + stage28_audit_section
             + stage29_conformance_section
             + stage30_closure_section
+            + stage31_continuity_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -37623,6 +38027,7 @@ def render_admin_record_evidence_page(
             f"{stage28_audit_section}"
             f"{stage29_conformance_section}"
             f"{stage30_closure_section}"
+            f"{stage31_continuity_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -37992,6 +38397,24 @@ def render_admin_record_evidence_page(
     .stage30-full-reflexive-closure table {{
       min-width: 1860px;
     }}
+    .stage31-framework-continuity table {{
+      table-layout: auto;
+    }}
+    .stage31-framework-continuity th,
+    .stage31-framework-continuity td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage31-continuity-summary,
+    .stage31-full-framework-continuity {{
+      overflow-x: auto;
+    }}
+    .stage31-full-framework-continuity table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -38019,6 +38442,7 @@ def render_admin_record_evidence_page(
       .stage28-audit-summary table {{ min-width: 840px; }}
       .stage29-conformance-summary table {{ min-width: 920px; }}
       .stage30-closure-summary table {{ min-width: 920px; }}
+      .stage31-continuity-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;
