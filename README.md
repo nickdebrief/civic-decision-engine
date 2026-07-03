@@ -371,6 +371,22 @@ write to the database, or modify records.
 
 ---
 
+## Stage 33 — Framework Governance Statement
+
+Introduces a visible and inspectable governance declaration for the methodology
+itself. Twenty-five deterministic principles document framework stewardship,
+methodological independence, preservation of Stage 21–32 structures, public
+inspectability, amendment visibility, and the framework's non-mutation,
+non-inference, evidence, classification, database, and public API boundaries.
+
+Executive mode presents a concise governance overview; Review mode adds the
+principles summary table; Full Inspection mode exposes every declared and
+observed governance state, result, basis, affected output, and limitation. The
+statement is descriptive only. It creates no authority, performs no evaluation,
+validates no evidence, changes no classifications, and modifies no records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

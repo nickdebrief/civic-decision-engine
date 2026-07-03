@@ -32146,6 +32146,7 @@ STAGE21_SECTION_INDEX = (
     ("Reflexive Closure", "Overview", "Summary", "Detail"),
     ("Framework Continuity", "Overview", "Summary", "Detail"),
     ("Framework Change Register", "Overview", "Summary", "Detail"),
+    ("Framework Governance Statement", "Overview", "Summary", "Detail"),
 )
 
 
@@ -37721,6 +37722,367 @@ def _render_framework_change_register(
       </section>"""
 
 
+STAGE33_LIMITATIONS = (
+    "Framework Governance Statement is not legal governance.",
+    "Framework Governance Statement is not external certification.",
+    "Framework Governance Statement does not validate evidence.",
+    "Framework Governance Statement does not determine truth.",
+    "Framework Governance Statement does not determine liability.",
+    "Framework Governance Statement does not infer intent.",
+    "Framework Governance Statement does not create authority.",
+    "Framework Governance Statement does not modify records.",
+    "Framework Governance Statement does not change classifications.",
+    "Framework Governance Statement does not change thresholds.",
+    "Framework Governance Statement does not change dependencies.",
+    "Framework Governance Statement does not change evidence relationships.",
+    "Framework Governance Statement does not change transition history.",
+    "Framework Governance Statement does not change provenance.",
+    "Framework Governance Statement does not change replay outputs.",
+    "Framework Governance Statement does not change integrity checks.",
+    "Framework Governance Statement does not change audit packages.",
+    "Framework Governance Statement does not change certifications.",
+    "Framework Governance Statement does not change continuity outputs.",
+    "Framework Governance Statement does not change change-register entries.",
+    "Framework Governance Statement does not write to the database.",
+    "Framework Governance Statement does not alter public API behaviour.",
+    "Framework Governance Statement documents visible and declared governance principles only.",
+)
+
+
+def _stage33_governance_principle(
+    *,
+    principle_id: str,
+    principle_name: str,
+    governance_category: str,
+    affected_stage_or_output: str,
+    declared_governance_state: Any,
+    observed_governance_state: Any,
+    governance_basis: str,
+    limitation_statement: str,
+    with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_governance_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_governance_state == declared_governance_state:
+        result = (
+            "Principle Declared With Limitation"
+            if with_limitation
+            else "Principle Declared"
+        )
+    else:
+        result = "Governance Gap Detected"
+    return {
+        "principle_id": principle_id,
+        "principle_name": principle_name,
+        "governance_category": governance_category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_governance_state": declared_governance_state,
+        "observed_governance_state": observed_governance_state,
+        "governance_result": result,
+        "governance_basis": governance_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_governance_statement(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    register = dict(change_register or {})
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    register_summary = register.get("framework_change_register_summary") or {}
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []),
+    }
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+            "Stage 33": STAGE33_LIMITATIONS,
+        }
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    boundary_text = " ".join(STAGE32_LIMITATIONS + STAGE33_LIMITATIONS).lower()
+    gap_total = sum(
+        int(value or 0)
+        for value in (
+            integrity_summary.get("integrity_gap_checks"),
+            audit_summary.get("unavailable_sections"),
+            certification_summary.get("non_conformance_checks"),
+            closure_summary.get("closure_gap_count"),
+            continuity_summary.get("continuity_gap_checks"),
+            register_summary.get("change_gap_entries"),
+        )
+    )
+    replay_preserved = (
+        counts["replay"] == replay_summary.get("replayable_outputs")
+        and replay_summary.get("non_replayable_outputs") == 0
+    ) if replay else None
+    boundary_preserved = all(
+        phrase in boundary_text
+        for phrase in (
+            "does not modify records",
+            "does not change classifications",
+            "does not change dependencies",
+            "does not alter public api behaviour",
+        )
+    )
+    specs = (
+        ("GS-001", "Framework Stewardship", "Stewardship", "Stage 33 Governance Statement", True, True, "CREF stewardship is declared within documented methodology.", "Does not create external stewardship authority.", True),
+        ("GS-002", "Methodological Independence", "Methodology Governance", "Declared Methodology", True, limitations_visible, "Methodology and limitations remain explicitly declared.", "Does not establish institutional independence.", False),
+        ("GS-003", "Deterministic Operation", "Methodology Governance", "Stages 21–32", True, True if report and register else None, "Visible governance inputs are deterministic framework outputs.", "Does not certify external execution environments.", False),
+        ("GS-004", "Visible Limitations", "Boundary Governance", "Stages 21–33 Limitations", True, limitations_visible, "Declared limitations remain visible.", "Visibility does not externally enforce limitations.", False),
+        ("GS-005", "Non-Mutation Boundary", "Boundary Governance", "Stage 33 Limitations", True, "does not modify records" in boundary_text, "The non-mutation boundary is explicitly declared.", "Declarative boundary only.", False),
+        ("GS-006", "Classification Boundary", "Boundary Governance", "Stage 33 Limitations", True, "does not change classifications" in boundary_text, "The classification boundary is explicitly declared.", "Does not monitor unrelated processes.", False),
+        ("GS-007", "Evidence Boundary", "Evidence Governance", "Stage 33 Limitations", True, "does not validate evidence" in boundary_text, "Evidence validation remains outside governance scope.", "Does not assess evidential truth.", False),
+        ("GS-008", "Dependency Preservation", "Dependency Governance", "Stage 22 Dependency Mapping", 30, counts["dependency"] if dependency else None, "The visible dependency graph remains preserved.", "Does not validate dependency correctness.", False),
+        ("GS-009", "Replay Preservation", "Replay Governance", "Stage 26 Deterministic Replay", True, replay_preserved, "Replay steps remain fully replayable.", "Does not simulate alternative outcomes.", False),
+        ("GS-010", "Integrity Preservation", "Integrity Governance", "Stage 27 Integrity Verification", (14, 0), (counts["integrity"], integrity_summary.get("integrity_gap_checks")) if integrity else None, "Integrity checks and zero-gap state remain visible.", "Framework integrity is not factual validation.", False),
+        ("GS-011", "Audit Preservation", "Audit Governance", "Stage 28 Audit Package", (10, 0), (counts["audit"], audit_summary.get("unavailable_sections")) if audit else None, "Audit sections remain visibly available.", "The package is not a legal audit.", False),
+        ("GS-012", "Certification Preservation", "Certification Governance", "Stage 29 Conformance Certification", (19, 0), (counts["certification"], certification_summary.get("non_conformance_checks")) if certification else None, "Certification checks remain visibly conforming.", "Not external certification.", False),
+        ("GS-013", "Continuity Preservation", "Continuity Governance", "Stage 31 Framework Continuity", (23, 0), (counts["continuity"], continuity_summary.get("continuity_gap_checks")) if continuity else None, "Continuity checks remain preserved without visible gaps.", "Visible continuity only.", False),
+        ("GS-014", "Change Register Preservation", "Change Governance", "Stage 32 Change Register", (25, 0), (counts["register"], register_summary.get("change_gap_entries")) if register else None, "The declared change register remains visible and gap-free.", "Does not infer undocumented changes.", False),
+        ("GS-015", "Public Inspectability", "Inspection Governance", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Three inspectable report modes remain available.", "Admin visibility does not make data public.", False),
+        ("GS-016", "Open Documentation", "Documentation Governance", "Declared Framework Metadata", True, True, "Governance principles are documented in visible framework materials.", "Does not guarantee third-party publication or access.", True),
+        ("GS-017", "Version Transparency", "Change Governance", "Stage 32 Change Register", True, True if register else None, "The visible change register supplies declared framework-change context.", "Does not infer undocumented versions.", False),
+        ("GS-018", "Boundary Preservation", "Boundary Governance", "Stages 32–33 Limitations", True, boundary_preserved, "Core classification, mutation, dependency, and API boundaries remain declared.", "Declared boundaries are not external enforcement.", False),
+        ("GS-019", "Non-Inference Principle", "Methodology Governance", "Stage 33 Limitations", True, "does not infer hidden inputs" in boundary_text, "Hidden inputs remain outside the governance statement.", "Does not identify unknown information.", False),
+        ("GS-020", "Non-Authority Principle", "Stewardship", "Stage 33 Limitations", True, "does not create authority" in boundary_text, "The statement explicitly disclaims authority creation.", "Does not confer legal or institutional authority.", True),
+        ("GS-021", "Governance Statement Visibility", "Governance Visibility", "Stage 33 Governance Statement", True, True, "The statement is rendered in every report mode.", "Visibility remains admin-only.", False),
+        ("GS-022", "Governance Gap Absence", "Governance Integrity", "Stages 27–32 Summaries", 0, gap_total if register else None, "Visible upstream governance gap counts remain zero.", "Absence of structural gaps does not determine truth.", False),
+        ("GS-023", "Framework Persistence Declaration", "Stewardship", "Stage 31 Framework Continuity", True, True if continuity else None, "Framework continuity provides a visible persistence declaration.", "Does not guarantee future operation or maintenance.", True),
+        ("GS-024", "Methodology Governance Availability", "Methodology Governance", "Stage 32 Change Register", True, True if register else None, "The governance phase is visibly represented by continuity and change registration.", "Does not create external governance authority.", False),
+        ("GS-025", "Governance Limitation Visibility", "Boundary Governance", "Stage 33 Limitations", True, bool(STAGE33_LIMITATIONS), "Governance-specific limitations are explicitly visible.", "Limitations remain descriptive only.", False),
+    )
+    principles = [
+        _stage33_governance_principle(
+            principle_id=principle_id,
+            principle_name=name,
+            governance_category=category,
+            affected_stage_or_output=affected,
+            declared_governance_state=declared,
+            observed_governance_state=observed,
+            governance_basis=basis,
+            limitation_statement=limitation,
+            with_limitation=limited,
+        )
+        for principle_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(principle["governance_result"] == result for principle in principles)
+        for result in (
+            "Principle Declared",
+            "Principle Declared With Limitation",
+            "Not Available",
+            "Governance Gap Detected",
+        )
+    }
+    if result_counts["Governance Gap Detected"]:
+        state = "Framework Governance Statement Gap Detected"
+    elif result_counts["Not Available"]:
+        state = "Framework Governance Statement Partially Available"
+    elif result_counts["Principle Declared With Limitation"]:
+        state = "Framework Governance Statement Available With Limitations"
+    else:
+        state = "Framework Governance Statement Available"
+    summary = {
+        "governance_state": state,
+        "total_governance_principles": len(principles),
+        "declared_principles": result_counts["Principle Declared"],
+        "principles_with_limitation": result_counts["Principle Declared With Limitation"],
+        "unavailable_principles": result_counts["Not Available"],
+        "governance_gap_count": result_counts["Governance Gap Detected"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "change_register_entry_count": counts["register"],
+        "limitation_summary": "The statement documents visible governance principles and boundaries only and creates no authority.",
+    }
+    return {
+        "governance_state": state,
+        "governance_summary": summary,
+        "governance_principles": principles,
+        "limitations": list(STAGE33_LIMITATIONS),
+    }
+
+
+def _render_stage33_overview(statement: dict[str, Any]) -> str:
+    summary = statement["governance_summary"]
+    labels = (
+        ("Governance State", "governance_state"),
+        ("Total Governance Principles", "total_governance_principles"),
+        ("Declared Principles", "declared_principles"),
+        ("Principles With Limitation", "principles_with_limitation"),
+        ("Unavailable Principles", "unavailable_principles"),
+        ("Governance Gap Count", "governance_gap_count"),
+        ("Dependency Node Count", "dependency_node_count"),
+        ("Pathway Count", "pathway_count"),
+        ("Transition Entry Count", "transition_entry_count"),
+        ("Provenance Entry Count", "provenance_entry_count"),
+        ("Replay Step Count", "replay_step_count"),
+        ("Integrity Check Count", "integrity_check_count"),
+        ("Audit Section Count", "audit_section_count"),
+        ("Certification Check Count", "certification_check_count"),
+        ("Reflexive Closure Check Count", "reflexive_closure_check_count"),
+        ("Continuity Check Count", "continuity_check_count"),
+        ("Change Register Entry Count", "change_register_entry_count"),
+        ("Limitation Summary", "limitation_summary"),
+    )
+    return f"""
+      <section class="stage33-governance-overview">
+        <h3>Framework Governance Overview</h3>
+        {_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}
+      </section>"""
+
+
+def _render_stage33_principles(
+    principles: list[dict[str, Any]], *, include_basis: bool
+) -> str:
+    if include_basis:
+        columns = (
+            ("Principle ID", "principle_id", True),
+            ("Principle Name", "principle_name", False),
+            ("Governance Category", "governance_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Declared Governance State", "declared_governance_state", False),
+            ("Observed Governance State", "observed_governance_state", False),
+            ("Governance Result", "governance_result", False),
+            ("Governance Basis", "governance_basis", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Governance Principles"
+        class_name = "stage33-full-governance-principles"
+    else:
+        columns = (
+            ("Principle ID", "principle_id", True),
+            ("Principle Name", "principle_name", False),
+            ("Governance Category", "governance_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Governance Result", "governance_result", False),
+        )
+        title = "Governance Principles Summary Table"
+        class_name = "stage33-governance-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>" + "".join(
+            f"<td><code>{escape(_stage18a_display_value(principle.get(key)))}</code></td>"
+            if use_code else f"<td>{escape(_stage18a_display_value(principle.get(key)))}</td>"
+            for _, key, use_code in columns
+        ) + "</tr>"
+        for principle in principles
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No governance principles are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage33_limitations(
+    statement: dict[str, Any], *, concise: bool = False
+) -> str:
+    limitations = statement["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 6, 7, 20, 21, 22)]
+    return f"""
+      <section class="stage33-governance-limitations">
+        <h3>Framework Governance Limitations</h3>
+        {_render_stage19a_list(limitations, "No framework governance limitations available.")}
+      </section>"""
+
+
+def _render_framework_governance_statement(
+    statement: dict[str, Any], *, report_mode: str
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Governance Statement is derived deterministically from
+          visible framework outputs and declared metadata only. It documents
+          governance principles, stewardship boundaries, and amendment
+          conditions without evaluation, authority creation, evidence
+          validation, reclassification, or record modification.
+        </p>"""
+    overview = _render_stage33_overview(statement)
+    if report_mode == "executive":
+        content = overview + _render_stage33_limitations(statement, concise=True)
+        mode_class = "stage33-governance-executive"
+    elif report_mode == "review":
+        content = overview + _render_stage33_principles(
+            statement["governance_principles"], include_basis=False
+        ) + _render_stage33_limitations(statement)
+        mode_class = "stage33-governance-review"
+    else:
+        content = overview + _render_stage33_principles(
+            statement["governance_principles"], include_basis=True
+        ) + _render_stage33_limitations(statement)
+        mode_class = "stage33-governance-full"
+    return f"""
+      <section class="management-section stage33-framework-governance {mode_class}">
+        <h2>Framework Governance Statement</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -38354,6 +38716,24 @@ def render_admin_record_evidence_page(
         stage32_framework_change_register,
         report_mode=report_structure["report_mode"],
     )
+    stage33_framework_governance = build_framework_governance_statement(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage31_framework_continuity,
+        stage32_framework_change_register,
+    )
+    stage33_governance_section = _render_framework_governance_statement(
+        stage33_framework_governance,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -38402,6 +38782,7 @@ def render_admin_record_evidence_page(
             + stage30_closure_section
             + stage31_continuity_section
             + stage32_change_register_section
+            + stage33_governance_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -38419,6 +38800,7 @@ def render_admin_record_evidence_page(
             + stage30_closure_section
             + stage31_continuity_section
             + stage32_change_register_section
+            + stage33_governance_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -38441,6 +38823,7 @@ def render_admin_record_evidence_page(
             f"{stage30_closure_section}"
             f"{stage31_continuity_section}"
             f"{stage32_change_register_section}"
+            f"{stage33_governance_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -38846,6 +39229,24 @@ def render_admin_record_evidence_page(
     .stage32-full-change-register table {{
       min-width: 1860px;
     }}
+    .stage33-framework-governance table {{
+      table-layout: auto;
+    }}
+    .stage33-framework-governance th,
+    .stage33-framework-governance td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage33-governance-summary,
+    .stage33-full-governance-principles {{
+      overflow-x: auto;
+    }}
+    .stage33-full-governance-principles table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -38875,6 +39276,7 @@ def render_admin_record_evidence_page(
       .stage30-closure-summary table {{ min-width: 920px; }}
       .stage31-continuity-summary table {{ min-width: 920px; }}
       .stage32-change-register-summary table {{ min-width: 920px; }}
+      .stage33-governance-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;
