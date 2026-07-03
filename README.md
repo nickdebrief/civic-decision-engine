@@ -354,6 +354,23 @@ to the database, or modify records.
 
 ---
 
+## Stage 32 — Framework Change Register
+
+Extends CREF governance with a deterministic register of visible and declared
+framework changes. Twenty-five entries record report-mode governance, preserved
+Stage 22–31 structures and gap states, replay coverage, visible administrative
+inputs, methodological limitations, and the continuing classification,
+non-mutation, database, and public API boundaries.
+
+Executive mode presents a concise register overview; Review mode adds the
+change-register summary table; Full Inspection mode exposes every declared and
+observed state, change basis, affected stage or output, result, and limitation.
+Stage 32 documents declared framework change only. It does not infer
+undocumented changes, validate evidence, reclassify outputs, alter public APIs,
+write to the database, or modify records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

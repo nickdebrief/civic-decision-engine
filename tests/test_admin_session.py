@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(21, len(review["section_index"]))
+        self.assertEqual(22, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 22)),
+            list(range(1, 23)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -8234,6 +8234,127 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Affected Stage or Output</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage32_framework_change_register_is_deterministic_and_complete(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE32-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        original_inputs = copy.deepcopy((report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values))
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+
+        self.assertEqual("Framework Change Register Available With Limitations", register["framework_change_register_state"])
+        self.assertEqual(25, len(register["change_entries"]))
+        required_fields = {
+            "change_entry_id", "change_name", "change_category",
+            "affected_stage_or_output", "declared_change_state",
+            "observed_change_state", "change_basis", "change_result",
+            "limitation_statement",
+        }
+        for entry in register["change_entries"]:
+            self.assertEqual(required_fields, set(entry))
+        summary = register["framework_change_register_summary"]
+        self.assertEqual((25, 21, 4, 0, 0), (
+            summary["total_change_entries"], summary["registered_change_entries"],
+            summary["registered_with_limitation_entries"], summary["unavailable_entries"],
+            summary["change_gap_entries"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+        ))
+        self.assertEqual((0, 0, 0, 0, 0), (
+            summary["integrity_gap_count"], summary["audit_unavailable_section_count"],
+            summary["certification_non_conformance_count"],
+            summary["reflexive_closure_gap_count"], summary["continuity_gap_count"],
+        ))
+        names = {entry["change_name"] for entry in register["change_entries"]}
+        for required_name in (
+            "Full Inspection Default", "Three Report Modes Available",
+            "Dependency Nodes Retained", "Pathways Retained",
+            "Transition Entries Retained", "Provenance Entries Retained",
+            "Replay Steps Retained", "Integrity Checks Retained",
+            "Integrity Gaps Remain Zero", "Audit Sections Retained",
+            "Audit Sections Remain Available", "Certification Checks Retained",
+            "Certification Non-Conformance Remains Zero",
+            "Reflexive Closure Checks Retained", "Reflexive Closure Gaps Remain Zero",
+            "Continuity Checks Retained", "Continuity Gaps Remain Zero",
+            "Replayable Outputs Match Replay Steps", "Non-Replayable Outputs Remain Zero",
+            "Methodological Limitations Remain Visible",
+            "Classification Boundary Continues", "Record Mutation Boundary Continues",
+            "Database Write Boundary Continues", "Public API Boundary Continues",
+        ):
+            self.assertIn(required_name, names)
+        self.assertEqual(register, self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values))
+        self.assertEqual(original_inputs, (report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values))
+
+    def test_stage32_gap_and_partial_states_are_deterministic(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE32-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        gap_dependency = copy.deepcopy(dependency)
+        gap_dependency["nodes"] = gap_dependency["nodes"][:-1]
+        gap = self.admin_session.build_framework_change_register(report, gap_dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        self.assertEqual("Framework Change Register Gap Detected", gap["framework_change_register_state"])
+        partial = self.admin_session.build_framework_change_register()
+        self.assertEqual("Framework Change Register Partially Available", partial["framework_change_register_state"])
+        self.assertGreater(partial["framework_change_register_summary"]["unavailable_entries"], 0)
+
+    def test_stage32_rendering_depth_matches_report_mode(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE32-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        executive = self.admin_session._render_framework_change_register(register, report_mode="executive")
+        review = self.admin_session._render_framework_change_register(register, report_mode="review")
+        full = self.admin_session._render_framework_change_register(register, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Change Register</h2>", rendered)
+            self.assertIn("<h3>Framework Change Register Overview</h3>", rendered)
+            self.assertIn("<h3>Framework Change Register Limitations</h3>", rendered)
+        self.assertIn("stage32-change-register-executive", executive)
+        self.assertNotIn("Framework Change Register Summary Table", executive)
+        self.assertNotIn("Full Framework Change Register", executive)
+        self.assertIn("stage32-change-register-review", review)
+        self.assertIn("Framework Change Register Summary Table", review)
+        self.assertNotIn("Full Framework Change Register", review)
+        self.assertNotIn("Change Basis</th>", review)
+        self.assertIn("stage32-change-register-full", full)
+        self.assertIn("Full Framework Change Register", full)
+        self.assertIn("Declared Change State</th>", full)
+        self.assertIn("Observed Change State</th>", full)
+        self.assertIn("Change Basis</th>", full)
+        self.assertIn("Affected Stage or Output</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -8339,6 +8460,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage31-continuity-executive", executive)
         self.assertIn("<h2>Framework Continuity</h2>", executive)
         self.assertNotIn("Framework Continuity Summary Table", executive)
+        self.assertIn("stage32-change-register-executive", executive)
+        self.assertIn("<h2>Framework Change Register</h2>", executive)
+        self.assertNotIn("Framework Change Register Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -8384,6 +8508,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage31-continuity-review", review)
         self.assertIn("Framework Continuity Summary Table", review)
         self.assertNotIn("Full Framework Continuity", review)
+        self.assertIn("stage32-change-register-review", review)
+        self.assertIn("Framework Change Register Summary Table", review)
+        self.assertNotIn("Full Framework Change Register", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -8412,6 +8539,7 @@ class AdminSessionTests(unittest.TestCase):
             "Methodological Conformance Certification",
             "Reflexive Closure",
             "Framework Continuity",
+            "Framework Change Register",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -8434,6 +8562,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Reflexive Closure", explicit_full)
         self.assertIn("stage31-continuity-full", explicit_full)
         self.assertIn("Full Framework Continuity", explicit_full)
+        self.assertIn("stage32-change-register-full", explicit_full)
+        self.assertIn("Full Framework Change Register", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -8469,6 +8599,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Reflexive Closure"),
             explicit_full.index("Framework Continuity"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Continuity"),
+            explicit_full.index("Framework Change Register"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
