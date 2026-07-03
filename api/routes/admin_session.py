@@ -32145,6 +32145,7 @@ STAGE21_SECTION_INDEX = (
     ("Methodological Conformance Certification", "Overview", "Summary", "Detail"),
     ("Reflexive Closure", "Overview", "Summary", "Detail"),
     ("Framework Continuity", "Overview", "Summary", "Detail"),
+    ("Framework Change Register", "Overview", "Summary", "Detail"),
 )
 
 
@@ -37329,6 +37330,397 @@ def _render_framework_continuity(
       </section>"""
 
 
+STAGE32_LIMITATIONS = (
+    "Framework Change Register does not validate evidence.",
+    "Framework Change Register does not determine truth.",
+    "Framework Change Register does not determine liability.",
+    "Framework Change Register does not infer intent.",
+    "Framework Change Register does not assign blame.",
+    "Framework Change Register does not infer hidden inputs.",
+    "Framework Change Register does not create evidence.",
+    "Framework Change Register does not modify records.",
+    "Framework Change Register does not change classifications.",
+    "Framework Change Register does not change thresholds.",
+    "Framework Change Register does not change dependencies.",
+    "Framework Change Register does not change evidence relationships.",
+    "Framework Change Register does not change transition history.",
+    "Framework Change Register does not change provenance.",
+    "Framework Change Register does not change replay outputs.",
+    "Framework Change Register does not change integrity checks.",
+    "Framework Change Register does not change audit package sections.",
+    "Framework Change Register does not change certification checks.",
+    "Framework Change Register does not change reflexive closure checks.",
+    "Framework Change Register does not change continuity checks.",
+    "Framework Change Register does not change report modes.",
+    "Framework Change Register does not write to the database.",
+    "Framework Change Register does not alter public API behaviour.",
+    "Framework Change Register documents visible and declared framework changes only.",
+)
+
+
+def _stage32_change_entry(
+    *,
+    change_entry_id: str,
+    change_name: str,
+    change_category: str,
+    affected_stage_or_output: str,
+    declared_change_state: Any,
+    observed_change_state: Any,
+    change_basis: str,
+    limitation_statement: str,
+    registered_with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_change_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_change_state == declared_change_state:
+        result = (
+            "Change Registered With Limitation"
+            if registered_with_limitation
+            else "Change Registered"
+        )
+    else:
+        result = "Change Gap Detected"
+    return {
+        "change_entry_id": change_entry_id,
+        "change_name": change_name,
+        "change_category": change_category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_change_state": declared_change_state,
+        "observed_change_state": observed_change_state,
+        "change_basis": change_basis,
+        "change_result": result,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_change_register(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    administrative_outputs: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    administrative = dict(administrative_outputs or {})
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+        }
+    )
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+    }
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    gap_values = {
+        "integrity": integrity_summary.get("integrity_gap_checks"),
+        "audit": audit_summary.get("unavailable_sections"),
+        "certification": certification_summary.get("non_conformance_checks"),
+        "closure": closure_summary.get("closure_gap_count"),
+        "continuity": continuity_summary.get("continuity_gap_checks"),
+    }
+    administrative_count = sum(
+        administrative.get(definition[1]) not in (None, "", [], {})
+        for definition in STAGE25_OUTPUT_DEFINITIONS[:11]
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    classification_boundary = any(
+        "does not change classifications" in str(value).lower()
+        for value in STAGE21_SUMMARY_LIMITATIONS
+    )
+    mutation_boundary = any(
+        "does not modify records" in str(value).lower()
+        for value in STAGE31_LIMITATIONS
+    )
+    database_boundary = any(
+        "does not write to the database" in str(value).lower()
+        for value in STAGE31_LIMITATIONS
+    )
+    public_api_boundary = any(
+        "does not alter public api behaviour" in str(value).lower()
+        for value in STAGE31_LIMITATIONS
+    )
+    specs = (
+        ("CR-001", "Full Inspection Default", "Report Mode Governance", "Stage 21 Report Modes", "Full Inspection Report", classify_report_mode(None), "The declared default remains Full Inspection.", "Registers the visible default only.", False),
+        ("CR-002", "Three Report Modes Available", "Report Mode Governance", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Executive, Review, and Full Inspection remain declared.", "Registers presentation governance only.", False),
+        ("CR-003", "Dependency Nodes Retained", "Dependency Governance", "Stage 22 Determination Dependency Mapping", 30, counts["dependency"] if dependency else None, "Visible Stage 22 node count.", "Does not validate dependencies.", False),
+        ("CR-004", "Pathways Retained", "Pathway Governance", "Stage 23 Pathway Stability Analysis", 8, counts["pathway"] if stability else None, "Visible Stage 23 pathway count.", "Does not predict outcomes.", False),
+        ("CR-005", "Transition Entries Retained", "Transition Governance", "Stage 24 Record State Transition History", 11, counts["transition"] if transitions else None, "Visible Stage 24 transition count.", "Does not infer prior states.", False),
+        ("CR-006", "Provenance Entries Retained", "Provenance Governance", "Stage 25 Output Provenance Layer", 14, counts["provenance"] if provenance else None, "Visible Stage 25 provenance count.", "Does not validate provenance truth.", False),
+        ("CR-007", "Replay Steps Retained", "Replay Governance", "Stage 26 Deterministic Replay Mode", 15, counts["replay"] if replay else None, "Visible Stage 26 replay count.", "Does not recalculate outputs.", False),
+        ("CR-008", "Integrity Checks Retained", "Integrity Governance", "Stage 27 Framework Integrity Verification", 14, counts["integrity"] if integrity else None, "Visible Stage 27 integrity check count.", "Registers structure only.", False),
+        ("CR-009", "Integrity Gaps Remain Zero", "Integrity Governance", "Stage 27 Integrity Summary", 0, gap_values["integrity"], "Visible integrity gap count.", "Zero gaps does not determine truth.", False),
+        ("CR-010", "Audit Sections Retained", "Audit Governance", "Stage 28 Administrative Audit Package", 10, counts["audit"] if audit else None, "Visible Stage 28 audit section count.", "Does not create legal audit status.", False),
+        ("CR-011", "Audit Sections Remain Available", "Audit Governance", "Stage 28 Audit Package Summary", 0, gap_values["audit"], "Visible unavailable audit section count.", "Does not validate packaged outputs.", False),
+        ("CR-012", "Certification Checks Retained", "Certification Governance", "Stage 29 Methodological Conformance Certification", 19, counts["certification"] if certification else None, "Visible Stage 29 certification check count.", "Does not create external compliance status.", False),
+        ("CR-013", "Certification Non-Conformance Remains Zero", "Certification Governance", "Stage 29 Certification Summary", 0, gap_values["certification"], "Visible non-conformance count.", "Does not establish legal compliance.", False),
+        ("CR-014", "Reflexive Closure Checks Retained", "Reflexive Governance", "Stage 30 Reflexive Closure", 23, counts["closure"] if closure else None, "Visible Stage 30 closure check count.", "Does not close the underlying case.", False),
+        ("CR-015", "Reflexive Closure Gaps Remain Zero", "Reflexive Governance", "Stage 30 Closure Summary", 0, gap_values["closure"], "Visible reflexive closure gap count.", "Closes inspection only.", False),
+        ("CR-016", "Continuity Checks Retained", "Continuity Governance", "Stage 31 Framework Continuity", 23, counts["continuity"] if continuity else None, "Visible Stage 31 continuity check count.", "Does not create a new evaluation.", False),
+        ("CR-017", "Continuity Gaps Remain Zero", "Continuity Governance", "Stage 31 Continuity Summary", 0, gap_values["continuity"], "Visible continuity gap count.", "Zero gaps concerns visible continuity only.", False),
+        ("CR-018", "Replayable Outputs Match Replay Steps", "Replay Governance", "Stage 26 Replay Summary", counts["replay"] if replay else None, replay_summary.get("replayable_outputs"), "Replayable outputs remain equal to visible replay steps.", "Does not certify correctness.", False),
+        ("CR-019", "Non-Replayable Outputs Remain Zero", "Replay Governance", "Stage 26 Replay Summary", 0, replay_summary.get("non_replayable_outputs"), "Visible non-replayable output count.", "Does not validate outputs.", False),
+        ("CR-020", "Methodological Limitations Remain Visible", "Methodology Governance", "Stages 21–32 Limitations", True, limitations_visible, "Declared limitation sets remain visible.", "Does not externally enforce limitations.", False),
+        ("CR-021", "Classification Boundary Continues", "Boundary Governance", "Stage 21 Report Modes", True, classification_boundary, "Report modes continue not to change classifications.", "Registers a declaration only.", True),
+        ("CR-022", "Record Mutation Boundary Continues", "Boundary Governance", "Stage 31 Framework Continuity", True, mutation_boundary, "Framework continuity declares no record mutation.", "Does not monitor external activity.", True),
+        ("CR-023", "Database Write Boundary Continues", "Boundary Governance", "Stage 31 Framework Continuity", True, database_boundary, "Framework continuity declares no database writes.", "Registers a declaration only.", True),
+        ("CR-024", "Public API Boundary Continues", "Boundary Governance", "Stage 31 Framework Continuity", True, public_api_boundary, "Framework continuity declares no public API alteration.", "Registers a declaration only.", True),
+        ("CR-025", "Administrative Inputs Remain Visible", "Methodology Governance", "Current Administrative Outputs", 11, administrative_count if administrative else None, "Eleven current administrative outputs remain visible.", "Does not validate an output.", False),
+    )
+    entries = [
+        _stage32_change_entry(
+            change_entry_id=entry_id,
+            change_name=name,
+            change_category=category,
+            affected_stage_or_output=affected,
+            declared_change_state=declared,
+            observed_change_state=observed,
+            change_basis=basis,
+            limitation_statement=limitation,
+            registered_with_limitation=limited,
+        )
+        for entry_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(entry["change_result"] == result for entry in entries)
+        for result in (
+            "Change Registered",
+            "Change Registered With Limitation",
+            "Not Available",
+            "Change Gap Detected",
+        )
+    }
+    if result_counts["Change Gap Detected"]:
+        state = "Framework Change Register Gap Detected"
+    elif result_counts["Not Available"]:
+        state = "Framework Change Register Partially Available"
+    elif result_counts["Change Registered With Limitation"]:
+        state = "Framework Change Register Available With Limitations"
+    else:
+        state = "Framework Change Register Available"
+    summary = {
+        "framework_change_register_state": state,
+        "total_change_entries": len(entries),
+        "registered_change_entries": result_counts["Change Registered"],
+        "registered_with_limitation_entries": result_counts[
+            "Change Registered With Limitation"
+        ],
+        "unavailable_entries": result_counts["Not Available"],
+        "change_gap_entries": result_counts["Change Gap Detected"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "integrity_gap_count": int(gap_values["integrity"] or 0),
+        "audit_unavailable_section_count": int(gap_values["audit"] or 0),
+        "certification_non_conformance_count": int(
+            gap_values["certification"] or 0
+        ),
+        "reflexive_closure_gap_count": int(gap_values["closure"] or 0),
+        "continuity_gap_count": int(gap_values["continuity"] or 0),
+        "limitation_summary": (
+            "The register documents visible and declared framework states only and does not infer undocumented changes."
+        ),
+    }
+    return {
+        "framework_change_register_state": state,
+        "framework_change_register_summary": summary,
+        "change_entries": entries,
+        "limitations": list(STAGE32_LIMITATIONS),
+    }
+
+
+def _render_stage32_overview(register: dict[str, Any]) -> str:
+    summary = register["framework_change_register_summary"]
+    return f"""
+      <section class="stage32-change-register-overview">
+        <h3>Framework Change Register Overview</h3>
+        {_render_stage18a_table((
+            ("Register State", summary["framework_change_register_state"]),
+            ("Total Change Entries", summary["total_change_entries"]),
+            ("Registered Change Entries", summary["registered_change_entries"]),
+            ("Registered With Limitation Entries", summary["registered_with_limitation_entries"]),
+            ("Unavailable Entries", summary["unavailable_entries"]),
+            ("Change Gap Entries", summary["change_gap_entries"]),
+            ("Dependency Node Count", summary["dependency_node_count"]),
+            ("Pathway Count", summary["pathway_count"]),
+            ("Transition Entry Count", summary["transition_entry_count"]),
+            ("Provenance Entry Count", summary["provenance_entry_count"]),
+            ("Replay Step Count", summary["replay_step_count"]),
+            ("Integrity Check Count", summary["integrity_check_count"]),
+            ("Audit Section Count", summary["audit_section_count"]),
+            ("Certification Check Count", summary["certification_check_count"]),
+            ("Reflexive Closure Check Count", summary["reflexive_closure_check_count"]),
+            ("Continuity Check Count", summary["continuity_check_count"]),
+            ("Integrity Gap Count", summary["integrity_gap_count"]),
+            ("Audit Unavailable Section Count", summary["audit_unavailable_section_count"]),
+            ("Certification Non-Conformance Count", summary["certification_non_conformance_count"]),
+            ("Reflexive Closure Gap Count", summary["reflexive_closure_gap_count"]),
+            ("Continuity Gap Count", summary["continuity_gap_count"]),
+            ("Limitation Summary", summary["limitation_summary"]),
+        ))}
+      </section>"""
+
+
+def _render_stage32_change_table(
+    entries: list[dict[str, Any]],
+    *,
+    include_basis: bool,
+) -> str:
+    if include_basis:
+        columns = (
+            ("Entry ID", "change_entry_id", True),
+            ("Change Name", "change_name", False),
+            ("Category", "change_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Declared Change State", "declared_change_state", False),
+            ("Observed Change State", "observed_change_state", False),
+            ("Change Basis", "change_basis", False),
+            ("Change Result", "change_result", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Framework Change Register"
+        class_name = "stage32-full-change-register"
+    else:
+        columns = (
+            ("Entry ID", "change_entry_id", True),
+            ("Change Name", "change_name", False),
+            ("Category", "change_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Change Result", "change_result", False),
+        )
+        title = "Framework Change Register Summary Table"
+        class_name = "stage32-change-register-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>"
+        + "".join(
+            f"<td><code>{escape(_stage18a_display_value(entry.get(key)))}</code></td>"
+            if use_code
+            else f"<td>{escape(_stage18a_display_value(entry.get(key)))}</td>"
+            for _, key, use_code in columns
+        )
+        + "</tr>"
+        for entry in entries
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No framework change entries are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage32_limitations(
+    register: dict[str, Any],
+    *,
+    concise: bool = False,
+) -> str:
+    limitations = register["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 5, 7, 21, 22, 23)]
+    return f"""
+      <section class="stage32-change-register-limitations">
+        <h3>Framework Change Register Limitations</h3>
+        {_render_stage19a_list(limitations, "No framework change register limitations available.")}
+      </section>"""
+
+
+def _render_framework_change_register(
+    register: dict[str, Any],
+    *,
+    report_mode: str,
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Change Register is assembled deterministically from visible
+          framework outputs and declared metadata only. It documents visible
+          and declared framework changes without inspecting hidden state,
+          inferring undocumented changes, validating evidence, reclassifying
+          outputs, or modifying the record.
+        </p>"""
+    overview = _render_stage32_overview(register)
+    if report_mode == "executive":
+        content = overview + _render_stage32_limitations(register, concise=True)
+        mode_class = "stage32-change-register-executive"
+    elif report_mode == "review":
+        content = (
+            overview
+            + _render_stage32_change_table(
+                register["change_entries"], include_basis=False
+            )
+            + _render_stage32_limitations(register)
+        )
+        mode_class = "stage32-change-register-review"
+    else:
+        content = (
+            overview
+            + _render_stage32_change_table(
+                register["change_entries"], include_basis=True
+            )
+            + _render_stage32_limitations(register)
+        )
+        mode_class = "stage32-change-register-full"
+    return f"""
+      <section class="management-section stage32-framework-change-register {mode_class}">
+        <h2>Framework Change Register</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -37944,6 +38336,24 @@ def render_admin_record_evidence_page(
         stage31_framework_continuity,
         report_mode=report_structure["report_mode"],
     )
+    stage32_framework_change_register = build_framework_change_register(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage31_framework_continuity,
+        stage22_current_values,
+    )
+    stage32_change_register_section = _render_framework_change_register(
+        stage32_framework_change_register,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -37991,6 +38401,7 @@ def render_admin_record_evidence_page(
             + stage29_conformance_section
             + stage30_closure_section
             + stage31_continuity_section
+            + stage32_change_register_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -38007,6 +38418,7 @@ def render_admin_record_evidence_page(
             + stage29_conformance_section
             + stage30_closure_section
             + stage31_continuity_section
+            + stage32_change_register_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -38028,6 +38440,7 @@ def render_admin_record_evidence_page(
             f"{stage29_conformance_section}"
             f"{stage30_closure_section}"
             f"{stage31_continuity_section}"
+            f"{stage32_change_register_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -38415,6 +38828,24 @@ def render_admin_record_evidence_page(
     .stage31-full-framework-continuity table {{
       min-width: 1860px;
     }}
+    .stage32-framework-change-register table {{
+      table-layout: auto;
+    }}
+    .stage32-framework-change-register th,
+    .stage32-framework-change-register td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage32-change-register-summary,
+    .stage32-full-change-register {{
+      overflow-x: auto;
+    }}
+    .stage32-full-change-register table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -38443,6 +38874,7 @@ def render_admin_record_evidence_page(
       .stage29-conformance-summary table {{ min-width: 920px; }}
       .stage30-closure-summary table {{ min-width: 920px; }}
       .stage31-continuity-summary table {{ min-width: 920px; }}
+      .stage32-change-register-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;
