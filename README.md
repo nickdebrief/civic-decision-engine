@@ -387,6 +387,26 @@ validates no evidence, changes no classifications, and modifies no records.
 
 ---
 
+## Stage 34 — Framework Version Lineage
+
+Introduces a visible and inspectable version-lineage model for the methodology
+itself. Twenty-five deterministic entries document methodology origin,
+sequential stage succession, declared phase relationships, release visibility,
+and preservation of Stage 21–33 structures and boundaries.
+
+Phase I covers Evaluation Methodology (Stages 1–19), Phase II covers Reflexive
+Inspection Infrastructure (Stages 20–30), and Phase III declares Methodology
+Governance across Stages 31–40 while identifying Stage 34 as the current
+implemented endpoint. The model does not infer implementation of future or
+undocumented stages.
+
+Executive mode presents the lineage overview and relationships; Review mode
+adds the lineage summary table; Full Inspection mode exposes every declared and
+observed version state, result, basis, affected output, and limitation. Stage 34
+performs no evaluation, creates no authority, and modifies no records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
