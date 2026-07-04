@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(24, len(review["section_index"]))
+        self.assertEqual(25, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 25)),
+            list(range(1, 26)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -8601,6 +8601,148 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Lineage Basis</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage35_framework_lifecycle_review_is_deterministic_and_complete(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE35-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        original_inputs = copy.deepcopy((report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage))
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+
+        self.assertEqual("Framework Lifecycle Review Available With Limitations", lifecycle["lifecycle_state"])
+        self.assertEqual(28, len(lifecycle["lifecycle_review_items"]))
+        self.assertEqual(8, len(lifecycle["lifecycle_relationships"]))
+        required_fields = {
+            "lifecycle_item_id", "lifecycle_item_name", "lifecycle_category",
+            "affected_stage_or_output", "declared_lifecycle_state",
+            "observed_lifecycle_state", "lifecycle_review_result",
+            "lifecycle_basis", "limitation_statement",
+        }
+        for item in lifecycle["lifecycle_review_items"]:
+            self.assertEqual(required_fields, set(item))
+        summary = lifecycle["lifecycle_summary"]
+        self.assertEqual((28, 24, 4, 0, 0), (
+            summary["total_lifecycle_review_items"], summary["reviewed_items"],
+            summary["items_with_limitation"], summary["unavailable_items"],
+            summary["lifecycle_gap_count"],
+        ))
+        self.assertEqual((35, 3, 6), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {item["lifecycle_item_name"] for item in lifecycle["lifecycle_review_items"]}
+        for required_name in (
+            "Methodology Lifecycle Origin", "Phase I Lifecycle Visibility",
+            "Phase II Lifecycle Visibility", "Phase III Lifecycle Visibility",
+            "Implemented Stage Progression", "Stage Succession Continuity",
+            "Evaluation Methodology Completion", "Reflexive Inspection Closure",
+            "Governance Phase Initiation", "Continuity Preservation",
+            "Change Register Preservation", "Governance Statement Preservation",
+            "Version Lineage Preservation", "Dependency Preservation",
+            "Pathway Preservation", "Transition Preservation", "Provenance Preservation",
+            "Replay Preservation", "Integrity Preservation", "Audit Package Preservation",
+            "Certification Preservation", "Reflexive Closure Preservation",
+            "Lifecycle Boundary Visibility", "Non-Inference of Future Stages",
+            "Non-Mutation Lifecycle Boundary", "Public Inspectability",
+            "Documentation Availability", "Lifecycle Review Limitation Visibility",
+        ):
+            self.assertIn(required_name, names)
+        relationships = {item["phase"]: item for item in lifecycle["lifecycle_relationships"]}
+        self.assertEqual("Stages 31–40", relationships["Phase III"]["stage_scope"])
+        self.assertIn("through Stage 35", relationships["Phase III"]["relationship"])
+        self.assertEqual("Stages 31–35", relationships["Current Governance"]["stage_scope"])
+        self.assertEqual("Stages 36–40", relationships["Future Boundary"]["stage_scope"])
+        self.assertEqual(lifecycle, self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage))
+        self.assertEqual(original_inputs, (report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage))
+
+    def test_stage35_gap_and_partial_states_are_deterministic(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE35-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        gap_dependency = copy.deepcopy(dependency)
+        gap_dependency["nodes"] = gap_dependency["nodes"][:-1]
+        gap = self.admin_session.build_framework_lifecycle_review(report, gap_dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        self.assertEqual("Framework Lifecycle Review Gap Detected", gap["lifecycle_state"])
+        partial = self.admin_session.build_framework_lifecycle_review()
+        self.assertEqual("Framework Lifecycle Review Partially Available", partial["lifecycle_state"])
+        self.assertGreater(partial["lifecycle_summary"]["unavailable_items"], 0)
+
+    def test_stage35_rendering_depth_matches_report_mode(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE35-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        executive = self.admin_session._render_framework_lifecycle_review(lifecycle, report_mode="executive")
+        review = self.admin_session._render_framework_lifecycle_review(lifecycle, report_mode="review")
+        full = self.admin_session._render_framework_lifecycle_review(lifecycle, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Lifecycle Review</h2>", rendered)
+            self.assertIn("<h3>Framework Lifecycle Review Overview</h3>", rendered)
+            self.assertIn("<h3>Lifecycle Relationships</h3>", rendered)
+            self.assertIn("<h3>Framework Lifecycle Review Limitations</h3>", rendered)
+            self.assertIn("Stages 31–40", rendered)
+            self.assertIn("through Stage 35", rendered)
+            self.assertIn("Stages 36–40", rendered)
+        self.assertIn("stage35-lifecycle-executive", executive)
+        self.assertNotIn("Lifecycle Review Summary Table", executive)
+        self.assertNotIn("Full Lifecycle Review Items", executive)
+        self.assertIn("stage35-lifecycle-review-mode", review)
+        self.assertIn("Lifecycle Review Summary Table", review)
+        self.assertNotIn("Full Lifecycle Review Items", review)
+        self.assertNotIn("Lifecycle Basis</th>", review)
+        self.assertIn("stage35-lifecycle-full", full)
+        self.assertIn("Full Lifecycle Review Items", full)
+        self.assertIn("Declared Lifecycle State</th>", full)
+        self.assertIn("Observed Lifecycle State</th>", full)
+        self.assertIn("Lifecycle Review Result</th>", full)
+        self.assertIn("Lifecycle Basis</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -8716,6 +8858,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Framework Version Lineage</h2>", executive)
         self.assertIn("Lineage Relationships", executive)
         self.assertNotIn("Version Lineage Summary Table", executive)
+        self.assertIn("stage35-lifecycle-executive", executive)
+        self.assertIn("<h2>Framework Lifecycle Review</h2>", executive)
+        self.assertIn("Lifecycle Relationships", executive)
+        self.assertNotIn("Lifecycle Review Summary Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -8770,6 +8916,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage34-lineage-review", review)
         self.assertIn("Version Lineage Summary Table", review)
         self.assertNotIn("Full Version Lineage Entries", review)
+        self.assertIn("stage35-lifecycle-review-mode", review)
+        self.assertIn("Lifecycle Review Summary Table", review)
+        self.assertNotIn("Full Lifecycle Review Items", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -8801,6 +8950,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Change Register",
             "Framework Governance Statement",
             "Framework Version Lineage",
+            "Framework Lifecycle Review",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -8829,6 +8979,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Governance Principles", explicit_full)
         self.assertIn("stage34-lineage-full", explicit_full)
         self.assertIn("Full Version Lineage Entries", explicit_full)
+        self.assertIn("stage35-lifecycle-full", explicit_full)
+        self.assertIn("Full Lifecycle Review Items", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -8876,6 +9028,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Framework Governance Statement"),
             explicit_full.index("Framework Version Lineage"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Version Lineage"),
+            explicit_full.index("Framework Lifecycle Review"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(
