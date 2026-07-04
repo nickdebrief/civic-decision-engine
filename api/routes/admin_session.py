@@ -32147,6 +32147,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Continuity", "Overview", "Summary", "Detail"),
     ("Framework Change Register", "Overview", "Summary", "Detail"),
     ("Framework Governance Statement", "Overview", "Summary", "Detail"),
+    ("Framework Version Lineage", "Overview", "Summary", "Detail"),
 )
 
 
@@ -38083,6 +38084,410 @@ def _render_framework_governance_statement(
       </section>"""
 
 
+STAGE34_LIMITATIONS = (
+    "Framework Version Lineage is not legal governance.",
+    "Framework Version Lineage is not external certification.",
+    "Framework Version Lineage does not validate evidence.",
+    "Framework Version Lineage does not determine truth.",
+    "Framework Version Lineage does not determine liability.",
+    "Framework Version Lineage does not infer intent.",
+    "Framework Version Lineage does not infer undocumented versions.",
+    "Framework Version Lineage does not create authority.",
+    "Framework Version Lineage does not modify records.",
+    "Framework Version Lineage does not change classifications.",
+    "Framework Version Lineage does not change thresholds.",
+    "Framework Version Lineage does not change dependencies.",
+    "Framework Version Lineage does not change evidence relationships.",
+    "Framework Version Lineage does not change transition history.",
+    "Framework Version Lineage does not change provenance.",
+    "Framework Version Lineage does not change replay outputs.",
+    "Framework Version Lineage does not change integrity checks.",
+    "Framework Version Lineage does not change audit packages.",
+    "Framework Version Lineage does not change certifications.",
+    "Framework Version Lineage does not change continuity outputs.",
+    "Framework Version Lineage does not change change-register entries.",
+    "Framework Version Lineage does not change governance principles.",
+    "Framework Version Lineage does not write to the database.",
+    "Framework Version Lineage does not alter public API behaviour.",
+    "Framework Version Lineage documents visible and declared framework versions only.",
+)
+
+
+STAGE34_LINEAGE_RELATIONSHIPS = (
+    ("Phase I", "Evaluation Methodology", "Stages 1–19", "Declared methodology phase"),
+    ("Phase II", "Reflexive Inspection Infrastructure", "Stages 20–30", "Declared inspection phase"),
+    ("Phase III", "Methodology Governance", "Stages 31–40", "Declared governance phase; implemented visibility currently extends through Stage 34"),
+    ("Stage Succession", "Sequential and Inspectable", "Implemented stages", "Stage succession remains sequential and inspectable"),
+    ("Implemented Visibility", "Visible and Reproducible", "Implemented outputs", "Implemented stages remain visible and reproducible"),
+    ("Lineage Source", "Declared Metadata Only", "Framework metadata", "Version lineage is derived exclusively from declared framework metadata"),
+)
+
+
+def _stage34_lineage_entry(
+    *,
+    version_id: str,
+    version_name: str,
+    lineage_category: str,
+    affected_stage_or_output: str,
+    declared_version_state: Any,
+    observed_version_state: Any,
+    lineage_basis: str,
+    limitation_statement: str,
+    with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_version_state in (None, "", "Not Available"):
+        result = "Not Available"
+    elif observed_version_state == declared_version_state:
+        result = (
+            "Version Declared With Limitation"
+            if with_limitation
+            else "Version Declared"
+        )
+    else:
+        result = "Version Gap Detected"
+    return {
+        "version_id": version_id,
+        "version_name": version_name,
+        "lineage_category": lineage_category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_version_state": declared_version_state,
+        "observed_version_state": observed_version_state,
+        "lineage_result": result,
+        "lineage_basis": lineage_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_version_lineage(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    governance_statement: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    register = dict(change_register or {})
+    governance = dict(governance_statement or {})
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    register_summary = register.get("framework_change_register_summary") or {}
+    governance_summary = governance.get("governance_summary") or {}
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []),
+        "governance": len(governance.get("governance_principles") or []),
+    }
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+            "Stage 33": STAGE33_LIMITATIONS,
+            "Stage 34": STAGE34_LIMITATIONS,
+        }
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    boundary_text = " ".join(STAGE33_LIMITATIONS + STAGE34_LIMITATIONS).lower()
+    gap_total = sum(
+        int(value or 0)
+        for value in (
+            integrity_summary.get("integrity_gap_checks"),
+            audit_summary.get("unavailable_sections"),
+            certification_summary.get("non_conformance_checks"),
+            closure_summary.get("closure_gap_count"),
+            continuity_summary.get("continuity_gap_checks"),
+            register_summary.get("change_gap_entries"),
+            governance_summary.get("governance_gap_count"),
+        )
+    )
+    replay_preserved = (
+        counts["replay"] == replay_summary.get("replayable_outputs")
+        and replay_summary.get("non_replayable_outputs") == 0
+    ) if replay else None
+    boundary_preserved = all(
+        phrase in boundary_text
+        for phrase in (
+            "does not modify records",
+            "does not change classifications",
+            "does not change dependencies",
+            "does not infer undocumented versions",
+            "does not alter public api behaviour",
+        )
+    )
+    specs = (
+        ("VL-001", "Methodology Origin", "Methodology Lineage", "CREF Methodology", "Declared CREF methodology origin", "Declared CREF methodology origin", "The framework origin is declared in visible methodology metadata.", "Does not establish legal authorship or authority.", True),
+        ("VL-002", "Stage Sequence Declaration", "Stage Lineage", "Stages 1–34", "Sequential implemented stage lineage", "Sequential implemented stage lineage" if governance else None, "Implemented stage succession is declared sequentially.", "Does not infer omitted or future stages.", False),
+        ("VL-003", "Implemented Stage Visibility", "Stage Lineage", "Implemented Framework", True, True if governance else None, "Implemented stages remain represented by visible outputs and documentation.", "Visibility is limited to implemented metadata.", False),
+        ("VL-004", "Phase I Lineage", "Phase Lineage", "Stages 1–19", "Evaluation Methodology", "Evaluation Methodology", "Stages 1–19 are declared as Phase I.", "Phase labels are descriptive only.", False),
+        ("VL-005", "Phase II Lineage", "Phase Lineage", "Stages 20–30", "Reflexive Inspection Infrastructure", "Reflexive Inspection Infrastructure", "Stages 20–30 are declared as Phase II.", "Phase labels do not alter stage behavior.", False),
+        ("VL-006", "Phase III Lineage", "Phase Lineage", "Stages 31–40", "Methodology Governance; implemented through Stage 34", "Methodology Governance; implemented through Stage 34", "Stages 31–40 are the declared governance phase while implemented visibility currently ends at Stage 34.", "Does not infer implementation of Stages 35–40.", False),
+        ("VL-007", "Deterministic Evolution", "Methodology Lineage", "Stages 21–34", True, True if register and governance else None, "Version lineage derives from deterministic visible outputs.", "Does not certify external release processes.", False),
+        ("VL-008", "Dependency Preservation", "Structural Lineage", "Stage 22 Dependency Mapping", 30, counts["dependency"] if dependency else None, "The dependency graph remains preserved across lineage.", "Does not validate dependency correctness.", False),
+        ("VL-009", "Replay Preservation", "Structural Lineage", "Stage 26 Deterministic Replay", True, replay_preserved, "Replay steps remain fully replayable.", "Does not simulate alternate versions.", False),
+        ("VL-010", "Integrity Preservation", "Structural Lineage", "Stage 27 Integrity Verification", (14, 0), (counts["integrity"], integrity_summary.get("integrity_gap_checks")) if integrity else None, "Integrity checks and zero-gap state remain visible.", "Does not validate underlying facts.", False),
+        ("VL-011", "Audit Preservation", "Structural Lineage", "Stage 28 Audit Package", (10, 0), (counts["audit"], audit_summary.get("unavailable_sections")) if audit else None, "Audit sections remain visibly available.", "Not a legal audit.", False),
+        ("VL-012", "Certification Preservation", "Structural Lineage", "Stage 29 Conformance Certification", (19, 0), (counts["certification"], certification_summary.get("non_conformance_checks")) if certification else None, "Certification checks remain preserved.", "Not external certification.", False),
+        ("VL-013", "Continuity Preservation", "Structural Lineage", "Stage 31 Framework Continuity", (23, 0), (counts["continuity"], continuity_summary.get("continuity_gap_checks")) if continuity else None, "Continuity checks remain visible without gaps.", "Visible continuity only.", False),
+        ("VL-014", "Change Register Preservation", "Change Lineage", "Stage 32 Change Register", (25, 0), (counts["register"], register_summary.get("change_gap_entries")) if register else None, "Declared changes remain registered without gaps.", "Does not infer undocumented changes.", False),
+        ("VL-015", "Governance Preservation", "Governance Lineage", "Stage 33 Governance Statement", (25, 0), (counts["governance"], governance_summary.get("governance_gap_count")) if governance else None, "Governance principles remain visible without gaps.", "Does not create governance authority.", False),
+        ("VL-016", "Public Inspectability", "Inspection Lineage", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Three report modes preserve inspectable lineage.", "Admin visibility does not publish private records.", False),
+        ("VL-017", "Documentation Availability", "Documentation Lineage", "Declared Framework Metadata", True, True, "Lineage relationships are documented in visible framework materials.", "Does not guarantee third-party publication.", True),
+        ("VL-018", "Version Traceability", "Version Lineage", "Stages 31–34", True, True if continuity and register and governance else None, "Continuity, change registration, and governance provide visible lineage traceability.", "Traceability remains limited to declared metadata.", False),
+        ("VL-019", "Release Visibility", "Release Lineage", "Declared Releases", True, True if register else None, "Declared framework changes provide visible release succession context.", "Does not inspect external release systems.", True),
+        ("VL-020", "Boundary Preservation", "Boundary Lineage", "Stages 33–34 Limitations", True, boundary_preserved, "Core non-inference, mutation, classification, dependency, and API boundaries remain declared.", "Declared boundaries are not external enforcement.", False),
+        ("VL-021", "Non-Inference Principle", "Boundary Lineage", "Stage 34 Limitations", True, "does not infer undocumented versions" in boundary_text, "Undocumented versions remain outside the lineage model.", "Does not identify unknown versions.", False),
+        ("VL-022", "Non-Mutation Principle", "Boundary Lineage", "Stage 34 Limitations", True, "does not modify records" in boundary_text, "The lineage model explicitly preserves non-mutation.", "Declarative boundary only.", False),
+        ("VL-023", "Version Gap Absence", "Lineage Integrity", "Stages 27–33 Summaries", 0, gap_total if governance else None, "Visible upstream structural gap counts remain zero.", "No structural gap does not determine truth.", False),
+        ("VL-024", "Framework Persistence Declaration", "Version Lineage", "Stage 31 Framework Continuity", True, True if continuity else None, "Framework continuity supplies a visible persistence declaration.", "Does not guarantee future releases or maintenance.", True),
+        ("VL-025", "Version Lineage Visibility", "Version Lineage", "Stage 34 Version Lineage", True, True, "The lineage model is rendered in every report mode.", "Visibility remains admin-only.", False),
+    )
+    entries = [
+        _stage34_lineage_entry(
+            version_id=version_id,
+            version_name=name,
+            lineage_category=category,
+            affected_stage_or_output=affected,
+            declared_version_state=declared,
+            observed_version_state=observed,
+            lineage_basis=basis,
+            limitation_statement=limitation,
+            with_limitation=limited,
+        )
+        for version_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(entry["lineage_result"] == result for entry in entries)
+        for result in (
+            "Version Declared",
+            "Version Declared With Limitation",
+            "Not Available",
+            "Version Gap Detected",
+        )
+    }
+    if result_counts["Version Gap Detected"]:
+        state = "Framework Version Lineage Gap Detected"
+    elif result_counts["Not Available"]:
+        state = "Framework Version Lineage Partially Available"
+    elif result_counts["Version Declared With Limitation"]:
+        state = "Framework Version Lineage Available With Limitations"
+    else:
+        state = "Framework Version Lineage Available"
+    summary = {
+        "lineage_state": state,
+        "total_version_entries": len(entries),
+        "declared_version_entries": result_counts["Version Declared"],
+        "versions_with_limitation": result_counts["Version Declared With Limitation"],
+        "unavailable_versions": result_counts["Not Available"],
+        "version_gap_count": result_counts["Version Gap Detected"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "change_register_entry_count": counts["register"],
+        "governance_principle_count": counts["governance"],
+        "limitation_summary": "Version lineage documents visible and declared framework succession only and does not infer undocumented versions.",
+    }
+    return {
+        "lineage_state": state,
+        "lineage_summary": summary,
+        "version_lineage_entries": entries,
+        "lineage_relationships": [
+            {"phase": phase, "name": name, "stage_scope": scope, "relationship": relationship}
+            for phase, name, scope, relationship in STAGE34_LINEAGE_RELATIONSHIPS
+        ],
+        "limitations": list(STAGE34_LIMITATIONS),
+    }
+
+
+def _render_stage34_overview(lineage: dict[str, Any]) -> str:
+    summary = lineage["lineage_summary"]
+    labels = (
+        ("Lineage State", "lineage_state"),
+        ("Total Version Entries", "total_version_entries"),
+        ("Declared Version Entries", "declared_version_entries"),
+        ("Versions With Limitation", "versions_with_limitation"),
+        ("Unavailable Versions", "unavailable_versions"),
+        ("Version Gap Count", "version_gap_count"),
+        ("Dependency Node Count", "dependency_node_count"),
+        ("Pathway Count", "pathway_count"),
+        ("Transition Entry Count", "transition_entry_count"),
+        ("Provenance Entry Count", "provenance_entry_count"),
+        ("Replay Step Count", "replay_step_count"),
+        ("Integrity Check Count", "integrity_check_count"),
+        ("Audit Section Count", "audit_section_count"),
+        ("Certification Check Count", "certification_check_count"),
+        ("Reflexive Closure Check Count", "reflexive_closure_check_count"),
+        ("Continuity Check Count", "continuity_check_count"),
+        ("Change Register Entry Count", "change_register_entry_count"),
+        ("Governance Principle Count", "governance_principle_count"),
+        ("Limitation Summary", "limitation_summary"),
+    )
+    return f"""
+      <section class="stage34-lineage-overview">
+        <h3>Framework Version Lineage Overview</h3>
+        {_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}
+      </section>"""
+
+
+def _render_stage34_relationships(lineage: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(item['phase'])}</td>"
+        f"<td>{escape(item['name'])}</td>"
+        f"<td><code>{escape(item['stage_scope'])}</code></td>"
+        f"<td>{escape(item['relationship'])}</td>"
+        "</tr>"
+        for item in lineage["lineage_relationships"]
+    )
+    return f"""
+      <section class="stage34-lineage-relationships">
+        <h3>Lineage Relationships</h3>
+        <table><thead><tr><th>Phase</th><th>Name</th><th>Stage Scope</th><th>Relationship</th></tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage34_entries(
+    entries: list[dict[str, Any]], *, include_basis: bool
+) -> str:
+    if include_basis:
+        columns = (
+            ("Version ID", "version_id", True),
+            ("Version Name", "version_name", False),
+            ("Lineage Category", "lineage_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Declared Version State", "declared_version_state", False),
+            ("Observed Version State", "observed_version_state", False),
+            ("Lineage Result", "lineage_result", False),
+            ("Lineage Basis", "lineage_basis", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Version Lineage Entries"
+        class_name = "stage34-full-lineage-entries"
+    else:
+        columns = (
+            ("Version ID", "version_id", True),
+            ("Version Name", "version_name", False),
+            ("Lineage Category", "lineage_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Lineage Result", "lineage_result", False),
+        )
+        title = "Version Lineage Summary Table"
+        class_name = "stage34-lineage-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>" + "".join(
+            f"<td><code>{escape(_stage18a_display_value(entry.get(key)))}</code></td>"
+            if use_code else f"<td>{escape(_stage18a_display_value(entry.get(key)))}</td>"
+            for _, key, use_code in columns
+        ) + "</tr>"
+        for entry in entries
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No framework version lineage entries are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage34_limitations(
+    lineage: dict[str, Any], *, concise: bool = False
+) -> str:
+    limitations = lineage["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 6, 8, 22, 23, 24)]
+    return f"""
+      <section class="stage34-lineage-limitations">
+        <h3>Framework Version Lineage Limitations</h3>
+        {_render_stage19a_list(limitations, "No framework version lineage limitations available.")}
+      </section>"""
+
+
+def _render_framework_version_lineage(
+    lineage: dict[str, Any], *, report_mode: str
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Version Lineage is derived deterministically from visible
+          framework outputs and declared metadata only. It documents stage
+          succession, phase relationships, and framework evolution boundaries
+          without evaluation, undocumented-version inference, authority
+          creation, evidence validation, or record modification.
+        </p>"""
+    overview = _render_stage34_overview(lineage)
+    relationships = _render_stage34_relationships(lineage)
+    if report_mode == "executive":
+        content = overview + relationships + _render_stage34_limitations(lineage, concise=True)
+        mode_class = "stage34-lineage-executive"
+    elif report_mode == "review":
+        content = overview + relationships + _render_stage34_entries(
+            lineage["version_lineage_entries"], include_basis=False
+        ) + _render_stage34_limitations(lineage)
+        mode_class = "stage34-lineage-review"
+    else:
+        content = overview + relationships + _render_stage34_entries(
+            lineage["version_lineage_entries"], include_basis=True
+        ) + _render_stage34_limitations(lineage)
+        mode_class = "stage34-lineage-full"
+    return f"""
+      <section class="management-section stage34-framework-version-lineage {mode_class}">
+        <h2>Framework Version Lineage</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -38734,6 +39139,25 @@ def render_admin_record_evidence_page(
         stage33_framework_governance,
         report_mode=report_structure["report_mode"],
     )
+    stage34_framework_version_lineage = build_framework_version_lineage(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage31_framework_continuity,
+        stage32_framework_change_register,
+        stage33_framework_governance,
+    )
+    stage34_version_lineage_section = _render_framework_version_lineage(
+        stage34_framework_version_lineage,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -38783,6 +39207,7 @@ def render_admin_record_evidence_page(
             + stage31_continuity_section
             + stage32_change_register_section
             + stage33_governance_section
+            + stage34_version_lineage_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -38801,6 +39226,7 @@ def render_admin_record_evidence_page(
             + stage31_continuity_section
             + stage32_change_register_section
             + stage33_governance_section
+            + stage34_version_lineage_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -38824,6 +39250,7 @@ def render_admin_record_evidence_page(
             f"{stage31_continuity_section}"
             f"{stage32_change_register_section}"
             f"{stage33_governance_section}"
+            f"{stage34_version_lineage_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -39247,6 +39674,25 @@ def render_admin_record_evidence_page(
     .stage33-full-governance-principles table {{
       min-width: 1860px;
     }}
+    .stage34-framework-version-lineage table {{
+      table-layout: auto;
+    }}
+    .stage34-framework-version-lineage th,
+    .stage34-framework-version-lineage td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage34-lineage-relationships,
+    .stage34-lineage-summary,
+    .stage34-full-lineage-entries {{
+      overflow-x: auto;
+    }}
+    .stage34-full-lineage-entries table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -39277,6 +39723,8 @@ def render_admin_record_evidence_page(
       .stage31-continuity-summary table {{ min-width: 920px; }}
       .stage32-change-register-summary table {{ min-width: 920px; }}
       .stage33-governance-summary table {{ min-width: 920px; }}
+      .stage34-lineage-relationships table {{ min-width: 760px; }}
+      .stage34-lineage-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;
