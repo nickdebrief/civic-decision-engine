@@ -32148,6 +32148,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Change Register", "Overview", "Summary", "Detail"),
     ("Framework Governance Statement", "Overview", "Summary", "Detail"),
     ("Framework Version Lineage", "Overview", "Summary", "Detail"),
+    ("Framework Lifecycle Review", "Overview", "Summary", "Detail"),
 )
 
 
@@ -38488,6 +38489,434 @@ def _render_framework_version_lineage(
       </section>"""
 
 
+STAGE35_LIMITATIONS = (
+    "Framework Lifecycle Review is not legal governance.",
+    "Framework Lifecycle Review is not external certification.",
+    "Framework Lifecycle Review does not validate evidence.",
+    "Framework Lifecycle Review does not determine truth.",
+    "Framework Lifecycle Review does not determine liability.",
+    "Framework Lifecycle Review does not infer intent.",
+    "Framework Lifecycle Review does not infer future stages.",
+    "Framework Lifecycle Review does not infer undocumented lifecycle states.",
+    "Framework Lifecycle Review does not create authority.",
+    "Framework Lifecycle Review does not modify records.",
+    "Framework Lifecycle Review does not change classifications.",
+    "Framework Lifecycle Review does not change thresholds.",
+    "Framework Lifecycle Review does not change dependencies.",
+    "Framework Lifecycle Review does not change evidence relationships.",
+    "Framework Lifecycle Review does not change transition history.",
+    "Framework Lifecycle Review does not change provenance.",
+    "Framework Lifecycle Review does not change replay outputs.",
+    "Framework Lifecycle Review does not change integrity checks.",
+    "Framework Lifecycle Review does not change audit packages.",
+    "Framework Lifecycle Review does not change certifications.",
+    "Framework Lifecycle Review does not change continuity outputs.",
+    "Framework Lifecycle Review does not change change-register entries.",
+    "Framework Lifecycle Review does not change governance principles.",
+    "Framework Lifecycle Review does not change version-lineage entries.",
+    "Framework Lifecycle Review does not write to the database.",
+    "Framework Lifecycle Review does not alter public API behaviour.",
+    "Framework Lifecycle Review documents visible and declared framework lifecycle state only.",
+)
+
+
+STAGE35_LIFECYCLE_RELATIONSHIPS = (
+    ("Phase I", "Evaluation Methodology", "Stages 1–19", "Declared evaluation lifecycle"),
+    ("Phase II", "Reflexive Inspection Infrastructure", "Stages 20–30", "Declared reflexive inspection lifecycle"),
+    ("Phase III", "Methodology Governance", "Stages 31–40", "Declared governance lifecycle; implemented visibility currently extends through Stage 35"),
+    ("Implemented Methodology", "Evaluation and Inspection Stack", "Stages 1–30", "Stages 1–30 implement the methodology and reflexive inspection stack"),
+    ("Current Governance", "Visible Governance Lifecycle", "Stages 31–35", "Stages 31–35 represent the current visible governance lifecycle"),
+    ("Future Boundary", "No Future-Stage Inference", "Stages 36–40", "Future stages are not inferred or treated as implemented"),
+    ("Lifecycle Source", "Declared Metadata and Visible Outputs", "Framework metadata", "Lifecycle review uses declared metadata and visible framework outputs only"),
+    ("Stage Succession", "Sequential and Inspectable", "Implemented stages", "Implemented lifecycle progression remains sequential and inspectable"),
+)
+
+
+def _stage35_lifecycle_item(
+    *,
+    lifecycle_item_id: str,
+    lifecycle_item_name: str,
+    lifecycle_category: str,
+    affected_stage_or_output: str,
+    declared_lifecycle_state: Any,
+    observed_lifecycle_state: Any,
+    lifecycle_basis: str,
+    limitation_statement: str,
+    with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_lifecycle_state in (None, "", "Not Available"):
+        result = "Lifecycle Item Not Available"
+    elif observed_lifecycle_state == declared_lifecycle_state:
+        result = (
+            "Lifecycle Item Reviewed With Limitation"
+            if with_limitation
+            else "Lifecycle Item Reviewed"
+        )
+    else:
+        result = "Lifecycle Gap Detected"
+    return {
+        "lifecycle_item_id": lifecycle_item_id,
+        "lifecycle_item_name": lifecycle_item_name,
+        "lifecycle_category": lifecycle_category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_lifecycle_state": declared_lifecycle_state,
+        "observed_lifecycle_state": observed_lifecycle_state,
+        "lifecycle_review_result": result,
+        "lifecycle_basis": lifecycle_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_lifecycle_review(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    governance_statement: dict[str, Any] | None = None,
+    version_lineage: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    register = dict(change_register or {})
+    governance = dict(governance_statement or {})
+    lineage = dict(version_lineage or {})
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    register_summary = register.get("framework_change_register_summary") or {}
+    governance_summary = governance.get("governance_summary") or {}
+    lineage_summary = lineage.get("lineage_summary") or {}
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []),
+        "governance": len(governance.get("governance_principles") or []),
+        "lineage": len(lineage.get("version_lineage_entries") or []),
+        "lineage_relationships": len(lineage.get("lineage_relationships") or []),
+    }
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+            "Stage 33": STAGE33_LIMITATIONS,
+            "Stage 34": STAGE34_LIMITATIONS,
+            "Stage 35": STAGE35_LIMITATIONS,
+        }
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    boundary_text = " ".join(STAGE34_LIMITATIONS + STAGE35_LIMITATIONS).lower()
+    upstream_gap_total = sum(
+        int(value or 0)
+        for value in (
+            integrity_summary.get("integrity_gap_checks"),
+            audit_summary.get("unavailable_sections"),
+            certification_summary.get("non_conformance_checks"),
+            closure_summary.get("closure_gap_count"),
+            continuity_summary.get("continuity_gap_checks"),
+            register_summary.get("change_gap_entries"),
+            governance_summary.get("governance_gap_count"),
+            lineage_summary.get("version_gap_count"),
+        )
+    )
+    replay_preserved = (
+        counts["replay"] == replay_summary.get("replayable_outputs")
+        and replay_summary.get("non_replayable_outputs") == 0
+    ) if replay else None
+    boundary_preserved = all(
+        phrase in boundary_text
+        for phrase in (
+            "does not infer future stages",
+            "does not infer undocumented lifecycle states",
+            "does not modify records",
+            "does not change classifications",
+            "does not change dependencies",
+            "does not alter public api behaviour",
+        )
+    )
+    specs = (
+        ("LR-001", "Methodology Lifecycle Origin", "Methodology Lifecycle", "CREF Methodology", "Declared CREF lifecycle origin", "Declared CREF lifecycle origin", "The lifecycle begins with the declared CREF methodology.", "Does not establish legal authorship or authority.", True),
+        ("LR-002", "Phase I Lifecycle Visibility", "Phase Lifecycle", "Stages 1–19", "Evaluation Methodology", "Evaluation Methodology", "Phase I remains declared and visible.", "Phase labels are descriptive only.", False),
+        ("LR-003", "Phase II Lifecycle Visibility", "Phase Lifecycle", "Stages 20–30", "Reflexive Inspection Infrastructure", "Reflexive Inspection Infrastructure", "Phase II remains declared and visible.", "Phase labels do not alter stage behavior.", False),
+        ("LR-004", "Phase III Lifecycle Visibility", "Phase Lifecycle", "Stages 31–40", "Methodology Governance; implemented through Stage 35", "Methodology Governance; implemented through Stage 35", "Phase III is declared through Stage 40 while implemented visibility currently ends at Stage 35.", "Does not infer implementation of Stages 36–40.", False),
+        ("LR-005", "Implemented Stage Progression", "Stage Lifecycle", "Stages 1–35", 35, 35 if lineage else None, "Declared implemented progression currently extends through Stage 35.", "Does not infer unimplemented stages.", False),
+        ("LR-006", "Stage Succession Continuity", "Stage Lifecycle", "Implemented Stages", True, True if lineage else None, "Visible stage succession remains sequential and inspectable.", "Does not validate external release ordering.", False),
+        ("LR-007", "Evaluation Methodology Completion", "Phase Lifecycle", "Stages 1–19", "Structurally Implemented", "Structurally Implemented", "Phase I is declared structurally implemented in visible methodology.", "Does not determine substantive correctness or real-world completion.", True),
+        ("LR-008", "Reflexive Inspection Closure", "Phase Lifecycle", "Stages 20–30", (23, 0), (counts["closure"], closure_summary.get("closure_gap_count")) if closure else None, "Phase II culminates in visible reflexive closure checks.", "Reflexive closure does not close an underlying case.", True),
+        ("LR-009", "Governance Phase Initiation", "Governance Lifecycle", "Stages 31–35", True, True if continuity and register and governance and lineage else None, "Continuity, change registration, governance, and lineage visibly initiate Phase III.", "Does not create external governance authority.", False),
+        ("LR-010", "Continuity Preservation", "Governance Lifecycle", "Stage 31 Framework Continuity", (23, 0), (counts["continuity"], continuity_summary.get("continuity_gap_checks")) if continuity else None, "Continuity checks remain visible without gaps.", "Visible continuity only.", False),
+        ("LR-011", "Change Register Preservation", "Governance Lifecycle", "Stage 32 Change Register", (25, 0), (counts["register"], register_summary.get("change_gap_entries")) if register else None, "Change entries remain preserved without gaps.", "Does not infer undocumented changes.", False),
+        ("LR-012", "Governance Statement Preservation", "Governance Lifecycle", "Stage 33 Governance Statement", (25, 0), (counts["governance"], governance_summary.get("governance_gap_count")) if governance else None, "Governance principles remain preserved without gaps.", "Does not create authority.", False),
+        ("LR-013", "Version Lineage Preservation", "Governance Lifecycle", "Stage 34 Version Lineage", (25, 0), (counts["lineage"], lineage_summary.get("version_gap_count")) if lineage else None, "Version lineage entries remain preserved without gaps.", "Does not infer undocumented versions.", False),
+        ("LR-014", "Dependency Preservation", "Structural Lifecycle", "Stage 22 Dependency Mapping", 30, counts["dependency"] if dependency else None, "Dependency nodes remain preserved.", "Does not validate dependency correctness.", False),
+        ("LR-015", "Pathway Preservation", "Structural Lifecycle", "Stage 23 Pathway Stability", 8, counts["pathway"] if stability else None, "Pathway entries remain preserved.", "Does not predict pathway outcomes.", False),
+        ("LR-016", "Transition Preservation", "Structural Lifecycle", "Stage 24 Transition History", 11, counts["transition"] if transitions else None, "Transition entries remain preserved.", "Does not infer prior states.", False),
+        ("LR-017", "Provenance Preservation", "Structural Lifecycle", "Stage 25 Output Provenance", 14, counts["provenance"] if provenance else None, "Provenance entries remain preserved.", "Does not validate provenance truth.", False),
+        ("LR-018", "Replay Preservation", "Structural Lifecycle", "Stage 26 Deterministic Replay", True, replay_preserved, "Replay steps remain fully replayable.", "Does not simulate alternate outcomes.", False),
+        ("LR-019", "Integrity Preservation", "Structural Lifecycle", "Stage 27 Integrity Verification", (14, 0), (counts["integrity"], integrity_summary.get("integrity_gap_checks")) if integrity else None, "Integrity checks remain visible without gaps.", "Framework integrity is not factual validation.", False),
+        ("LR-020", "Audit Package Preservation", "Structural Lifecycle", "Stage 28 Audit Package", (10, 0), (counts["audit"], audit_summary.get("unavailable_sections")) if audit else None, "Audit sections remain visibly available.", "The package is not a legal audit.", False),
+        ("LR-021", "Certification Preservation", "Structural Lifecycle", "Stage 29 Conformance Certification", (19, 0), (counts["certification"], certification_summary.get("non_conformance_checks")) if certification else None, "Certification checks remain visibly conforming.", "Not external certification.", False),
+        ("LR-022", "Reflexive Closure Preservation", "Structural Lifecycle", "Stage 30 Reflexive Closure", 23, counts["closure"] if closure else None, "Reflexive closure checks remain preserved.", "Does not close the underlying case.", False),
+        ("LR-023", "Lifecycle Boundary Visibility", "Boundary Lifecycle", "Stages 34–35 Limitations", True, boundary_preserved, "Future-stage, mutation, classification, dependency, and API boundaries remain declared.", "Declared boundaries are not external enforcement.", False),
+        ("LR-024", "Non-Inference of Future Stages", "Boundary Lifecycle", "Stage 35 Limitations", True, "does not infer future stages" in boundary_text, "Future stages remain outside the lifecycle review.", "Does not identify unknown future stages.", False),
+        ("LR-025", "Non-Mutation Lifecycle Boundary", "Boundary Lifecycle", "Stage 35 Limitations", True, "does not modify records" in boundary_text, "The lifecycle review explicitly preserves non-mutation.", "Declarative boundary only.", False),
+        ("LR-026", "Public Inspectability", "Inspection Lifecycle", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Three report modes preserve inspectable lifecycle views.", "Admin visibility does not publish private records.", False),
+        ("LR-027", "Documentation Availability", "Documentation Lifecycle", "Declared Framework Metadata", True, True, "Lifecycle relationships are documented in visible framework materials.", "Does not guarantee third-party publication.", True),
+        ("LR-028", "Lifecycle Review Limitation Visibility", "Boundary Lifecycle", "Stage 35 Limitations", True, limitations_visible, "Lifecycle-specific limitations remain explicitly visible.", "Limitations remain descriptive only.", False),
+    )
+    items = [
+        _stage35_lifecycle_item(
+            lifecycle_item_id=item_id,
+            lifecycle_item_name=name,
+            lifecycle_category=category,
+            affected_stage_or_output=affected,
+            declared_lifecycle_state=declared,
+            observed_lifecycle_state=observed,
+            lifecycle_basis=basis,
+            limitation_statement=limitation,
+            with_limitation=limited,
+        )
+        for item_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(item["lifecycle_review_result"] == result for item in items)
+        for result in (
+            "Lifecycle Item Reviewed",
+            "Lifecycle Item Reviewed With Limitation",
+            "Lifecycle Item Not Available",
+            "Lifecycle Gap Detected",
+        )
+    }
+    if result_counts["Lifecycle Gap Detected"]:
+        state = "Framework Lifecycle Review Gap Detected"
+    elif result_counts["Lifecycle Item Not Available"]:
+        state = "Framework Lifecycle Review Partially Available"
+    elif result_counts["Lifecycle Item Reviewed With Limitation"]:
+        state = "Framework Lifecycle Review Available With Limitations"
+    else:
+        state = "Framework Lifecycle Review Available"
+    summary = {
+        "lifecycle_state": state,
+        "total_lifecycle_review_items": len(items),
+        "reviewed_items": result_counts["Lifecycle Item Reviewed"],
+        "items_with_limitation": result_counts["Lifecycle Item Reviewed With Limitation"],
+        "unavailable_items": result_counts["Lifecycle Item Not Available"],
+        "lifecycle_gap_count": result_counts["Lifecycle Gap Detected"],
+        "implemented_stage_count": 35,
+        "declared_phase_count": 3,
+        "version_lineage_relationship_count": counts["lineage_relationships"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "change_register_entry_count": counts["register"],
+        "governance_principle_count": counts["governance"],
+        "version_lineage_entry_count": counts["lineage"],
+        "upstream_gap_count": upstream_gap_total,
+        "limitation_summary": "Lifecycle review describes visible implemented progression and declared phase boundaries only and does not infer future stages.",
+    }
+    return {
+        "lifecycle_state": state,
+        "lifecycle_summary": summary,
+        "lifecycle_review_items": items,
+        "lifecycle_relationships": [
+            {"phase": phase, "name": name, "stage_scope": scope, "relationship": relationship}
+            for phase, name, scope, relationship in STAGE35_LIFECYCLE_RELATIONSHIPS
+        ],
+        "limitations": list(STAGE35_LIMITATIONS),
+    }
+
+
+def _render_stage35_overview(review: dict[str, Any]) -> str:
+    summary = review["lifecycle_summary"]
+    labels = (
+        ("Lifecycle State", "lifecycle_state"),
+        ("Total Lifecycle Review Items", "total_lifecycle_review_items"),
+        ("Reviewed Items", "reviewed_items"),
+        ("Items With Limitation", "items_with_limitation"),
+        ("Unavailable Items", "unavailable_items"),
+        ("Lifecycle Gap Count", "lifecycle_gap_count"),
+        ("Implemented Stage Count", "implemented_stage_count"),
+        ("Declared Phase Count", "declared_phase_count"),
+        ("Version Lineage Relationship Count", "version_lineage_relationship_count"),
+        ("Dependency Node Count", "dependency_node_count"),
+        ("Pathway Count", "pathway_count"),
+        ("Transition Entry Count", "transition_entry_count"),
+        ("Provenance Entry Count", "provenance_entry_count"),
+        ("Replay Step Count", "replay_step_count"),
+        ("Integrity Check Count", "integrity_check_count"),
+        ("Audit Section Count", "audit_section_count"),
+        ("Certification Check Count", "certification_check_count"),
+        ("Reflexive Closure Check Count", "reflexive_closure_check_count"),
+        ("Continuity Check Count", "continuity_check_count"),
+        ("Change Register Entry Count", "change_register_entry_count"),
+        ("Governance Principle Count", "governance_principle_count"),
+        ("Version Lineage Entry Count", "version_lineage_entry_count"),
+        ("Limitation Summary", "limitation_summary"),
+    )
+    return f"""
+      <section class="stage35-lifecycle-overview">
+        <h3>Framework Lifecycle Review Overview</h3>
+        {_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}
+      </section>"""
+
+
+def _render_stage35_relationships(review: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(item['phase'])}</td>"
+        f"<td>{escape(item['name'])}</td>"
+        f"<td><code>{escape(item['stage_scope'])}</code></td>"
+        f"<td>{escape(item['relationship'])}</td>"
+        "</tr>"
+        for item in review["lifecycle_relationships"]
+    )
+    return f"""
+      <section class="stage35-lifecycle-relationships">
+        <h3>Lifecycle Relationships</h3>
+        <table><thead><tr><th>Phase</th><th>Name</th><th>Stage Scope</th><th>Relationship</th></tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage35_items(
+    items: list[dict[str, Any]], *, include_basis: bool
+) -> str:
+    if include_basis:
+        columns = (
+            ("Lifecycle Item ID", "lifecycle_item_id", True),
+            ("Lifecycle Item Name", "lifecycle_item_name", False),
+            ("Lifecycle Category", "lifecycle_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Declared Lifecycle State", "declared_lifecycle_state", False),
+            ("Observed Lifecycle State", "observed_lifecycle_state", False),
+            ("Lifecycle Review Result", "lifecycle_review_result", False),
+            ("Lifecycle Basis", "lifecycle_basis", False),
+            ("Limitation Statement", "limitation_statement", False),
+        )
+        title = "Full Lifecycle Review Items"
+        class_name = "stage35-full-lifecycle-items"
+    else:
+        columns = (
+            ("Lifecycle Item ID", "lifecycle_item_id", True),
+            ("Lifecycle Item Name", "lifecycle_item_name", False),
+            ("Lifecycle Category", "lifecycle_category", False),
+            ("Affected Stage or Output", "affected_stage_or_output", False),
+            ("Lifecycle Review Result", "lifecycle_review_result", False),
+        )
+        title = "Lifecycle Review Summary Table"
+        class_name = "stage35-lifecycle-summary"
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>" + "".join(
+            f"<td><code>{escape(_stage18a_display_value(item.get(key)))}</code></td>"
+            if use_code else f"<td>{escape(_stage18a_display_value(item.get(key)))}</td>"
+            for _, key, use_code in columns
+        ) + "</tr>"
+        for item in items
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No framework lifecycle review items are available.</td></tr>'
+    return f"""
+      <section class="{class_name}">
+        <h3>{title}</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage35_limitations(
+    review: dict[str, Any], *, concise: bool = False
+) -> str:
+    limitations = review["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 6, 7, 9, 24, 25, 26)]
+    return f"""
+      <section class="stage35-lifecycle-limitations">
+        <h3>Framework Lifecycle Review Limitations</h3>
+        {_render_stage19a_list(limitations, "No framework lifecycle review limitations available.")}
+      </section>"""
+
+
+def _render_framework_lifecycle_review(
+    review: dict[str, Any], *, report_mode: str
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Lifecycle Review is derived deterministically from visible
+          framework outputs and declared metadata only. It documents declared
+          phases, implemented stage progression, lifecycle continuity, and
+          governance boundaries without evaluation, future-stage inference,
+          authority creation, evidence validation, or record modification.
+        </p>"""
+    overview = _render_stage35_overview(review)
+    relationships = _render_stage35_relationships(review)
+    if report_mode == "executive":
+        content = overview + relationships + _render_stage35_limitations(review, concise=True)
+        mode_class = "stage35-lifecycle-executive"
+    elif report_mode == "review":
+        content = overview + relationships + _render_stage35_items(
+            review["lifecycle_review_items"], include_basis=False
+        ) + _render_stage35_limitations(review)
+        mode_class = "stage35-lifecycle-review-mode"
+    else:
+        content = overview + relationships + _render_stage35_items(
+            review["lifecycle_review_items"], include_basis=True
+        ) + _render_stage35_limitations(review)
+        mode_class = "stage35-lifecycle-full"
+    return f"""
+      <section class="management-section stage35-framework-lifecycle-review {mode_class}">
+        <h2>Framework Lifecycle Review</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -39158,6 +39587,26 @@ def render_admin_record_evidence_page(
         stage34_framework_version_lineage,
         report_mode=report_structure["report_mode"],
     )
+    stage35_framework_lifecycle_review = build_framework_lifecycle_review(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage31_framework_continuity,
+        stage32_framework_change_register,
+        stage33_framework_governance,
+        stage34_framework_version_lineage,
+    )
+    stage35_lifecycle_review_section = _render_framework_lifecycle_review(
+        stage35_framework_lifecycle_review,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -39208,6 +39657,7 @@ def render_admin_record_evidence_page(
             + stage32_change_register_section
             + stage33_governance_section
             + stage34_version_lineage_section
+            + stage35_lifecycle_review_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -39227,6 +39677,7 @@ def render_admin_record_evidence_page(
             + stage32_change_register_section
             + stage33_governance_section
             + stage34_version_lineage_section
+            + stage35_lifecycle_review_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -39251,6 +39702,7 @@ def render_admin_record_evidence_page(
             f"{stage32_change_register_section}"
             f"{stage33_governance_section}"
             f"{stage34_version_lineage_section}"
+            f"{stage35_lifecycle_review_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -39693,6 +40145,25 @@ def render_admin_record_evidence_page(
     .stage34-full-lineage-entries table {{
       min-width: 1860px;
     }}
+    .stage35-framework-lifecycle-review table {{
+      table-layout: auto;
+    }}
+    .stage35-framework-lifecycle-review th,
+    .stage35-framework-lifecycle-review td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage35-lifecycle-relationships,
+    .stage35-lifecycle-summary,
+    .stage35-full-lifecycle-items {{
+      overflow-x: auto;
+    }}
+    .stage35-full-lifecycle-items table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -39725,6 +40196,8 @@ def render_admin_record_evidence_page(
       .stage33-governance-summary table {{ min-width: 920px; }}
       .stage34-lineage-relationships table {{ min-width: 760px; }}
       .stage34-lineage-summary table {{ min-width: 920px; }}
+      .stage35-lifecycle-relationships table {{ min-width: 760px; }}
+      .stage35-lifecycle-summary table {{ min-width: 920px; }}
     }}
     details {{
       break-inside: avoid;

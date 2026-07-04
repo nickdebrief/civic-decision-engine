@@ -407,6 +407,25 @@ performs no evaluation, creates no authority, and modifies no records.
 
 ---
 
+## Stage 35 — Framework Lifecycle Review
+
+Introduces a visible and inspectable lifecycle review model for the methodology
+itself. Twenty-eight deterministic items review declared phases, implemented
+stage progression, continuity, governance, lineage, preservation counts, and
+framework lifecycle boundaries.
+
+The review records Phase I (Stages 1–19), Phase II (Stages 20–30), and the
+declared Phase III governance scope (Stages 31–40), while identifying Stage 35
+as the current implemented endpoint. Stages 36–40 are not inferred or treated
+as implemented.
+
+Executive mode presents the lifecycle overview and relationships; Review mode
+adds the lifecycle summary table; Full Inspection mode exposes every declared
+and observed lifecycle state, result, basis, affected output, and limitation.
+Stage 35 performs no evaluation, creates no authority, and modifies no records.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
