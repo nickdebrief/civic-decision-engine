@@ -32149,6 +32149,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Governance Statement", "Overview", "Summary", "Detail"),
     ("Framework Version Lineage", "Overview", "Summary", "Detail"),
     ("Framework Lifecycle Review", "Overview", "Summary", "Detail"),
+    ("Framework Self-Containment Certification", "Overview", "Relationships", "Detail"),
 )
 
 
@@ -38917,6 +38918,426 @@ def _render_framework_lifecycle_review(
       </section>"""
 
 
+STAGE36_LIMITATIONS = (
+    "Framework Self-Containment Certification is not legal certification.",
+    "Framework Self-Containment Certification is not external accreditation.",
+    "Framework Self-Containment Certification does not validate evidence.",
+    "Framework Self-Containment Certification does not determine truth.",
+    "Framework Self-Containment Certification does not determine liability.",
+    "Framework Self-Containment Certification does not infer intent.",
+    "Framework Self-Containment Certification does not infer future stages.",
+    "Framework Self-Containment Certification does not infer undocumented implementations.",
+    "Framework Self-Containment Certification does not certify third-party implementation correctness.",
+    "Framework Self-Containment Certification does not certify software portability.",
+    "Framework Self-Containment Certification does not certify institutional adoption readiness.",
+    "Framework Self-Containment Certification does not create authority.",
+    "Framework Self-Containment Certification does not modify records.",
+    "Framework Self-Containment Certification does not change classifications.",
+    "Framework Self-Containment Certification does not change thresholds.",
+    "Framework Self-Containment Certification does not change dependencies.",
+    "Framework Self-Containment Certification does not change evidence relationships.",
+    "Framework Self-Containment Certification does not change transition history.",
+    "Framework Self-Containment Certification does not change provenance.",
+    "Framework Self-Containment Certification does not change replay outputs.",
+    "Framework Self-Containment Certification does not change integrity checks.",
+    "Framework Self-Containment Certification does not change audit packages.",
+    "Framework Self-Containment Certification does not change certifications.",
+    "Framework Self-Containment Certification does not change continuity outputs.",
+    "Framework Self-Containment Certification does not change change-register entries.",
+    "Framework Self-Containment Certification does not change governance principles.",
+    "Framework Self-Containment Certification does not change version-lineage entries.",
+    "Framework Self-Containment Certification does not change lifecycle review items.",
+    "Framework Self-Containment Certification does not write to the database.",
+    "Framework Self-Containment Certification does not alter public API behaviour.",
+    "Framework Self-Containment Certification certifies visible methodological self-containment only.",
+)
+
+
+STAGE36_SELF_CONTAINMENT_RELATIONSHIPS = (
+    ("Methodology / Implementation", "CREF", "Civic Decision Engine", "CREF methodology is distinct from the Civic Decision Engine software implementation."),
+    ("Implementation Role", "Civic Decision Engine", "CREF", "Civic Decision Engine implements CREF but does not define the entire methodology."),
+    ("Methodology Description", "Declared stages and phases", "CREF documentation", "CREF is described through declared stages, phases, limitations, and governance outputs."),
+    ("Independent Adoption Boundary", "Declared methodology", "Independent implementation", "Independent adoption requires preserving declared methodology, boundaries, limitations, and deterministic principles."),
+    ("Portability Boundary", "Methodological portability", "Software deployment portability", "Self-containment concerns methodological portability, not software deployment portability."),
+    ("Future Boundary", "Implemented Stage 36", "Future stages", "Future stages are not inferred or treated as implemented."),
+    ("Certification Source", "Visible framework outputs", "Declared metadata", "Self-containment is derived from visible framework outputs and declared metadata only."),
+)
+
+
+def _stage36_self_containment_check(
+    *,
+    self_containment_check_id: str,
+    check_name: str,
+    self_containment_category: str,
+    affected_stage_or_output: str,
+    declared_self_containment_state: Any,
+    observed_self_containment_state: Any,
+    certification_basis: str,
+    limitation_statement: str,
+    with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_self_containment_state in (None, "", "Not Available"):
+        result = "Self-Containment Not Available"
+    elif observed_self_containment_state == declared_self_containment_state:
+        result = (
+            "Self-Containment Certified With Limitation"
+            if with_limitation
+            else "Self-Containment Certified"
+        )
+    else:
+        result = "Self-Containment Gap Detected"
+    return {
+        "self_containment_check_id": self_containment_check_id,
+        "check_name": check_name,
+        "self_containment_category": self_containment_category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_self_containment_state": declared_self_containment_state,
+        "observed_self_containment_state": observed_self_containment_state,
+        "certification_result": result,
+        "certification_basis": certification_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_self_containment_certification(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    governance_statement: dict[str, Any] | None = None,
+    version_lineage: dict[str, Any] | None = None,
+    lifecycle_review: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    register = dict(change_register or {})
+    governance = dict(governance_statement or {})
+    lineage = dict(version_lineage or {})
+    lifecycle = dict(lifecycle_review or {})
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    register_summary = register.get("framework_change_register_summary") or {}
+    governance_summary = governance.get("governance_summary") or {}
+    lineage_summary = lineage.get("lineage_summary") or {}
+    lifecycle_summary = lifecycle.get("lifecycle_summary") or {}
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []),
+        "governance": len(governance.get("governance_principles") or []),
+        "lineage": len(lineage.get("version_lineage_entries") or []),
+        "lifecycle": len(lifecycle.get("lifecycle_review_items") or []),
+        "lineage_relationships": len(lineage.get("lineage_relationships") or []),
+    }
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+            "Stage 33": STAGE33_LIMITATIONS,
+            "Stage 34": STAGE34_LIMITATIONS,
+            "Stage 35": STAGE35_LIMITATIONS,
+            "Stage 36": STAGE36_LIMITATIONS,
+        }
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    boundary_text = " ".join(STAGE35_LIMITATIONS + STAGE36_LIMITATIONS).lower()
+    upstream_gap_total = sum(
+        int(value or 0)
+        for value in (
+            integrity_summary.get("integrity_gap_checks"),
+            audit_summary.get("unavailable_sections"),
+            certification_summary.get("non_conformance_checks"),
+            closure_summary.get("closure_gap_count"),
+            continuity_summary.get("continuity_gap_checks"),
+            register_summary.get("change_gap_entries"),
+            governance_summary.get("governance_gap_count"),
+            lineage_summary.get("version_gap_count"),
+            lifecycle_summary.get("lifecycle_gap_count"),
+        )
+    )
+    replay_available = (
+        counts["replay"] == replay_summary.get("replayable_outputs")
+        and replay_summary.get("non_replayable_outputs") == 0
+    ) if replay else None
+    separation_declared = bool(governance and lineage and lifecycle)
+    specs = (
+        ("SC-001", "Methodology Description Availability", "Methodology Description", "Declared CREF Methodology", True, True if lifecycle else None, "Visible stages, phases, relationships, and limitations describe the methodology.", "Does not replace the declared documentation.", False),
+        ("SC-002", "Framework Purpose Visibility", "Methodology Description", "Framework Self-Description", True, True if report else None, "Framework purpose remains visible in declared methodology and reports.", "Does not create a new purpose.", False),
+        ("SC-003", "Scope Boundary Visibility", "Boundary Visibility", "Stages 33–36 Limitations", True, limitations_visible, "Scope boundaries remain explicitly visible.", "Visibility does not externally enforce boundaries.", False),
+        ("SC-004", "Limitation Visibility", "Boundary Visibility", "Stages 21–36 Limitations", True, limitations_visible, "Declared methodological limitations remain visible.", "Does not certify external compliance.", False),
+        ("SC-005", "Evaluation Methodology Completeness", "Methodology Structure", "Stages 1–19", "Structurally Described", "Structurally Described", "Phase I is visibly represented as the evaluation methodology.", "Structural description does not certify correctness or completeness in every implementation.", True),
+        ("SC-006", "Reflexive Inspection Completeness", "Methodology Structure", "Stages 20–30", (23, 0), (counts["closure"], closure_summary.get("closure_gap_count")) if closure else None, "Phase II culminates in visible reflexive closure.", "Reflexive completeness is internal and does not certify external validity.", True),
+        ("SC-007", "Governance Phase Visibility", "Methodology Structure", "Stages 31–36", True, True if lifecycle else None, "The visible governance lifecycle extends through Stage 36.", "Does not infer future governance stages.", False),
+        ("SC-008", "Report Mode Availability", "Inspection Availability", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Executive, Review, and Full Inspection modes remain available.", "Report modes are presentation only.", False),
+        ("SC-009", "Dependency Mapping Availability", "Inspection Availability", "Stage 22 Dependency Mapping", 30, counts["dependency"] if dependency else None, "Dependency nodes remain visible.", "Does not validate dependency correctness.", False),
+        ("SC-010", "Pathway Stability Availability", "Inspection Availability", "Stage 23 Pathway Stability", 8, counts["pathway"] if stability else None, "Pathway states remain visible.", "Does not predict outcomes.", False),
+        ("SC-011", "Transition History Availability", "Inspection Availability", "Stage 24 Transition History", 11, counts["transition"] if transitions else None, "Transition entries remain visible.", "Does not infer missing prior states.", False),
+        ("SC-012", "Output Provenance Availability", "Inspection Availability", "Stage 25 Output Provenance", 14, counts["provenance"] if provenance else None, "Provenance entries remain visible.", "Does not validate provenance truth.", False),
+        ("SC-013", "Deterministic Replay Availability", "Inspection Availability", "Stage 26 Deterministic Replay", True, replay_available, "Existing outputs remain deterministically replayable.", "Does not simulate alternate outcomes.", False),
+        ("SC-014", "Integrity Verification Availability", "Inspection Availability", "Stage 27 Integrity Verification", (14, 0), (counts["integrity"], integrity_summary.get("integrity_gap_checks")) if integrity else None, "Integrity checks remain visible without gaps.", "Framework integrity is not factual validation.", False),
+        ("SC-015", "Audit Package Availability", "Inspection Availability", "Stage 28 Audit Package", (10, 0), (counts["audit"], audit_summary.get("unavailable_sections")) if audit else None, "Audit sections remain visibly available.", "The package is not a legal audit.", False),
+        ("SC-016", "Methodological Conformance Availability", "Inspection Availability", "Stage 29 Conformance Certification", (19, 0), (counts["certification"], certification_summary.get("non_conformance_checks")) if certification else None, "Conformance checks remain visible without non-conformance.", "Not external certification.", False),
+        ("SC-017", "Reflexive Closure Availability", "Inspection Availability", "Stage 30 Reflexive Closure", (23, 0), (counts["closure"], closure_summary.get("closure_gap_count")) if closure else None, "Reflexive closure remains visible without gaps.", "Does not close an underlying case.", False),
+        ("SC-018", "Continuity Availability", "Governance Availability", "Stage 31 Framework Continuity", (23, 0), (counts["continuity"], continuity_summary.get("continuity_gap_checks")) if continuity else None, "Continuity checks remain visible without gaps.", "Visible continuity only.", False),
+        ("SC-019", "Change Register Availability", "Governance Availability", "Stage 32 Change Register", (25, 0), (counts["register"], register_summary.get("change_gap_entries")) if register else None, "Change entries remain visible without gaps.", "Does not infer undocumented changes.", False),
+        ("SC-020", "Governance Statement Availability", "Governance Availability", "Stage 33 Governance Statement", (25, 0), (counts["governance"], governance_summary.get("governance_gap_count")) if governance else None, "Governance principles remain visible without gaps.", "Does not create authority.", False),
+        ("SC-021", "Version Lineage Availability", "Governance Availability", "Stage 34 Version Lineage", (25, 0), (counts["lineage"], lineage_summary.get("version_gap_count")) if lineage else None, "Version lineage remains visible without gaps.", "Does not infer undocumented versions.", False),
+        ("SC-022", "Lifecycle Review Availability", "Governance Availability", "Stage 35 Lifecycle Review", (28, 0), (counts["lifecycle"], lifecycle_summary.get("lifecycle_gap_count")) if lifecycle else None, "Lifecycle review items remain visible without gaps.", "Does not infer future lifecycle states.", False),
+        ("SC-023", "Methodology / Implementation Separation", "Methodology Separation", "CREF and Civic Decision Engine", True, separation_declared if lifecycle else None, "CREF methodology is visibly described separately from its software implementation.", "Separation still depends on declared CREF documentation.", False),
+        ("SC-024", "Civic Decision Engine Independence", "Methodology Separation", "CREF Methodology", True, separation_declared if lifecycle else None, "CREF can be described without requiring use of the Civic Decision Engine runtime.", "Does not certify third-party implementation correctness or operational independence from documentation.", True),
+        ("SC-025", "Cross-Implementation Interpretability", "Methodology Portability", "Declared CREF Methodology", True, separation_declared if lifecycle else None, "Declared methodology and deterministic boundaries support interpretation in another implementation context.", "Does not certify that another implementation will interpret or implement CREF correctly.", True),
+        ("SC-026", "External Adoption Boundary", "Adoption Boundary", "Stage 36 Limitations", True, "does not certify institutional adoption readiness" in boundary_text, "External adoption readiness remains outside certification scope.", "Does not approve institutional adoption.", False),
+        ("SC-027", "Non-Software Dependency Declaration", "Methodology Separation", "Declared CREF Documentation", "Declared documentation required; Civic Decision Engine runtime not required", "Declared documentation required; Civic Decision Engine runtime not required", "Methodological understanding depends on declared documentation rather than a specific software runtime.", "Does not claim independence from all documentation.", False),
+        ("SC-028", "Public Documentation Availability", "Documentation Availability", "Declared Framework Metadata", True, True, "Framework purpose, stages, boundaries, and limitations are visibly documented.", "Does not guarantee third-party publication or accessibility.", False),
+        ("SC-029", "Open Methodology Visibility", "Documentation Availability", "CREF Methodology", True, True if lifecycle else None, "Visible methodology outputs can be inspected independently of runtime internals.", "Visibility remains bounded by available documentation.", False),
+        ("SC-030", "Future Stage Non-Inference", "Boundary Visibility", "Stage 36 Limitations", True, "does not infer future stages" in boundary_text, "Future stages remain outside the self-containment certification.", "Does not identify unknown future stages.", False),
+        ("SC-031", "Non-Mutation Boundary", "Boundary Visibility", "Stage 36 Limitations", True, "does not modify records" in boundary_text, "The self-containment layer explicitly preserves non-mutation.", "Declarative boundary only.", False),
+        ("SC-032", "Non-Authority Boundary", "Boundary Visibility", "Stage 36 Limitations", True, "does not create authority" in boundary_text, "Methodological self-containment creates no legal or institutional authority.", "Does not confer adoption authority.", False),
+        ("SC-033", "Self-Containment Gap Absence", "Certification Integrity", "Stages 27–35 Summaries", 0, upstream_gap_total if lifecycle else None, "Visible upstream structural gap counts remain zero.", "No structural gap does not certify external validity.", False),
+        ("SC-034", "Independent Methodology Portability Declaration", "Methodology Portability", "CREF Methodology", True, separation_declared if lifecycle else None, "CREF is declared methodologically separable and describable across implementation contexts.", "Does not certify software portability, adoption readiness, legal validity, or implementation correctness.", True),
+        ("SC-035", "Self-Containment Limitation Visibility", "Boundary Visibility", "Stage 36 Limitations", True, bool(STAGE36_LIMITATIONS), "Self-containment-specific limitations remain explicitly visible.", "Limitations remain descriptive only.", False),
+    )
+    checks = [
+        _stage36_self_containment_check(
+            self_containment_check_id=check_id,
+            check_name=name,
+            self_containment_category=category,
+            affected_stage_or_output=affected,
+            declared_self_containment_state=declared,
+            observed_self_containment_state=observed,
+            certification_basis=basis,
+            limitation_statement=limitation,
+            with_limitation=limited,
+        )
+        for check_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(check["certification_result"] == result for check in checks)
+        for result in (
+            "Self-Containment Certified",
+            "Self-Containment Certified With Limitation",
+            "Self-Containment Not Available",
+            "Self-Containment Gap Detected",
+        )
+    }
+    if result_counts["Self-Containment Gap Detected"]:
+        state = "Framework Self-Containment Gap Detected"
+    elif result_counts["Self-Containment Not Available"]:
+        state = "Framework Self-Containment Partially Available"
+    elif result_counts["Self-Containment Certified With Limitation"]:
+        state = "Framework Self-Containment Certified With Limitations"
+    else:
+        state = "Framework Self-Containment Certified"
+    summary = {
+        "self_containment_state": state,
+        "total_self_containment_checks": len(checks),
+        "certified_checks": result_counts["Self-Containment Certified"],
+        "certified_with_limitation_checks": result_counts["Self-Containment Certified With Limitation"],
+        "unavailable_checks": result_counts["Self-Containment Not Available"],
+        "self_containment_gap_count": result_counts["Self-Containment Gap Detected"],
+        "implemented_stage_count": 36,
+        "declared_phase_count": 3,
+        "version_lineage_relationship_count": counts["lineage_relationships"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "change_register_entry_count": counts["register"],
+        "governance_principle_count": counts["governance"],
+        "version_lineage_entry_count": counts["lineage"],
+        "lifecycle_review_item_count": counts["lifecycle"],
+        "upstream_gap_count": upstream_gap_total,
+        "limitation_summary": "Certification confirms visible methodological separability only and does not certify software portability, external adoption, legal validity, or implementation correctness.",
+    }
+    return {
+        "self_containment_state": state,
+        "self_containment_summary": summary,
+        "self_containment_checks": checks,
+        "self_containment_relationships": [
+            {"relationship": relationship, "methodology_side": methodology, "implementation_side": implementation, "declaration": declaration}
+            for relationship, methodology, implementation, declaration in STAGE36_SELF_CONTAINMENT_RELATIONSHIPS
+        ],
+        "limitations": list(STAGE36_LIMITATIONS),
+    }
+
+
+def _render_stage36_overview(certification: dict[str, Any]) -> str:
+    summary = certification["self_containment_summary"]
+    labels = (
+        ("Self-Containment State", "self_containment_state"),
+        ("Total Self-Containment Checks", "total_self_containment_checks"),
+        ("Certified Checks", "certified_checks"),
+        ("Certified With Limitation Checks", "certified_with_limitation_checks"),
+        ("Unavailable Checks", "unavailable_checks"),
+        ("Self-Containment Gap Count", "self_containment_gap_count"),
+        ("Implemented Stage Count", "implemented_stage_count"),
+        ("Declared Phase Count", "declared_phase_count"),
+        ("Version Lineage Relationship Count", "version_lineage_relationship_count"),
+        ("Dependency Node Count", "dependency_node_count"),
+        ("Pathway Count", "pathway_count"),
+        ("Transition Entry Count", "transition_entry_count"),
+        ("Provenance Entry Count", "provenance_entry_count"),
+        ("Replay Step Count", "replay_step_count"),
+        ("Integrity Check Count", "integrity_check_count"),
+        ("Audit Section Count", "audit_section_count"),
+        ("Certification Check Count", "certification_check_count"),
+        ("Reflexive Closure Check Count", "reflexive_closure_check_count"),
+        ("Continuity Check Count", "continuity_check_count"),
+        ("Change Register Entry Count", "change_register_entry_count"),
+        ("Governance Principle Count", "governance_principle_count"),
+        ("Version Lineage Entry Count", "version_lineage_entry_count"),
+        ("Lifecycle Review Item Count", "lifecycle_review_item_count"),
+        ("Limitation Summary", "limitation_summary"),
+    )
+    return f"""
+      <section class="stage36-self-containment-overview">
+        <h3>Self-Containment Overview</h3>
+        {_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}
+      </section>"""
+
+
+def _render_stage36_relationships(certification: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(item['relationship'])}</td>"
+        f"<td>{escape(item['methodology_side'])}</td>"
+        f"<td>{escape(item['implementation_side'])}</td>"
+        f"<td>{escape(item['declaration'])}</td>"
+        "</tr>"
+        for item in certification["self_containment_relationships"]
+    )
+    return f"""
+      <section class="stage36-self-containment-relationships">
+        <h3>Self-Containment Relationships</h3>
+        <table><thead><tr><th>Relationship</th><th>Methodology Side</th><th>Implementation Side</th><th>Declaration</th></tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage36_checks(checks: list[dict[str, Any]]) -> str:
+    columns = (
+        ("Check ID", "self_containment_check_id", True),
+        ("Check Name", "check_name", False),
+        ("Category", "self_containment_category", False),
+        ("Affected Stage or Output", "affected_stage_or_output", False),
+        ("Declared Self-Containment State", "declared_self_containment_state", False),
+        ("Observed Self-Containment State", "observed_self_containment_state", False),
+        ("Certification Result", "certification_result", False),
+        ("Certification Basis", "certification_basis", False),
+        ("Limitation Statement", "limitation_statement", False),
+    )
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>" + "".join(
+            f"<td><code>{escape(_stage18a_display_value(check.get(key)))}</code></td>"
+            if use_code else f"<td>{escape(_stage18a_display_value(check.get(key)))}</td>"
+            for _, key, use_code in columns
+        ) + "</tr>"
+        for check in checks
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No self-containment checks are available.</td></tr>'
+    return f"""
+      <section class="stage36-full-self-containment-checks">
+        <h3>Full Self-Containment Certification</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage36_limitations(
+    certification: dict[str, Any], *, concise: bool = False
+) -> str:
+    limitations = certification["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 7, 8, 9, 10, 11, 28, 29, 30)]
+    return f"""
+      <section class="stage36-self-containment-limitations">
+        <h3>Self-Containment Limitations</h3>
+        {_render_stage19a_list(limitations, "No self-containment limitations available.")}
+      </section>"""
+
+
+def _render_framework_self_containment_certification(
+    certification: dict[str, Any], *, report_mode: str
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Self-Containment Certification is derived deterministically
+          from visible framework outputs and declared metadata only. It
+          certifies whether CREF is methodologically describable and separable
+          from the Civic Decision Engine implementation without certifying
+          software portability, third-party correctness, external adoption,
+          legal validity, evidence correctness, or institutional authority.
+        </p>"""
+    overview = _render_stage36_overview(certification)
+    relationships = _render_stage36_relationships(certification)
+    if report_mode == "executive":
+        content = overview + _render_stage36_limitations(certification, concise=True)
+        mode_class = "stage36-self-containment-executive"
+    elif report_mode == "review":
+        content = overview + relationships + _render_stage36_limitations(certification)
+        mode_class = "stage36-self-containment-review"
+    else:
+        content = overview + relationships + _render_stage36_checks(
+            certification["self_containment_checks"]
+        ) + _render_stage36_limitations(certification)
+        mode_class = "stage36-self-containment-full"
+    return f"""
+      <section class="management-section stage36-framework-self-containment {mode_class}">
+        <h2>Framework Self-Containment Certification</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -39607,6 +40028,31 @@ def render_admin_record_evidence_page(
         stage35_framework_lifecycle_review,
         report_mode=report_structure["report_mode"],
     )
+    stage36_self_containment_certification = (
+        build_framework_self_containment_certification(
+            report_structure,
+            stage22_dependency_map,
+            stage23_stability_analysis,
+            stage24_transition_history,
+            stage25_output_provenance,
+            stage26_deterministic_replay,
+            stage27_integrity_verification,
+            stage28_audit_package,
+            stage29_conformance_certification,
+            stage30_reflexive_closure,
+            stage31_framework_continuity,
+            stage32_framework_change_register,
+            stage33_framework_governance,
+            stage34_framework_version_lineage,
+            stage35_framework_lifecycle_review,
+        )
+    )
+    stage36_self_containment_section = (
+        _render_framework_self_containment_certification(
+            stage36_self_containment_certification,
+            report_mode=report_structure["report_mode"],
+        )
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -39658,6 +40104,7 @@ def render_admin_record_evidence_page(
             + stage33_governance_section
             + stage34_version_lineage_section
             + stage35_lifecycle_review_section
+            + stage36_self_containment_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -39678,6 +40125,7 @@ def render_admin_record_evidence_page(
             + stage33_governance_section
             + stage34_version_lineage_section
             + stage35_lifecycle_review_section
+            + stage36_self_containment_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -39703,6 +40151,7 @@ def render_admin_record_evidence_page(
             f"{stage33_governance_section}"
             f"{stage34_version_lineage_section}"
             f"{stage35_lifecycle_review_section}"
+            f"{stage36_self_containment_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -40164,6 +40613,24 @@ def render_admin_record_evidence_page(
     .stage35-full-lifecycle-items table {{
       min-width: 1860px;
     }}
+    .stage36-framework-self-containment table {{
+      table-layout: auto;
+    }}
+    .stage36-framework-self-containment th,
+    .stage36-framework-self-containment td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage36-self-containment-relationships,
+    .stage36-full-self-containment-checks {{
+      overflow-x: auto;
+    }}
+    .stage36-full-self-containment-checks table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -40198,6 +40665,7 @@ def render_admin_record_evidence_page(
       .stage34-lineage-summary table {{ min-width: 920px; }}
       .stage35-lifecycle-relationships table {{ min-width: 760px; }}
       .stage35-lifecycle-summary table {{ min-width: 920px; }}
+      .stage36-self-containment-relationships table {{ min-width: 840px; }}
     }}
     details {{
       break-inside: avoid;
