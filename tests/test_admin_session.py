@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(25, len(review["section_index"]))
+        self.assertEqual(26, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 26)),
+            list(range(1, 27)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -8743,6 +8743,152 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Lifecycle Basis</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def test_stage36_self_containment_is_deterministic_and_complete(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE36-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        original_inputs = copy.deepcopy((report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle))
+        self_containment = self.admin_session.build_framework_self_containment_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle)
+
+        self.assertEqual("Framework Self-Containment Certified With Limitations", self_containment["self_containment_state"])
+        self.assertEqual(35, len(self_containment["self_containment_checks"]))
+        self.assertEqual(7, len(self_containment["self_containment_relationships"]))
+        required_fields = {
+            "self_containment_check_id", "check_name", "self_containment_category",
+            "affected_stage_or_output", "declared_self_containment_state",
+            "observed_self_containment_state", "certification_result",
+            "certification_basis", "limitation_statement",
+        }
+        for check in self_containment["self_containment_checks"]:
+            self.assertEqual(required_fields, set(check))
+        summary = self_containment["self_containment_summary"]
+        self.assertEqual((35, 30, 5, 0, 0), (
+            summary["total_self_containment_checks"], summary["certified_checks"],
+            summary["certified_with_limitation_checks"], summary["unavailable_checks"],
+            summary["self_containment_gap_count"],
+        ))
+        self.assertEqual((36, 3, 6), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25, 28), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"], summary["lifecycle_review_item_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {check["check_name"] for check in self_containment["self_containment_checks"]}
+        for required_name in (
+            "Methodology Description Availability", "Framework Purpose Visibility",
+            "Scope Boundary Visibility", "Limitation Visibility",
+            "Evaluation Methodology Completeness", "Reflexive Inspection Completeness",
+            "Governance Phase Visibility", "Report Mode Availability",
+            "Dependency Mapping Availability", "Pathway Stability Availability",
+            "Transition History Availability", "Output Provenance Availability",
+            "Deterministic Replay Availability", "Integrity Verification Availability",
+            "Audit Package Availability", "Methodological Conformance Availability",
+            "Reflexive Closure Availability", "Continuity Availability",
+            "Change Register Availability", "Governance Statement Availability",
+            "Version Lineage Availability", "Lifecycle Review Availability",
+            "Methodology / Implementation Separation", "Civic Decision Engine Independence",
+            "Cross-Implementation Interpretability", "External Adoption Boundary",
+            "Non-Software Dependency Declaration", "Public Documentation Availability",
+            "Open Methodology Visibility", "Future Stage Non-Inference",
+            "Non-Mutation Boundary", "Non-Authority Boundary",
+            "Self-Containment Gap Absence", "Independent Methodology Portability Declaration",
+            "Self-Containment Limitation Visibility",
+        ):
+            self.assertIn(required_name, names)
+        declarations = [item["declaration"] for item in self_containment["self_containment_relationships"]]
+        self.assertTrue(any("distinct from the Civic Decision Engine" in value for value in declarations))
+        self.assertTrue(any("does not define the entire methodology" in value for value in declarations))
+        self.assertTrue(any("not software deployment portability" in value for value in declarations))
+        self.assertEqual(self_containment, self.admin_session.build_framework_self_containment_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle))
+        self.assertEqual(original_inputs, (report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle))
+
+    def test_stage36_gap_and_partial_states_are_deterministic(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE36-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        gap_dependency = copy.deepcopy(dependency)
+        gap_dependency["nodes"] = gap_dependency["nodes"][:-1]
+        gap = self.admin_session.build_framework_self_containment_certification(report, gap_dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle)
+        self.assertEqual("Framework Self-Containment Gap Detected", gap["self_containment_state"])
+        partial = self.admin_session.build_framework_self_containment_certification()
+        self.assertEqual("Framework Self-Containment Partially Available", partial["self_containment_state"])
+        self.assertGreater(partial["self_containment_summary"]["unavailable_checks"], 0)
+
+    def test_stage36_rendering_depth_matches_report_mode(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE36-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        self_containment = self.admin_session.build_framework_self_containment_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle)
+        executive = self.admin_session._render_framework_self_containment_certification(self_containment, report_mode="executive")
+        review = self.admin_session._render_framework_self_containment_certification(self_containment, report_mode="review")
+        full = self.admin_session._render_framework_self_containment_certification(self_containment, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Self-Containment Certification</h2>", rendered)
+            self.assertIn("<h3>Self-Containment Overview</h3>", rendered)
+            self.assertIn("<h3>Self-Containment Limitations</h3>", rendered)
+            self.assertIn("does not certify software portability", rendered)
+        self.assertIn("stage36-self-containment-executive", executive)
+        self.assertNotIn("Self-Containment Relationships", executive)
+        self.assertNotIn("Full Self-Containment Certification", executive)
+        self.assertIn("stage36-self-containment-review", review)
+        self.assertIn("Self-Containment Relationships", review)
+        self.assertNotIn("Full Self-Containment Certification", review)
+        self.assertIn("stage36-self-containment-full", full)
+        self.assertIn("Self-Containment Relationships", full)
+        self.assertIn("Full Self-Containment Certification", full)
+        self.assertIn("Declared Self-Containment State</th>", full)
+        self.assertIn("Observed Self-Containment State</th>", full)
+        self.assertIn("Certification Result</th>", full)
+        self.assertIn("Certification Basis</th>", full)
+        self.assertIn("Limitation Statement</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -8862,6 +9008,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Framework Lifecycle Review</h2>", executive)
         self.assertIn("Lifecycle Relationships", executive)
         self.assertNotIn("Lifecycle Review Summary Table", executive)
+        self.assertIn("stage36-self-containment-executive", executive)
+        self.assertIn("<h2>Framework Self-Containment Certification</h2>", executive)
+        self.assertNotIn("Self-Containment Relationships", executive)
+        self.assertNotIn("Full Self-Containment Certification", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -8919,6 +9069,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage35-lifecycle-review-mode", review)
         self.assertIn("Lifecycle Review Summary Table", review)
         self.assertNotIn("Full Lifecycle Review Items", review)
+        self.assertIn("stage36-self-containment-review", review)
+        self.assertIn("Self-Containment Relationships", review)
+        self.assertNotIn("Full Self-Containment Certification", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -8951,6 +9104,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Governance Statement",
             "Framework Version Lineage",
             "Framework Lifecycle Review",
+            "Framework Self-Containment Certification",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -8981,6 +9135,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Version Lineage Entries", explicit_full)
         self.assertIn("stage35-lifecycle-full", explicit_full)
         self.assertIn("Full Lifecycle Review Items", explicit_full)
+        self.assertIn("stage36-self-containment-full", explicit_full)
+        self.assertIn("Full Self-Containment Certification", explicit_full)
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
@@ -9032,6 +9188,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Framework Version Lineage"),
             explicit_full.index("Framework Lifecycle Review"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Lifecycle Review"),
+            explicit_full.index("Framework Self-Containment Certification"),
         )
         self.assertIn("@media print", explicit_full)
         self.assertIn(

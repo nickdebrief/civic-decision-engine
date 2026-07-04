@@ -426,6 +426,27 @@ Stage 35 performs no evaluation, creates no authority, and modifies no records.
 
 ---
 
+## Stage 36 — Framework Self-Containment Certification
+
+Certifies visible methodological self-containment by documenting whether CREF
+can be understood and independently adopted as a methodology separate from the
+Civic Decision Engine implementation. Thirty-five deterministic checks cover
+methodology description, inspection and governance availability, declared
+boundaries, implementation separation, documentation, and portability framing.
+
+Civic Decision Engine implements CREF but does not define the entire
+methodology. Independent implementation requires preserving CREF's declared
+stages, deterministic principles, limitations, and governance boundaries.
+Certification concerns methodological separability only: it does not certify
+software portability, third-party implementation correctness, external
+adoption, legal validity, institutional authority, or evidence correctness.
+
+Executive mode presents a concise certification overview; Review mode adds the
+methodology/implementation relationship table; Full Inspection mode exposes all
+checks, relationships, bases, observed states, results, and limitations.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
