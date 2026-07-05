@@ -467,6 +467,25 @@ observed states, results, bases, affected outputs, and limitations.
 
 ---
 
+## Stage 38 — Framework Legacy Package
+
+Assembles the visible portable legacy package for CREF by documenting the
+methodology artefacts, boundaries, documentation duties, governance outputs,
+and preservation requirements needed for independent understanding and future
+continuation.
+
+Thirty-six deterministic package items and eight relationships preserve the
+declared methodology through Stage 38. The package records methodology and
+implementation separation without certifying software portability, legal
+validity, external adoption, institutional authority, or implementation
+correctness.
+
+Executive mode presents a concise legacy-package overview; Review mode adds the
+relationship table; Full Inspection mode exposes every package item, observed
+state, result, basis, affected output, and limitation.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.
