@@ -447,6 +447,26 @@ checks, relationships, bases, observed states, results, and limitations.
 
 ---
 
+## Stage 37 — Framework Stewardship Declaration
+
+Introduces a visible and inspectable declaration of stewardship responsibilities
+for the CREF methodology. Twenty-five deterministic declarations cover
+methodology and documentation stewardship, governance preservation, structural
+continuity, implementation independence, public inspectability, and declared
+adoption and authority boundaries.
+
+Stewardship concerns preserving and maintaining the declared methodology. It
+does not create legal ownership, accreditation, institutional authority,
+amendment powers, software portability, or approval for external adoption. The
+Civic Decision Engine remains an implementation of CREF rather than a required
+runtime for methodological stewardship.
+
+Executive mode presents a concise stewardship overview; Review mode adds seven
+stewardship relationships; Full Inspection mode exposes all declarations,
+observed states, results, bases, affected outputs, and limitations.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

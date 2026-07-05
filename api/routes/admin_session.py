@@ -32150,6 +32150,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Version Lineage", "Overview", "Summary", "Detail"),
     ("Framework Lifecycle Review", "Overview", "Summary", "Detail"),
     ("Framework Self-Containment Certification", "Overview", "Relationships", "Detail"),
+    ("Framework Stewardship Declaration", "Overview", "Relationships", "Detail"),
 )
 
 
@@ -39338,6 +39339,421 @@ def _render_framework_self_containment_certification(
       </section>"""
 
 
+STAGE37_LIMITATIONS = (
+    "Framework Stewardship Declaration is not legal ownership.",
+    "Framework Stewardship Declaration is not accreditation.",
+    "Framework Stewardship Declaration does not validate evidence.",
+    "Framework Stewardship Declaration does not determine truth.",
+    "Framework Stewardship Declaration does not determine liability.",
+    "Framework Stewardship Declaration does not infer intent.",
+    "Framework Stewardship Declaration does not create institutional authority.",
+    "Framework Stewardship Declaration does not infer undocumented implementations.",
+    "Framework Stewardship Declaration does not certify software portability.",
+    "Framework Stewardship Declaration does not approve external adoption.",
+    "Framework Stewardship Declaration does not modify records.",
+    "Framework Stewardship Declaration does not change classifications.",
+    "Framework Stewardship Declaration does not change thresholds.",
+    "Framework Stewardship Declaration does not change dependencies.",
+    "Framework Stewardship Declaration does not change evidence relationships.",
+    "Framework Stewardship Declaration does not change transition history.",
+    "Framework Stewardship Declaration does not change provenance.",
+    "Framework Stewardship Declaration does not change replay outputs.",
+    "Framework Stewardship Declaration does not change integrity checks.",
+    "Framework Stewardship Declaration does not change audit packages.",
+    "Framework Stewardship Declaration does not change certifications.",
+    "Framework Stewardship Declaration does not change continuity outputs.",
+    "Framework Stewardship Declaration does not change change-register entries.",
+    "Framework Stewardship Declaration does not change governance principles.",
+    "Framework Stewardship Declaration does not change version-lineage entries.",
+    "Framework Stewardship Declaration does not change lifecycle review items.",
+    "Framework Stewardship Declaration does not change self-containment checks.",
+    "Framework Stewardship Declaration does not write to the database.",
+    "Framework Stewardship Declaration does not alter public API behaviour.",
+    "Framework Stewardship Declaration documents visible stewardship responsibilities only.",
+)
+
+
+STAGE37_STEWARDSHIP_RELATIONSHIPS = (
+    ("Methodology Custodian", "Declared CREF methodology", "Stewardship concerns preservation and maintenance of the declared methodology."),
+    ("Software Independence", "Civic Decision Engine implementation", "Stewardship does not require a particular runtime implementation."),
+    ("Documentation Stewardship", "Framework documentation", "Stewardship includes maintaining visible documentation and declared boundaries."),
+    ("Governance Continuity", "Stages 31–37 outputs", "Stewardship preserves governance continuity and inspectability."),
+    ("Non-Mutation Boundary", "Existing outputs", "Stewardship declarations do not modify records or prior outputs."),
+    ("Future Boundary", "Stages 38–40", "Future stages remain undeclared and unimplemented."),
+    ("Stewardship Source", "Visible outputs and metadata", "Stewardship derives exclusively from declared metadata and visible framework outputs."),
+)
+
+
+def _stage37_stewardship_declaration(
+    *,
+    declaration_id: str,
+    declaration_name: str,
+    category: str,
+    affected_stage_or_output: str,
+    declared_stewardship_state: Any,
+    observed_stewardship_state: Any,
+    stewardship_basis: str,
+    limitation_statement: str,
+    with_limitation: bool = False,
+) -> dict[str, Any]:
+    if observed_stewardship_state in (None, "", "Not Available"):
+        result = "Stewardship Declaration Not Available"
+    elif observed_stewardship_state == declared_stewardship_state:
+        result = (
+            "Stewardship Declared With Limitation"
+            if with_limitation
+            else "Stewardship Responsibility Declared"
+        )
+    else:
+        result = "Stewardship Gap Detected"
+    return {
+        "declaration_id": declaration_id,
+        "declaration_name": declaration_name,
+        "category": category,
+        "affected_stage_or_output": affected_stage_or_output,
+        "declared_stewardship_state": declared_stewardship_state,
+        "observed_stewardship_state": observed_stewardship_state,
+        "stewardship_result": result,
+        "stewardship_basis": stewardship_basis,
+        "limitation_statement": limitation_statement,
+    }
+
+
+def build_framework_stewardship_declaration(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    governance_statement: dict[str, Any] | None = None,
+    version_lineage: dict[str, Any] | None = None,
+    lifecycle_review: dict[str, Any] | None = None,
+    self_containment_certification: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report = dict(report_structure or {})
+    dependency = dict(dependency_map or {})
+    stability = dict(stability_analysis or {})
+    transitions = dict(transition_history or {})
+    provenance = dict(output_provenance or {})
+    replay = dict(deterministic_replay or {})
+    integrity = dict(integrity_verification or {})
+    audit = dict(audit_package or {})
+    certification = dict(conformance_certification or {})
+    closure = dict(reflexive_closure or {})
+    continuity = dict(framework_continuity or {})
+    register = dict(change_register or {})
+    governance = dict(governance_statement or {})
+    lineage = dict(version_lineage or {})
+    lifecycle = dict(lifecycle_review or {})
+    self_containment = dict(self_containment_certification or {})
+    replay_summary = replay.get("replay_summary") or {}
+    integrity_summary = integrity.get("integrity_summary") or {}
+    audit_summary = audit.get("audit_package_summary") or {}
+    certification_summary = certification.get("certification_summary") or {}
+    closure_summary = closure.get("reflexive_closure_summary") or {}
+    continuity_summary = continuity.get("continuity_summary") or {}
+    register_summary = register.get("framework_change_register_summary") or {}
+    governance_summary = governance.get("governance_summary") or {}
+    lineage_summary = lineage.get("lineage_summary") or {}
+    lifecycle_summary = lifecycle.get("lifecycle_summary") or {}
+    self_containment_summary = self_containment.get("self_containment_summary") or {}
+    counts = {
+        "dependency": len(dependency.get("nodes") or []),
+        "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []),
+        "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []),
+        "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []),
+        "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []),
+        "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []),
+        "governance": len(governance.get("governance_principles") or []),
+        "lineage": len(lineage.get("version_lineage_entries") or []),
+        "lifecycle": len(lifecycle.get("lifecycle_review_items") or []),
+        "self_containment": len(self_containment.get("self_containment_checks") or []),
+        "lineage_relationships": len(lineage.get("lineage_relationships") or []),
+    }
+    limitation_sets = dict(
+        declared_limitations
+        or {
+            "Stage 21": STAGE21_FULL_LIMITATIONS,
+            "Stage 22": STAGE22_LIMITATIONS,
+            "Stage 23": STAGE23_LIMITATIONS,
+            "Stage 24": STAGE24_LIMITATIONS,
+            "Stage 25": STAGE25_LIMITATIONS,
+            "Stage 26": STAGE26_LIMITATIONS,
+            "Stage 27": STAGE27_LIMITATIONS,
+            "Stage 28": STAGE28_LIMITATIONS,
+            "Stage 29": STAGE29_LIMITATIONS,
+            "Stage 30": STAGE30_LIMITATIONS,
+            "Stage 31": STAGE31_LIMITATIONS,
+            "Stage 32": STAGE32_LIMITATIONS,
+            "Stage 33": STAGE33_LIMITATIONS,
+            "Stage 34": STAGE34_LIMITATIONS,
+            "Stage 35": STAGE35_LIMITATIONS,
+            "Stage 36": STAGE36_LIMITATIONS,
+            "Stage 37": STAGE37_LIMITATIONS,
+        }
+    )
+    limitations_visible = bool(limitation_sets) and all(
+        bool(tuple(values or ())) for values in limitation_sets.values()
+    )
+    boundary_text = " ".join(STAGE36_LIMITATIONS + STAGE37_LIMITATIONS).lower()
+    upstream_gap_total = sum(
+        int(value or 0)
+        for value in (
+            integrity_summary.get("integrity_gap_checks"),
+            audit_summary.get("unavailable_sections"),
+            certification_summary.get("non_conformance_checks"),
+            closure_summary.get("closure_gap_count"),
+            continuity_summary.get("continuity_gap_checks"),
+            register_summary.get("change_gap_entries"),
+            governance_summary.get("governance_gap_count"),
+            lineage_summary.get("version_gap_count"),
+            lifecycle_summary.get("lifecycle_gap_count"),
+            self_containment_summary.get("self_containment_gap_count"),
+        )
+    )
+    replay_preserved = (
+        counts["replay"] == replay_summary.get("replayable_outputs")
+        and replay_summary.get("non_replayable_outputs") == 0
+    ) if replay else None
+    specs = (
+        ("SD-001", "Methodology Stewardship", "Methodology Stewardship", "Declared CREF Methodology", True, True, "Stewardship declares responsibility for preserving the methodology as documented.", "Does not create legal ownership or appoint an external custodian.", True),
+        ("SD-002", "Documentation Stewardship", "Documentation Stewardship", "Framework Documentation", True, limitations_visible, "Visible documentation and declared boundaries remain stewardship responsibilities.", "Does not guarantee third-party publication or perpetual availability.", False),
+        ("SD-003", "Governance Preservation", "Governance Preservation", "Stages 31–37", True, True if self_containment else None, "Visible governance outputs remain sequential and inspectable.", "Does not create governance powers.", False),
+        ("SD-004", "Continuity Preservation", "Governance Preservation", "Stage 31 Framework Continuity", (23, 0), (counts["continuity"], continuity_summary.get("continuity_gap_checks")) if continuity else None, "Continuity checks remain preserved without gaps.", "Visible continuity only.", False),
+        ("SD-005", "Version Lineage Preservation", "Lineage Preservation", "Stage 34 Version Lineage", (25, 0), (counts["lineage"], lineage_summary.get("version_gap_count")) if lineage else None, "Version lineage remains preserved without gaps.", "Does not infer undocumented versions.", False),
+        ("SD-006", "Lifecycle Preservation", "Lifecycle Preservation", "Stage 35 Lifecycle Review", (28, 0), (counts["lifecycle"], lifecycle_summary.get("lifecycle_gap_count")) if lifecycle else None, "Lifecycle review remains preserved without gaps.", "Does not infer future lifecycle states.", False),
+        ("SD-007", "Self-Containment Preservation", "Methodology Stewardship", "Stage 36 Self-Containment", (35, 0), (counts["self_containment"], self_containment_summary.get("self_containment_gap_count")) if self_containment else None, "Self-containment checks remain preserved without gaps.", "Does not certify software portability or external adoption.", False),
+        ("SD-008", "Dependency Preservation", "Structural Preservation", "Stage 22 Dependency Mapping", 30, counts["dependency"] if dependency else None, "Dependency nodes remain preserved.", "Does not validate dependency correctness.", False),
+        ("SD-009", "Pathway Preservation", "Structural Preservation", "Stage 23 Pathway Stability", 8, counts["pathway"] if stability else None, "Pathway entries remain preserved.", "Does not predict outcomes.", False),
+        ("SD-010", "Transition History Preservation", "Structural Preservation", "Stage 24 Transition History", 11, counts["transition"] if transitions else None, "Transition entries remain preserved.", "Does not infer prior states.", False),
+        ("SD-011", "Provenance Preservation", "Structural Preservation", "Stage 25 Output Provenance", 14, counts["provenance"] if provenance else None, "Provenance entries remain preserved.", "Does not validate provenance truth.", False),
+        ("SD-012", "Replay Preservation", "Structural Preservation", "Stage 26 Deterministic Replay", True, replay_preserved, "Replay steps remain fully replayable.", "Does not simulate alternate outcomes.", False),
+        ("SD-013", "Integrity Preservation", "Structural Preservation", "Stage 27 Integrity Verification", (14, 0), (counts["integrity"], integrity_summary.get("integrity_gap_checks")) if integrity else None, "Integrity checks remain preserved without gaps.", "Framework integrity is not factual validation.", False),
+        ("SD-014", "Audit Preservation", "Structural Preservation", "Stage 28 Audit Package", (10, 0), (counts["audit"], audit_summary.get("unavailable_sections")) if audit else None, "Audit sections remain visibly available.", "The package is not a legal audit.", False),
+        ("SD-015", "Certification Preservation", "Structural Preservation", "Stage 29 Conformance Certification", (19, 0), (counts["certification"], certification_summary.get("non_conformance_checks")) if certification else None, "Certification checks remain visibly conforming.", "Not external certification or accreditation.", False),
+        ("SD-016", "Non-Mutation Boundary", "Stewardship Boundary", "Stage 37 Limitations", True, "does not modify records" in boundary_text, "Stewardship preserves existing records and outputs without mutation.", "Declarative boundary only.", False),
+        ("SD-017", "Non-Authority Boundary", "Stewardship Boundary", "Stage 37 Limitations", True, "does not create institutional authority" in boundary_text, "Stewardship creates no institutional or amendment authority.", "Does not assign legal custodianship.", False),
+        ("SD-018", "Future-Stage Boundary", "Stewardship Boundary", "Stages 38–40", "Undeclared and unimplemented", "Undeclared and unimplemented", "Future stages remain outside current stewardship declarations.", "Does not infer or constrain future declared work.", False),
+        ("SD-019", "Public Inspectability Preservation", "Inspection Stewardship", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Three report modes preserve inspectable stewardship outputs.", "Admin inspectability does not guarantee public publication.", True),
+        ("SD-020", "Open Methodology Visibility", "Documentation Stewardship", "CREF Methodology", True, True if self_containment else None, "Methodology boundaries and declarations remain visibly documented.", "Visibility remains bounded by available documentation.", False),
+        ("SD-021", "Implementation Independence", "Implementation Boundary", "CREF and Civic Decision Engine", True, True if self_containment else None, "Stewardship of CREF does not require a particular software runtime.", "Does not certify software portability or third-party implementation correctness.", True),
+        ("SD-022", "Independent Adoption Boundary", "Adoption Boundary", "Stage 36 Self-Containment", True, "does not approve external adoption" in boundary_text, "External adoption approval remains outside stewardship scope.", "Does not accredit or approve adopters.", True),
+        ("SD-023", "Metadata Preservation", "Documentation Stewardship", "Declared Framework Metadata", True, True, "Declared stages, phases, relationships, and limitations remain preservation responsibilities.", "Does not create hidden or inferred metadata.", False),
+        ("SD-024", "Change Register Preservation", "Change Stewardship", "Stage 32 Change Register", (25, 0), (counts["register"], register_summary.get("change_gap_entries")) if register else None, "Change-register entries remain preserved without gaps.", "Does not infer undocumented changes.", False),
+        ("SD-025", "Stewardship Gap Absence", "Stewardship Integrity", "Stages 27–36 Summaries", 0, upstream_gap_total if self_containment else None, "Visible upstream structural gap counts remain zero.", "No structural gap does not establish ownership, authority, or external validity.", False),
+    )
+    declarations = [
+        _stage37_stewardship_declaration(
+            declaration_id=declaration_id,
+            declaration_name=name,
+            category=category,
+            affected_stage_or_output=affected,
+            declared_stewardship_state=declared,
+            observed_stewardship_state=observed,
+            stewardship_basis=basis,
+            limitation_statement=limitation,
+            with_limitation=limited,
+        )
+        for declaration_id, name, category, affected, declared, observed, basis, limitation, limited in specs
+    ]
+    result_counts = {
+        result: sum(item["stewardship_result"] == result for item in declarations)
+        for result in (
+            "Stewardship Responsibility Declared",
+            "Stewardship Declared With Limitation",
+            "Stewardship Declaration Not Available",
+            "Stewardship Gap Detected",
+        )
+    }
+    if result_counts["Stewardship Gap Detected"]:
+        state = "Framework Stewardship Declaration Gap Detected"
+    elif result_counts["Stewardship Declaration Not Available"]:
+        state = "Framework Stewardship Declaration Partially Available"
+    elif result_counts["Stewardship Declared With Limitation"]:
+        state = "Framework Stewardship Declaration Available With Limitations"
+    else:
+        state = "Framework Stewardship Declaration Available"
+    summary = {
+        "stewardship_state": state,
+        "total_stewardship_declarations": len(declarations),
+        "declared_responsibilities": result_counts["Stewardship Responsibility Declared"],
+        "declarations_with_limitations": result_counts["Stewardship Declared With Limitation"],
+        "unavailable_declarations": result_counts["Stewardship Declaration Not Available"],
+        "stewardship_gap_count": result_counts["Stewardship Gap Detected"],
+        "implemented_stage_count": 37,
+        "declared_phase_count": 3,
+        "version_lineage_relationship_count": counts["lineage_relationships"],
+        "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"],
+        "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"],
+        "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"],
+        "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"],
+        "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"],
+        "change_register_entry_count": counts["register"],
+        "governance_principle_count": counts["governance"],
+        "version_lineage_entry_count": counts["lineage"],
+        "lifecycle_review_item_count": counts["lifecycle"],
+        "self_containment_check_count": counts["self_containment"],
+        "upstream_gap_count": upstream_gap_total,
+        "limitation_summary": "Stewardship documents visible preservation responsibilities only and creates no ownership, authority, accreditation, or modification rights.",
+    }
+    return {
+        "stewardship_state": state,
+        "stewardship_summary": summary,
+        "stewardship_declarations": declarations,
+        "stewardship_relationships": [
+            {"relationship": relationship, "stewardship_side": side, "declaration": declaration}
+            for relationship, side, declaration in STAGE37_STEWARDSHIP_RELATIONSHIPS
+        ],
+        "limitations": list(STAGE37_LIMITATIONS),
+    }
+
+
+def _render_stage37_overview(stewardship: dict[str, Any]) -> str:
+    summary = stewardship["stewardship_summary"]
+    labels = (
+        ("Stewardship State", "stewardship_state"),
+        ("Total Stewardship Declarations", "total_stewardship_declarations"),
+        ("Declared Responsibilities", "declared_responsibilities"),
+        ("Declarations With Limitations", "declarations_with_limitations"),
+        ("Unavailable Declarations", "unavailable_declarations"),
+        ("Stewardship Gap Count", "stewardship_gap_count"),
+        ("Implemented Stage Count", "implemented_stage_count"),
+        ("Declared Phase Count", "declared_phase_count"),
+        ("Version Lineage Relationship Count", "version_lineage_relationship_count"),
+        ("Lifecycle Review Item Count", "lifecycle_review_item_count"),
+        ("Self-Containment Check Count", "self_containment_check_count"),
+        ("Dependency Node Count", "dependency_node_count"),
+        ("Pathway Count", "pathway_count"),
+        ("Transition Entry Count", "transition_entry_count"),
+        ("Provenance Entry Count", "provenance_entry_count"),
+        ("Replay Step Count", "replay_step_count"),
+        ("Integrity Check Count", "integrity_check_count"),
+        ("Audit Section Count", "audit_section_count"),
+        ("Certification Check Count", "certification_check_count"),
+        ("Reflexive Closure Check Count", "reflexive_closure_check_count"),
+        ("Continuity Check Count", "continuity_check_count"),
+        ("Change Register Entry Count", "change_register_entry_count"),
+        ("Governance Principle Count", "governance_principle_count"),
+        ("Version Lineage Entry Count", "version_lineage_entry_count"),
+        ("Limitation Summary", "limitation_summary"),
+    )
+    return f"""
+      <section class="stage37-stewardship-overview">
+        <h3>Framework Stewardship Declaration Overview</h3>
+        {_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}
+      </section>"""
+
+
+def _render_stage37_relationships(stewardship: dict[str, Any]) -> str:
+    rows = "".join(
+        "<tr>"
+        f"<td>{escape(item['relationship'])}</td>"
+        f"<td>{escape(item['stewardship_side'])}</td>"
+        f"<td>{escape(item['declaration'])}</td>"
+        "</tr>"
+        for item in stewardship["stewardship_relationships"]
+    )
+    return f"""
+      <section class="stage37-stewardship-relationships">
+        <h3>Framework Stewardship Relationships</h3>
+        <table><thead><tr><th>Relationship</th><th>Stewardship Side</th><th>Declaration</th></tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage37_declarations(declarations: list[dict[str, Any]]) -> str:
+    columns = (
+        ("Declaration ID", "declaration_id", True),
+        ("Declaration Name", "declaration_name", False),
+        ("Category", "category", False),
+        ("Affected Stage or Output", "affected_stage_or_output", False),
+        ("Declared Stewardship State", "declared_stewardship_state", False),
+        ("Observed Stewardship State", "observed_stewardship_state", False),
+        ("Stewardship Result", "stewardship_result", False),
+        ("Stewardship Basis", "stewardship_basis", False),
+        ("Limitation Statement", "limitation_statement", False),
+    )
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join(
+        "<tr>" + "".join(
+            f"<td><code>{escape(_stage18a_display_value(item.get(key)))}</code></td>"
+            if use_code else f"<td>{escape(_stage18a_display_value(item.get(key)))}</td>"
+            for _, key, use_code in columns
+        ) + "</tr>"
+        for item in declarations
+    )
+    if not rows:
+        rows = f'<tr><td colspan="{len(columns)}">No stewardship declarations are available.</td></tr>'
+    return f"""
+      <section class="stage37-full-stewardship-declarations">
+        <h3>Full Stewardship Declaration Table</h3>
+        <table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>
+      </section>"""
+
+
+def _render_stage37_limitations(
+    stewardship: dict[str, Any], *, concise: bool = False
+) -> str:
+    limitations = stewardship["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0, 1, 2, 6, 7, 8, 9, 10, 27, 28, 29)]
+    return f"""
+      <section class="stage37-stewardship-limitations">
+        <h3>Framework Stewardship Declaration Limitations</h3>
+        {_render_stage19a_list(limitations, "No stewardship declaration limitations available.")}
+      </section>"""
+
+
+def _render_framework_stewardship_declaration(
+    stewardship: dict[str, Any], *, report_mode: str
+) -> str:
+    notice = """
+        <p class="notice">
+          Framework Stewardship Declaration is derived deterministically from
+          visible framework outputs and declared metadata only. It documents
+          preservation responsibilities, custodial boundaries, documentation
+          duties, and implementation independence without creating ownership,
+          accreditation, institutional authority, amendment power, evidence
+          validation, or record modification.
+        </p>"""
+    overview = _render_stage37_overview(stewardship)
+    relationships = _render_stage37_relationships(stewardship)
+    if report_mode == "executive":
+        content = overview + _render_stage37_limitations(stewardship, concise=True)
+        mode_class = "stage37-stewardship-executive"
+    elif report_mode == "review":
+        content = overview + relationships + _render_stage37_limitations(stewardship)
+        mode_class = "stage37-stewardship-review"
+    else:
+        content = overview + relationships + _render_stage37_declarations(
+            stewardship["stewardship_declarations"]
+        ) + _render_stage37_limitations(stewardship)
+        mode_class = "stage37-stewardship-full"
+    return f"""
+      <section class="management-section stage37-framework-stewardship {mode_class}">
+        <h2>Framework Stewardship Declaration</h2>
+        {notice}
+        {content}
+      </section>"""
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -40053,6 +40469,28 @@ def render_admin_record_evidence_page(
             report_mode=report_structure["report_mode"],
         )
     )
+    stage37_framework_stewardship = build_framework_stewardship_declaration(
+        report_structure,
+        stage22_dependency_map,
+        stage23_stability_analysis,
+        stage24_transition_history,
+        stage25_output_provenance,
+        stage26_deterministic_replay,
+        stage27_integrity_verification,
+        stage28_audit_package,
+        stage29_conformance_certification,
+        stage30_reflexive_closure,
+        stage31_framework_continuity,
+        stage32_framework_change_register,
+        stage33_framework_governance,
+        stage34_framework_version_lineage,
+        stage35_framework_lifecycle_review,
+        stage36_self_containment_certification,
+    )
+    stage37_stewardship_section = _render_framework_stewardship_declaration(
+        stage37_framework_stewardship,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -40105,6 +40543,7 @@ def render_admin_record_evidence_page(
             + stage34_version_lineage_section
             + stage35_lifecycle_review_section
             + stage36_self_containment_section
+            + stage37_stewardship_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -40126,6 +40565,7 @@ def render_admin_record_evidence_page(
             + stage34_version_lineage_section
             + stage35_lifecycle_review_section
             + stage36_self_containment_section
+            + stage37_stewardship_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -40152,6 +40592,7 @@ def render_admin_record_evidence_page(
             f"{stage34_version_lineage_section}"
             f"{stage35_lifecycle_review_section}"
             f"{stage36_self_containment_section}"
+            f"{stage37_stewardship_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -40631,6 +41072,24 @@ def render_admin_record_evidence_page(
     .stage36-full-self-containment-checks table {{
       min-width: 1860px;
     }}
+    .stage37-framework-stewardship table {{
+      table-layout: auto;
+    }}
+    .stage37-framework-stewardship th,
+    .stage37-framework-stewardship td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage37-stewardship-relationships,
+    .stage37-full-stewardship-declarations {{
+      overflow-x: auto;
+    }}
+    .stage37-full-stewardship-declarations table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -40651,6 +41110,7 @@ def render_admin_record_evidence_page(
       .stage23-pathway-level-stability table {{ min-width: 1640px; }}
       .stage23-evidence-sensitivity-indicators table {{ min-width: 860px; }}
       .stage23-stability-path table {{ min-width: 720px; }}
+      .stage37-stewardship-relationships table {{ min-width: 760px; }}
       .stage24-transition-summary table {{ min-width: 760px; }}
       .stage25-provenance-summary table {{ min-width: 900px; }}
       .stage26-replay-summary table {{ min-width: 1120px; }}
