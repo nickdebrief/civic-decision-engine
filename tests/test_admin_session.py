@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(27, len(review["section_index"]))
+        self.assertEqual(28, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 28)),
+            list(range(1, 29)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -8984,6 +8984,89 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Stewardship Result</th>", full)
         self.assertIn("Stewardship Basis</th>", full)
 
+    def test_stage38_legacy_package_is_deterministic_complete_and_non_mutating(self):
+        stage37_inputs, stewardship = self._build_stage37_fixture()
+        inputs = (*stage37_inputs, stewardship)
+        original_inputs = copy.deepcopy(inputs)
+        package = self.admin_session.build_framework_legacy_package(*inputs)
+        self.assertEqual("Framework Legacy Package Available With Limitations", package["legacy_package_state"])
+        self.assertEqual(36, len(package["legacy_package_items"]))
+        self.assertEqual(8, len(package["legacy_package_relationships"]))
+        required_fields = {
+            "legacy_item_id", "item_name", "legacy_category",
+            "affected_stage_or_output", "declared_legacy_state",
+            "observed_legacy_state", "legacy_result", "legacy_basis",
+            "limitation_statement",
+        }
+        for item in package["legacy_package_items"]:
+            self.assertEqual(required_fields, set(item))
+        summary = package["legacy_package_summary"]
+        self.assertEqual((36, 30, 6, 0, 0), (
+            summary["total_legacy_package_items"], summary["included_legacy_items"],
+            summary["items_included_with_limitation"], summary["unavailable_legacy_items"],
+            summary["legacy_gap_count"],
+        ))
+        self.assertEqual((38, 3, 6, 28, 35, 25), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"], summary["lifecycle_review_item_count"],
+            summary["self_containment_check_count"], summary["stewardship_declaration_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {item["item_name"] for item in package["legacy_package_items"]}
+        for required_name in (
+            "Methodology Description", "Framework Purpose Statement", "Limitation Set",
+            "Framework Self-Containment Certification", "Framework Stewardship Declaration",
+            "Methodology / Implementation Separation Statement", "Independent Adoption Boundary",
+            "Portable Methodology Package Declaration", "Legacy Package Limitation Visibility",
+        ):
+            self.assertIn(required_name, names)
+        relationships = {item["relationship"] for item in package["legacy_package_relationships"]}
+        self.assertEqual({"Methodology Package", "Implementation Separation", "Documentation Package", "Governance Package", "Preservation Package", "Adoption Boundary", "Future Boundary", "Legacy Source"}, relationships)
+        self.assertEqual(package, self.admin_session.build_framework_legacy_package(*inputs))
+        self.assertEqual(original_inputs, inputs)
+
+    def test_stage38_gap_partial_and_rendering_modes_are_deterministic(self):
+        stage37_inputs, stewardship = self._build_stage37_fixture()
+        inputs = (*stage37_inputs, stewardship)
+        package = self.admin_session.build_framework_legacy_package(*inputs)
+        gap_inputs = list(inputs)
+        gap_inputs[1] = copy.deepcopy(gap_inputs[1])
+        gap_inputs[1]["nodes"] = gap_inputs[1]["nodes"][:-1]
+        gap = self.admin_session.build_framework_legacy_package(*gap_inputs)
+        self.assertEqual("Framework Legacy Package Gap Detected", gap["legacy_package_state"])
+        partial = self.admin_session.build_framework_legacy_package()
+        self.assertEqual("Framework Legacy Package Partially Available", partial["legacy_package_state"])
+        self.assertGreater(partial["legacy_package_summary"]["unavailable_legacy_items"], 0)
+        executive = self.admin_session._render_framework_legacy_package(package, report_mode="executive")
+        review = self.admin_session._render_framework_legacy_package(package, report_mode="review")
+        full = self.admin_session._render_framework_legacy_package(package, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Legacy Package</h2>", rendered)
+            self.assertIn("Framework Legacy Package Overview", rendered)
+            self.assertIn("Framework Legacy Package Limitations", rendered)
+        self.assertIn("stage38-legacy-executive", executive)
+        self.assertNotIn("Legacy Package Relationships", executive)
+        self.assertNotIn("Full Framework Legacy Package", executive)
+        self.assertIn("stage38-legacy-review", review)
+        self.assertIn("Legacy Package Relationships", review)
+        self.assertNotIn("Full Framework Legacy Package", review)
+        self.assertIn("stage38-legacy-full", full)
+        self.assertIn("Legacy Package Relationships", full)
+        self.assertIn("Full Framework Legacy Package", full)
+        self.assertIn("Declared Legacy State</th>", full)
+        self.assertIn("Observed Legacy State</th>", full)
+        self.assertIn("Legacy Result</th>", full)
+        self.assertIn("Legacy Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -9111,6 +9194,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Framework Stewardship Declaration</h2>", executive)
         self.assertNotIn("Framework Stewardship Relationships", executive)
         self.assertNotIn("Full Stewardship Declaration Table", executive)
+        self.assertIn("stage38-legacy-executive", executive)
+        self.assertIn("<h2>Framework Legacy Package</h2>", executive)
+        self.assertNotIn("Legacy Package Relationships", executive)
+        self.assertNotIn("Full Framework Legacy Package", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -9174,6 +9261,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage37-stewardship-review", review)
         self.assertIn("Framework Stewardship Relationships", review)
         self.assertNotIn("Full Stewardship Declaration Table", review)
+        self.assertIn("stage38-legacy-review", review)
+        self.assertIn("Legacy Package Relationships", review)
+        self.assertNotIn("Full Framework Legacy Package", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -9208,6 +9298,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Lifecycle Review",
             "Framework Self-Containment Certification",
             "Framework Stewardship Declaration",
+            "Framework Legacy Package",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -9242,9 +9333,15 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Self-Containment Certification", explicit_full)
         self.assertIn("stage37-stewardship-full", explicit_full)
         self.assertIn("Full Stewardship Declaration Table", explicit_full)
+        self.assertIn("stage38-legacy-full", explicit_full)
+        self.assertIn("Full Framework Legacy Package", explicit_full)
         self.assertLess(
             explicit_full.index("Framework Self-Containment Certification"),
             explicit_full.index("Framework Stewardship Declaration"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Stewardship Declaration"),
+            explicit_full.index("Framework Legacy Package"),
         )
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
