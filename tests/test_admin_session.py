@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(26, len(review["section_index"]))
+        self.assertEqual(27, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 27)),
+            list(range(1, 28)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -8889,6 +8889,101 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Certification Basis</th>", full)
         self.assertIn("Limitation Statement</th>", full)
 
+    def _build_stage37_fixture(self):
+        current_values = {definition[1]: f"Visible value for {definition[2]}" for definition in self.admin_session.STAGE22_NODE_DEFINITIONS}
+        report = self.admin_session.build_stage21_report_structure()
+        dependency = self.admin_session.build_determination_dependency_map(current_values)
+        stability = self.admin_session.build_pathway_stability_analysis(dependency)
+        transitions = self.admin_session.build_record_state_transition_history(current_values, dependency, stability)
+        provenance = self.admin_session.build_output_provenance_layer(current_values, dependency, stability, transitions)
+        replay = self.admin_session.build_deterministic_replay(dependency, stability, transitions, provenance)
+        integrity = self.admin_session.build_framework_integrity_verification(report, dependency, stability, transitions, provenance, replay, current_values)
+        audit = self.admin_session.build_administrative_audit_package("CREF-STAGE37-001", current_values, dependency, stability, transitions, provenance, replay, integrity)
+        certification = self.admin_session.build_methodological_conformance_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, current_values)
+        closure = self.admin_session.build_reflexive_closure(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, current_values)
+        continuity = self.admin_session.build_framework_continuity(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, current_values)
+        register = self.admin_session.build_framework_change_register(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, current_values)
+        governance = self.admin_session.build_framework_governance_statement(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register)
+        lineage = self.admin_session.build_framework_version_lineage(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance)
+        lifecycle = self.admin_session.build_framework_lifecycle_review(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage)
+        self_containment = self.admin_session.build_framework_self_containment_certification(report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle)
+        inputs = (report, dependency, stability, transitions, provenance, replay, integrity, audit, certification, closure, continuity, register, governance, lineage, lifecycle, self_containment)
+        return inputs, self.admin_session.build_framework_stewardship_declaration(*inputs)
+
+    def test_stage37_stewardship_is_deterministic_complete_and_non_mutating(self):
+        inputs, stewardship = self._build_stage37_fixture()
+        original_inputs = copy.deepcopy(inputs)
+        self.assertEqual("Framework Stewardship Declaration Available With Limitations", stewardship["stewardship_state"])
+        self.assertEqual(25, len(stewardship["stewardship_declarations"]))
+        self.assertEqual(7, len(stewardship["stewardship_relationships"]))
+        required_fields = {
+            "declaration_id", "declaration_name", "category",
+            "affected_stage_or_output", "declared_stewardship_state",
+            "observed_stewardship_state", "stewardship_result",
+            "stewardship_basis", "limitation_statement",
+        }
+        for declaration in stewardship["stewardship_declarations"]:
+            self.assertEqual(required_fields, set(declaration))
+        summary = stewardship["stewardship_summary"]
+        self.assertEqual((25, 21, 4, 0, 0), (
+            summary["total_stewardship_declarations"], summary["declared_responsibilities"],
+            summary["declarations_with_limitations"], summary["unavailable_declarations"],
+            summary["stewardship_gap_count"],
+        ))
+        self.assertEqual((37, 3, 6), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25, 28, 35), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"], summary["lifecycle_review_item_count"],
+            summary["self_containment_check_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {item["declaration_name"] for item in stewardship["stewardship_declarations"]}
+        for name in ("Methodology Stewardship", "Documentation Stewardship", "Implementation Independence", "Independent Adoption Boundary", "Stewardship Gap Absence"):
+            self.assertIn(name, names)
+        relationships = {item["relationship"] for item in stewardship["stewardship_relationships"]}
+        self.assertEqual({"Methodology Custodian", "Software Independence", "Documentation Stewardship", "Governance Continuity", "Non-Mutation Boundary", "Future Boundary", "Stewardship Source"}, relationships)
+        self.assertEqual(stewardship, self.admin_session.build_framework_stewardship_declaration(*inputs))
+        self.assertEqual(original_inputs, inputs)
+
+    def test_stage37_gap_partial_and_rendering_modes_are_deterministic(self):
+        inputs, stewardship = self._build_stage37_fixture()
+        gap_inputs = list(inputs)
+        gap_inputs[1] = copy.deepcopy(gap_inputs[1])
+        gap_inputs[1]["nodes"] = gap_inputs[1]["nodes"][:-1]
+        gap = self.admin_session.build_framework_stewardship_declaration(*gap_inputs)
+        self.assertEqual("Framework Stewardship Declaration Gap Detected", gap["stewardship_state"])
+        partial = self.admin_session.build_framework_stewardship_declaration()
+        self.assertEqual("Framework Stewardship Declaration Partially Available", partial["stewardship_state"])
+        self.assertGreater(partial["stewardship_summary"]["unavailable_declarations"], 0)
+        executive = self.admin_session._render_framework_stewardship_declaration(stewardship, report_mode="executive")
+        review = self.admin_session._render_framework_stewardship_declaration(stewardship, report_mode="review")
+        full = self.admin_session._render_framework_stewardship_declaration(stewardship, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Stewardship Declaration</h2>", rendered)
+            self.assertIn("Framework Stewardship Declaration Overview", rendered)
+            self.assertIn("Framework Stewardship Declaration Limitations", rendered)
+        self.assertIn("stage37-stewardship-executive", executive)
+        self.assertNotIn("Framework Stewardship Relationships", executive)
+        self.assertNotIn("Full Stewardship Declaration Table", executive)
+        self.assertIn("stage37-stewardship-review", review)
+        self.assertIn("Framework Stewardship Relationships", review)
+        self.assertNotIn("Full Stewardship Declaration Table", review)
+        self.assertIn("stage37-stewardship-full", full)
+        self.assertIn("Framework Stewardship Relationships", full)
+        self.assertIn("Full Stewardship Declaration Table", full)
+        self.assertIn("Declared Stewardship State</th>", full)
+        self.assertIn("Observed Stewardship State</th>", full)
+        self.assertIn("Stewardship Result</th>", full)
+        self.assertIn("Stewardship Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -9012,6 +9107,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Framework Self-Containment Certification</h2>", executive)
         self.assertNotIn("Self-Containment Relationships", executive)
         self.assertNotIn("Full Self-Containment Certification", executive)
+        self.assertIn("stage37-stewardship-executive", executive)
+        self.assertIn("<h2>Framework Stewardship Declaration</h2>", executive)
+        self.assertNotIn("Framework Stewardship Relationships", executive)
+        self.assertNotIn("Full Stewardship Declaration Table", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -9072,6 +9171,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage36-self-containment-review", review)
         self.assertIn("Self-Containment Relationships", review)
         self.assertNotIn("Full Self-Containment Certification", review)
+        self.assertIn("stage37-stewardship-review", review)
+        self.assertIn("Framework Stewardship Relationships", review)
+        self.assertNotIn("Full Stewardship Declaration Table", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -9105,6 +9207,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Version Lineage",
             "Framework Lifecycle Review",
             "Framework Self-Containment Certification",
+            "Framework Stewardship Declaration",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -9137,6 +9240,12 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Lifecycle Review Items", explicit_full)
         self.assertIn("stage36-self-containment-full", explicit_full)
         self.assertIn("Full Self-Containment Certification", explicit_full)
+        self.assertIn("stage37-stewardship-full", explicit_full)
+        self.assertIn("Full Stewardship Declaration Table", explicit_full)
+        self.assertLess(
+            explicit_full.index("Framework Self-Containment Certification"),
+            explicit_full.index("Framework Stewardship Declaration"),
+        )
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
             explicit_full.index("Pathway Stability Analysis"),
