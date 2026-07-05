@@ -504,6 +504,25 @@ observed state, result, basis, affected output, and limitation.
 
 ---
 
+## Stage 40 — Framework Completion Statement
+
+Declares CREF complete as a deterministic civic record evaluation methodology
+within its visible, declared, and bounded forty-stage implementation sequence.
+The statement preserves governance outputs, self-containment certification,
+stewardship declarations, legacy-package artefacts, meta-framework reflection,
+and methodological limitations.
+
+Forty deterministic completion items and ten relationships establish completion
+within declared scope only. Completion creates no legal authority, external
+validation, accreditation, software-portability certification, adoption
+approval, evidence validation, or record modification.
+
+Executive mode presents a concise completion overview; Review mode adds the
+relationship table; Full Inspection mode exposes every completion item,
+observed state, result, basis, affected output, and limitation.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

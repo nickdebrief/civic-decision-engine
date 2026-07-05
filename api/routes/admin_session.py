@@ -32153,6 +32153,7 @@ STAGE21_SECTION_INDEX = (
     ("Framework Stewardship Declaration", "Overview", "Relationships", "Detail"),
     ("Framework Legacy Package", "Overview", "Relationships", "Detail"),
     ("Meta-Framework Reflection", "Overview", "Relationships", "Detail"),
+    ("Framework Completion Statement", "Overview", "Relationships", "Detail"),
 )
 
 
@@ -40351,6 +40352,271 @@ def _render_meta_framework_reflection(reflection: dict[str, Any], *, report_mode
     return f'<section class="management-section stage39-meta-framework-reflection {mode_class}"><h2>Meta-Framework Reflection</h2>{notice}{content}</section>'
 
 
+STAGE40_LIMITATIONS = (
+    "Framework Completion Statement is not legal certification.",
+    "Framework Completion Statement is not accreditation.",
+    "Framework Completion Statement is not external validation.",
+    "Framework Completion Statement does not validate evidence.",
+    "Framework Completion Statement does not determine truth.",
+    "Framework Completion Statement does not determine liability.",
+    "Framework Completion Statement does not infer intent.",
+    "Framework Completion Statement does not infer undocumented implementations.",
+    "Framework Completion Statement does not infer future stages.",
+    "Framework Completion Statement does not certify software portability.",
+    "Framework Completion Statement does not certify third-party implementation correctness.",
+    "Framework Completion Statement does not approve external adoption.",
+    "Framework Completion Statement does not create legal ownership.",
+    "Framework Completion Statement does not create institutional authority.",
+    "Framework Completion Statement does not modify records.",
+    "Framework Completion Statement does not change classifications.",
+    "Framework Completion Statement does not change thresholds.",
+    "Framework Completion Statement does not change dependencies.",
+    "Framework Completion Statement does not change evidence relationships.",
+    "Framework Completion Statement does not change transition history.",
+    "Framework Completion Statement does not change provenance.",
+    "Framework Completion Statement does not change replay outputs.",
+    "Framework Completion Statement does not change integrity checks.",
+    "Framework Completion Statement does not change audit packages.",
+    "Framework Completion Statement does not change certifications.",
+    "Framework Completion Statement does not change continuity outputs.",
+    "Framework Completion Statement does not change change-register entries.",
+    "Framework Completion Statement does not change governance principles.",
+    "Framework Completion Statement does not change version-lineage entries.",
+    "Framework Completion Statement does not change lifecycle review items.",
+    "Framework Completion Statement does not change self-containment checks.",
+    "Framework Completion Statement does not change stewardship declarations.",
+    "Framework Completion Statement does not change legacy package items.",
+    "Framework Completion Statement does not change meta-framework reflection items.",
+    "Framework Completion Statement does not write to the database.",
+    "Framework Completion Statement does not alter public API behaviour.",
+    "Framework Completion Statement declares visible framework completion only.",
+)
+
+
+STAGE40_COMPLETION_RELATIONSHIPS = (
+    ("Methodology Completion", "CREF", "CREF is declared complete as a deterministic civic record evaluation methodology within declared limitations."),
+    ("Phase Completion", "Stages 1–40", "The three declared phases are complete within implemented visibility."),
+    ("Implementation Boundary", "Civic Decision Engine", "The Civic Decision Engine implements CREF but does not exhaust or define the methodology."),
+    ("Governance Boundary", "Stages 31–40", "Governance architecture is declared complete without creating institutional authority."),
+    ("Legacy Boundary", "Stage 38 Legacy Package", "Completion relies upon preserved methodology artefacts and declared metadata."),
+    ("Meta-Framework Boundary", "Stage 39 Reflection", "Completion follows declared reflection on CREF as a methodology category."),
+    ("Adoption Boundary", "Independent adopters", "Completion supports independent understanding, not approval, accreditation, or certification of adoption."),
+    ("Evidence Boundary", "Evidence inputs", "Completion does not validate evidence truth or real-world correctness."),
+    ("Final Boundary", "No Stage 41", "No future stage is inferred or declared beyond the implemented forty-stage sequence."),
+    ("Completion Source", "Visible outputs and declared metadata", "Framework completion derives exclusively from visible framework outputs and declared metadata."),
+)
+
+
+def _stage40_completion_item(
+    item_id: str, name: str, category: str, affected: str,
+    declared: Any, observed: Any, basis: str, limitation: str,
+    limited: bool = False,
+) -> dict[str, Any]:
+    if observed in (None, "", "Not Available"):
+        result = "Completion Item Not Available"
+    elif observed == declared:
+        result = "Completion Item Declared With Limitation" if limited else "Completion Item Declared"
+    else:
+        result = "Completion Gap Detected"
+    return {
+        "completion_item_id": item_id, "item_name": name,
+        "completion_category": category, "affected_stage_or_output": affected,
+        "declared_completion_state": declared, "observed_completion_state": observed,
+        "completion_result": result, "completion_basis": basis,
+        "limitation_statement": limitation,
+    }
+
+
+def build_framework_completion_statement(
+    report_structure: dict[str, Any] | None = None,
+    dependency_map: dict[str, Any] | None = None,
+    stability_analysis: dict[str, Any] | None = None,
+    transition_history: dict[str, Any] | None = None,
+    output_provenance: dict[str, Any] | None = None,
+    deterministic_replay: dict[str, Any] | None = None,
+    integrity_verification: dict[str, Any] | None = None,
+    audit_package: dict[str, Any] | None = None,
+    conformance_certification: dict[str, Any] | None = None,
+    reflexive_closure: dict[str, Any] | None = None,
+    framework_continuity: dict[str, Any] | None = None,
+    change_register: dict[str, Any] | None = None,
+    governance_statement: dict[str, Any] | None = None,
+    version_lineage: dict[str, Any] | None = None,
+    lifecycle_review: dict[str, Any] | None = None,
+    self_containment_certification: dict[str, Any] | None = None,
+    stewardship_declaration: dict[str, Any] | None = None,
+    legacy_package: dict[str, Any] | None = None,
+    meta_framework_reflection: dict[str, Any] | None = None,
+    declared_limitations: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    report, dependency, stability = dict(report_structure or {}), dict(dependency_map or {}), dict(stability_analysis or {})
+    transitions, provenance, replay = dict(transition_history or {}), dict(output_provenance or {}), dict(deterministic_replay or {})
+    integrity, audit, certification = dict(integrity_verification or {}), dict(audit_package or {}), dict(conformance_certification or {})
+    closure, continuity, register = dict(reflexive_closure or {}), dict(framework_continuity or {}), dict(change_register or {})
+    governance, lineage, lifecycle = dict(governance_statement or {}), dict(version_lineage or {}), dict(lifecycle_review or {})
+    self_containment, stewardship = dict(self_containment_certification or {}), dict(stewardship_declaration or {})
+    legacy, reflection = dict(legacy_package or {}), dict(meta_framework_reflection or {})
+    summaries = {
+        "replay": replay.get("replay_summary") or {}, "integrity": integrity.get("integrity_summary") or {},
+        "audit": audit.get("audit_package_summary") or {}, "certification": certification.get("certification_summary") or {},
+        "closure": closure.get("reflexive_closure_summary") or {}, "continuity": continuity.get("continuity_summary") or {},
+        "register": register.get("framework_change_register_summary") or {}, "governance": governance.get("governance_summary") or {},
+        "lineage": lineage.get("lineage_summary") or {}, "lifecycle": lifecycle.get("lifecycle_summary") or {},
+        "self_containment": self_containment.get("self_containment_summary") or {}, "stewardship": stewardship.get("stewardship_summary") or {},
+        "legacy": legacy.get("legacy_package_summary") or {}, "reflection": reflection.get("reflection_summary") or {},
+    }
+    counts = {
+        "dependency": len(dependency.get("nodes") or []), "pathway": len(stability.get("pathways") or []),
+        "transition": len(transitions.get("transitions") or []), "provenance": len(provenance.get("provenance_entries") or []),
+        "replay": len(replay.get("replay_entries") or []), "integrity": len(integrity.get("integrity_checks") or []),
+        "audit": len(audit.get("audit_sections") or []), "certification": len(certification.get("certification_checks") or []),
+        "closure": len(closure.get("closure_checks") or []), "continuity": len(continuity.get("continuity_checks") or []),
+        "register": len(register.get("change_entries") or []), "governance": len(governance.get("governance_principles") or []),
+        "lineage": len(lineage.get("version_lineage_entries") or []), "lifecycle": len(lifecycle.get("lifecycle_review_items") or []),
+        "self_containment": len(self_containment.get("self_containment_checks") or []),
+        "stewardship": len(stewardship.get("stewardship_declarations") or []),
+        "legacy": len(legacy.get("legacy_package_items") or []),
+        "reflection": len(reflection.get("reflection_items") or []),
+        "lineage_relationships": len(lineage.get("lineage_relationships") or []),
+    }
+    limitation_sets = dict(declared_limitations or {
+        "Stage 21": STAGE21_FULL_LIMITATIONS, "Stage 22": STAGE22_LIMITATIONS, "Stage 23": STAGE23_LIMITATIONS,
+        "Stage 24": STAGE24_LIMITATIONS, "Stage 25": STAGE25_LIMITATIONS, "Stage 26": STAGE26_LIMITATIONS,
+        "Stage 27": STAGE27_LIMITATIONS, "Stage 28": STAGE28_LIMITATIONS, "Stage 29": STAGE29_LIMITATIONS,
+        "Stage 30": STAGE30_LIMITATIONS, "Stage 31": STAGE31_LIMITATIONS, "Stage 32": STAGE32_LIMITATIONS,
+        "Stage 33": STAGE33_LIMITATIONS, "Stage 34": STAGE34_LIMITATIONS, "Stage 35": STAGE35_LIMITATIONS,
+        "Stage 36": STAGE36_LIMITATIONS, "Stage 37": STAGE37_LIMITATIONS, "Stage 38": STAGE38_LIMITATIONS,
+        "Stage 39": STAGE39_LIMITATIONS, "Stage 40": STAGE40_LIMITATIONS,
+    })
+    limitations_visible = bool(limitation_sets) and all(bool(tuple(value or ())) for value in limitation_sets.values())
+    upstream_gaps = sum(int(value or 0) for value in (
+        summaries["integrity"].get("integrity_gap_checks"), summaries["audit"].get("unavailable_sections"),
+        summaries["certification"].get("non_conformance_checks"), summaries["closure"].get("closure_gap_count"),
+        summaries["continuity"].get("continuity_gap_checks"), summaries["register"].get("change_gap_entries"),
+        summaries["governance"].get("governance_gap_count"), summaries["lineage"].get("version_gap_count"),
+        summaries["lifecycle"].get("lifecycle_gap_count"), summaries["self_containment"].get("self_containment_gap_count"),
+        summaries["stewardship"].get("stewardship_gap_count"), summaries["legacy"].get("legacy_gap_count"),
+        summaries["reflection"].get("meta_framework_gap_count"),
+    ))
+    expected_counts = {"dependency":30,"pathway":8,"transition":11,"provenance":14,"replay":15,"integrity":14,"audit":10,"certification":19,"closure":23,"continuity":23,"register":25,"governance":25,"lineage":25,"lifecycle":28,"self_containment":35,"stewardship":25,"legacy":36,"reflection":33}
+    sources = {"dependency":dependency,"pathway":stability,"transition":transitions,"provenance":provenance,"replay":replay,"integrity":integrity,"audit":audit,"certification":certification,"closure":closure,"continuity":continuity,"register":register,"governance":governance,"lineage":lineage,"lifecycle":lifecycle,"self_containment":self_containment,"stewardship":stewardship,"legacy":legacy,"reflection":reflection}
+    upstream_gaps += sum(counts[name] != expected for name, expected in expected_counts.items() if sources[name])
+    complete = True if reflection else None
+    replay_preserved = counts["replay"] == summaries["replay"].get("replayable_outputs") and summaries["replay"].get("non_replayable_outputs") == 0 if replay else None
+    specs = (
+        ("CS-001", "Methodology Completion Declaration", "Methodology Completion", "CREF", True, complete, "The declared methodology sequence and boundaries are visibly assembled.", "Completion is limited to declared framework scope."),
+        ("CS-002", "Forty-Stage Sequence Completion", "Sequence Completion", "Stages 1–40", 40, 40 if reflection else None, "The declared sequence reaches Stage 40.", "No Stage 41 is inferred."),
+        ("CS-003", "Phase I Completion", "Phase Completion", "Stages 1–19", True, complete, "Evaluation methodology phase remains implemented and visible.", "Does not validate case outputs."),
+        ("CS-004", "Phase II Completion", "Phase Completion", "Stages 20–30", True, complete, "Reflexive inspection phase remains implemented and visible.", "Does not create new analysis."),
+        ("CS-005", "Phase III Completion", "Phase Completion", "Stages 31–40", True, complete, "Governance phase reaches its declared Stage 40 boundary.", "Does not create institutional authority."),
+        ("CS-006", "Evaluation Methodology Preservation", "Preservation", "Stages 1–19", True, complete, "Evaluation methodology remains preserved.", "Preservation is structural only."),
+        ("CS-007", "Reflexive Inspection Preservation", "Preservation", "Stages 20–30", True, complete, "Reflexive inspection outputs remain preserved.", "Does not determine truth."),
+        ("CS-008", "Governance Architecture Preservation", "Preservation", "Stages 31–40", True, complete, "Governance outputs remain sequential and inspectable.", "Governance is descriptive only."),
+        ("CS-009", "Report Mode Preservation", "Inspection Preservation", "Stage 21", 3, len(report.get("available_report_modes") or []) if report else None, "All report modes remain available.", "Full Inspection remains default."),
+        ("CS-010", "Dependency Preservation", "Inspection Preservation", "Stage 22", 30, counts["dependency"] if dependency else None, "Dependency nodes remain preserved.", "Does not validate dependency truth."),
+        ("CS-011", "Pathway Preservation", "Inspection Preservation", "Stage 23", 8, counts["pathway"] if stability else None, "Pathways remain preserved.", "Does not predict outcomes."),
+        ("CS-012", "Transition History Preservation", "Inspection Preservation", "Stage 24", 11, counts["transition"] if transitions else None, "Transition entries remain preserved.", "Does not infer missing states."),
+        ("CS-013", "Provenance Preservation", "Inspection Preservation", "Stage 25", 14, counts["provenance"] if provenance else None, "Provenance entries remain preserved.", "Does not validate evidence."),
+        ("CS-014", "Replay Preservation", "Inspection Preservation", "Stage 26", True, replay_preserved, "Replay remains fully available.", "Does not simulate alternatives."),
+        ("CS-015", "Integrity Verification Preservation", "Verification Preservation", "Stage 27", (14,0), (counts["integrity"], summaries["integrity"].get("integrity_gap_checks")) if integrity else None, "Integrity checks remain preserved without gaps.", "Structural integrity only."),
+        ("CS-016", "Audit Package Preservation", "Verification Preservation", "Stage 28", (10,0), (counts["audit"], summaries["audit"].get("unavailable_sections")) if audit else None, "Audit sections remain available.", "Not a legal audit."),
+        ("CS-017", "Methodological Conformance Preservation", "Verification Preservation", "Stage 29", (19,0), (counts["certification"], summaries["certification"].get("non_conformance_checks")) if certification else None, "Conformance checks remain preserved.", "Not external certification."),
+        ("CS-018", "Reflexive Closure Preservation", "Governance Preservation", "Stage 30", (23,0), (counts["closure"], summaries["closure"].get("closure_gap_count")) if closure else None, "Reflexive closure remains preserved.", "Does not close a case."),
+        ("CS-019", "Framework Continuity Preservation", "Governance Preservation", "Stage 31", (23,0), (counts["continuity"], summaries["continuity"].get("continuity_gap_checks")) if continuity else None, "Continuity remains preserved.", "Visible continuity only."),
+        ("CS-020", "Change Register Preservation", "Governance Preservation", "Stage 32", (25,0), (counts["register"], summaries["register"].get("change_gap_entries")) if register else None, "Change register remains preserved.", "Does not infer undocumented changes."),
+        ("CS-021", "Governance Statement Preservation", "Governance Preservation", "Stage 33", (25,0), (counts["governance"], summaries["governance"].get("governance_gap_count")) if governance else None, "Governance principles remain preserved.", "Does not create authority."),
+        ("CS-022", "Version Lineage Preservation", "Governance Preservation", "Stage 34", (25,0), (counts["lineage"], summaries["lineage"].get("version_gap_count")) if lineage else None, "Version lineage remains preserved.", "Does not infer undocumented versions."),
+        ("CS-023", "Lifecycle Review Preservation", "Governance Preservation", "Stage 35", (28,0), (counts["lifecycle"], summaries["lifecycle"].get("lifecycle_gap_count")) if lifecycle else None, "Lifecycle review remains preserved.", "Does not infer future stages."),
+        ("CS-024", "Self-Containment Certification Preservation", "Methodology Preservation", "Stage 36", (35,0), (counts["self_containment"], summaries["self_containment"].get("self_containment_gap_count")) if self_containment else None, "Self-containment remains preserved.", "Does not certify software portability."),
+        ("CS-025", "Stewardship Declaration Preservation", "Methodology Preservation", "Stage 37", (25,0), (counts["stewardship"], summaries["stewardship"].get("stewardship_gap_count")) if stewardship else None, "Stewardship remains preserved.", "Does not create ownership."),
+        ("CS-026", "Legacy Package Preservation", "Methodology Preservation", "Stage 38", (36,0), (counts["legacy"], summaries["legacy"].get("legacy_gap_count")) if legacy else None, "Legacy artefacts remain preserved.", "Does not certify adoption readiness."),
+        ("CS-027", "Meta-Framework Reflection Preservation", "Methodology Preservation", "Stage 39", (33,0), (counts["reflection"], summaries["reflection"].get("meta_framework_gap_count")) if reflection else None, "Reflection items remain preserved.", "Does not establish external validity."),
+        ("CS-028", "Methodology / Implementation Separation", "Implementation Boundary", "CREF and Civic Decision Engine", True, complete, "CREF remains distinct from its software implementation.", "Does not assess implementation correctness."),
+        ("CS-029", "Portable Methodology Declaration", "Portability Boundary", "CREF Methodology", True, complete, "Declared artefacts support methodology understanding across implementations.", "Does not certify software or institutional portability.", True),
+        ("CS-030", "Open Methodology Visibility", "Visibility Boundary", "Framework Documentation", True, complete, "Methodology and limitations remain visibly documented.", "Does not guarantee perpetual public hosting.", True),
+        ("CS-031", "Public Inspectability Preservation", "Visibility Boundary", "Stage 21 Report Modes", 3, len(report.get("available_report_modes") or []) if report else None, "Three inspection modes remain available.", "Admin visibility is not universal public access.", True),
+        ("CS-032", "Future Stage Closure", "Final Boundary", "No Stage 41", "No future stage declared", "No future stage declared", "The declared forty-stage sequence ends at Stage 40.", "Does not prohibit future methodology versions."),
+        ("CS-033", "Non-Mutation Boundary", "Final Boundary", "Stage 40 Limitations", True, any("does not modify records" in value.lower() for value in STAGE40_LIMITATIONS), "Completion introduces no mutation.", "Declarative only."),
+        ("CS-034", "Non-Authority Boundary", "Final Boundary", "Stage 40 Limitations", True, any("does not create institutional authority" in value.lower() for value in STAGE40_LIMITATIONS), "Completion creates no authority.", "Does not confer ownership or accreditation."),
+        ("CS-035", "Completion Gap Absence", "Completion Integrity", "Stages 22–39", 0, upstream_gaps if reflection else None, "Visible upstream outputs remain preserved without gaps.", "No gap does not establish external validity."),
+        ("CS-036", "Framework Completion Limitation Visibility", "Final Boundary", "Stage 40 Limitations", True, bool(STAGE40_LIMITATIONS), "Completion limitations remain visible.", "Limitations govern every completion item."),
+        ("CS-037", "Independent Understanding Readiness", "Understanding Boundary", "Stages 36–40", True, complete, "Visible methodology artefacts support independent understanding.", "Does not certify implementation or adoption correctness.", True),
+        ("CS-038", "Preservation Readiness", "Preservation Boundary", "Stages 37–40", True, complete, "Stewardship and legacy artefacts support preservation.", "Does not guarantee perpetual preservation by third parties.", True),
+        ("CS-039", "Completion Statement Availability", "Completion Declaration", "Stage 40", True, complete, "A deterministic completion statement is visibly available.", "Availability does not create authority."),
+        ("CS-040", "Final Framework Completion Declaration", "Completion Declaration", "CREF Forty-Stage Methodology", True, complete, "CREF is declared methodologically complete within visible scope, limitations, governance, and preservation boundaries.", "Completion is internal, bounded, non-legal, and non-mutating.", True),
+    )
+    items = [_stage40_completion_item(*spec) for spec in specs]
+    results = {name: sum(item["completion_result"] == name for item in items) for name in ("Completion Item Declared", "Completion Item Declared With Limitation", "Completion Item Not Available", "Completion Gap Detected")}
+    if results["Completion Gap Detected"]:
+        state = "Framework Completion Gap Detected"
+    elif results["Completion Item Not Available"]:
+        state = "Framework Completion Statement Partially Available"
+    elif results["Completion Item Declared With Limitation"]:
+        state = "Framework Completion Statement Available With Limitations"
+    else:
+        state = "Framework Completion Statement Available"
+    summary = {
+        "completion_state": state, "total_completion_items": len(items),
+        "completed_items": results["Completion Item Declared"],
+        "items_completed_with_limitation": results["Completion Item Declared With Limitation"],
+        "unavailable_completion_items": results["Completion Item Not Available"],
+        "completion_gap_count": results["Completion Gap Detected"],
+        "implemented_stage_count": 40, "declared_phase_count": 3,
+        "version_lineage_relationship_count": counts["lineage_relationships"],
+        "lifecycle_review_item_count": counts["lifecycle"], "self_containment_check_count": counts["self_containment"],
+        "stewardship_declaration_count": counts["stewardship"], "legacy_package_item_count": counts["legacy"],
+        "meta_framework_reflection_item_count": counts["reflection"], "dependency_node_count": counts["dependency"],
+        "pathway_count": counts["pathway"], "transition_entry_count": counts["transition"],
+        "provenance_entry_count": counts["provenance"], "replay_step_count": counts["replay"],
+        "integrity_check_count": counts["integrity"], "audit_section_count": counts["audit"],
+        "certification_check_count": counts["certification"], "reflexive_closure_check_count": counts["closure"],
+        "continuity_check_count": counts["continuity"], "change_register_entry_count": counts["register"],
+        "governance_principle_count": counts["governance"], "version_lineage_entry_count": counts["lineage"],
+        "upstream_gap_count": upstream_gaps,
+        "limitation_summary": "CREF is complete within its visible forty-stage methodology, declared scope, limitations, governance, and preservation boundaries only.",
+    }
+    return {"completion_state": state, "completion_summary": summary, "completion_items": items,
+        "completion_relationships": [{"relationship": name, "completion_side": side, "declaration": declaration} for name, side, declaration in STAGE40_COMPLETION_RELATIONSHIPS],
+        "limitations": list(STAGE40_LIMITATIONS)}
+
+
+def _render_stage40_overview(statement: dict[str, Any]) -> str:
+    summary = statement["completion_summary"]
+    labels = (("Completion State","completion_state"),("Total Completion Items","total_completion_items"),("Completed Items","completed_items"),("Items Completed With Limitation","items_completed_with_limitation"),("Unavailable Completion Items","unavailable_completion_items"),("Completion Gap Count","completion_gap_count"),("Implemented Stage Count","implemented_stage_count"),("Declared Phase Count","declared_phase_count"),("Version Lineage Relationship Count","version_lineage_relationship_count"),("Lifecycle Review Item Count","lifecycle_review_item_count"),("Self-Containment Check Count","self_containment_check_count"),("Stewardship Declaration Count","stewardship_declaration_count"),("Legacy Package Item Count","legacy_package_item_count"),("Meta-Framework Reflection Item Count","meta_framework_reflection_item_count"),("Dependency Node Count","dependency_node_count"),("Pathway Count","pathway_count"),("Transition Entry Count","transition_entry_count"),("Provenance Entry Count","provenance_entry_count"),("Replay Step Count","replay_step_count"),("Integrity Check Count","integrity_check_count"),("Audit Section Count","audit_section_count"),("Certification Check Count","certification_check_count"),("Reflexive Closure Check Count","reflexive_closure_check_count"),("Continuity Check Count","continuity_check_count"),("Change Register Entry Count","change_register_entry_count"),("Governance Principle Count","governance_principle_count"),("Version Lineage Entry Count","version_lineage_entry_count"),("Limitation Summary","limitation_summary"))
+    return f'<section class="stage40-completion-overview"><h3>Framework Completion Overview</h3>{_render_stage18a_table(tuple((label, summary[key]) for label, key in labels))}</section>'
+
+
+def _render_stage40_relationships(statement: dict[str, Any]) -> str:
+    rows = "".join(f"<tr><td>{escape(item['relationship'])}</td><td>{escape(item['completion_side'])}</td><td>{escape(item['declaration'])}</td></tr>" for item in statement["completion_relationships"])
+    return f'<section class="stage40-completion-relationships"><h3>Framework Completion Relationships</h3><table><thead><tr><th>Relationship</th><th>Completion Side</th><th>Declaration</th></tr></thead><tbody>{rows}</tbody></table></section>'
+
+
+def _render_stage40_items(items: list[dict[str, Any]]) -> str:
+    columns = (("Completion Item ID","completion_item_id",True),("Item Name","item_name",False),("Completion Category","completion_category",False),("Affected Stage or Output","affected_stage_or_output",False),("Declared Completion State","declared_completion_state",False),("Observed Completion State","observed_completion_state",False),("Completion Result","completion_result",False),("Completion Basis","completion_basis",False),("Limitation Statement","limitation_statement",False))
+    headers = "".join(f"<th>{escape(label)}</th>" for label, _, _ in columns)
+    rows = "".join("<tr>" + "".join(f"<td><code>{escape(_stage18a_display_value(item.get(key)))}</code></td>" if code else f"<td>{escape(_stage18a_display_value(item.get(key)))}</td>" for _, key, code in columns) + "</tr>" for item in items)
+    return f'<section class="stage40-full-completion-items"><h3>Full Framework Completion Statement</h3><table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></section>'
+
+
+def _render_stage40_limitations(statement: dict[str, Any], *, concise: bool = False) -> str:
+    limitations = statement["limitations"]
+    if concise:
+        limitations = [limitations[index] for index in (0,1,2,3,7,8,9,10,11,12,13,14,34,35,36)]
+    return f'<section class="stage40-completion-limitations"><h3>Framework Completion Statement Limitations</h3>{_render_stage19a_list(limitations, "No completion limitations available.")}</section>'
+
+
+def _render_framework_completion_statement(statement: dict[str, Any], *, report_mode: str) -> str:
+    notice = '<p class="notice">Framework Completion Statement deterministically declares CREF complete within its visible forty-stage methodology, declared limitations, governance architecture, preservation structure, and inspection record. It creates no legal authority, external validation, portability certification, or record modification.</p>'
+    overview, relationships = _render_stage40_overview(statement), _render_stage40_relationships(statement)
+    if report_mode == "executive":
+        content, mode_class = overview + _render_stage40_limitations(statement, concise=True), "stage40-completion-executive"
+    elif report_mode == "review":
+        content, mode_class = overview + relationships + _render_stage40_limitations(statement), "stage40-completion-review"
+    else:
+        content, mode_class = overview + relationships + _render_stage40_items(statement["completion_items"]) + _render_stage40_limitations(statement), "stage40-completion-full"
+    return f'<section class="management-section stage40-framework-completion {mode_class}"><h2>Framework Completion Statement</h2>{notice}{content}</section>'
+
+
 def render_admin_record_evidence_page(
     *,
     reference: str,
@@ -41126,6 +41392,21 @@ def render_admin_record_evidence_page(
         stage39_meta_framework_reflection,
         report_mode=report_structure["report_mode"],
     )
+    stage40_framework_completion = build_framework_completion_statement(
+        report_structure, stage22_dependency_map, stage23_stability_analysis,
+        stage24_transition_history, stage25_output_provenance,
+        stage26_deterministic_replay, stage27_integrity_verification,
+        stage28_audit_package, stage29_conformance_certification,
+        stage30_reflexive_closure, stage31_framework_continuity,
+        stage32_framework_change_register, stage33_framework_governance,
+        stage34_framework_version_lineage, stage35_framework_lifecycle_review,
+        stage36_self_containment_certification, stage37_framework_stewardship,
+        stage38_framework_legacy_package, stage39_meta_framework_reflection,
+    )
+    stage40_completion_section = _render_framework_completion_statement(
+        stage40_framework_completion,
+        report_mode=report_structure["report_mode"],
+    )
     stage21_executive_core = (
         '<section class="stage21-report-mode stage21-executive-report">'
         '<h2>Executive Report Summary</h2>'
@@ -41181,6 +41462,7 @@ def render_admin_record_evidence_page(
             + stage37_stewardship_section
             + stage38_legacy_package_section
             + stage39_reflection_section
+            + stage40_completion_section
             + _render_stage21_limitations(report_structure)
         )
     elif report_structure["report_mode"] == "review":
@@ -41205,6 +41487,7 @@ def render_admin_record_evidence_page(
             + stage37_stewardship_section
             + stage38_legacy_package_section
             + stage39_reflection_section
+            + stage40_completion_section
             + _render_stage21_limitations(report_structure)
         )
     else:
@@ -41234,6 +41517,7 @@ def render_admin_record_evidence_page(
             f"{stage37_stewardship_section}"
             f"{stage38_legacy_package_section}"
             f"{stage39_reflection_section}"
+            f"{stage40_completion_section}"
             f"{_render_stage21_limitations(report_structure)}"
         )
     attachments_url = f"/admin/records/{escape(reference)}/attachments"
@@ -41767,6 +42051,24 @@ def render_admin_record_evidence_page(
     .stage39-full-reflection-items table {{
       min-width: 1860px;
     }}
+    .stage40-framework-completion table {{
+      table-layout: auto;
+    }}
+    .stage40-framework-completion th,
+    .stage40-framework-completion td {{
+      text-align: left;
+      vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: break-word;
+    }}
+    .stage40-completion-relationships,
+    .stage40-full-completion-items {{
+      overflow-x: auto;
+    }}
+    .stage40-full-completion-items table {{
+      min-width: 1860px;
+    }}
     @media (max-width: 640px) {{
       body {{ padding: 12px; }}
       main {{ padding: 16px; }}
@@ -41790,6 +42092,7 @@ def render_admin_record_evidence_page(
       .stage37-stewardship-relationships table {{ min-width: 760px; }}
       .stage38-legacy-relationships table {{ min-width: 760px; }}
       .stage39-reflection-relationships table {{ min-width: 760px; }}
+      .stage40-completion-relationships table {{ min-width: 760px; }}
       .stage24-transition-summary table {{ min-width: 760px; }}
       .stage25-provenance-summary table {{ min-width: 900px; }}
       .stage26-replay-summary table {{ min-width: 1120px; }}
