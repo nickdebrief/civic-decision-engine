@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(29, len(review["section_index"]))
+        self.assertEqual(30, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 30)),
+            list(range(1, 31)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -9155,6 +9155,92 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Reflection Result</th>", full)
         self.assertIn("Reflection Basis</th>", full)
 
+    def _build_stage40_fixture(self):
+        stage39_inputs, reflection = self._build_stage39_fixture()
+        inputs = (*stage39_inputs, reflection)
+        return inputs, self.admin_session.build_framework_completion_statement(*inputs)
+
+    def test_stage40_completion_is_deterministic_complete_and_non_mutating(self):
+        inputs, statement = self._build_stage40_fixture()
+        original_inputs = copy.deepcopy(inputs)
+        self.assertEqual("Framework Completion Statement Available With Limitations", statement["completion_state"])
+        self.assertEqual(40, len(statement["completion_items"]))
+        self.assertEqual(10, len(statement["completion_relationships"]))
+        required_fields = {
+            "completion_item_id", "item_name", "completion_category",
+            "affected_stage_or_output", "declared_completion_state",
+            "observed_completion_state", "completion_result",
+            "completion_basis", "limitation_statement",
+        }
+        for item in statement["completion_items"]:
+            self.assertEqual(required_fields, set(item))
+        summary = statement["completion_summary"]
+        self.assertEqual((40, 34, 6, 0, 0), (
+            summary["total_completion_items"], summary["completed_items"],
+            summary["items_completed_with_limitation"], summary["unavailable_completion_items"],
+            summary["completion_gap_count"],
+        ))
+        self.assertEqual((40, 3, 6, 28, 35, 25, 36, 33), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"], summary["lifecycle_review_item_count"],
+            summary["self_containment_check_count"], summary["stewardship_declaration_count"],
+            summary["legacy_package_item_count"], summary["meta_framework_reflection_item_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {item["item_name"] for item in statement["completion_items"]}
+        for required_name in (
+            "Methodology Completion Declaration", "Forty-Stage Sequence Completion",
+            "Phase I Completion", "Phase II Completion", "Phase III Completion",
+            "Meta-Framework Reflection Preservation", "Future Stage Closure",
+            "Completion Gap Absence", "Framework Completion Limitation Visibility",
+            "Final Framework Completion Declaration",
+        ):
+            self.assertIn(required_name, names)
+        relationships = {item["relationship"] for item in statement["completion_relationships"]}
+        self.assertEqual({"Methodology Completion", "Phase Completion", "Implementation Boundary", "Governance Boundary", "Legacy Boundary", "Meta-Framework Boundary", "Adoption Boundary", "Evidence Boundary", "Final Boundary", "Completion Source"}, relationships)
+        self.assertEqual(statement, self.admin_session.build_framework_completion_statement(*inputs))
+        self.assertEqual(original_inputs, inputs)
+
+    def test_stage40_gap_partial_and_rendering_modes_are_deterministic(self):
+        inputs, statement = self._build_stage40_fixture()
+        gap_inputs = list(inputs)
+        gap_inputs[1] = copy.deepcopy(gap_inputs[1])
+        gap_inputs[1]["nodes"] = gap_inputs[1]["nodes"][:-1]
+        gap = self.admin_session.build_framework_completion_statement(*gap_inputs)
+        self.assertEqual("Framework Completion Gap Detected", gap["completion_state"])
+        partial = self.admin_session.build_framework_completion_statement()
+        self.assertEqual("Framework Completion Statement Partially Available", partial["completion_state"])
+        self.assertGreater(partial["completion_summary"]["unavailable_completion_items"], 0)
+        executive = self.admin_session._render_framework_completion_statement(statement, report_mode="executive")
+        review = self.admin_session._render_framework_completion_statement(statement, report_mode="review")
+        full = self.admin_session._render_framework_completion_statement(statement, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Framework Completion Statement</h2>", rendered)
+            self.assertIn("Framework Completion Overview", rendered)
+            self.assertIn("Framework Completion Statement Limitations", rendered)
+        self.assertIn("stage40-completion-executive", executive)
+        self.assertNotIn("Framework Completion Relationships", executive)
+        self.assertNotIn("Full Framework Completion Statement", executive)
+        self.assertIn("stage40-completion-review", review)
+        self.assertIn("Framework Completion Relationships", review)
+        self.assertNotIn("Full Framework Completion Statement", review)
+        self.assertIn("stage40-completion-full", full)
+        self.assertIn("Framework Completion Relationships", full)
+        self.assertIn("Full Framework Completion Statement", full)
+        self.assertIn("Declared Completion State</th>", full)
+        self.assertIn("Observed Completion State</th>", full)
+        self.assertIn("Completion Result</th>", full)
+        self.assertIn("Completion Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -9290,6 +9376,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Meta-Framework Reflection</h2>", executive)
         self.assertNotIn("Meta-Framework Relationships", executive)
         self.assertNotIn("Full Meta-Framework Reflection", executive)
+        self.assertIn("stage40-completion-executive", executive)
+        self.assertIn("<h2>Framework Completion Statement</h2>", executive)
+        self.assertNotIn("Framework Completion Relationships", executive)
+        self.assertNotIn("Full Framework Completion Statement", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -9359,6 +9449,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage39-reflection-review", review)
         self.assertIn("Meta-Framework Relationships", review)
         self.assertNotIn("Full Meta-Framework Reflection", review)
+        self.assertIn("stage40-completion-review", review)
+        self.assertIn("Framework Completion Relationships", review)
+        self.assertNotIn("Full Framework Completion Statement", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -9395,6 +9488,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Stewardship Declaration",
             "Framework Legacy Package",
             "Meta-Framework Reflection",
+            "Framework Completion Statement",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -9433,6 +9527,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Framework Legacy Package", explicit_full)
         self.assertIn("stage39-reflection-full", explicit_full)
         self.assertIn("Full Meta-Framework Reflection", explicit_full)
+        self.assertIn("stage40-completion-full", explicit_full)
+        self.assertIn("Full Framework Completion Statement", explicit_full)
         self.assertLess(
             explicit_full.index("Framework Self-Containment Certification"),
             explicit_full.index("Framework Stewardship Declaration"),
@@ -9444,6 +9540,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Framework Legacy Package"),
             explicit_full.index("Meta-Framework Reflection"),
+        )
+        self.assertLess(
+            explicit_full.index("Meta-Framework Reflection"),
+            explicit_full.index("Framework Completion Statement"),
         )
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
