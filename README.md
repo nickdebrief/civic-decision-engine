@@ -486,6 +486,24 @@ state, result, basis, affected output, and limitation.
 
 ---
 
+## Stage 39 — Meta-Framework Reflection
+
+Reflects on CREF as a deterministic civic record evaluation methodology,
+documenting its category, contribution, implementation separation, adjacent
+domain relationships, and methodological boundaries.
+
+Thirty-three deterministic reflection items and nine relationships describe
+CREF's inspection, reflexive, governance, preservation, and non-adjudicative
+character. Public administration, record keeping, decision science, and digital
+governance are identified as adjacent domains without claiming replacement,
+external validation, legal authority, or institutional adoption.
+
+Executive mode presents a concise reflection overview; Review mode adds the
+relationship table; Full Inspection mode exposes every reflection item,
+observed state, result, basis, affected output, and limitation.
+
+---
+
 ## Public Record Infrastructure
 
 The Civic Decision Engine supports publicly verifiable civic records.

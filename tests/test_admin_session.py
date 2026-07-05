@@ -6089,9 +6089,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertEqual("review", review["report_mode"])
         self.assertEqual("Review Report", review["report_mode_label"])
         self.assertEqual(3, len(review["available_report_modes"]))
-        self.assertEqual(28, len(review["section_index"]))
+        self.assertEqual(29, len(review["section_index"]))
         self.assertEqual(
-            list(range(1, 29)),
+            list(range(1, 30)),
             [section["section_number"] for section in review["section_index"]],
         )
         self.assertIn(
@@ -9067,6 +9067,94 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Legacy Result</th>", full)
         self.assertIn("Legacy Basis</th>", full)
 
+    def _build_stage39_fixture(self):
+        stage37_inputs, stewardship = self._build_stage37_fixture()
+        stage38_inputs = (*stage37_inputs, stewardship)
+        legacy = self.admin_session.build_framework_legacy_package(*stage38_inputs)
+        inputs = (*stage38_inputs, legacy)
+        return inputs, self.admin_session.build_meta_framework_reflection(*inputs)
+
+    def test_stage39_reflection_is_deterministic_complete_and_non_mutating(self):
+        inputs, reflection = self._build_stage39_fixture()
+        original_inputs = copy.deepcopy(inputs)
+        self.assertEqual("Meta-Framework Reflection Available With Limitations", reflection["meta_framework_state"])
+        self.assertEqual(33, len(reflection["reflection_items"]))
+        self.assertEqual(9, len(reflection["meta_framework_relationships"]))
+        required_fields = {
+            "reflection_item_id", "item_name", "reflection_category",
+            "affected_stage_or_output", "declared_reflection_state",
+            "observed_reflection_state", "reflection_result",
+            "reflection_basis", "limitation_statement",
+        }
+        for item in reflection["reflection_items"]:
+            self.assertEqual(required_fields, set(item))
+        summary = reflection["reflection_summary"]
+        self.assertEqual((33, 27, 6, 0, 0), (
+            summary["total_reflection_items"], summary["reflected_items"],
+            summary["items_reflected_with_limitation"], summary["unavailable_reflection_items"],
+            summary["meta_framework_gap_count"],
+        ))
+        self.assertEqual((39, 3, 6, 28, 35, 25, 36), (
+            summary["implemented_stage_count"], summary["declared_phase_count"],
+            summary["version_lineage_relationship_count"], summary["lifecycle_review_item_count"],
+            summary["self_containment_check_count"], summary["stewardship_declaration_count"],
+            summary["legacy_package_item_count"],
+        ))
+        self.assertEqual((30, 8, 11, 14, 15, 14, 10, 19, 23, 23, 25, 25, 25), (
+            summary["dependency_node_count"], summary["pathway_count"],
+            summary["transition_entry_count"], summary["provenance_entry_count"],
+            summary["replay_step_count"], summary["integrity_check_count"],
+            summary["audit_section_count"], summary["certification_check_count"],
+            summary["reflexive_closure_check_count"], summary["continuity_check_count"],
+            summary["change_register_entry_count"], summary["governance_principle_count"],
+            summary["version_lineage_entry_count"],
+        ))
+        self.assertEqual(0, summary["upstream_gap_count"])
+        names = {item["item_name"] for item in reflection["reflection_items"]}
+        for required_name in (
+            "Methodology Category Identification", "Deterministic Methodology Character",
+            "Implementation Separation", "Public Administration Relevance",
+            "Decision-Science Relevance", "Digital Governance Relevance",
+            "Adjacent Domain Relationship", "Future Stage Non-Inference",
+            "Completion Proximity Declaration", "Reflection Limitation Visibility",
+        ):
+            self.assertIn(required_name, names)
+        relationships = {item["relationship"] for item in reflection["meta_framework_relationships"]}
+        self.assertEqual({"Methodology Category", "Implementation Boundary", "Evidence Boundary", "Governance Boundary", "Portability Boundary", "Adjacent Domains", "Legacy Relationship", "Future Boundary", "Reflection Source"}, relationships)
+        self.assertEqual(reflection, self.admin_session.build_meta_framework_reflection(*inputs))
+        self.assertEqual(original_inputs, inputs)
+
+    def test_stage39_gap_partial_and_rendering_modes_are_deterministic(self):
+        inputs, reflection = self._build_stage39_fixture()
+        gap_inputs = list(inputs)
+        gap_inputs[1] = copy.deepcopy(gap_inputs[1])
+        gap_inputs[1]["nodes"] = gap_inputs[1]["nodes"][:-1]
+        gap = self.admin_session.build_meta_framework_reflection(*gap_inputs)
+        self.assertEqual("Meta-Framework Reflection Gap Detected", gap["meta_framework_state"])
+        partial = self.admin_session.build_meta_framework_reflection()
+        self.assertEqual("Meta-Framework Reflection Partially Available", partial["meta_framework_state"])
+        self.assertGreater(partial["reflection_summary"]["unavailable_reflection_items"], 0)
+        executive = self.admin_session._render_meta_framework_reflection(reflection, report_mode="executive")
+        review = self.admin_session._render_meta_framework_reflection(reflection, report_mode="review")
+        full = self.admin_session._render_meta_framework_reflection(reflection, report_mode="full")
+        for rendered in (executive, review, full):
+            self.assertIn("<h2>Meta-Framework Reflection</h2>", rendered)
+            self.assertIn("Meta-Framework Reflection Overview", rendered)
+            self.assertIn("Meta-Framework Limitations", rendered)
+        self.assertIn("stage39-reflection-executive", executive)
+        self.assertNotIn("Meta-Framework Relationships", executive)
+        self.assertNotIn("Full Meta-Framework Reflection", executive)
+        self.assertIn("stage39-reflection-review", review)
+        self.assertIn("Meta-Framework Relationships", review)
+        self.assertNotIn("Full Meta-Framework Reflection", review)
+        self.assertIn("stage39-reflection-full", full)
+        self.assertIn("Meta-Framework Relationships", full)
+        self.assertIn("Full Meta-Framework Reflection", full)
+        self.assertIn("Declared Reflection State</th>", full)
+        self.assertIn("Observed Reflection State</th>", full)
+        self.assertIn("Reflection Result</th>", full)
+        self.assertIn("Reflection Basis</th>", full)
+
     def test_stage21_report_modes_preserve_values_and_scope_output(self):
         evidence_groups = {
             "condition": [
@@ -9198,6 +9286,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("<h2>Framework Legacy Package</h2>", executive)
         self.assertNotIn("Legacy Package Relationships", executive)
         self.assertNotIn("Full Framework Legacy Package", executive)
+        self.assertIn("stage39-reflection-executive", executive)
+        self.assertIn("<h2>Meta-Framework Reflection</h2>", executive)
+        self.assertNotIn("Meta-Framework Relationships", executive)
+        self.assertNotIn("Full Meta-Framework Reflection", executive)
         self.assertNotIn("stage19c-evidence-attribution-matrix", executive)
         self.assertNotIn("supporting-evidence-admin-group", executive)
         self.assertIn(
@@ -9264,6 +9356,9 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("stage38-legacy-review", review)
         self.assertIn("Legacy Package Relationships", review)
         self.assertNotIn("Full Framework Legacy Package", review)
+        self.assertIn("stage39-reflection-review", review)
+        self.assertIn("Meta-Framework Relationships", review)
+        self.assertNotIn("Full Meta-Framework Reflection", review)
         self.assertIn("<h2>Determination Trace</h2>", review)
         self.assertNotIn("stage19c-evidence-attribution-matrix", review)
 
@@ -9299,6 +9394,7 @@ class AdminSessionTests(unittest.TestCase):
             "Framework Self-Containment Certification",
             "Framework Stewardship Declaration",
             "Framework Legacy Package",
+            "Meta-Framework Reflection",
         ):
             self.assertIn(section, explicit_full)
         self.assertIn("stage22-dependency-full", explicit_full)
@@ -9335,6 +9431,8 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Full Stewardship Declaration Table", explicit_full)
         self.assertIn("stage38-legacy-full", explicit_full)
         self.assertIn("Full Framework Legacy Package", explicit_full)
+        self.assertIn("stage39-reflection-full", explicit_full)
+        self.assertIn("Full Meta-Framework Reflection", explicit_full)
         self.assertLess(
             explicit_full.index("Framework Self-Containment Certification"),
             explicit_full.index("Framework Stewardship Declaration"),
@@ -9342,6 +9440,10 @@ class AdminSessionTests(unittest.TestCase):
         self.assertLess(
             explicit_full.index("Framework Stewardship Declaration"),
             explicit_full.index("Framework Legacy Package"),
+        )
+        self.assertLess(
+            explicit_full.index("Framework Legacy Package"),
+            explicit_full.index("Meta-Framework Reflection"),
         )
         self.assertLess(
             explicit_full.index("Determination Dependency Mapping"),
