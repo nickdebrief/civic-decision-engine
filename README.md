@@ -101,6 +101,21 @@ content, or a public upload UI.
 
 ---
 
+## CDE v12.2 — Admin Document Intake
+
+CDE v12.2 extends the existing authenticated administration interface with a
+private PDF intake workflow. Administrators can capture document metadata,
+store the original PDF in a pending intake area, inspect its SHA-256 hash and
+proposed private storage location, and review pending submissions.
+
+Pending intake is deliberately separate from public records and record
+attachments. Uploading a document does not create or modify a record, publish
+an attachment, establish an evidence relationship, or change canonical or
+attachment hashes. Approval, publication, and record creation remain deferred
+to a later stage.
+
+---
+
 ## What it does
 
 Given one or more civic cases, the system:

@@ -47,6 +47,12 @@ from api.attachments import (
     validate_document_date,
     validate_publication_status,
 )
+from api.document_intake import (
+    intake_root,
+    list_pending_documents,
+    load_pending_document,
+    store_pending_document,
+)
 
 router = APIRouter()
 
@@ -276,6 +282,20 @@ def _safe_attachment_response(row: sqlite3.Row) -> dict[str, Any]:
         "is_latest": row["is_latest"],
         "is_deleted": row["is_deleted"],
     }
+
+
+def _read_uploaded_file(file: UploadFile) -> bytes:
+    file_handle = getattr(file, "file", None)
+    if file_handle is None or not hasattr(file_handle, "read"):
+        raise _http_error(400, "document_intake_file_required")
+    if hasattr(file_handle, "seek"):
+        file_handle.seek(0)
+    data = file_handle.read()
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    if not isinstance(data, bytes):
+        raise _http_error(400, "document_intake_file_required")
+    return data
 
 
 def _attachment_row_to_metadata(row: sqlite3.Row) -> dict[str, Any]:
@@ -43546,6 +43566,7 @@ def render_admin_record_evidence_page(
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
       <a class="navigation-link" href="{attachments_url}">Back to attachment management</a>
+      <a class="navigation-link" href="/admin/document-intake">Admin Document Intake</a>
     </section>
     {stage21_section_index}
     {stage21_report_content}
@@ -44298,6 +44319,7 @@ def render_admin_attachments_page(
       <p><strong>Record reference:</strong> {escape(reference)}</p>
       <p><strong>Record version:</strong> {record_version}</p>
       <p><a href="/admin/records/{escape(reference)}/evidence">View record evidence by target</a></p>
+      <p><a href="/admin/document-intake">Admin Document Intake</a></p>
     </section>
     {temporary_upload_section}
     <section class="management-section current-attachments">
@@ -44450,6 +44472,104 @@ def render_admin_attachments_page(
 </html>"""
 
 
+def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str:
+    rows = "".join(
+        f"""
+        <tr>
+          <td><a href="/admin/document-intake/{escape(item['intake_id'])}">{escape(item['title'])}</a></td>
+          <td>{escape(item['original_filename'])}</td>
+          <td>{escape(item['institution_source'])}</td>
+          <td>{escape(item['category'])}</td>
+          <td><span class="status">{escape(item['status'])}</span></td>
+          <td>{escape(item['upload_date'])}</td>
+        </tr>
+        """
+        for item in pending_documents
+    ) or '<tr><td colspan="6">No pending documents.</td></tr>'
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Document Intake</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; background: #f4f3ef; color: #222; font-family: system-ui, sans-serif; }}
+    main {{ width: min(1120px, calc(100% - 32px)); margin: 32px auto 64px; }}
+    h1, h2 {{ color: #143a52; }}
+    nav {{ display: flex; gap: 16px; margin-bottom: 20px; font-size: 0.9rem; }}
+    nav a {{ color: #245d61; }}
+    .notice {{ padding: 14px 16px; border-left: 4px solid #2e8b9a; background: #fff; }}
+    .intake-form {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px; background: #fff; border: 1px solid #d8d4ca; }}
+    .intake-form label {{ display: grid; gap: 6px; color: #555; font: 0.78rem ui-monospace, monospace; text-transform: uppercase; }}
+    .intake-form input, .intake-form select, .intake-form textarea {{ width: 100%; padding: 9px 10px; border: 1px solid #c9c6bd; background: #fff; color: #222; font: 0.92rem system-ui, sans-serif; }}
+    .intake-form textarea, .full-width {{ grid-column: 1 / -1; }}
+    .intake-form textarea {{ min-height: 84px; resize: vertical; }}
+    button {{ width: max-content; padding: 10px 14px; border: 0; background: #245d61; color: #fff; cursor: pointer; }}
+    .pending {{ margin-top: 28px; overflow-x: auto; }}
+    table {{ width: 100%; border-collapse: collapse; background: #fff; font-size: 0.88rem; }}
+    th {{ background: #143a52; color: #fff; text-align: left; }}
+    th, td {{ padding: 10px; border: 1px solid #e1dfd8; vertical-align: top; }}
+    .status {{ color: #725a00; font-weight: 700; text-transform: uppercase; }}
+    @media (max-width: 720px) {{ .intake-form {{ grid-template-columns: 1fr; }} .intake-form > * {{ grid-column: 1; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <nav><a href="/admin/login">Admin</a><a href="/admin/document-intake" aria-current="page">Document intake</a></nav>
+    <h1>Admin Document Intake</h1>
+    <p class="notice">PDF documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
+    <section>
+      <h2>New pending document</h2>
+      <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
+        <label>PDF document<input name="file" type="file" accept="application/pdf,.pdf" required></label>
+        <label>Title<input name="title" maxlength="240" required></label>
+        <label>Institution / source<input name="institution_source" maxlength="240" required></label>
+        <label>Document date<input name="document_date" type="date" required></label>
+        <label>Category<input name="category" maxlength="120" required></label>
+        <label>Visibility<select name="visibility" required><option value="private">Private</option><option value="restricted">Restricted</option></select></label>
+        <label>Optional reference identifier<input name="reference_identifier" maxlength="160"></label>
+        <label class="full-width">Description<textarea name="description" required></textarea></label>
+        <label class="full-width">Notes<textarea name="notes" required></textarea></label>
+        <button type="submit">Store as pending</button>
+      </form>
+    </section>
+    <section class="pending">
+      <h2>Pending intake</h2>
+      <table><thead><tr><th>Title</th><th>Filename</th><th>Institution / source</th><th>Category</th><th>Status</th><th>Upload date</th></tr></thead><tbody>{rows}</tbody></table>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def _render_document_intake_preview(item: dict[str, Any]) -> str:
+    fields = (
+        ("Status", item["status"]),
+        ("Filename", item["original_filename"]),
+        ("File size", f"{item['file_size_bytes']} bytes"),
+        ("SHA-256", item["sha256_hash"]),
+        ("Title", item["title"]),
+        ("Institution / source", item["institution_source"]),
+        ("Document date", item["document_date"]),
+        ("Upload date", item["upload_date"]),
+        ("Category", item["category"]),
+        ("Description", item["description"]),
+        ("Visibility", item["visibility"]),
+        ("Notes", item["notes"]),
+        ("Reference identifier", item.get("reference_identifier") or "Not provided"),
+        ("Proposed storage location", item["proposed_storage_location"]),
+    )
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
+        for label, value in fields
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}code{{font-size:.85rem}}</style></head>
+<body><main><p><a href="/admin/document-intake">Back to document intake</a></p><h1>Pending Document Preview</h1><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval and publication are not available in this stage.</p><table>{rows}</table></main></body></html>"""
+
+
 @router.get("/admin/login", response_class=HTMLResponse)
 def admin_login_page():
     html = """
@@ -44463,6 +44583,7 @@ def admin_login_page():
 <body>
   <main>
     <h1>Civic Decision Engine Admin</h1>
+    <p><a href="/admin/document-intake">Admin Document Intake</a></p>
     <form method="post" action="/api/admin/session/login">
       <label for="password">Admin password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
@@ -44494,6 +44615,65 @@ def admin_session_logout():
     response = JSONResponse(content={"ok": True})
     _clear_session_cookie(response)
     return response
+
+
+@router.get("/admin/document-intake", response_class=HTMLResponse)
+def admin_document_intake_page(request: Request):
+    require_admin_session(request)
+    return HTMLResponse(
+        content=_render_document_intake_page(list_pending_documents())
+    )
+
+
+@router.get("/admin/document-intake/{intake_id}", response_class=HTMLResponse)
+def admin_document_intake_preview_page(intake_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        item = load_pending_document(intake_id)
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    return HTMLResponse(content=_render_document_intake_preview(item))
+
+
+@router.post("/api/admin/session/document-intake", response_class=HTMLResponse)
+def admin_document_intake_upload(
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    document_date: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    visibility: str = Form(...),
+    notes: str = Form(...),
+    reference_identifier: str | None = Form(None),
+    file: UploadFile = File(...),
+):
+    require_admin_session(request)
+    data = _read_uploaded_file(file)
+    try:
+        item = store_pending_document(
+            data=data,
+            original_filename=getattr(file, "filename", None) or "document.pdf",
+            content_type=getattr(file, "content_type", None),
+            title=title,
+            institution_source=institution_source,
+            document_date=document_date,
+            category=category,
+            description=description,
+            visibility=visibility,
+            notes=notes,
+            reference_identifier=reference_identifier,
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = {
+            "document_intake_file_type_not_allowed": 415,
+            "document_intake_file_too_large": 413,
+            "document_intake_duplicate": 409,
+        }.get(detail, 400)
+        raise _http_error(status_code, detail) from exc
+    return HTMLResponse(content=_render_document_intake_preview(item), status_code=201)
 
 
 @router.get("/admin/records/{reference}/attachments", response_class=HTMLResponse)
