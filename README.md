@@ -156,6 +156,18 @@ private intake metadata is added to public pages. Lifecycle transitions,
 publication eligibility, evidence relationships, classifications, hashes, and
 record behavior are unchanged.
 
+### CDE v12.5.1 — Complete Administration Console Navigation
+
+CDE v12.5.1 completes the Administration Console dashboard with first-class
+summary cards for Pending Intake, the active Review Queue, Record Evidence,
+and the Public Library. Record Evidence now has a dedicated **Open Record
+Evidence** card describing the existing inspection capabilities and retaining
+the known-reference navigation boundary.
+
+This maintenance stage changes dashboard navigation and presentation only. It
+adds no record index, lifecycle transition, publication action, evidence
+operation, hash or verification change, security change, or public API.
+
 ---
 
 ## What it does

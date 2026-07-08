@@ -61,7 +61,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn('href="/admin"', content)
         self.assertIn('href="/admin/document-intake#new-intake"', content)
         self.assertIn('href="/admin/document-intake#intake-management"', content)
-        self.assertIn('href="/admin#record-evidence"', content)
+        self.assertIn('href="/admin#open-record-evidence"', content)
         self.assertIn('href="/documents"', content)
         self.assertIn('/api/admin/session/logout', content)
 
@@ -80,6 +80,31 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn("Rejected</th><td>0", content)
         self.assertIn(f'/admin/document-intake/{self.pending_id}', content)
         self.assertIn(f'/admin/document-intake/{self.review_id}', content)
+
+    def test_dashboard_renders_four_first_class_summary_cards(self):
+        content = admin_session.admin_dashboard_page(self.request).content
+        self.assertIn('aria-label="Administration summary"', content)
+        for heading in (
+            "Pending Intake",
+            "Review Queue",
+            "Record Evidence",
+            "Public Library",
+        ):
+            self.assertIn(f"<h2>{heading}</h2>", content)
+        self.assertIn('<span class="summary-value">1</span>', content)
+        self.assertIn('<span class="summary-value">2</span>', content)
+        self.assertIn('href="#open-record-evidence"', content)
+        self.assertIn('href="/documents"', content)
+
+    def test_record_evidence_card_describes_existing_inspection_capabilities(self):
+        content = admin_session.admin_dashboard_page(self.request).content
+        self.assertIn('id="open-record-evidence"', content)
+        self.assertIn("determination traces", content)
+        self.assertIn("dependency and stability views", content)
+        self.assertIn("provenance", content)
+        self.assertIn("Full Inspection report modes", content)
+        self.assertIn('aria-label="Record reference"', content)
+        self.assertIn("Open Record Evidence</button>", content)
 
     def test_shared_navigation_uses_current_record_reference_when_available(self):
         content = admin_session._render_admin_console_navigation("RECORD-2026-001")
