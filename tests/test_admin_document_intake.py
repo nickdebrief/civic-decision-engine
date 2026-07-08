@@ -1,0 +1,210 @@
+import hashlib
+import io
+import json
+import os
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from api.document_intake import (
+    list_pending_documents,
+    load_pending_document,
+    store_pending_document,
+)
+from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+
+install_fastapi_stubs()
+
+from api.routes import admin_session
+
+
+PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+
+
+class AdminDocumentIntakeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name) / "pending"
+        self.db_path = Path(self.temp_dir.name) / "records.db"
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("CREATE TABLE records (reference TEXT, verification_hash TEXT)")
+        conn.execute("INSERT INTO records VALUES ('existing', 'unchanged')")
+        conn.commit()
+        conn.close()
+        self.env = patch.dict(
+            os.environ,
+            {
+                "CDE_ADMIN_PASSWORD": "admin-password",
+                "CDE_ADMIN_SESSION_SECRET": "session-secret",
+                "CDE_DOCUMENT_INTAKE_ROOT": str(self.root),
+                "CDE_DOCUMENT_INTAKE_MAX_BYTES": "1048576",
+            },
+            clear=False,
+        )
+        self.env.start()
+        self.original_db_path = admin_session.DB_PATH
+        admin_session.DB_PATH = self.db_path
+        self.session = admin_session.create_admin_session()
+        self.request = FakeRequest(
+            cookies={admin_session.SESSION_COOKIE_NAME: self.session}
+        )
+
+    def tearDown(self):
+        admin_session.DB_PATH = self.original_db_path
+        self.env.stop()
+        self.temp_dir.cleanup()
+
+    def metadata(self):
+        return {
+            "title": "Administrative decision",
+            "institution_source": "Civic Office",
+            "document_date": "2026-07-08",
+            "category": "Decision",
+            "description": "Pending administrative source document.",
+            "visibility": "private",
+            "notes": "Awaiting explicit approval.",
+            "reference_identifier": "INT-2026-001",
+        }
+
+    def upload(self, **overrides):
+        data = overrides.pop("data", PDF_BYTES)
+        filename = overrides.pop("filename", "decision.pdf")
+        content_type = overrides.pop("content_type", "application/pdf")
+        request = overrides.pop("request", self.request)
+        values = self.metadata()
+        values.update(overrides)
+        file = SimpleNamespace(
+            filename=filename,
+            content_type=content_type,
+            file=io.BytesIO(data),
+        )
+        return admin_session.admin_document_intake_upload(
+            request=request,
+            file=file,
+            **values,
+        )
+
+    @staticmethod
+    def response_text(response):
+        return response.content
+
+    def test_authenticated_admin_page_uses_existing_session(self):
+        response = admin_session.admin_document_intake_page(self.request)
+        content = self.response_text(response)
+        self.assertIn("Admin Document Intake", content)
+        self.assertIn("/api/admin/session/document-intake", content)
+        self.assertIn("This upload has not created or modified any public record.", content)
+
+    def test_unauthenticated_page_and_upload_are_denied(self):
+        with self.assertRaises(FakeHTTPException) as page_ctx:
+            admin_session.admin_document_intake_page(FakeRequest())
+        self.assertEqual(page_ctx.exception.status_code, 401)
+
+        with self.assertRaises(FakeHTTPException) as upload_ctx:
+            self.upload(request=FakeRequest())
+        self.assertEqual(upload_ctx.exception.status_code, 401)
+        self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_pdf_upload_persists_private_pending_metadata_and_hash(self):
+        response = self.upload()
+        expected_hash = hashlib.sha256(PDF_BYTES).hexdigest()
+        item = load_pending_document(expected_hash, root=self.root)
+        content = self.response_text(response)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(item["status"], "pending")
+        self.assertEqual(item["original_filename"], "decision.pdf")
+        self.assertEqual(item["sha256_hash"], expected_hash)
+        self.assertEqual(item["file_size_bytes"], len(PDF_BYTES))
+        self.assertEqual(item["title"], "Administrative decision")
+        self.assertEqual(item["institution_source"], "Civic Office")
+        self.assertEqual(item["reference_identifier"], "INT-2026-001")
+        self.assertFalse(item["public_record_mutation"])
+        self.assertIn(expected_hash, content)
+        self.assertIn("Pending Document Preview", content)
+        self.assertIn("This upload has not created or modified any public record.", content)
+
+        stored_file = Path(item["proposed_storage_location"])
+        self.assertTrue(stored_file.is_file())
+        self.assertEqual(stored_file.read_bytes(), PDF_BYTES)
+        self.assertTrue(str(stored_file).startswith(str(self.root.resolve())))
+
+    def test_original_filename_is_preserved_without_path_traversal(self):
+        self.upload(filename="../../private/source.PDF")
+        item = list_pending_documents(root=self.root)[0]
+        self.assertEqual(item["original_filename"], "source.PDF")
+        self.assertNotIn("..", Path(item["proposed_storage_location"]).parts)
+
+    def test_invalid_mime_extension_and_signature_are_rejected(self):
+        cases = (
+            {"content_type": "text/plain"},
+            {"filename": "decision.txt"},
+            {"data": b"not a pdf"},
+        )
+        for case in cases:
+            with self.subTest(case=case), self.assertRaises(FakeHTTPException) as ctx:
+                self.upload(**case)
+            self.assertIn(ctx.exception.status_code, {400, 415})
+        self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_size_limit_is_enforced_before_persistence(self):
+        with patch.dict(os.environ, {"CDE_DOCUMENT_INTAKE_MAX_BYTES": "8"}):
+            with self.assertRaises(FakeHTTPException) as ctx:
+                self.upload()
+        self.assertEqual(ctx.exception.status_code, 413)
+        self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_preview_requires_authentication_and_has_no_file_serving_route(self):
+        self.upload()
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        response = admin_session.admin_document_intake_preview_page(
+            intake_id, self.request
+        )
+        content = self.response_text(response)
+        self.assertIn("Proposed storage location", content)
+        self.assertNotIn("download", content.lower())
+        with self.assertRaises(FakeHTTPException) as ctx:
+            admin_session.admin_document_intake_preview_page(
+                intake_id, FakeRequest()
+            )
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_upload_does_not_mutate_public_records_or_attachment_tables(self):
+        conn = sqlite3.connect(self.db_path)
+        before = conn.execute("SELECT * FROM records").fetchall()
+        before_tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        conn.close()
+
+        self.upload()
+
+        conn = sqlite3.connect(self.db_path)
+        after = conn.execute("SELECT * FROM records").fetchall()
+        after_tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(after, before)
+        self.assertEqual(after_tables, before_tables)
+
+    def test_sidecar_json_is_stable_and_contains_no_file_bytes(self):
+        item = store_pending_document(
+            data=PDF_BYTES,
+            original_filename="direct.pdf",
+            content_type="application/pdf",
+            uploaded_at="2026-07-08T12:00:00Z",
+            root=self.root,
+            **self.metadata(),
+        )
+        sidecar = self.root / item["intake_id"] / "metadata.json"
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        self.assertEqual(payload, item)
+        self.assertNotIn("%PDF", sidecar.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()
