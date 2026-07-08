@@ -127,6 +127,20 @@ In v12.3, Published is a declared administrative status only; it creates no
 public route, public attachment, evidence relationship, or public-record
 mutation. Actual public exposure remains deferred.
 
+### CDE v12.4 — Public Document Library
+
+CDE v12.4 activates controlled public visibility for documents whose current
+administrative lifecycle state is exactly **Published**. The public library at
+`/documents` supports search by title, institution, category, and reference
+identifier, plus institution, category, and publication-year filters. Each
+published document has a metadata/provenance page and governed PDF download.
+
+Pending Intake, Under Review, Approved, Rejected, and Archived documents remain
+private and return no public detail or download. Public eligibility is checked
+from the current lifecycle state on every request. Publication changes no CREF
+methodology, record verification hash, evidence relationship, evaluation,
+classification, or public record.
+
 ---
 
 ## What it does
