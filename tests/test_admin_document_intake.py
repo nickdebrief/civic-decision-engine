@@ -10,6 +10,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.document_intake import (
+    STATUS_LABELS,
+    list_intake_documents,
     list_pending_documents,
     load_pending_document,
     store_pending_document,
@@ -87,6 +89,15 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             **values,
         )
 
+    def transition(self, new_status, note=None, request=None):
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        return admin_session.admin_document_intake_status_update(
+            intake_id,
+            request or self.request,
+            new_status=new_status,
+            admin_note=note,
+        )
+
     @staticmethod
     def response_text(response):
         return response.content
@@ -116,6 +127,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(item["status"], "pending")
+        self.assertEqual(item["status_history"][0]["new_status"], "pending")
         self.assertEqual(item["original_filename"], "decision.pdf")
         self.assertEqual(item["sha256_hash"], expected_hash)
         self.assertEqual(item["file_size_bytes"], len(PDF_BYTES))
@@ -204,6 +216,121 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         self.assertEqual(payload, item)
         self.assertNotIn("%PDF", sidecar.read_text(encoding="utf-8"))
+
+    def test_lifecycle_status_labels_are_complete(self):
+        self.assertEqual(
+            set(STATUS_LABELS),
+            {"pending", "under_review", "approved", "published", "archived", "rejected"},
+        )
+
+    def test_pending_can_move_to_under_review_and_approved(self):
+        self.upload()
+        review_response = self.transition("under_review", "Review started.")
+        self.assertIn("Under Review", self.response_text(review_response))
+        approved_response = self.transition("approved", "Metadata verified.")
+        self.assertIn("Approved", self.response_text(approved_response))
+
+        item = list_intake_documents(root=self.root)[0]
+        self.assertEqual(item["status"], "approved")
+        self.assertEqual(
+            [entry["new_status"] for entry in item["status_history"]],
+            ["pending", "under_review", "approved"],
+        )
+        self.assertEqual(item["status_history"][-1]["actor"], "admin")
+
+    def test_under_review_can_be_rejected_then_archived(self):
+        self.upload()
+        self.transition("under_review")
+        self.transition("rejected", "Outside intake scope.")
+        response = self.transition("archived", "Retained privately.")
+        item = list_intake_documents(root=self.root)[0]
+        self.assertEqual(item["status"], "archived")
+        self.assertIn("Archived", self.response_text(response))
+        self.assertEqual(item["status_history"][-2]["new_status"], "rejected")
+
+    def test_approved_can_be_archived_without_publication(self):
+        self.upload()
+        self.transition("under_review")
+        self.transition("approved")
+        self.transition("archived")
+        self.assertEqual(list_intake_documents(root=self.root)[0]["status"], "archived")
+
+    def test_published_is_declarative_and_can_be_archived(self):
+        self.upload()
+        self.transition("under_review")
+        self.transition("approved")
+
+        conn = sqlite3.connect(self.db_path)
+        before = conn.execute("SELECT * FROM records").fetchall()
+        before_tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        conn.close()
+
+        response = self.transition("published", "Publication status declared.")
+        item = list_intake_documents(root=self.root)[0]
+        self.assertEqual(item["status"], "published")
+        self.assertFalse(item["public_record_mutation"])
+        self.assertIn("Published is a declared lifecycle state only", self.response_text(response))
+
+        conn = sqlite3.connect(self.db_path)
+        after = conn.execute("SELECT * FROM records").fetchall()
+        after_tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        conn.close()
+        self.assertEqual(after, before)
+        self.assertEqual(after_tables, before_tables)
+
+        self.transition("archived")
+        self.assertEqual(list_intake_documents(root=self.root)[0]["status"], "archived")
+
+    def test_invalid_transition_is_rejected_without_metadata_change(self):
+        self.upload()
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        metadata_path = self.root / intake_id / "metadata.json"
+        before = metadata_path.read_bytes()
+        with self.assertRaises(FakeHTTPException) as ctx:
+            self.transition("approved")
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertEqual(ctx.exception.detail, "document_intake_transition_invalid")
+        self.assertEqual(metadata_path.read_bytes(), before)
+
+    def test_unauthenticated_status_and_notes_updates_are_denied(self):
+        self.upload()
+        with self.assertRaises(FakeHTTPException) as status_ctx:
+            self.transition("under_review", request=FakeRequest())
+        self.assertEqual(status_ctx.exception.status_code, 401)
+
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        with self.assertRaises(FakeHTTPException) as notes_ctx:
+            admin_session.admin_document_intake_notes_update(
+                intake_id, FakeRequest(), notes="private"
+            )
+        self.assertEqual(notes_ctx.exception.status_code, 401)
+        self.assertEqual(load_pending_document(intake_id, root=self.root)["status"], "pending")
+
+    def test_internal_notes_can_be_updated_and_remain_in_private_sidecar(self):
+        self.upload()
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        response = admin_session.admin_document_intake_notes_update(
+            intake_id,
+            self.request,
+            notes="Internal review note; do not publish.",
+        )
+        item = load_pending_document(intake_id, root=self.root)
+        self.assertEqual(item["notes"], "Internal review note; do not publish.")
+        self.assertIn("Internal review note; do not publish.", self.response_text(response))
+        self.assertNotIn("download", self.response_text(response).lower())
+
+    def test_management_page_lists_all_lifecycle_states_and_contextual_action(self):
+        self.upload()
+        self.transition("under_review")
+        response = admin_session.admin_document_intake_page(self.request)
+        content = self.response_text(response)
+        self.assertIn("Intake management", content)
+        self.assertIn("Under Review", content)
+        self.assertIn("Review", content)
 
 
 if __name__ == "__main__":

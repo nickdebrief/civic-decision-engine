@@ -114,6 +114,19 @@ an attachment, establish an evidence relationship, or change canonical or
 attachment hashes. Approval, publication, and record creation remain deferred
 to a later stage.
 
+### CDE v12.3 — Admin Approval Workflow
+
+CDE v12.3 adds an explicit private lifecycle to document intake: **Pending
+Intake**, **Under Review**, **Approved**, **Published**, **Rejected**, and
+**Archived**. Authenticated administrators can begin review, approve or reject,
+archive, update internal notes, and inspect timestamped transition history.
+
+Transitions are constrained by the declared lifecycle and invalid transitions
+are rejected without changing metadata. Approval does not publish a document.
+In v12.3, Published is a declared administrative status only; it creates no
+public route, public attachment, evidence relationship, or public-record
+mutation. Actual public exposure remains deferred.
+
 ---
 
 ## What it does
