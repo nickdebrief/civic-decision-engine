@@ -43558,6 +43558,7 @@ def render_admin_record_evidence_page(
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
       <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
+    {_render_admin_console_navigation(reference)}
     <h1>Admin Record Evidence</h1>
     <p class="notice">
       This read-only administrative view inverts attachment relationships by record target.
@@ -44311,6 +44312,7 @@ def render_admin_attachments_page(
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
       <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
+    {_render_admin_console_navigation(reference)}
     <h1>Admin Attachment Management</h1>
     <p class="notice">
       Administrative attachment management is controlled in this stage.
@@ -44475,6 +44477,49 @@ def render_admin_attachments_page(
 </html>"""
 
 
+def _render_admin_console_navigation(record_reference: str | None = None) -> str:
+    record_evidence_href = (
+        f"/admin/records/{escape(record_reference)}/evidence"
+        if record_reference
+        else "/admin#record-evidence"
+    )
+    return f"""<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
+      <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
+      <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
+      <a style="color:#245d61;font-weight:650" href="/documents">Public Library</a>
+    </nav>"""
+
+
+def _render_admin_dashboard(intake_documents: list[dict[str, Any]]) -> str:
+    counts = {status: 0 for status in STATUS_LABELS}
+    for item in intake_documents:
+        if item.get("status") in counts:
+            counts[item["status"]] += 1
+    count_rows = "".join(
+        f"<tr><th>{escape(STATUS_LABELS[status])}</th><td>{counts[status]}</td></tr>"
+        for status in STATUS_LABELS
+    )
+    active_documents = [
+        item
+        for item in intake_documents
+        if item.get("status") in {"pending", "under_review", "approved"}
+    ]
+    queue_rows = "".join(
+        f'<tr><td><a href="/admin/document-intake/{escape(item["intake_id"])}">{escape(item["title"])}</a></td><td>{escape(item["institution_source"])}</td><td>{_status_badge(item["status"])}</td><td>{escape(item["upload_date"])}</td></tr>'
+        for item in active_documents
+    ) or '<tr><td colspan="4">No documents currently require active review.</td></tr>'
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CDE Administration Console</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:760px){{.dashboard-grid{{grid-template-columns:1fr}}}}</style></head>
+<body><main>{_render_admin_console_navigation()}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
+<div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
+<section id="record-evidence"><h2>Admin Record Evidence</h2><p>Open the existing evidence and report tools for a known record reference.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
+<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+</main></body></html>"""
+
+
 def _status_badge(status: str) -> str:
     label = STATUS_LABELS.get(status, status.replace("_", " ").title())
     return f'<span class="status status-{escape(status)}">{escape(label)}</span>'
@@ -44506,8 +44551,8 @@ def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
     body {{ margin: 0; background: #f4f3ef; color: #222; font-family: system-ui, sans-serif; }}
     main {{ width: min(1120px, calc(100% - 32px)); margin: 32px auto 64px; }}
     h1, h2 {{ color: #143a52; }}
-    nav {{ display: flex; gap: 16px; margin-bottom: 20px; font-size: 0.9rem; }}
-    nav a {{ color: #245d61; }}
+    .admin-console-navigation {{ display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 0; border-bottom: 1px solid #d8d4ca; margin-bottom: 24px; font-size: 0.9rem; }}
+    .admin-console-navigation a {{ color: #245d61; font-weight: 650; }}
     .notice {{ padding: 14px 16px; border-left: 4px solid #2e8b9a; background: #fff; }}
     .intake-form {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px; background: #fff; border: 1px solid #d8d4ca; }}
     .intake-form label {{ display: grid; gap: 6px; color: #555; font: 0.78rem ui-monospace, monospace; text-transform: uppercase; }}
@@ -44531,10 +44576,10 @@ def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
 </head>
 <body>
   <main>
-    <nav><a href="/admin/login">Admin</a><a href="/admin/document-intake" aria-current="page">Document intake</a></nav>
+    {_render_admin_console_navigation()}
     <h1>Admin Document Intake</h1>
     <p class="notice">PDF documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
-    <section>
+    <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
         <label>PDF document<input name="file" type="file" accept="application/pdf,.pdf" required></label>
@@ -44549,7 +44594,7 @@ def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
         <button type="submit">Store as pending</button>
       </form>
     </section>
-    <section class="pending">
+    <section class="pending" id="intake-management">
       <h2>Intake management</h2>
       <table><thead><tr><th>Title</th><th>Filename</th><th>Institution / source</th><th>Category</th><th>Current status</th><th>Upload date</th><th>Actions</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
@@ -44607,12 +44652,18 @@ def _render_document_intake_preview(item: dict[str, Any]) -> str:
     ) or '<tr><td colspan="5">No status history is available.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head>
-<body><main><p><a href="/admin/document-intake">Back to document intake</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head>
+<body><main>{_render_admin_console_navigation()}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
 <h2>Status history</h2><table><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{history_rows}</tbody></table>
 </main></body></html>"""
+
+
+@router.get("/admin", response_class=HTMLResponse)
+def admin_dashboard_page(request: Request):
+    require_admin_session(request)
+    return HTMLResponse(content=_render_admin_dashboard(list_intake_documents()))
 
 
 @router.get("/admin/login", response_class=HTMLResponse)
@@ -44628,7 +44679,7 @@ def admin_login_page():
 <body>
   <main>
     <h1>Civic Decision Engine Admin</h1>
-    <p><a href="/admin/document-intake">Admin Document Intake</a></p>
+    <p>Sign in to access the unified Administration Console.</p>
     <form method="post" action="/api/admin/session/login">
       <label for="password">Admin password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>

@@ -141,6 +141,21 @@ from the current lifecycle state on every request. Publication changes no CREF
 methodology, record verification hash, evidence relationship, evaluation,
 classification, or public record.
 
+### CDE v12.5 — Admin Navigation Console
+
+CDE v12.5 organises the existing authenticated admin area into one coherent
+Administration Console at `/admin`. A shared navigation bar connects the
+dashboard, new document intake, intake management/review, record evidence, and
+the Public Document Library. The dashboard also provides lifecycle counts,
+active review-queue links, record-reference navigation, and the existing
+session logout action.
+
+This stage changes navigation and presentation only. Admin pages retain the
+existing signed-session boundary, the public library remains public, and no
+private intake metadata is added to public pages. Lifecycle transitions,
+publication eligibility, evidence relationships, classifications, hashes, and
+record behavior are unchanged.
+
 ---
 
 ## What it does
