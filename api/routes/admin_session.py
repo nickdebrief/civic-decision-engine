@@ -48,10 +48,13 @@ from api.attachments import (
     validate_publication_status,
 )
 from api.document_intake import (
+    STATUS_LABELS,
     intake_root,
-    list_pending_documents,
+    list_intake_documents,
     load_pending_document,
     store_pending_document,
+    update_intake_notes,
+    update_intake_status,
 )
 
 router = APIRouter()
@@ -44472,7 +44475,12 @@ def render_admin_attachments_page(
 </html>"""
 
 
-def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str:
+def _status_badge(status: str) -> str:
+    label = STATUS_LABELS.get(status, status.replace("_", " ").title())
+    return f'<span class="status status-{escape(status)}">{escape(label)}</span>'
+
+
+def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
     rows = "".join(
         f"""
         <tr>
@@ -44480,12 +44488,13 @@ def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str
           <td>{escape(item['original_filename'])}</td>
           <td>{escape(item['institution_source'])}</td>
           <td>{escape(item['category'])}</td>
-          <td><span class="status">{escape(item['status'])}</span></td>
+          <td>{_status_badge(item['status'])}</td>
           <td>{escape(item['upload_date'])}</td>
+          <td><a href="/admin/document-intake/{escape(item['intake_id'])}">Review</a></td>
         </tr>
         """
-        for item in pending_documents
-    ) or '<tr><td colspan="6">No pending documents.</td></tr>'
+        for item in intake_documents
+    ) or '<tr><td colspan="7">No intake documents.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44510,7 +44519,13 @@ def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str
     table {{ width: 100%; border-collapse: collapse; background: #fff; font-size: 0.88rem; }}
     th {{ background: #143a52; color: #fff; text-align: left; }}
     th, td {{ padding: 10px; border: 1px solid #e1dfd8; vertical-align: top; }}
-    .status {{ color: #725a00; font-weight: 700; text-transform: uppercase; }}
+    .status {{ display: inline-block; padding: 3px 7px; border: 1px solid currentColor; font-weight: 700; font-size: .75rem; text-transform: uppercase; }}
+    .status-pending {{ color: #725a00; background: #fff9db; }}
+    .status-under_review {{ color: #075985; background: #e0f2fe; }}
+    .status-approved {{ color: #166534; background: #dcfce7; }}
+    .status-published {{ color: #14532d; background: #bbf7d0; }}
+    .status-archived {{ color: #52525b; background: #f4f4f5; }}
+    .status-rejected {{ color: #991b1b; background: #fee2e2; }}
     @media (max-width: 720px) {{ .intake-form {{ grid-template-columns: 1fr; }} .intake-form > * {{ grid-column: 1; }} }}
   </style>
 </head>
@@ -44535,8 +44550,8 @@ def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str
       </form>
     </section>
     <section class="pending">
-      <h2>Pending intake</h2>
-      <table><thead><tr><th>Title</th><th>Filename</th><th>Institution / source</th><th>Category</th><th>Status</th><th>Upload date</th></tr></thead><tbody>{rows}</tbody></table>
+      <h2>Intake management</h2>
+      <table><thead><tr><th>Title</th><th>Filename</th><th>Institution / source</th><th>Category</th><th>Current status</th><th>Upload date</th><th>Actions</th></tr></thead><tbody>{rows}</tbody></table>
     </section>
   </main>
 </body>
@@ -44545,7 +44560,7 @@ def _render_document_intake_page(pending_documents: list[dict[str, Any]]) -> str
 
 def _render_document_intake_preview(item: dict[str, Any]) -> str:
     fields = (
-        ("Status", item["status"]),
+        ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
         ("File size", f"{item['file_size_bytes']} bytes"),
         ("SHA-256", item["sha256_hash"]),
@@ -44564,10 +44579,40 @@ def _render_document_intake_preview(item: dict[str, Any]) -> str:
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
     )
+    transitions = {
+        "pending": (("under_review", "Begin review"),),
+        "under_review": (("approved", "Approve"), ("rejected", "Reject")),
+        "approved": (("published", "Declare published"), ("archived", "Archive")),
+        "rejected": (("archived", "Archive"),),
+        "published": (("archived", "Archive"),),
+        "archived": (),
+    }.get(item["status"], ())
+    action_forms = "".join(
+        f"""<form method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/status">
+          <input type="hidden" name="new_status" value="{escape(status)}">
+          <label>Transition note <input name="admin_note" maxlength="500"></label>
+          <button type="submit">{escape(label)}</button>
+        </form>"""
+        for status, label in transitions
+    ) or "<p>No further lifecycle actions are available from this state.</p>"
+    history_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(entry.get('timestamp', 'Not available')))}</td>"
+        f"<td>{escape(STATUS_LABELS.get(entry.get('previous_status'), 'Initial state') if entry.get('previous_status') else 'Initial state')}</td>"
+        f"<td>{escape(STATUS_LABELS.get(entry.get('new_status'), str(entry.get('new_status', ''))))}</td>"
+        f"<td>{escape(str(entry.get('actor', 'admin')))}</td>"
+        f"<td>{escape(str(entry.get('note') or ''))}</td>"
+        "</tr>"
+        for entry in item.get("status_history", [])
+    ) or '<tr><td colspan="5">No status history is available.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}code{{font-size:.85rem}}</style></head>
-<body><main><p><a href="/admin/document-intake">Back to document intake</a></p><h1>Pending Document Preview</h1><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval and publication are not available in this stage.</p><table>{rows}</table></main></body></html>"""
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head>
+<body><main><p><a href="/admin/document-intake">Back to document intake</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
+<h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
+<h2>Available admin actions</h2><div class="actions">{action_forms}</div>
+<h2>Status history</h2><table><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{history_rows}</tbody></table>
+</main></body></html>"""
 
 
 @router.get("/admin/login", response_class=HTMLResponse)
@@ -44621,7 +44666,7 @@ def admin_session_logout():
 def admin_document_intake_page(request: Request):
     require_admin_session(request)
     return HTMLResponse(
-        content=_render_document_intake_page(list_pending_documents())
+        content=_render_document_intake_page(list_intake_documents())
     )
 
 
@@ -44674,6 +44719,49 @@ def admin_document_intake_upload(
         }.get(detail, 400)
         raise _http_error(status_code, detail) from exc
     return HTMLResponse(content=_render_document_intake_preview(item), status_code=201)
+
+
+@router.post(
+    "/api/admin/session/document-intake/{intake_id}/status",
+    response_class=HTMLResponse,
+)
+def admin_document_intake_status_update(
+    intake_id: str,
+    request: Request,
+    new_status: str = Form(...),
+    admin_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    try:
+        item = update_intake_status(
+            intake_id,
+            new_status,
+            actor=str(session.get("role") or "admin"),
+            note=admin_note,
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail == "document_intake_not_found" else 409
+        raise _http_error(status_code, detail) from exc
+    return HTMLResponse(content=_render_document_intake_preview(item))
+
+
+@router.post(
+    "/api/admin/session/document-intake/{intake_id}/notes",
+    response_class=HTMLResponse,
+)
+def admin_document_intake_notes_update(
+    intake_id: str,
+    request: Request,
+    notes: str = Form(...),
+):
+    require_admin_session(request)
+    try:
+        item = update_intake_notes(intake_id, notes, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    return HTMLResponse(content=_render_document_intake_preview(item))
 
 
 @router.get("/admin/records/{reference}/attachments", response_class=HTMLResponse)

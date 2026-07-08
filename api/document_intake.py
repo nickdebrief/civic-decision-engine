@@ -12,6 +12,30 @@ from typing import Any
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 VALID_VISIBILITY = {"private", "restricted"}
+INTAKE_STATUSES = {
+    "pending",
+    "under_review",
+    "approved",
+    "published",
+    "archived",
+    "rejected",
+}
+STATUS_LABELS = {
+    "pending": "Pending Intake",
+    "under_review": "Under Review",
+    "approved": "Approved",
+    "published": "Published",
+    "archived": "Archived",
+    "rejected": "Rejected",
+}
+VALID_STATUS_TRANSITIONS = {
+    "pending": {"under_review"},
+    "under_review": {"approved", "rejected"},
+    "approved": {"published", "archived"},
+    "published": {"archived"},
+    "rejected": {"archived"},
+    "archived": set(),
+}
 _SAFE_ID_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
@@ -118,6 +142,16 @@ def store_pending_document(
         "reference_identifier": str(reference_identifier or "").strip() or None,
         "proposed_storage_location": str(file_path),
         "public_record_mutation": False,
+        "status_updated_at": timestamp,
+        "status_history": [
+            {
+                "previous_status": None,
+                "new_status": "pending",
+                "timestamp": timestamp,
+                "actor": "admin",
+                "note": "Document uploaded to pending intake.",
+            }
+        ],
     }
     try:
         file_path.write_bytes(data)
@@ -144,7 +178,7 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     return json.loads(metadata_path.read_text(encoding="utf-8"))
 
 
-def list_pending_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
+def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
     destination_root = (root or intake_root()).resolve(strict=False)
     if not destination_root.is_dir():
         return []
@@ -154,6 +188,103 @@ def list_pending_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if metadata.get("status") == "pending":
+        if metadata.get("status") in INTAKE_STATUSES:
             items.append(metadata)
     return sorted(items, key=lambda item: (item.get("upload_date", ""), item["intake_id"]), reverse=True)
+
+
+def list_pending_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
+    return [
+        item for item in list_intake_documents(root=root) if item["status"] == "pending"
+    ]
+
+
+def update_intake_status(
+    intake_id: str,
+    new_status: str,
+    *,
+    actor: str = "admin",
+    note: str | None = None,
+    notes: str | None = None,
+    changed_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    metadata = load_pending_document(intake_id, root=root)
+    current_status = metadata.get("status")
+    normalized_status = str(new_status or "").strip().lower()
+    if current_status not in INTAKE_STATUSES:
+        raise ValueError("document_intake_status_invalid")
+    if normalized_status not in INTAKE_STATUSES:
+        raise ValueError("document_intake_status_invalid")
+    if normalized_status not in VALID_STATUS_TRANSITIONS[current_status]:
+        raise ValueError("document_intake_transition_invalid")
+
+    timestamp = changed_at or datetime.now(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
+    )
+    history = list(metadata.get("status_history") or [])
+    if not history:
+        history.append(
+            {
+                "previous_status": None,
+                "new_status": current_status,
+                "timestamp": metadata.get("upload_date", timestamp),
+                "actor": "admin",
+                "note": "Existing intake state recorded.",
+            }
+        )
+    history.append(
+        {
+            "previous_status": current_status,
+            "new_status": normalized_status,
+            "timestamp": timestamp,
+            "actor": str(actor or "admin"),
+            "note": str(note or "").strip() or None,
+        }
+    )
+    metadata["status"] = normalized_status
+    metadata["status_updated_at"] = timestamp
+    metadata["status_history"] = history
+    metadata["public_record_mutation"] = False
+    if notes is not None:
+        metadata["notes"] = str(notes).strip()
+    _write_metadata(intake_id, metadata, root=root)
+    return metadata
+
+
+def update_intake_notes(
+    intake_id: str,
+    notes: str,
+    *,
+    updated_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    metadata = load_pending_document(intake_id, root=root)
+    metadata["notes"] = str(notes or "").strip()
+    metadata["notes_updated_at"] = updated_at or datetime.now(
+        timezone.utc
+    ).isoformat().replace("+00:00", "Z")
+    metadata["public_record_mutation"] = False
+    _write_metadata(intake_id, metadata, root=root)
+    return metadata
+
+
+def _write_metadata(
+    intake_id: str, metadata: dict[str, Any], *, root: Path | None = None
+) -> None:
+    if not _SAFE_ID_RE.fullmatch(str(intake_id or "")):
+        raise ValueError("document_intake_not_found")
+    destination_root = (root or intake_root()).resolve(strict=False)
+    item_dir = destination_root / intake_id
+    metadata_path = item_dir / "metadata.json"
+    if not metadata_path.is_file():
+        raise ValueError("document_intake_not_found")
+    temporary_path = item_dir / "metadata.json.tmp"
+    try:
+        temporary_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, metadata_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
