@@ -246,6 +246,8 @@ def update_intake_status(
     metadata["status_updated_at"] = timestamp
     metadata["status_history"] = history
     metadata["public_record_mutation"] = False
+    if normalized_status == "published":
+        metadata["publication_date"] = timestamp
     if notes is not None:
         metadata["notes"] = str(notes).strip()
     _write_metadata(intake_id, metadata, root=root)
@@ -288,3 +290,83 @@ def _write_metadata(
         os.replace(temporary_path, metadata_path)
     finally:
         temporary_path.unlink(missing_ok=True)
+
+
+def list_published_documents(
+    *,
+    query: str | None = None,
+    institution: str | None = None,
+    category: str | None = None,
+    publication_year: str | None = None,
+    root: Path | None = None,
+) -> list[dict[str, Any]]:
+    documents = []
+    for item in list_intake_documents(root=root):
+        if item["status"] != "published":
+            continue
+        normalized_item = dict(item)
+        normalized_item["publication_date"] = _publication_date(item)
+        documents.append(normalized_item)
+    normalized_query = str(query or "").strip().casefold()
+    normalized_institution = str(institution or "").strip().casefold()
+    normalized_category = str(category or "").strip().casefold()
+    normalized_year = str(publication_year or "").strip()
+
+    def matches(item: dict[str, Any]) -> bool:
+        searchable = " ".join(
+            str(item.get(key) or "")
+            for key in ("title", "institution_source", "category", "reference_identifier")
+        ).casefold()
+        if normalized_query and normalized_query not in searchable:
+            return False
+        if normalized_institution and str(item.get("institution_source") or "").casefold() != normalized_institution:
+            return False
+        if normalized_category and str(item.get("category") or "").casefold() != normalized_category:
+            return False
+        if normalized_year and not str(item.get("publication_date") or "").startswith(
+            f"{normalized_year}-"
+        ):
+            return False
+        return True
+
+    return sorted(
+        (item for item in documents if matches(item)),
+        key=lambda item: (item.get("publication_date", ""), item["intake_id"]),
+        reverse=True,
+    )
+
+
+def load_published_document(
+    document_id: str, *, root: Path | None = None
+) -> dict[str, Any]:
+    metadata = load_pending_document(document_id, root=root)
+    if metadata.get("status") != "published":
+        raise ValueError("public_document_not_found")
+    metadata["publication_date"] = _publication_date(metadata)
+    return metadata
+
+
+def published_document_file(
+    document_id: str, *, root: Path | None = None
+) -> tuple[Path, dict[str, Any]]:
+    metadata = load_published_document(document_id, root=root)
+    destination_root = (root or intake_root()).resolve(strict=False)
+    file_path = (destination_root / document_id / f"pending-{document_id}.pdf").resolve(
+        strict=False
+    )
+    try:
+        file_path.relative_to(destination_root)
+    except ValueError as exc:
+        raise ValueError("public_document_not_found") from exc
+    if not file_path.is_file():
+        raise ValueError("public_document_not_found")
+    return file_path, metadata
+
+
+def _publication_date(metadata: dict[str, Any]) -> str:
+    if metadata.get("publication_date"):
+        return str(metadata["publication_date"])
+    for event in reversed(metadata.get("status_history") or []):
+        if event.get("new_status") == "published" and event.get("timestamp"):
+            return str(event["timestamp"])
+    return str(metadata.get("status_updated_at") or metadata.get("upload_date") or "")

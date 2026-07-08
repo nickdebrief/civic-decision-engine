@@ -83,6 +83,13 @@ class FakeJSONResponse(FakeResponse):
         self.headers["Set-Cookie"] = "; ".join(parts)
 
 
+class FakeFileResponse(FakeResponse):
+    def __init__(self, path, media_type=None, filename=None, **kwargs):
+        super().__init__(content=None, media_type=media_type, **kwargs)
+        self.path = path
+        self.filename = filename
+
+
 def install_fastapi_stubs():
     fastapi = sys.modules.get("fastapi") or types.ModuleType("fastapi")
     fastapi.APIRouter = FakeAPIRouter
@@ -99,6 +106,7 @@ def install_fastapi_stubs():
     )
     responses.HTMLResponse = FakeResponse
     responses.JSONResponse = FakeJSONResponse
+    responses.FileResponse = FakeFileResponse
     responses.Response = FakeResponse
 
     models = types.ModuleType("api.models")
