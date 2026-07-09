@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
 
@@ -23,11 +23,18 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
         self.assertIn('<div class="public-footer-right">', content)
         self.assertIn('Civic Decision Engine v12 &mdash;', content)
         self.assertIn('<span data-i18n="hero_record">The record does not argue.</span>', content)
-        self.assertIn('<a class="public-footer-link" href="/admin">Administration</a>', content)
+        self.assertIn('<a class="public-footer-link" href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
+        self.assertIn('.public-footer-link {\n      font-size: 0.82rem;', content)
         self.assertLess(
             content.index('Civic Decision Engine v12 &mdash;'),
-            content.index('href="/admin">Administration</a>'),
+            content.index('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>'),
         )
+
+    def test_administration_link_has_required_target_attributes(self):
+        content = self.public_index_html()
+        self.assertIn('class="public-footer-link" href="/admin"', content)
+        self.assertIn('target="_blank"', content)
+        self.assertIn('rel="noopener noreferrer"', content)
 
     def test_existing_public_footer_navigation_remains_present(self):
         content = self.public_index_html()
@@ -58,10 +65,12 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
             with self.subTest(private_text=private_text):
                 self.assertNotIn(private_text, footer)
 
-    def test_unauthenticated_admin_behavior_remains_unchanged(self):
-        with self.assertRaises(FakeHTTPException) as ctx:
-            admin_session.admin_dashboard_page(FakeRequest())
-        self.assertEqual(ctx.exception.status_code, 401)
+    def test_unauthenticated_admin_link_route_renders_login_ui(self):
+        response = admin_session.admin_dashboard_page(FakeRequest())
+        self.assertIn("Civic Decision Engine Admin", response.content)
+        self.assertIn('type="password"', response.content)
+        self.assertIn('/api/admin/session/login', response.content)
+        self.assertNotIn('{"detail":"admin_session_unauthorized"}', response.content)
 
     def test_authenticated_admin_behavior_remains_unchanged(self):
         with patch.dict(

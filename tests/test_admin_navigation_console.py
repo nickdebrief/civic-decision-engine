@@ -65,10 +65,12 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn('href="/documents"', content)
         self.assertIn('/api/admin/session/logout', content)
 
-    def test_unauthenticated_dashboard_is_denied(self):
-        with self.assertRaises(FakeHTTPException) as ctx:
-            admin_session.admin_dashboard_page(FakeRequest())
-        self.assertEqual(ctx.exception.status_code, 401)
+    def test_unauthenticated_dashboard_renders_login_ui(self):
+        response = admin_session.admin_dashboard_page(FakeRequest())
+        self.assertIn("Civic Decision Engine Admin", response.content)
+        self.assertIn('type="password"', response.content)
+        self.assertIn('/api/admin/session/login', response.content)
+        self.assertNotIn('CDE Administration Console</h1>', response.content)
 
     def test_dashboard_displays_lifecycle_counts_and_review_queue_links(self):
         content = admin_session.admin_dashboard_page(self.request).content
