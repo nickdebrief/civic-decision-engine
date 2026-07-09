@@ -168,6 +168,17 @@ This maintenance stage changes dashboard navigation and presentation only. It
 adds no record index, lifecycle transition, publication action, evidence
 operation, hash or verification change, security change, or public API.
 
+### CDE v12.5.2 — Public Footer Administration Link
+
+CDE v12.5.2 adds a discreet **Administration** link beneath the existing
+right-hand public footer identity, `Civic Decision Engine v12 — The record does
+not argue.`, routing users to the existing authenticated `/admin` entry point.
+
+This stage changes public footer navigation only. It does not change admin
+login, session handling, authorization, document intake, lifecycle management,
+publication rules, private intake visibility, evidence relationships, hashes,
+verification, records, attachments, database state, or public API behaviour.
+
 ---
 
 ## What it does
