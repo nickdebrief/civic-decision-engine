@@ -32,7 +32,7 @@ except ImportError:
         pass
 
 
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from api.attachments import (
     ATTACHMENT_ROOT,
@@ -44693,7 +44693,7 @@ def _render_admin_login_page() -> str:
   <main>
     <h1>Civic Decision Engine Admin</h1>
     <p>Sign in to access the unified Administration Console.</p>
-    <form method="post" action="/api/admin/session/login">
+    <form method="post" action="/admin/login">
       <label for="password">Admin password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
       <button type="submit">Sign in</button>
@@ -44709,15 +44709,26 @@ def admin_login_page():
     return HTMLResponse(content=_render_admin_login_page())
 
 
-@router.post("/api/admin/session/login")
-def admin_session_login(password: str = Form(...)):
+def _create_session_for_password(password: str) -> str:
     expected_password = os.getenv(ADMIN_PASSWORD_ENV)
     if not expected_password or not _session_secret():
         raise _http_error(401, "admin_session_unauthorized")
     if not hmac.compare_digest(str(password), expected_password):
         raise _http_error(401, "admin_session_unauthorized")
+    return create_admin_session()
 
-    session = create_admin_session()
+
+@router.post("/admin/login")
+def admin_browser_login(password: str = Form(...)):
+    session = _create_session_for_password(password)
+    response = RedirectResponse(url="/admin", status_code=303)
+    _set_session_cookie(response, session)
+    return response
+
+
+@router.post("/api/admin/session/login")
+def admin_session_login(password: str = Form(...)):
+    session = _create_session_for_password(password)
     response = JSONResponse(content={"ok": True, "role": "admin"})
     _set_session_cookie(response, session)
     return response

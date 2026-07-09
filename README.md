@@ -191,6 +191,21 @@ boundary. Authenticated administrators continue to reach the CDE Administration
 Console, while the public footer exposes no private records, intake data,
 lifecycle state, evidence, administrative counts, or security state.
 
+### CDE v12.5.4 — Admin Login Redirect Fix
+
+CDE v12.5.4 separates the browser login form flow from the programmatic API
+login response. The admin login page now posts to a browser-facing login route
+that sets the existing signed admin session cookie and redirects to `/admin`,
+so successful browser login opens the CDE Administration Console instead of
+displaying raw JSON.
+
+The existing `/api/admin/session/login` endpoint remains available for the API
+contract and continues to return the established JSON response with the same
+secure session cookie behaviour. Authentication, authorization, private intake
+visibility, lifecycle rules, publication controls, evidence relationships,
+hashes, verification, database state, and public API behaviour are otherwise
+unchanged.
+
 ---
 
 ## What it does
