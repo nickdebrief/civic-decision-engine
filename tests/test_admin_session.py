@@ -90,6 +90,14 @@ class FakeFileResponse(FakeResponse):
         self.filename = filename
 
 
+class FakeRedirectResponse(FakeResponse):
+    def __init__(self, url, status_code=307, headers=None, **kwargs):
+        merged_headers = dict(headers or {})
+        merged_headers["Location"] = url
+        super().__init__(content=None, status_code=status_code, headers=merged_headers, **kwargs)
+        self.url = url
+
+
 def install_fastapi_stubs():
     fastapi = sys.modules.get("fastapi") or types.ModuleType("fastapi")
     fastapi.APIRouter = FakeAPIRouter
@@ -106,6 +114,7 @@ def install_fastapi_stubs():
     )
     responses.HTMLResponse = FakeResponse
     responses.JSONResponse = FakeJSONResponse
+    responses.RedirectResponse = FakeRedirectResponse
     responses.FileResponse = FakeFileResponse
     responses.Response = FakeResponse
 
@@ -9646,6 +9655,39 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("Secure", cookie)
         self.assertIn("SameSite=Strict", cookie)
         self.assert_no_admin_token_exposed(response)
+
+    def test_browser_login_redirects_to_admin_console_with_session_cookie(self):
+        with self.env():
+            response = self.admin_session.admin_browser_login("admin-password")
+
+        cookie = response.headers["Set-Cookie"]
+
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers.get("Location"), "/admin")
+        self.assertIsNone(response.content)
+        self.assertIn("cde_admin_session=", cookie)
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("Secure", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+
+        session = self.session_from_response(response)
+        with self.env():
+            dashboard = self.admin_session.admin_dashboard_page(
+                FakeRequest(cookies={self.admin_session.SESSION_COOKIE_NAME: session})
+            )
+
+        self.assertIn("CDE Administration Console", dashboard.content)
+        self.assertNotIn('{"ok":true,"role":"admin"}', str(dashboard.content))
+
+    def test_browser_login_invalid_password_is_denied(self):
+        with self.env():
+            with self.assertRaises(Exception) as ctx:
+                self.admin_session.admin_browser_login("wrong-password")
+
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+        self.assertEqual(
+            getattr(ctx.exception, "detail", None), "admin_session_unauthorized"
+        )
 
     def test_session_payload_contains_only_allowed_fields(self):
         with self.env():

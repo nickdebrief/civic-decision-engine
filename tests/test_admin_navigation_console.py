@@ -69,7 +69,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         response = admin_session.admin_dashboard_page(FakeRequest())
         self.assertIn("Civic Decision Engine Admin", response.content)
         self.assertIn('type="password"', response.content)
-        self.assertIn('/api/admin/session/login', response.content)
+        self.assertIn('/admin/login', response.content)
         self.assertNotIn('CDE Administration Console</h1>', response.content)
 
     def test_dashboard_displays_lifecycle_counts_and_review_queue_links(self):

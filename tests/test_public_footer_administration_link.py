@@ -69,7 +69,7 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
         response = admin_session.admin_dashboard_page(FakeRequest())
         self.assertIn("Civic Decision Engine Admin", response.content)
         self.assertIn('type="password"', response.content)
-        self.assertIn('/api/admin/session/login', response.content)
+        self.assertIn('/admin/login', response.content)
         self.assertNotIn('{"detail":"admin_session_unauthorized"}', response.content)
 
     def test_authenticated_admin_behavior_remains_unchanged(self):
