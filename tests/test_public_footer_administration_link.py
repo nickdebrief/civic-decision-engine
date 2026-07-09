@@ -45,10 +45,26 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
             ('/stats', 'Stats'),
             ('/graph', 'Graph'),
             ('/api/docs', 'API docs'),
+            ('/documents', 'Public Library'),
         ):
             with self.subTest(label=label):
                 self.assertIn(f'href="{href}"', content)
                 self.assertIn(f'>{label}</a>', content)
+
+    def test_public_library_link_appears_after_api_docs(self):
+        content = self.public_index_html()
+        self.assertLess(
+            content.index('href="/api/docs" target="_blank" rel="noopener noreferrer">API docs</a>'),
+            content.index('href="/documents" target="_blank" rel="noopener noreferrer">Public Library</a>'),
+        )
+
+    def test_public_footer_does_not_add_admin_navigation_to_public_links(self):
+        footer_nav = self.public_index_html().split('<nav aria-label="Archive links" class="public-footer-nav">', 1)[1].split('</nav>', 1)[0]
+        self.assertIn('href="/documents"', footer_nav)
+        self.assertIn('>Public Library</a>', footer_nav)
+        self.assertNotIn('>Documents</a>', footer_nav)
+        self.assertNotIn('href="/admin"', footer_nav)
+        self.assertNotIn('Administration', footer_nav)
 
     def test_footer_does_not_expose_private_administrative_state(self):
         footer = self.public_index_html().split('<footer class="public-footer">', 1)[1]

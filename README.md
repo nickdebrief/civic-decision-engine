@@ -206,6 +206,16 @@ visibility, lifecycle rules, publication controls, evidence relationships,
 hashes, verification, database state, and public API behaviour are otherwise
 unchanged.
 
+### CDE v12.5.5 — Public Library Footer Link
+
+CDE v12.5.5 adds **Public Library** to the shared public footer navigation,
+immediately after **API docs**, linking to the existing `/documents` route.
+
+This stage adds only a public navigation link. It does not change document
+publication eligibility, `/documents` access rules, authentication,
+authorization, intake lifecycle state, evidence relationships, hashes,
+verification, records, attachments, database state, or public API behaviour.
+
 ---
 
 ## What it does
