@@ -179,6 +179,18 @@ login, session handling, authorization, document intake, lifecycle management,
 publication rules, private intake visibility, evidence relationships, hashes,
 verification, records, attachments, database state, or public API behaviour.
 
+### CDE v12.5.3 — Footer Administration Link UI Fix
+
+CDE v12.5.3 refines the public footer Administration link so it visually
+matches the existing footer links, opens `/admin` in a new tab, and routes
+unauthenticated browser users to the existing admin login UI instead of an
+API-style JSON unauthorized response.
+
+This corrective stage preserves the existing authentication and authorization
+boundary. Authenticated administrators continue to reach the CDE Administration
+Console, while the public footer exposes no private records, intake data,
+lifecycle state, evidence, administrative counts, or security state.
+
 ---
 
 ## What it does

@@ -44671,13 +44671,17 @@ def _render_document_intake_preview(item: dict[str, Any]) -> str:
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard_page(request: Request):
-    require_admin_session(request)
+    try:
+        require_admin_session(request)
+    except HTTPException as exc:
+        if getattr(exc, "status_code", None) == 401:
+            return HTMLResponse(content=_render_admin_login_page())
+        raise
     return HTMLResponse(content=_render_admin_dashboard(list_intake_documents()))
 
 
-@router.get("/admin/login", response_class=HTMLResponse)
-def admin_login_page():
-    html = """
+def _render_admin_login_page() -> str:
+    return """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44698,7 +44702,11 @@ def admin_login_page():
 </body>
 </html>
 """
-    return HTMLResponse(content=html)
+
+
+@router.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page():
+    return HTMLResponse(content=_render_admin_login_page())
 
 
 @router.post("/api/admin/session/login")
