@@ -321,6 +321,75 @@
       font-size: 0.95rem;
     }
 
+    .public-footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .public-footer-left,
+    .public-footer-right {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .public-footer-right {
+      align-items: flex-end;
+      text-align: right;
+    }
+
+    .public-footer-copyright,
+    .public-footer-metadata,
+    .public-footer-link,
+    .public-footer-identity {
+      color: var(--muted);
+    }
+
+    .public-footer-copyright { font-size: 0.88rem; }
+    .public-footer-metadata { font-size: 0.82rem; }
+
+    .public-footer-identity {
+      font-size: 0.82rem;
+      font-family: ui-monospace, monospace;
+    }
+
+    .public-footer-nav {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 0.82rem;
+    }
+
+    .public-footer-link {
+      text-decoration: none;
+    }
+
+    .public-footer-link:hover,
+    .public-footer-link:focus-visible {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    .public-footer-link:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+      border-radius: 3px;
+    }
+
+    @media (max-width: 700px) {
+      .public-footer,
+      .public-footer-right {
+        align-items: flex-start;
+        text-align: left;
+      }
+    }
+
     .case-ref-block {
       background: #060b14;
       border: 1px solid #1e3a5f;
@@ -1124,24 +1193,29 @@ button.record-btn.copy-ok {
       </div>
     </section>
 
-    <footer style="margin-top:48px;padding-top:20px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <span style="color:var(--muted);font-size:0.88rem;">
-        &copy; <span id="copyrightYear"></span> Nick Moloney. All rights reserved.
-      </span>
-      <span style="color:var(--muted);font-size:0.82rem;font-family:ui-monospace,monospace;">
-        Civic Decision Engine v12 &mdash; <span data-i18n="hero_record">The record does not argue.</span>
-      </span>
-      <span style="color:var(--muted);font-size:0.82rem;flex-basis:100%;">
-        Public attachment metadata, where available, appears on the record verification page.
-      </span>
-      <nav aria-label="Archive links" style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.82rem;">
-        <a href="/records" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">Records</a>
-        <a href="/conditions" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">Conditions</a>
-        <a href="/patterns" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">Patterns</a>
-        <a href="/stats" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">Stats</a>
-        <a href="/graph" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">Graph</a>
-        <a href="/api/docs" target="_blank" rel="noopener noreferrer" style="color:var(--muted);">API docs</a>
-      </nav>
+    <footer class="public-footer">
+      <div class="public-footer-left">
+        <span class="public-footer-copyright">
+          &copy; <span id="copyrightYear"></span> Nick Moloney. All rights reserved.
+        </span>
+        <span class="public-footer-metadata">
+          Public attachment metadata, where available, appears on the record verification page.
+        </span>
+        <nav aria-label="Archive links" class="public-footer-nav">
+          <a class="public-footer-link" href="/records" target="_blank" rel="noopener noreferrer">Records</a>
+          <a class="public-footer-link" href="/conditions" target="_blank" rel="noopener noreferrer">Conditions</a>
+          <a class="public-footer-link" href="/patterns" target="_blank" rel="noopener noreferrer">Patterns</a>
+          <a class="public-footer-link" href="/stats" target="_blank" rel="noopener noreferrer">Stats</a>
+          <a class="public-footer-link" href="/graph" target="_blank" rel="noopener noreferrer">Graph</a>
+          <a class="public-footer-link" href="/api/docs" target="_blank" rel="noopener noreferrer">API docs</a>
+        </nav>
+      </div>
+      <div class="public-footer-right">
+        <span class="public-footer-identity">
+          Civic Decision Engine v12 &mdash; <span data-i18n="hero_record">The record does not argue.</span>
+        </span>
+        <a class="public-footer-link" href="/admin">Administration</a>
+      </div>
     </footer>
   </div>
 
