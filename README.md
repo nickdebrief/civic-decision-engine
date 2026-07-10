@@ -216,6 +216,14 @@ publication eligibility, `/documents` access rules, authentication,
 authorization, intake lifecycle state, evidence relationships, hashes,
 verification, records, attachments, database state, or public API behaviour.
 
+### CDE v12.5.6 — Public Document Library Label Alignment
+
+CDE v12.5.6 updates the shared public footer navigation label from **Public
+Library** to **Public Document Library**, aligning the public UI with the formal
+feature name while preserving the existing `/documents` route and all document
+visibility, publication, authentication, authorization, evidence, hashing,
+verification, database, and API behaviour.
+
 ---
 
 ## What it does
