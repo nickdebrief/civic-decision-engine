@@ -39,7 +39,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.env = patch.dict(
             os.environ,
             {
-                "CDE_ADMIN_PASSWORD": "admin-password",
+                "ADMIN_USERNAME": "admin-user",
+                "ADMIN_PASSWORD": "admin-password",
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_DOCUMENT_INTAKE_ROOT": str(self.root),
                 "CDE_DOCUMENT_INTAKE_MAX_BYTES": "1048576",
@@ -49,7 +50,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.env.start()
         self.original_db_path = admin_session.DB_PATH
         admin_session.DB_PATH = self.db_path
-        self.session = admin_session.create_admin_session()
+        self.session = admin_session.create_admin_session("admin-user")
         self.request = FakeRequest(
             cookies={admin_session.SESSION_COOKIE_NAME: self.session}
         )
@@ -128,6 +129,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(item["status"], "pending")
         self.assertEqual(item["status_history"][0]["new_status"], "pending")
+        self.assertEqual(item["status_history"][0]["actor"], "admin-user")
         self.assertEqual(item["original_filename"], "decision.pdf")
         self.assertEqual(item["sha256_hash"], expected_hash)
         self.assertEqual(item["file_size_bytes"], len(PDF_BYTES))
@@ -236,7 +238,39 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             [entry["new_status"] for entry in item["status_history"]],
             ["pending", "under_review", "approved"],
         )
-        self.assertEqual(item["status_history"][-1]["actor"], "admin")
+        self.assertEqual(item["status_history"][-1]["actor"], "admin-user")
+
+    def test_client_cannot_override_lifecycle_actor_identity(self):
+        self.upload()
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        with self.assertRaises(TypeError):
+            admin_session.admin_document_intake_status_update(
+                intake_id,
+                self.request,
+                new_status="under_review",
+                admin_note="Review started.",
+                actor="mallory",
+            )
+
+        self.transition("under_review", "Review started.")
+        item = load_pending_document(intake_id, root=self.root)
+        self.assertEqual(item["status_history"][-1]["actor"], "admin-user")
+        self.assertNotIn(
+            "mallory",
+            {str(entry.get("actor")) for entry in item["status_history"]},
+        )
+
+    def test_direct_helper_historical_default_actor_remains_unchanged(self):
+        item = store_pending_document(
+            data=b"%PDF-1.7\nhistorical\n%%EOF\n",
+            original_filename="historical.pdf",
+            content_type="application/pdf",
+            uploaded_at="2026-07-08T12:00:00Z",
+            root=self.root,
+            **self.metadata(),
+        )
+
+        self.assertEqual(item["status_history"][0]["actor"], "admin")
 
     def test_under_review_can_be_rejected_then_archived(self):
         self.upload()

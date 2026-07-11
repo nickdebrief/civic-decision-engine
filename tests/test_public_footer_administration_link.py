@@ -93,12 +93,13 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                'CDE_ADMIN_PASSWORD': 'admin-password',
+                'ADMIN_USERNAME': 'admin-user',
+                'ADMIN_PASSWORD': 'admin-password',
                 'CDE_ADMIN_SESSION_SECRET': 'session-secret',
             },
             clear=False,
         ):
-            session = admin_session.create_admin_session()
+            session = admin_session.create_admin_session("admin-user")
             response = admin_session.admin_dashboard_page(
                 FakeRequest(cookies={admin_session.SESSION_COOKIE_NAME: session})
             )

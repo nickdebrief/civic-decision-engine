@@ -61,7 +61,8 @@ router = APIRouter()
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 
-ADMIN_PASSWORD_ENV = "CDE_ADMIN_PASSWORD"
+ADMIN_USERNAME_ENV = "ADMIN_USERNAME"
+ADMIN_PASSWORD_ENV = "ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
 ADMIN_TEMP_UPLOAD_ENABLED_ENV = "ADMIN_TEMP_UPLOAD_ENABLED"
 SESSION_COOKIE_NAME = "cde_admin_session"
@@ -143,14 +144,33 @@ def _sign(payload: str, secret: str) -> str:
     return _b64encode(digest.digest())
 
 
-def create_admin_session(now: int | None = None) -> str:
+def _configured_admin_credentials() -> tuple[str, str] | None:
+    username = os.getenv(ADMIN_USERNAME_ENV)
+    password = os.getenv(ADMIN_PASSWORD_ENV)
+    if not username or not username.strip() or not password or not password.strip():
+        return None
+    return username.strip(), password
+
+
+def _admin_session_actor(session: dict[str, Any]) -> str:
+    username = str(session.get("username") or "").strip()
+    if not username:
+        raise _http_error(401, "admin_session_unauthorized")
+    return username
+
+
+def create_admin_session(username: str, now: int | None = None) -> str:
     secret = _session_secret()
     if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    normalized_username = str(username or "").strip()
+    if not normalized_username:
         raise _http_error(401, "admin_session_unauthorized")
 
     issued_at = int(now if now is not None else time.time())
     payload = {
         "role": "admin",
+        "username": normalized_username,
         "issued_at": issued_at,
         "expires_at": issued_at + SESSION_MAX_AGE_SECONDS,
     }
@@ -179,8 +199,12 @@ def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]
     except (ValueError, json.JSONDecodeError) as exc:
         raise _http_error(401, "admin_session_unauthorized") from exc
 
-    allowed_keys = {"role", "issued_at", "expires_at"}
+    allowed_keys = {"role", "username", "issued_at", "expires_at"}
     if set(payload.keys()) != allowed_keys or payload.get("role") != "admin":
+        raise _http_error(401, "admin_session_unauthorized")
+
+    username = payload.get("username")
+    if not isinstance(username, str) or not username.strip():
         raise _http_error(401, "admin_session_unauthorized")
 
     expires_at = payload.get("expires_at")
@@ -44680,8 +44704,13 @@ def admin_dashboard_page(request: Request):
     return HTMLResponse(content=_render_admin_dashboard(list_intake_documents()))
 
 
-def _render_admin_login_page() -> str:
-    return """
+def _render_admin_login_page(error_message: str | None = None) -> str:
+    error_html = (
+        f'<p role="alert">{escape(error_message)}</p>'
+        if error_message
+        else ""
+    )
+    return f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44693,8 +44722,11 @@ def _render_admin_login_page() -> str:
   <main>
     <h1>Civic Decision Engine Admin</h1>
     <p>Sign in to access the unified Administration Console.</p>
+    {error_html}
     <form method="post" action="/admin/login">
-      <label for="password">Admin password</label>
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required>
+      <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required>
       <button type="submit">Sign in</button>
     </form>
@@ -44709,26 +44741,39 @@ def admin_login_page():
     return HTMLResponse(content=_render_admin_login_page())
 
 
-def _create_session_for_password(password: str) -> str:
-    expected_password = os.getenv(ADMIN_PASSWORD_ENV)
-    if not expected_password or not _session_secret():
+def _create_session_for_credentials(username: str, password: str) -> str:
+    credentials = _configured_admin_credentials()
+    if credentials is None or not _session_secret():
         raise _http_error(401, "admin_session_unauthorized")
-    if not hmac.compare_digest(str(password), expected_password):
+    expected_username, expected_password = credentials
+    supplied_username = str(username or "")
+    supplied_password = str(password or "")
+    username_matches = hmac.compare_digest(supplied_username, expected_username)
+    password_matches = hmac.compare_digest(supplied_password, expected_password)
+    if not (username_matches and password_matches):
         raise _http_error(401, "admin_session_unauthorized")
-    return create_admin_session()
+    return create_admin_session(expected_username)
 
 
 @router.post("/admin/login")
-def admin_browser_login(password: str = Form(...)):
-    session = _create_session_for_password(password)
+def admin_browser_login(username: str = Form(...), password: str = Form(...)):
+    try:
+        session = _create_session_for_credentials(username, password)
+    except HTTPException as exc:
+        if getattr(exc, "status_code", None) == 401:
+            return HTMLResponse(
+                content=_render_admin_login_page("Invalid username or password."),
+                status_code=401,
+            )
+        raise
     response = RedirectResponse(url="/admin", status_code=303)
     _set_session_cookie(response, session)
     return response
 
 
 @router.post("/api/admin/session/login")
-def admin_session_login(password: str = Form(...)):
-    session = _create_session_for_password(password)
+def admin_session_login(username: str = Form(...), password: str = Form(...)):
+    session = _create_session_for_credentials(username, password)
     response = JSONResponse(content={"ok": True, "role": "admin"})
     _set_session_cookie(response, session)
     return response
@@ -44772,7 +44817,7 @@ def admin_document_intake_upload(
     reference_identifier: str | None = Form(None),
     file: UploadFile = File(...),
 ):
-    require_admin_session(request)
+    session = require_admin_session(request)
     data = _read_uploaded_file(file)
     try:
         item = store_pending_document(
@@ -44787,6 +44832,7 @@ def admin_document_intake_upload(
             visibility=visibility,
             notes=notes,
             reference_identifier=reference_identifier,
+            actor=_admin_session_actor(session),
             root=intake_root(),
         )
     except ValueError as exc:
@@ -44815,7 +44861,7 @@ def admin_document_intake_status_update(
         item = update_intake_status(
             intake_id,
             new_status,
-            actor=str(session.get("role") or "admin"),
+            actor=_admin_session_actor(session),
             note=admin_note,
             root=intake_root(),
         )

@@ -82,6 +82,7 @@ def store_pending_document(
     visibility: str,
     notes: str,
     reference_identifier: str | None = None,
+    actor: str = "admin",
     uploaded_at: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
@@ -148,7 +149,7 @@ def store_pending_document(
                 "previous_status": None,
                 "new_status": "pending",
                 "timestamp": timestamp,
-                "actor": "admin",
+                "actor": str(actor or "admin"),
                 "note": "Document uploaded to pending intake.",
             }
         ],
