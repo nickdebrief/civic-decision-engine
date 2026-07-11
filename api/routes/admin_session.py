@@ -40673,6 +40673,7 @@ def render_admin_record_evidence_page(
     record_metadata: dict[str, Any] | None = None,
     version_history: list[dict[str, Any]] | None = None,
     report_mode: str | None = None,
+    admin_session: dict[str, Any] | None = None,
 ) -> str:
     normalized_record_metadata = dict(record_metadata or {})
     normalized_version_history = list(version_history or [])
@@ -43582,7 +43583,7 @@ def render_admin_record_evidence_page(
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
       <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
-    {_render_admin_console_navigation(reference)}
+    {_render_admin_console_navigation(reference, admin_session=admin_session)}
     <h1>Admin Record Evidence</h1>
     <p class="notice">
       This read-only administrative view inverts attachment relationships by record target.
@@ -43904,6 +43905,7 @@ def render_admin_attachments_page(
     attachments: list[dict[str, Any]],
     audit_events: list[dict[str, Any]],
     relationship_target_options: dict[str, list[str]],
+    admin_session: dict[str, Any] | None = None,
 ) -> str:
     attachment_rows = _render_admin_attachment_rows(
         attachments,
@@ -44336,7 +44338,7 @@ def render_admin_attachments_page(
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
       <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
     </svg>
-    {_render_admin_console_navigation(reference)}
+    {_render_admin_console_navigation(reference, admin_session=admin_session)}
     <h1>Admin Attachment Management</h1>
     <p class="notice">
       Administrative attachment management is controlled in this stage.
@@ -44501,22 +44503,40 @@ def render_admin_attachments_page(
 </html>"""
 
 
-def _render_admin_console_navigation(record_reference: str | None = None) -> str:
+def _render_admin_console_navigation(
+    record_reference: str | None = None,
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
     record_evidence_href = (
         f"/admin/records/{escape(record_reference)}/evidence"
         if record_reference
         else "/admin#open-record-evidence"
     )
+    identity = ""
+    if admin_session is not None:
+        username = _admin_session_actor(admin_session)
+        identity = (
+            '<span class="admin-console-identity" '
+            'style="margin-left:auto;color:#555;font-weight:500">'
+            f"Signed in as: <strong>{escape(username)}</strong>"
+            "</span>"
+        )
     return f"""<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
       <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
+      {identity}
     </nav>"""
 
 
-def _render_admin_dashboard(intake_documents: list[dict[str, Any]]) -> str:
+def _render_admin_dashboard(
+    intake_documents: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
     counts = {status: 0 for status in STATUS_LABELS}
     for item in intake_documents:
         if item.get("status") in counts:
@@ -44540,7 +44560,7 @@ def _render_admin_dashboard(intake_documents: list[dict[str, Any]]) -> str:
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CDE Administration Console</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:26px}}.summary-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.evidence-card h2{{margin:0 0 8px}}.summary-value{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail{{min-height:42px;color:#555}}.card-link{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:900px){{.summary-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:760px){{.dashboard-grid,.summary-grid{{grid-template-columns:1fr}}.summary-detail{{min-height:0}}}}</style></head>
-<body><main>{_render_admin_console_navigation()}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
 <div class="summary-grid" aria-label="Administration summary">
   <article class="summary-card"><h2>Pending Intake</h2><span class="summary-value">{pending_count}</span><p class="summary-detail">Private uploads awaiting administrative review.</p><a class="card-link" href="/admin/document-intake#intake-management">Open pending intake</a></article>
   <article class="summary-card"><h2>Review Queue</h2><span class="summary-value">{review_queue_count}</span><p class="summary-detail">Pending, under-review, and approved documents requiring active management.</p><a class="card-link" href="/admin/document-intake#intake-management">Open review queue</a></article>
@@ -44558,7 +44578,11 @@ def _status_badge(status: str) -> str:
     return f'<span class="status status-{escape(status)}">{escape(label)}</span>'
 
 
-def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
+def _render_document_intake_page(
+    intake_documents: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
     rows = "".join(
         f"""
         <tr>
@@ -44609,7 +44633,7 @@ def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
 </head>
 <body>
   <main>
-    {_render_admin_console_navigation()}
+    {_render_admin_console_navigation(admin_session=admin_session)}
     <h1>Admin Document Intake</h1>
     <p class="notice">PDF documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
     <section id="new-intake">
@@ -44636,7 +44660,11 @@ def _render_document_intake_page(intake_documents: list[dict[str, Any]]) -> str:
 </html>"""
 
 
-def _render_document_intake_preview(item: dict[str, Any]) -> str:
+def _render_document_intake_preview(
+    item: dict[str, Any],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
     fields = (
         ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
@@ -44678,30 +44706,35 @@ def _render_document_intake_preview(item: dict[str, Any]) -> str:
         f"<td>{escape(str(entry.get('timestamp', 'Not available')))}</td>"
         f"<td>{escape(STATUS_LABELS.get(entry.get('previous_status'), 'Initial state') if entry.get('previous_status') else 'Initial state')}</td>"
         f"<td>{escape(STATUS_LABELS.get(entry.get('new_status'), str(entry.get('new_status', ''))))}</td>"
-        f"<td>{escape(str(entry.get('actor', 'admin')))}</td>"
-        f"<td>{escape(str(entry.get('note') or ''))}</td>"
+        f'<td class="status-history-actor">{escape(str(entry.get("actor", "admin")))}</td>'
+        f'<td class="status-history-note">{escape(str(entry.get("note") or ""))}</td>'
         "</tr>"
         for entry in item.get("status_history", [])
     ) or '<tr><td colspan="5">No status history is available.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head>
-<body><main>{_render_admin_console_navigation()}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status-history{{table-layout:auto}}.status-history-actor{{min-width:120px;width:120px;overflow-wrap:anywhere}}.status-history-note{{min-width:260px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}@media(max-width:720px){{.status-history-actor{{min-width:96px;width:auto}}.status-history-note{{min-width:0}}}}</style></head>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
-<h2>Status history</h2><table><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{history_rows}</tbody></table>
+<h2>Status history</h2><table class="status-history"><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th class="status-history-actor">Actor</th><th class="status-history-note">Note</th></tr></thead><tbody>{history_rows}</tbody></table>
 </main></body></html>"""
 
 
 @router.get("/admin", response_class=HTMLResponse)
 def admin_dashboard_page(request: Request):
     try:
-        require_admin_session(request)
+        session = require_admin_session(request)
     except HTTPException as exc:
         if getattr(exc, "status_code", None) == 401:
             return HTMLResponse(content=_render_admin_login_page())
         raise
-    return HTMLResponse(content=_render_admin_dashboard(list_intake_documents()))
+    return HTMLResponse(
+        content=_render_admin_dashboard(
+            list_intake_documents(),
+            admin_session=session,
+        )
+    )
 
 
 def _render_admin_login_page(error_message: str | None = None) -> str:
@@ -44788,20 +44821,23 @@ def admin_session_logout():
 
 @router.get("/admin/document-intake", response_class=HTMLResponse)
 def admin_document_intake_page(request: Request):
-    require_admin_session(request)
+    session = require_admin_session(request)
     return HTMLResponse(
-        content=_render_document_intake_page(list_intake_documents())
+        content=_render_document_intake_page(
+            list_intake_documents(),
+            admin_session=session,
+        )
     )
 
 
 @router.get("/admin/document-intake/{intake_id}", response_class=HTMLResponse)
 def admin_document_intake_preview_page(intake_id: str, request: Request):
-    require_admin_session(request)
+    session = require_admin_session(request)
     try:
         item = load_pending_document(intake_id)
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
-    return HTMLResponse(content=_render_document_intake_preview(item))
+    return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
 
 
 @router.post("/api/admin/session/document-intake", response_class=HTMLResponse)
@@ -44843,7 +44879,10 @@ def admin_document_intake_upload(
             "document_intake_duplicate": 409,
         }.get(detail, 400)
         raise _http_error(status_code, detail) from exc
-    return HTMLResponse(content=_render_document_intake_preview(item), status_code=201)
+    return HTMLResponse(
+        content=_render_document_intake_preview(item, admin_session=session),
+        status_code=201,
+    )
 
 
 @router.post(
@@ -44869,7 +44908,7 @@ def admin_document_intake_status_update(
         detail = str(exc)
         status_code = 404 if detail == "document_intake_not_found" else 409
         raise _http_error(status_code, detail) from exc
-    return HTMLResponse(content=_render_document_intake_preview(item))
+    return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
 
 
 @router.post(
@@ -44881,17 +44920,17 @@ def admin_document_intake_notes_update(
     request: Request,
     notes: str = Form(...),
 ):
-    require_admin_session(request)
+    session = require_admin_session(request)
     try:
         item = update_intake_notes(intake_id, notes, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
-    return HTMLResponse(content=_render_document_intake_preview(item))
+    return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
 
 
 @router.get("/admin/records/{reference}/attachments", response_class=HTMLResponse)
 def admin_record_attachments_page(reference: str, request: Request):
-    require_admin_session(request)
+    session = require_admin_session(request)
     conn = get_db()
     try:
         record = conn.execute(
@@ -44920,6 +44959,7 @@ def admin_record_attachments_page(reference: str, request: Request):
                     conn, reference=record["reference"]
                 ),
                 relationship_target_options=_record_relationship_target_options(record),
+                admin_session=session,
             )
         )
     finally:
@@ -44928,7 +44968,7 @@ def admin_record_attachments_page(reference: str, request: Request):
 
 @router.get("/admin/records/{reference}/evidence", response_class=HTMLResponse)
 def admin_record_evidence_page(reference: str, request: Request):
-    require_admin_session(request)
+    session = require_admin_session(request)
     query_params = getattr(request, "query_params", {})
     requested_report_mode = (
         query_params.get("report_mode")
@@ -44971,6 +45011,7 @@ def admin_record_evidence_page(reference: str, request: Request):
                     reference=record["reference"],
                 ),
                 report_mode=requested_report_mode,
+                admin_session=session,
             )
         )
     finally:

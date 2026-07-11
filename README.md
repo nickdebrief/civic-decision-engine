@@ -254,6 +254,24 @@ existing `/documents` route and all authentication, lifecycle, publication,
 evidence, hashing, verification, database, API, footer-navigation, and
 public/private visibility behaviour.
 
+### CDE v12.7 — Administrative Identity
+
+CDE v12.7 makes the authenticated administrator identity visible inside the
+Administration Console through a restrained session-derived indicator such as
+`Signed in as: <username>`. The displayed identity comes only from the signed
+administrator session created by the `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+login flow; it is not read from query parameters, form fields, headers, or
+client-supplied actor values.
+
+This stage also improves readability of the active document lifecycle-history
+Actor column so ordinary values such as historical `admin` entries and newer
+named administrator entries remain readable while long identifiers can still
+wrap safely. Historical actor values are preserved exactly as recorded, and
+new lifecycle attribution continues to come only from the authenticated
+server-side session. No authentication, lifecycle, publication, evidence,
+hashing, verification, database, API, Public Document Library, public-footer,
+or public/private visibility behaviour changes are introduced.
+
 ---
 
 ## What it does
