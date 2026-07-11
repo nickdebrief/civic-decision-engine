@@ -109,6 +109,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertIn("Admin Document Intake", content)
         self.assertIn("/api/admin/session/document-intake", content)
         self.assertIn("This upload has not created or modified any public record.", content)
+        self.assertIn("Signed in as:", content)
+        self.assertIn("<strong>admin-user</strong>", content)
 
     def test_unauthenticated_page_and_upload_are_denied(self):
         with self.assertRaises(FakeHTTPException) as page_ctx:
@@ -140,6 +142,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertIn(expected_hash, content)
         self.assertIn("Pending Document Preview", content)
         self.assertIn("This upload has not created or modified any public record.", content)
+        self.assertIn("Signed in as:", content)
+        self.assertIn("<strong>admin-user</strong>", content)
 
         stored_file = Path(item["proposed_storage_location"])
         self.assertTrue(stored_file.is_file())
@@ -259,6 +263,48 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             "mallory",
             {str(entry.get("actor")) for entry in item["status_history"]},
         )
+
+    def test_client_supplied_username_cannot_override_displayed_identity(self):
+        session = admin_session.create_admin_session("session-user")
+        request = FakeRequest(
+            cookies={admin_session.SESSION_COOKIE_NAME: session},
+            query_params={"username": "mallory", "actor": "mallory"},
+        )
+        content = self.response_text(admin_session.admin_document_intake_page(request))
+        self.assertIn("<strong>session-user</strong>", content)
+        self.assertNotIn("<strong>mallory</strong>", content)
+
+    def test_status_history_actor_column_has_readable_styling_hook(self):
+        response = self.upload()
+        content = self.response_text(response)
+        self.assertIn('<table class="status-history">', content)
+        self.assertIn('<th class="status-history-actor">Actor</th>', content)
+        self.assertIn('<th class="status-history-note">Note</th>', content)
+        self.assertIn('<td class="status-history-actor">admin-user</td>', content)
+        self.assertIn("min-width:120px", content)
+        self.assertIn("status-history-note", content)
+
+    def test_status_history_preserves_long_actor_and_note_text(self):
+        item = store_pending_document(
+            data=b"%PDF-1.7\nlong-actor\n%%EOF\n",
+            original_filename="long-actor.pdf",
+            content_type="application/pdf",
+            uploaded_at="2026-07-08T12:00:00Z",
+            root=self.root,
+            **self.metadata(),
+        )
+        long_actor = "administrator-with-a-very-long-session-derived-identifier"
+        long_note = "Retain full internal note text for lifecycle review."
+        item["status_history"][0]["actor"] = long_actor
+        item["status_history"][0]["note"] = long_note
+        content = admin_session._render_document_intake_preview(
+            item,
+            admin_session={"username": "admin-user"},
+        )
+        self.assertIn(long_actor, content)
+        self.assertIn(long_note, content)
+        self.assertIn(f'<td class="status-history-actor">{long_actor}</td>', content)
+        self.assertIn("overflow-wrap:anywhere", content)
 
     def test_direct_helper_historical_default_actor_remains_unchanged(self):
         item = store_pending_document(

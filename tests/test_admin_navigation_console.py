@@ -59,6 +59,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         response = admin_session.admin_dashboard_page(self.request)
         content = response.content
         self.assertIn("CDE Administration Console", content)
+        self.assertIn("Signed in as:", content)
+        self.assertIn("<strong>admin-user</strong>", content)
         self.assertIn('href="/admin"', content)
         self.assertIn('href="/admin/document-intake#new-intake"', content)
         self.assertIn('href="/admin/document-intake#intake-management"', content)
@@ -71,7 +73,29 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn("Civic Decision Engine Admin", response.content)
         self.assertIn('type="password"', response.content)
         self.assertIn('/admin/login', response.content)
+        self.assertNotIn("Signed in as:", response.content)
+        self.assertNotIn("admin-user", response.content)
+        self.assertNotIn("admin-password", response.content)
+        self.assertNotIn("session-secret", response.content)
         self.assertNotIn('CDE Administration Console</h1>', response.content)
+
+    def test_signed_in_identity_is_derived_from_signed_session_only(self):
+        session = admin_session.create_admin_session("session-user")
+        request = FakeRequest(
+            cookies={admin_session.SESSION_COOKIE_NAME: session},
+            query_params={"username": "mallory", "actor": "mallory"},
+        )
+        content = admin_session.admin_dashboard_page(request).content
+        self.assertIn("Signed in as:", content)
+        self.assertIn("<strong>session-user</strong>", content)
+        self.assertNotIn("<strong>mallory</strong>", content)
+
+    def test_logout_response_clears_authenticated_identity_cookie(self):
+        response = admin_session.admin_session_logout()
+        self.assertIn("cde_admin_session=", response.headers["Set-Cookie"])
+        self.assertIn("Max-Age=0", response.headers["Set-Cookie"])
+        login_content = admin_session.admin_dashboard_page(FakeRequest()).content
+        self.assertNotIn("Signed in as:", login_content)
 
     def test_dashboard_displays_lifecycle_counts_and_review_queue_links(self):
         content = admin_session.admin_dashboard_page(self.request).content
@@ -110,7 +134,10 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn("Open Record Evidence</button>", content)
 
     def test_shared_navigation_uses_current_record_reference_when_available(self):
-        content = admin_session._render_admin_console_navigation("RECORD-2026-001")
+        content = admin_session._render_admin_console_navigation(
+            "RECORD-2026-001",
+            admin_session={"username": "admin-user"},
+        )
         self.assertIn("Administration / Dashboard", content)
         self.assertIn("Document Intake", content)
         self.assertIn("Intake Management", content)
@@ -119,6 +146,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         )
         self.assertIn("Public Document Library", content)
         self.assertNotIn(">Public Library</a>", content)
+        self.assertIn("Signed in as:", content)
+        self.assertIn("<strong>admin-user</strong>", content)
 
     def test_intake_and_review_pages_include_shared_navigation(self):
         intake = admin_session.admin_document_intake_page(self.request).content
@@ -130,6 +159,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
             self.assertIn('href="/admin"', content)
             self.assertIn('href="/documents"', content)
             self.assertIn("Public Document Library", content)
+            self.assertIn("Signed in as:", content)
+            self.assertIn("<strong>admin-user</strong>", content)
 
     def test_private_review_link_remains_admin_protected(self):
         with self.assertRaises(FakeHTTPException) as ctx:
