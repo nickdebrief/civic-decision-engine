@@ -91,7 +91,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
             "Pending Intake",
             "Review Queue",
             "Record Evidence",
-            "Public Library",
+            "Public Document Library",
         ):
             self.assertIn(f"<h2>{heading}</h2>", content)
         self.assertIn('<span class="summary-value">1</span>', content)
@@ -117,7 +117,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn(
             'href="/admin/records/RECORD-2026-001/evidence"', content
         )
-        self.assertIn("Public Library", content)
+        self.assertIn("Public Document Library", content)
+        self.assertNotIn(">Public Library</a>", content)
 
     def test_intake_and_review_pages_include_shared_navigation(self):
         intake = admin_session.admin_document_intake_page(self.request).content
@@ -128,6 +129,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
             self.assertIn('aria-label="Administration Console"', content)
             self.assertIn('href="/admin"', content)
             self.assertIn('href="/documents"', content)
+            self.assertIn("Public Document Library", content)
 
     def test_private_review_link_remains_admin_protected(self):
         with self.assertRaises(FakeHTTPException) as ctx:

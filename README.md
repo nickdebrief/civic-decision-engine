@@ -160,7 +160,7 @@ record behavior are unchanged.
 
 CDE v12.5.1 completes the Administration Console dashboard with first-class
 summary cards for Pending Intake, the active Review Queue, Record Evidence,
-and the Public Library. Record Evidence now has a dedicated **Open Record
+and the Public Document Library. Record Evidence now has a dedicated **Open Record
 Evidence** card describing the existing inspection capabilities and retaining
 the known-reference navigation boundary.
 
@@ -238,6 +238,21 @@ does not add default credentials or a password-only fallback, and it does not
 change document lifecycle rules, approval/publication boundaries, public
 visibility, evidence handling, SHA-256 verification, database behaviour,
 records, attachments, classification logic, public APIs, or footer navigation.
+
+### CDE v12.6.1 — Legacy Credential Audit and Admin Library Label Alignment
+
+CDE v12.6.1 confirms that the legacy `CDE_ADMIN_PASSWORD` variable is no longer
+referenced by active runtime code after named administrator authentication moved
+to `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Remaining references are audit
+documentation or test assertions only, so the legacy Railway variable can be
+removed from deployment configuration after operational confirmation. No
+fallback to the legacy variable was introduced.
+
+This maintenance stage also aligns active Administration Console labels with
+the canonical **Public Document Library** feature name while preserving the
+existing `/documents` route and all authentication, lifecycle, publication,
+evidence, hashing, verification, database, API, footer-navigation, and
+public/private visibility behaviour.
 
 ---
 
