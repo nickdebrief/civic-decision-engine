@@ -9798,6 +9798,17 @@ class AdminSessionTests(unittest.TestCase):
                 self.admin_session.admin_session_login("Admin", "admin-password")
             self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
 
+    def test_active_runtime_code_does_not_read_legacy_admin_password_variable(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        runtime_files = (
+            repo_root / "api" / "routes" / "admin_session.py",
+            repo_root / "api" / "document_intake.py",
+            repo_root / "api" / "routes" / "documents.py",
+        )
+        for path in runtime_files:
+            with self.subTest(path=path.name):
+                self.assertNotIn("CDE_ADMIN_PASSWORD", path.read_text())
+
     def test_missing_session_fails_require_admin_session(self):
         with self.env():
             with self.assertRaises(Exception) as ctx:

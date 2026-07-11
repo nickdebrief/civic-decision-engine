@@ -44512,7 +44512,7 @@ def _render_admin_console_navigation(record_reference: str | None = None) -> str
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
-      <a style="color:#245d61;font-weight:650" href="/documents">Public Library</a>
+      <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
     </nav>"""
 
 
@@ -44545,7 +44545,7 @@ def _render_admin_dashboard(intake_documents: list[dict[str, Any]]) -> str:
   <article class="summary-card"><h2>Pending Intake</h2><span class="summary-value">{pending_count}</span><p class="summary-detail">Private uploads awaiting administrative review.</p><a class="card-link" href="/admin/document-intake#intake-management">Open pending intake</a></article>
   <article class="summary-card"><h2>Review Queue</h2><span class="summary-value">{review_queue_count}</span><p class="summary-detail">Pending, under-review, and approved documents requiring active management.</p><a class="card-link" href="/admin/document-intake#intake-management">Open review queue</a></article>
   <article class="summary-card"><h2>Record Evidence</h2><span class="summary-value">Open</span><p class="summary-detail">Inspect record-derived evidence, determinations, provenance, and report modes.</p><a class="card-link" href="#open-record-evidence">Open Record Evidence</a></article>
-  <article class="summary-card"><h2>Public Library</h2><span class="summary-value">{published_count}</span><p class="summary-detail">Published documents currently eligible for public visibility.</p><a class="card-link" href="/documents">Open Public Library</a></article>
+  <article class="summary-card"><h2>Public Document Library</h2><span class="summary-value">{published_count}</span><p class="summary-detail">Published documents currently eligible for public visibility.</p><a class="card-link" href="/documents">Open Public Document Library</a></article>
 </div>
 <div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
 <section id="open-record-evidence" class="evidence-card"><h2>Open Record Evidence</h2><p>Open the existing administrative evidence workspace for a known record reference. Inspect visible evidence relationships, determination traces, dependency and stability views, provenance, verification details, and Executive, Review, or Full Inspection report modes.</p><p>This navigation does not enumerate records or alter evidence, classifications, hashes, lifecycle states, or public visibility.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
