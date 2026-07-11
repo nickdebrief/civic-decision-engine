@@ -156,7 +156,8 @@ class AdminSessionTests(unittest.TestCase):
         return patch.dict(
             os.environ,
             {
-                "CDE_ADMIN_PASSWORD": "admin-password",
+                "ADMIN_USERNAME": "admin-user",
+                "ADMIN_PASSWORD": "admin-password",
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_ADMIN_TOKEN": "server-only-token",
                 "ADMIN_TEMP_UPLOAD_ENABLED": "false",
@@ -9636,15 +9637,26 @@ class AdminSessionTests(unittest.TestCase):
             response = self.admin_session.admin_login_page()
 
         self.assertIn("Civic Decision Engine Admin", response.content)
+        self.assertIn('type="text"', response.content)
+        self.assertIn('name="username"', response.content)
+        self.assertIn('autocomplete="username"', response.content)
+        self.assertIn('required', response.content)
+        self.assertIn(">Username</label>", response.content)
+        self.assertIn(">Password</label>", response.content)
         self.assertIn('type="password"', response.content)
+        self.assertIn('autocomplete="current-password"', response.content)
         self.assertNotIn("server-only-token", response.content)
         self.assertNotIn("CDE_ADMIN_TOKEN", response.content)
+        self.assertNotIn("admin-user", response.content)
+        self.assertNotIn("admin-password", response.content)
         self.assertNotIn("Upload", response.content)
         self.assertNotIn("attachment", response.content.lower())
 
     def test_successful_login_sets_secure_httponly_strict_cookie(self):
         with self.env():
-            response = self.admin_session.admin_session_login("admin-password")
+            response = self.admin_session.admin_session_login(
+                "admin-user", "admin-password"
+            )
 
         cookie = response.headers["Set-Cookie"]
 
@@ -9658,7 +9670,9 @@ class AdminSessionTests(unittest.TestCase):
 
     def test_browser_login_redirects_to_admin_console_with_session_cookie(self):
         with self.env():
-            response = self.admin_session.admin_browser_login("admin-password")
+            response = self.admin_session.admin_browser_login(
+                "admin-user", "admin-password"
+            )
 
         cookie = response.headers["Set-Cookie"]
 
@@ -9679,19 +9693,22 @@ class AdminSessionTests(unittest.TestCase):
         self.assertIn("CDE Administration Console", dashboard.content)
         self.assertNotIn('{"ok":true,"role":"admin"}', str(dashboard.content))
 
-    def test_browser_login_invalid_password_is_denied(self):
+    def test_browser_login_invalid_credentials_show_generic_error(self):
         with self.env():
-            with self.assertRaises(Exception) as ctx:
-                self.admin_session.admin_browser_login("wrong-password")
+            response = self.admin_session.admin_browser_login(
+                "admin-user", "wrong-password"
+            )
 
-        self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
-        self.assertEqual(
-            getattr(ctx.exception, "detail", None), "admin_session_unauthorized"
-        )
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Invalid username or password.", response.content)
+        self.assertNotIn("admin-user", response.content)
+        self.assertNotIn("admin-password", response.content)
 
     def test_session_payload_contains_only_allowed_fields(self):
         with self.env():
-            response = self.admin_session.admin_session_login("admin-password")
+            response = self.admin_session.admin_session_login(
+                "admin-user", "admin-password"
+            )
 
         session = self.session_from_response(response)
         payload_b64 = session.split(".", 1)[0]
@@ -9702,13 +9719,19 @@ class AdminSessionTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(set(payload.keys()), {"role", "issued_at", "expires_at"})
+        self.assertEqual(
+            set(payload.keys()), {"role", "username", "issued_at", "expires_at"}
+        )
         self.assertEqual(payload["role"], "admin")
+        self.assertEqual(payload["username"], "admin-user")
+        self.assertNotIn("admin-password", payload.values())
 
     def test_invalid_login_returns_401_without_secret_details(self):
         with self.env():
             with self.assertRaises(Exception) as ctx:
-                self.admin_session.admin_session_login("wrong-password")
+                self.admin_session.admin_session_login(
+                    "admin-user", "wrong-password"
+                )
 
         self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
         self.assertEqual(
@@ -9716,6 +9739,64 @@ class AdminSessionTests(unittest.TestCase):
         )
         self.assertNotIn("server-only-token", getattr(ctx.exception, "detail", ""))
         self.assertNotIn("admin-password", getattr(ctx.exception, "detail", ""))
+
+    def test_login_requires_matching_username_and_password(self):
+        cases = (
+            ("valid username with wrong password", "admin-user", "wrong-password"),
+            ("wrong username with valid password", "wrong-user", "admin-password"),
+            ("wrong username with wrong password", "wrong-user", "wrong-password"),
+            ("missing username", "", "admin-password"),
+            ("missing password", "admin-user", ""),
+        )
+        with self.env():
+            for label, username, password in cases:
+                with self.subTest(label=label):
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.admin_session_login(username, password)
+                    self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+                    self.assertEqual(
+                        getattr(ctx.exception, "detail", None),
+                        "admin_session_unauthorized",
+                    )
+
+    def test_missing_or_empty_admin_credentials_fail_closed(self):
+        cases = (
+            ("empty username", {"ADMIN_USERNAME": ""}),
+            ("empty password", {"ADMIN_PASSWORD": ""}),
+            (
+                "missing username",
+                {
+                    "ADMIN_PASSWORD": "admin-password",
+                    "CDE_ADMIN_SESSION_SECRET": "session-secret",
+                },
+            ),
+            (
+                "missing password",
+                {
+                    "ADMIN_USERNAME": "admin-user",
+                    "CDE_ADMIN_SESSION_SECRET": "session-secret",
+                },
+            ),
+        )
+        for label, env_values in cases:
+            with self.subTest(label=label):
+                with patch.dict(os.environ, env_values, clear=True):
+                    with self.assertRaises(Exception) as ctx:
+                        self.admin_session.admin_session_login(
+                            "admin-user", "admin-password"
+                        )
+                    self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
+
+    def test_no_default_or_password_only_admin_login_is_accepted(self):
+        with self.env():
+            with self.assertRaises(Exception) as password_only_ctx:
+                self.admin_session.admin_session_login("admin-password")
+            self.assertEqual(
+                getattr(password_only_ctx.exception, "status_code", None), 401
+            )
+            with self.assertRaises(Exception) as ctx:
+                self.admin_session.admin_session_login("Admin", "admin-password")
+            self.assertEqual(getattr(ctx.exception, "status_code", None), 401)
 
     def test_missing_session_fails_require_admin_session(self):
         with self.env():
@@ -9726,7 +9807,7 @@ class AdminSessionTests(unittest.TestCase):
 
     def test_expired_session_fails_require_admin_session(self):
         with self.env():
-            session = self.admin_session.create_admin_session(now=100)
+            session = self.admin_session.create_admin_session("admin-user", now=100)
 
         with self.env():
             with patch.object(self.admin_session.time, "time", return_value=3701):
@@ -9739,7 +9820,7 @@ class AdminSessionTests(unittest.TestCase):
 
     def test_valid_session_passes_require_admin_session(self):
         with self.env():
-            session = self.admin_session.create_admin_session(now=100)
+            session = self.admin_session.create_admin_session("admin-user", now=100)
 
         with self.env():
             with patch.object(self.admin_session.time, "time", return_value=200):
@@ -9748,7 +9829,10 @@ class AdminSessionTests(unittest.TestCase):
                 )
 
         self.assertEqual(payload["role"], "admin")
-        self.assertEqual(set(payload.keys()), {"role", "issued_at", "expires_at"})
+        self.assertEqual(payload["username"], "admin-user")
+        self.assertEqual(
+            set(payload.keys()), {"role", "username", "issued_at", "expires_at"}
+        )
 
     def test_logout_clears_cookie(self):
         response = self.admin_session.admin_session_logout()
@@ -9911,7 +9995,7 @@ class AdminSessionTests(unittest.TestCase):
 
     def valid_request(self, report_mode=None):
         with self.env():
-            session = self.admin_session.create_admin_session()
+            session = self.admin_session.create_admin_session("admin-user")
         query_params = (
             {"report_mode": report_mode}
             if report_mode is not None

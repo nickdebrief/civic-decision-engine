@@ -19,14 +19,15 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.env = patch.dict(
             os.environ,
             {
-                "CDE_ADMIN_PASSWORD": "admin-password",
+                "ADMIN_USERNAME": "admin-user",
+                "ADMIN_PASSWORD": "admin-password",
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_DOCUMENT_INTAKE_ROOT": str(self.root),
             },
             clear=False,
         )
         self.env.start()
-        session = admin_session.create_admin_session()
+        session = admin_session.create_admin_session("admin-user")
         self.request = FakeRequest(
             cookies={admin_session.SESSION_COOKIE_NAME: session}
         )
@@ -136,7 +137,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 401)
 
     def test_login_contract_is_preserved(self):
-        response = admin_session.admin_session_login("admin-password")
+        response = admin_session.admin_session_login("admin-user", "admin-password")
         self.assertEqual(response.content, {"ok": True, "role": "admin"})
         self.assertIn("cde_admin_session=", response.headers["Set-Cookie"])
 

@@ -224,6 +224,21 @@ feature name while preserving the existing `/documents` route and all document
 visibility, publication, authentication, authorization, evidence, hashing,
 verification, database, and API behaviour.
 
+### CDE v12.6 — Named Administrator Authentication
+
+CDE v12.6 replaces password-only Administration Console login with named
+administrator authentication using the required `ADMIN_USERNAME` and
+`ADMIN_PASSWORD` environment variables. Successful authentication stores the
+administrator username in the protected server-side session and uses that
+identity for newly created document-intake and lifecycle-history actor
+attribution. Historical actor values remain unchanged.
+
+This stage fails closed when either credential variable is absent or empty. It
+does not add default credentials or a password-only fallback, and it does not
+change document lifecycle rules, approval/publication boundaries, public
+visibility, evidence handling, SHA-256 verification, database behaviour,
+records, attachments, classification logic, public APIs, or footer navigation.
+
 ---
 
 ## What it does
