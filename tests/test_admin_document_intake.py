@@ -390,12 +390,20 @@ class AdminDocumentIntakeTests(unittest.TestCase):
     def test_status_history_actor_column_has_readable_styling_hook(self):
         response = self.upload()
         content = self.response_text(response)
-        self.assertIn('<table class="status-history">', content)
-        self.assertIn('<th class="status-history-actor">Actor</th>', content)
-        self.assertIn('<th class="status-history-note">Note</th>', content)
-        self.assertIn('<td class="status-history-actor">admin-user</td>', content)
+        self.assertIn('class="status-history-wrapper audit-table-wrapper"', content)
+        self.assertIn('<table class="status-history audit-history-table">', content)
+        self.assertIn('<th class="history-timestamp">Timestamp</th>', content)
+        self.assertIn('<th class="history-status history-previous-status">Previous status</th>', content)
+        self.assertIn('<th class="history-status history-new-status">New status</th>', content)
+        self.assertIn('<th class="status-history-actor history-actor">Actor</th>', content)
+        self.assertIn('<th class="status-history-note history-note">Note</th>', content)
+        self.assertIn('<td class="status-history-actor history-actor">admin-user</td>', content)
         self.assertIn("min-width:120px", content)
+        self.assertIn("min-width:180px", content)
+        self.assertIn("min-width:145px", content)
         self.assertIn("status-history-note", content)
+        self.assertIn("Pending Intake", content)
+        self.assertIn("Initial state", content)
 
     def test_status_history_preserves_long_actor_and_note_text(self):
         item = store_pending_document(
@@ -416,7 +424,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         )
         self.assertIn(long_actor, content)
         self.assertIn(long_note, content)
-        self.assertIn(f'<td class="status-history-actor">{long_actor}</td>', content)
+        self.assertIn(f'<td class="status-history-actor history-actor">{long_actor}</td>', content)
         self.assertIn("overflow-wrap:anywhere", content)
 
     def test_direct_helper_historical_default_actor_remains_unchanged(self):

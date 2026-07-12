@@ -230,10 +230,29 @@ class PublicDocumentLibraryTests(unittest.TestCase):
                 self.assertIn('class="public-document-image"', content)
                 self.assertIn('max-width:100%', content)
                 self.assertIn(f'alt="{title}"', content)
+                self.assertIn(f'/documents/{document_id}/view', content)
+                self.assertIn(f'/documents/{document_id}/download', content)
                 self.assertIn("View image", content)
                 self.assertIn("Download original image", content)
 
-    def test_published_image_downloads_return_exact_bytes_and_media_types(self):
+    def test_published_image_view_returns_exact_bytes_inline_and_media_types(self):
+        cases = (
+            (self.jpeg_id, "image/jpeg", "Strike_001.jpg", JPEG_BYTES),
+            (self.png_id, "image/png", "Strike_003.png", PNG_BYTES),
+        )
+        for document_id, media_type, filename, expected_bytes in cases:
+            with self.subTest(filename=filename):
+                response = documents.public_document_image_view(document_id)
+                self.assertIsInstance(response, FakeFileResponse)
+                self.assertEqual(response.media_type, media_type)
+                self.assertEqual(Path(response.path).read_bytes(), expected_bytes)
+                self.assertIn(
+                    "inline",
+                    response.headers.get("Content-Disposition", ""),
+                )
+                self.assertIn(filename, response.headers.get("Content-Disposition", ""))
+
+    def test_published_image_downloads_return_exact_bytes_attachment_and_media_types(self):
         cases = (
             (self.jpeg_id, "image/jpeg", "Strike_001.jpg", JPEG_BYTES),
             (self.png_id, "image/png", "Strike_003.png", PNG_BYTES),
@@ -245,6 +264,11 @@ class PublicDocumentLibraryTests(unittest.TestCase):
                 self.assertEqual(response.media_type, media_type)
                 self.assertEqual(response.filename, filename)
                 self.assertEqual(Path(response.path).read_bytes(), expected_bytes)
+                self.assertIn(
+                    "attachment",
+                    response.headers.get("Content-Disposition", ""),
+                )
+                self.assertIn(filename, response.headers.get("Content-Disposition", ""))
 
     def test_every_private_state_is_inaccessible_by_page_and_download(self):
         for status in ("pending", "under_review", "approved", "archived", "rejected"):
@@ -255,10 +279,20 @@ class PublicDocumentLibraryTests(unittest.TestCase):
                 with self.assertRaises(FakeHTTPException) as download_ctx:
                     documents.public_document_download(self.ids[status])
                 self.assertEqual(download_ctx.exception.status_code, 404)
+                with self.assertRaises(FakeHTTPException) as view_ctx:
+                    documents.public_document_image_view(self.ids[status])
+                self.assertEqual(view_ctx.exception.status_code, 404)
         with self.assertRaises(FakeHTTPException):
             documents.public_document_page(self.private_jpeg_id)
         with self.assertRaises(FakeHTTPException):
             documents.public_document_download(self.private_jpeg_id)
+        with self.assertRaises(FakeHTTPException):
+            documents.public_document_image_view(self.private_jpeg_id)
+
+    def test_pdf_is_not_served_through_public_image_view_route(self):
+        with self.assertRaises(FakeHTTPException) as ctx:
+            documents.public_document_image_view(self.ids["published"])
+        self.assertEqual(ctx.exception.status_code, 404)
 
     def test_archiving_a_published_document_revokes_page_and_download(self):
         document_id = self.ids["published"]
@@ -276,6 +310,8 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             documents.public_document_page(document_id)
         with self.assertRaises(FakeHTTPException):
             documents.public_document_download(document_id)
+        with self.assertRaises(FakeHTTPException):
+            documents.public_document_image_view(document_id)
         library = documents.public_document_library(
             q=None, institution=None, category=None, publication_year=None
         )

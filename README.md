@@ -293,6 +293,22 @@ metadata extraction, image conversion, thumbnailing, galleries, Strike-specific
 fields, lifecycle changes, authentication changes, database schema changes,
 evidence changes, verification changes, or audit-table redesign.
 
+### CDE v12.8.1 — Public Image Presentation Refinement
+
+CDE v12.8.1 separates public image viewing from original-image downloading for
+published JPEG and PNG records. Public image detail pages now use a dedicated
+inline image-view route for browser display while preserving the existing
+download route for explicit original-file download. Both routes return the
+exact preserved bytes, use server-derived media types, and remain restricted to
+Published image records.
+
+This refinement also improves the Document Intake Review lifecycle-history
+table with a responsive wrapper and semantic column styling for timestamp,
+previous status, new status, actor, and note values. Ordinary lifecycle labels
+remain readable without changing lifecycle data, actor attribution, notes,
+authentication, storage, provenance, evidence, verification, database behaviour,
+PDF downloads, footer navigation, or public/private visibility boundaries.
+
 ---
 
 ## What it does
