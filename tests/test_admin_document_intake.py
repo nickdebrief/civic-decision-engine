@@ -24,6 +24,8 @@ from api.routes import admin_session
 
 
 PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
+JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x02strike-jpeg\xff\xd9"
+PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRstrike-png"
 
 
 class AdminDocumentIntakeTests(unittest.TestCase):
@@ -132,6 +134,9 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertEqual(item["status"], "pending")
         self.assertEqual(item["status_history"][0]["new_status"], "pending")
         self.assertEqual(item["status_history"][0]["actor"], "admin-user")
+        self.assertEqual(item["document_type"], "pdf")
+        self.assertEqual(item["document_format"], "PDF")
+        self.assertEqual(item["content_type"], "application/pdf")
         self.assertEqual(item["original_filename"], "decision.pdf")
         self.assertEqual(item["sha256_hash"], expected_hash)
         self.assertEqual(item["file_size_bytes"], len(PDF_BYTES))
@@ -156,11 +161,46 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertEqual(item["original_filename"], "source.PDF")
         self.assertNotIn("..", Path(item["proposed_storage_location"]).parts)
 
-    def test_invalid_mime_extension_and_signature_are_rejected(self):
+    def test_valid_image_uploads_preserve_bytes_type_and_session_actor(self):
         cases = (
-            {"content_type": "text/plain"},
+            ("Strike_001.jpg", "image/jpeg", JPEG_BYTES, "jpeg", "JPEG"),
+            ("Strike_002.jpeg", "image/jpeg", JPEG_BYTES + b"-jpeg", "jpeg", "JPEG"),
+            ("Strike_003.png", "image/png", PNG_BYTES, "png", "PNG"),
+            ("STRIKE_004.JPG", "text/plain", JPEG_BYTES + b"-upper", "jpeg", "JPEG"),
+            ("STRIKE_005.PNG", "application/octet-stream", PNG_BYTES + b"-upper", "png", "PNG"),
+        )
+        for filename, content_type, data, document_type, label in cases:
+            with self.subTest(filename=filename):
+                response = self.upload(
+                    filename=filename,
+                    content_type=content_type,
+                    data=data,
+                    title=f"{filename} record",
+                )
+                expected_hash = hashlib.sha256(data).hexdigest()
+                item = load_pending_document(expected_hash, root=self.root)
+                self.assertEqual(response.status_code, 201)
+                self.assertEqual(item["document_type"], document_type)
+                self.assertEqual(item["document_format"], label)
+                self.assertEqual(item["sha256_hash"], expected_hash)
+                self.assertEqual(item["status_history"][0]["actor"], "admin-user")
+                self.assertEqual(Path(item["proposed_storage_location"]).read_bytes(), data)
+                self.assertEqual(item["original_filename"], filename)
+
+    def test_invalid_extension_and_signature_cases_are_rejected(self):
+        cases = (
             {"filename": "decision.txt"},
             {"data": b"not a pdf"},
+            {"filename": "Strike_001.gif", "data": JPEG_BYTES, "content_type": "image/jpeg"},
+            {"filename": "Strike_001.webp", "data": JPEG_BYTES, "content_type": "image/jpeg"},
+            {"filename": "Strike_001.svg", "data": b"<svg></svg>", "content_type": "image/svg+xml"},
+            {"filename": "Strike_001.bmp", "data": b"BMfixture", "content_type": "image/bmp"},
+            {"filename": "Strike_001.tiff", "data": b"II*\x00", "content_type": "image/tiff"},
+            {"filename": "Strike_001.exe", "data": b"MZfixture", "content_type": "application/octet-stream"},
+            {"filename": "Strike_001", "data": JPEG_BYTES, "content_type": "image/jpeg"},
+            {"filename": "renamed.jpg", "data": b"MZfixture", "content_type": "image/jpeg"},
+            {"filename": "html.png", "data": b"<html><script></script></html>", "content_type": "image/png"},
+            {"filename": "svg.pdf", "data": b"<svg></svg>", "content_type": "application/pdf"},
         )
         for case in cases:
             with self.subTest(case=case), self.assertRaises(FakeHTTPException) as ctx:
@@ -168,10 +208,27 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             self.assertIn(ctx.exception.status_code, {400, 415})
         self.assertEqual(list_pending_documents(root=self.root), [])
 
+    def test_extension_and_detected_type_must_match(self):
+        cases = (
+            {"filename": "png-renamed.jpg", "data": PNG_BYTES, "content_type": "image/jpeg"},
+            {"filename": "jpeg-renamed.png", "data": JPEG_BYTES, "content_type": "image/png"},
+            {"filename": "pdf-renamed.jpg", "data": PDF_BYTES, "content_type": "image/jpeg"},
+        )
+        for case in cases:
+            with self.subTest(case=case), self.assertRaises(FakeHTTPException) as ctx:
+                self.upload(**case)
+            self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_empty_upload_is_rejected(self):
+        with self.assertRaises(FakeHTTPException) as ctx:
+            self.upload(data=b"", filename="empty.png", content_type="image/png")
+        self.assertEqual(ctx.exception.status_code, 400)
+
     def test_size_limit_is_enforced_before_persistence(self):
         with patch.dict(os.environ, {"CDE_DOCUMENT_INTAKE_MAX_BYTES": "8"}):
             with self.assertRaises(FakeHTTPException) as ctx:
-                self.upload()
+                self.upload(data=PNG_BYTES, filename="large.png", content_type="image/png")
         self.assertEqual(ctx.exception.status_code, 413)
         self.assertEqual(list_pending_documents(root=self.root), [])
 
@@ -189,6 +246,36 @@ class AdminDocumentIntakeTests(unittest.TestCase):
                 intake_id, FakeRequest()
             )
         self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_authenticated_image_preview_serves_original_private_bytes(self):
+        self.upload(data=JPEG_BYTES, filename="Strike_001.jpg", content_type="image/jpeg")
+        intake_id = hashlib.sha256(JPEG_BYTES).hexdigest()
+        page = admin_session.admin_document_intake_preview_page(intake_id, self.request).content
+        self.assertIn('class="admin-document-image-preview"', page)
+        self.assertIn(f'/admin/document-intake/{intake_id}/preview', page)
+        response = admin_session.admin_document_intake_image_preview(
+            intake_id, self.request
+        )
+        self.assertEqual(response.media_type, "image/jpeg")
+        self.assertEqual(Path(response.path).read_bytes(), JPEG_BYTES)
+        with self.assertRaises(FakeHTTPException) as unauth_ctx:
+            admin_session.admin_document_intake_image_preview(intake_id, FakeRequest())
+        self.assertEqual(unauth_ctx.exception.status_code, 401)
+
+    def test_png_preview_serves_original_bytes_and_pdf_preview_route_is_not_available(self):
+        self.upload(data=PNG_BYTES, filename="Strike_003.png", content_type="image/png")
+        png_id = hashlib.sha256(PNG_BYTES).hexdigest()
+        png_response = admin_session.admin_document_intake_image_preview(
+            png_id, self.request
+        )
+        self.assertEqual(png_response.media_type, "image/png")
+        self.assertEqual(Path(png_response.path).read_bytes(), PNG_BYTES)
+
+        self.upload()
+        pdf_id = hashlib.sha256(PDF_BYTES).hexdigest()
+        with self.assertRaises(FakeHTTPException) as ctx:
+            admin_session.admin_document_intake_image_preview(pdf_id, self.request)
+        self.assertEqual(ctx.exception.status_code, 404)
 
     def test_upload_does_not_mutate_public_records_or_attachment_tables(self):
         conn = sqlite3.connect(self.db_path)
@@ -243,6 +330,32 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             ["pending", "under_review", "approved"],
         )
         self.assertEqual(item["status_history"][-1]["actor"], "admin-user")
+
+    def test_image_lifecycle_uses_existing_transitions_and_session_actor(self):
+        self.upload(data=PNG_BYTES, filename="Strike_003.png", content_type="image/png")
+        intake_id = hashlib.sha256(PNG_BYTES).hexdigest()
+        for status, note in (
+            ("under_review", "Image review started."),
+            ("approved", "Image approved."),
+            ("published", "Image published."),
+        ):
+            response = admin_session.admin_document_intake_status_update(
+                intake_id,
+                self.request,
+                new_status=status,
+                admin_note=note,
+            )
+            self.assertIn(STATUS_LABELS[status], self.response_text(response))
+        item = load_pending_document(intake_id, root=self.root)
+        self.assertEqual(item["status"], "published")
+        self.assertEqual(
+            [entry["new_status"] for entry in item["status_history"]],
+            ["pending", "under_review", "approved", "published"],
+        )
+        self.assertTrue(
+            all(entry["actor"] == "admin-user" for entry in item["status_history"])
+        )
+        self.assertIn("Image published.", {entry.get("note") for entry in item["status_history"]})
 
     def test_client_cannot_override_lifecycle_actor_identity(self):
         self.upload()
@@ -351,7 +464,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         item = list_intake_documents(root=self.root)[0]
         self.assertEqual(item["status"], "published")
         self.assertFalse(item["public_record_mutation"])
-        self.assertIn("Published is a declared lifecycle state only", self.response_text(response))
+        self.assertIn("Public availability occurs only after", self.response_text(response))
 
         conn = sqlite3.connect(self.db_path)
         after = conn.execute("SELECT * FROM records").fetchall()

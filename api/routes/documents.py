@@ -8,7 +8,10 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 
 from api.document_intake import (
+    document_media_type,
+    document_type_label,
     intake_root,
+    is_image_document,
     list_published_documents,
     load_published_document,
     published_document_file,
@@ -105,6 +108,7 @@ def _render_document(item: dict) -> str:
         ("Category", item["category"]),
         ("Publication Date", _date(item.get("publication_date"))),
         ("Document Date", item["document_date"]),
+        ("Document Format", document_type_label(item.get("document_type"))),
         ("SHA-256", item["sha256_hash"]),
         ("Reference Identifier", item.get("reference_identifier") or "Not provided"),
     )
@@ -112,10 +116,15 @@ def _render_document(item: dict) -> str:
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
     )
+    image_block = (
+        f"""<h2>Document Image</h2><div class="public-document-image-wrap"><img class="public-document-image" src="/documents/{escape(item['intake_id'])}/download" alt="{escape(str(item['title']))}"></div><a class="download" href="/documents/{escape(item['intake_id'])}/download">View image</a> <a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original image</a>"""
+        if is_image_document(item)
+        else f"""<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a>"""
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(900px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.governance{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head>
-<body><main><p><a href="/documents">Back to Public Document Library</a></p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><table>{rows}</table><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a><h2>Provenance Summary</h2><p>{escape(provenance)}</p></main></body></html>"""
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(900px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.governance{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head>
+<body><main><p><a href="/documents">Back to Public Document Library</a></p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><table>{rows}</table>{image_block}<h2>Provenance Summary</h2><p>{escape(provenance)}</p></main></body></html>"""
 
 
 @router.get("/documents", response_class=HTMLResponse)
@@ -163,6 +172,6 @@ def public_document_download(document_id: str):
         _not_found(exc)
     return FileResponse(
         path=Path(file_path),
-        media_type="application/pdf",
+        media_type=document_media_type(item),
         filename=item["original_filename"],
     )

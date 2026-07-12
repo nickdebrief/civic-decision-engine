@@ -272,6 +272,27 @@ server-side session. No authentication, lifecycle, publication, evidence,
 hashing, verification, database, API, Public Document Library, public-footer,
 or public/private visibility behaviour changes are introduced.
 
+### CDE v12.8 — Image Document Intake
+
+CDE v12.8 extends the authenticated Admin Document Intake workflow to accept
+PDF, JPEG, and PNG document records through the same controlled lifecycle:
+Pending Intake, Under Review, Approved, Published, Rejected, and Archived.
+File type is validated server-side using both the filename extension and
+uploaded byte signature, and the detected document type is stored as
+server-derived metadata.
+
+Uploaded bytes are preserved exactly. The SHA-256 digest continues to identify
+the original uploaded file, and image records remain private until an
+authenticated administrator explicitly marks them Published. Published JPEG
+and PNG records appear in the existing Public Document Library, use the same
+search and filter behaviour as PDFs, display a restrained inline image on the
+public detail page, and serve the original bytes with the correct media type.
+
+This stage does not add bulk upload, OCR, image interpretation, automatic
+metadata extraction, image conversion, thumbnailing, galleries, Strike-specific
+fields, lifecycle changes, authentication changes, database schema changes,
+evidence changes, verification changes, or audit-table redesign.
+
 ---
 
 ## What it does

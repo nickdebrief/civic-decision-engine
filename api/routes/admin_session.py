@@ -32,7 +32,7 @@ except ImportError:
         pass
 
 
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from api.attachments import (
     ATTACHMENT_ROOT,
@@ -49,7 +49,11 @@ from api.attachments import (
 )
 from api.document_intake import (
     STATUS_LABELS,
+    document_media_type,
+    document_type_label,
     intake_root,
+    intake_document_file,
+    is_image_document,
     list_intake_documents,
     load_pending_document,
     store_pending_document,
@@ -44635,11 +44639,12 @@ def _render_document_intake_page(
   <main>
     {_render_admin_console_navigation(admin_session=admin_session)}
     <h1>Admin Document Intake</h1>
-    <p class="notice">PDF documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
+    <p class="notice">Documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>PDF document<input name="file" type="file" accept="application/pdf,.pdf" required></label>
+        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" required></label>
+        <p class="full-width notice">Supported document formats: PDF, JPEG, and PNG.</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>
@@ -44668,6 +44673,7 @@ def _render_document_intake_preview(
     fields = (
         ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
+        ("Document format", document_type_label(item.get("document_type"))),
         ("File size", f"{item['file_size_bytes']} bytes"),
         ("SHA-256", item["sha256_hash"]),
         ("Title", item["title"]),
@@ -44711,10 +44717,16 @@ def _render_document_intake_preview(
         "</tr>"
         for entry in item.get("status_history", [])
     ) or '<tr><td colspan="5">No status history is available.</td></tr>'
+    image_preview = (
+        f"""<h2>Image preview</h2><div class="admin-image-preview-wrap"><img class="admin-document-image-preview" src="/admin/document-intake/{escape(item['intake_id'])}/preview" alt="{escape(str(item['title']))}"></div>"""
+        if is_image_document(item)
+        else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.status-history{{table-layout:auto}}.status-history-actor{{min-width:120px;width:120px;overflow-wrap:anywhere}}.status-history-note{{min-width:260px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}@media(max-width:720px){{.status-history-actor{{min-width:96px;width:auto}}.status-history-note{{min-width:0}}}}</style></head>
-<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or mutate a public record. Published is a declared lifecycle state only in CDE v12.3; public exposure remains deferred.</p><table class="metadata">{rows}</table>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history{{table-layout:auto}}.status-history-actor{{min-width:120px;width:120px;overflow-wrap:anywhere}}.status-history-note{{min-width:260px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}@media(max-width:720px){{.status-history-actor{{min-width:96px;width:auto}}.status-history-note{{min-width:0}}}}</style></head>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p><table class="metadata">{rows}</table>
+{image_preview}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
 <h2>Status history</h2><table class="status-history"><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th class="status-history-actor">Actor</th><th class="status-history-note">Note</th></tr></thead><tbody>{history_rows}</tbody></table>
@@ -44838,6 +44850,23 @@ def admin_document_intake_preview_page(intake_id: str, request: Request):
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
     return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
+
+
+@router.get("/admin/document-intake/{intake_id}/preview")
+def admin_document_intake_image_preview(intake_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        item = load_pending_document(intake_id)
+        if not is_image_document(item):
+            raise ValueError("document_intake_preview_not_available")
+        file_path, item = intake_document_file(intake_id, metadata=item, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_preview_not_found") from exc
+    return FileResponse(
+        path=Path(file_path),
+        media_type=document_media_type(item),
+        filename=item["original_filename"],
+    )
 
 
 @router.post("/api/admin/session/document-intake", response_class=HTMLResponse)
