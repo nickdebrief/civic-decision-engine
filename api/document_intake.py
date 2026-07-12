@@ -12,6 +12,22 @@ from typing import Any
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 VALID_VISIBILITY = {"private", "restricted"}
+DOCUMENT_TYPE_EXTENSIONS = {
+    "pdf": ".pdf",
+    "jpeg": ".jpg",
+    "png": ".png",
+}
+DOCUMENT_TYPE_MEDIA_TYPES = {
+    "pdf": "application/pdf",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+}
+EXTENSION_DOCUMENT_TYPES = {
+    ".pdf": "pdf",
+    ".jpg": "jpeg",
+    ".jpeg": "jpeg",
+    ".png": "png",
+}
 INTAKE_STATUSES = {
     "pending",
     "under_review",
@@ -56,17 +72,68 @@ def intake_max_bytes() -> int:
     return value
 
 
-def validate_pdf(data: bytes, content_type: str | None) -> str:
-    normalized = (content_type or "").split(";", 1)[0].strip().lower()
-    if normalized != "application/pdf":
-        raise ValueError("document_intake_file_type_not_allowed")
+def _detected_document_type(data: bytes) -> str:
     if not data:
         raise ValueError("document_intake_file_required")
     if len(data) > intake_max_bytes():
         raise ValueError("document_intake_file_too_large")
-    if not data.startswith(b"%PDF-"):
+    if data.startswith(b"%PDF-"):
+        return "pdf"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    raise ValueError("document_intake_file_type_not_allowed")
+
+
+def validate_document_file(
+    data: bytes, original_filename: str, content_type: str | None = None
+) -> tuple[str, str, str]:
+    filename = PurePath(str(original_filename or "").replace("\\", "/")).name
+    extension = Path(filename).suffix.lower()
+    if not filename or extension not in EXTENSION_DOCUMENT_TYPES:
+        raise ValueError("document_intake_file_type_not_allowed")
+    detected_type = _detected_document_type(data)
+    expected_type = EXTENSION_DOCUMENT_TYPES[extension]
+    if detected_type != expected_type:
+        raise ValueError("document_intake_file_type_mismatch")
+    return detected_type, DOCUMENT_TYPE_MEDIA_TYPES[detected_type], filename
+
+
+def validate_pdf(data: bytes, content_type: str | None) -> str:
+    detected_type = _detected_document_type(data)
+    if detected_type != "pdf":
         raise ValueError("document_intake_invalid_pdf")
-    return normalized
+    return DOCUMENT_TYPE_MEDIA_TYPES["pdf"]
+
+
+def document_type_label(document_type: str | None) -> str:
+    normalized = normalized_document_type({"document_type": document_type})
+    return {"pdf": "PDF", "jpeg": "JPEG", "png": "PNG"}[normalized]
+
+
+def normalized_document_type(metadata: dict[str, Any]) -> str:
+    document_type = str(metadata.get("document_type") or "").strip().lower()
+    if document_type in DOCUMENT_TYPE_EXTENSIONS:
+        return document_type
+    content_type = str(metadata.get("content_type") or "").split(";", 1)[0].lower()
+    if content_type == "image/jpeg":
+        return "jpeg"
+    if content_type == "image/png":
+        return "png"
+    return "pdf"
+
+
+def document_media_type(metadata: dict[str, Any]) -> str:
+    return DOCUMENT_TYPE_MEDIA_TYPES[normalized_document_type(metadata)]
+
+
+def document_storage_extension(metadata: dict[str, Any]) -> str:
+    return DOCUMENT_TYPE_EXTENSIONS[normalized_document_type(metadata)]
+
+
+def is_image_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) in {"jpeg", "png"}
 
 
 def store_pending_document(
@@ -86,10 +153,9 @@ def store_pending_document(
     uploaded_at: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    normalized_type = validate_pdf(data, content_type)
-    filename = PurePath(original_filename or "document.pdf").name
-    if not filename.lower().endswith(".pdf"):
-        raise ValueError("document_intake_file_type_not_allowed")
+    document_type, normalized_type, filename = validate_document_file(
+        data, original_filename, content_type
+    )
 
     required = {
         "title": title,
@@ -118,7 +184,7 @@ def store_pending_document(
         raise ValueError("document_intake_duplicate")
     item_dir.mkdir(mode=0o700)
 
-    stored_filename = f"pending-{digest}.pdf"
+    stored_filename = f"pending-{digest}{DOCUMENT_TYPE_EXTENSIONS[document_type]}"
     file_path = item_dir / stored_filename
     metadata_path = item_dir / "metadata.json"
     timestamp = uploaded_at or datetime.now(timezone.utc).isoformat().replace(
@@ -130,6 +196,8 @@ def store_pending_document(
         "original_filename": filename,
         "stored_filename": stored_filename,
         "content_type": normalized_type,
+        "document_type": document_type,
+        "document_format": document_type_label(document_type),
         "file_size_bytes": len(data),
         "sha256_hash": digest,
         "title": normalized["title"],
@@ -176,7 +244,11 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     metadata_path = destination_root / intake_id / "metadata.json"
     if not metadata_path.is_file():
         raise ValueError("document_intake_not_found")
-    return json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata.setdefault("document_type", normalized_document_type(metadata))
+    metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
+    metadata.setdefault("content_type", document_media_type(metadata))
+    return metadata
 
 
 def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
@@ -190,6 +262,9 @@ def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
         except (OSError, json.JSONDecodeError):
             continue
         if metadata.get("status") in INTAKE_STATUSES:
+            metadata.setdefault("document_type", normalized_document_type(metadata))
+            metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
+            metadata.setdefault("content_type", document_media_type(metadata))
             items.append(metadata)
     return sorted(items, key=lambda item: (item.get("upload_date", ""), item["intake_id"]), reverse=True)
 
@@ -347,21 +422,32 @@ def load_published_document(
     return metadata
 
 
-def published_document_file(
-    document_id: str, *, root: Path | None = None
+def intake_document_file(
+    document_id: str,
+    *,
+    metadata: dict[str, Any] | None = None,
+    root: Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
-    metadata = load_published_document(document_id, root=root)
+    loaded_metadata = metadata or load_pending_document(document_id, root=root)
     destination_root = (root or intake_root()).resolve(strict=False)
-    file_path = (destination_root / document_id / f"pending-{document_id}.pdf").resolve(
-        strict=False
+    stored_filename = loaded_metadata.get("stored_filename") or (
+        f"pending-{document_id}{document_storage_extension(loaded_metadata)}"
     )
+    file_path = (destination_root / document_id / str(stored_filename)).resolve(strict=False)
     try:
         file_path.relative_to(destination_root)
     except ValueError as exc:
         raise ValueError("public_document_not_found") from exc
     if not file_path.is_file():
         raise ValueError("public_document_not_found")
-    return file_path, metadata
+    return file_path, loaded_metadata
+
+
+def published_document_file(
+    document_id: str, *, root: Path | None = None
+) -> tuple[Path, dict[str, Any]]:
+    metadata = load_published_document(document_id, root=root)
+    return intake_document_file(document_id, metadata=metadata, root=root)
 
 
 def _publication_date(metadata: dict[str, Any]) -> str:
