@@ -117,7 +117,7 @@ def _render_document(item: dict) -> str:
         for label, value in fields
     )
     image_block = (
-        f"""<h2>Document Image</h2><div class="public-document-image-wrap"><img class="public-document-image" src="/documents/{escape(item['intake_id'])}/download" alt="{escape(str(item['title']))}"></div><a class="download" href="/documents/{escape(item['intake_id'])}/download">View image</a> <a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original image</a>"""
+        f"""<h2>Document Image</h2><div class="public-document-image-wrap"><img class="public-document-image" src="/documents/{escape(item['intake_id'])}/view" alt="{escape(str(item['title']))}"></div><a class="download" href="/documents/{escape(item['intake_id'])}/view">View image</a> <a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original image</a>"""
         if is_image_document(item)
         else f"""<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a>"""
     )
@@ -164,14 +164,49 @@ def public_document_page(document_id: str):
     return HTMLResponse(content=_render_document(item))
 
 
+def _content_disposition(disposition: str, filename: str) -> str:
+    safe_filename = str(filename or "document").replace("\\", "_").replace('"', "")
+    safe_filename = Path(safe_filename).name
+    return f'{disposition}; filename="{safe_filename}"'
+
+
+@router.get("/documents/{document_id}/view")
+def public_document_image_view(document_id: str):
+    try:
+        file_path, item = published_document_file(document_id, root=intake_root())
+        if not is_image_document(item):
+            raise ValueError("public_document_image_not_found")
+    except ValueError as exc:
+        _not_found(exc)
+    return FileResponse(
+        path=Path(file_path),
+        media_type=document_media_type(item),
+        headers={
+            "Content-Disposition": _content_disposition(
+                "inline",
+                item["original_filename"],
+            )
+        },
+    )
+
+
 @router.get("/documents/{document_id}/download")
 def public_document_download(document_id: str):
     try:
         file_path, item = published_document_file(document_id, root=intake_root())
     except ValueError as exc:
         _not_found(exc)
+    headers = None
+    if is_image_document(item):
+        headers = {
+            "Content-Disposition": _content_disposition(
+                "attachment",
+                item["original_filename"],
+            )
+        }
     return FileResponse(
         path=Path(file_path),
         media_type=document_media_type(item),
         filename=item["original_filename"],
+        headers=headers,
     )
