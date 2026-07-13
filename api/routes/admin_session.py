@@ -47,6 +47,7 @@ from api.attachments import (
     validate_document_date,
     validate_publication_status,
 )
+from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
     document_media_type,
@@ -44531,6 +44532,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
       <a style="color:#245d61;font-weight:650" href="/admin/audit">Administrative Audit</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
       {identity}
@@ -44565,21 +44567,207 @@ def _render_admin_dashboard(
     ) or '<tr><td colspan="4">No documents currently require active review.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CDE Administration Console</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;margin-top:26px}}.summary-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.evidence-card h2{{margin:0 0 8px}}.summary-value{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail{{min-height:42px;color:#555}}.card-link{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:900px){{.summary-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:760px){{.dashboard-grid,.summary-grid{{grid-template-columns:1fr}}.summary-detail{{min-height:0}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid{{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-top:26px}}.summary-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.evidence-card h2{{margin:0 0 8px}}.summary-value{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail{{min-height:42px;color:#555}}.card-link{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:900px){{.summary-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:760px){{.dashboard-grid,.summary-grid{{grid-template-columns:1fr}}.summary-detail{{min-height:0}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
 <div class="summary-grid" aria-label="Administration summary">
   <article class="summary-card"><h2>Pending Intake</h2><span class="summary-value">{pending_count}</span><p class="summary-detail">Private uploads awaiting administrative review.</p><a class="card-link" href="/admin/document-intake#intake-management">Open pending intake</a></article>
   <article class="summary-card"><h2>Review Queue</h2><span class="summary-value">{review_queue_count}</span><p class="summary-detail">Pending, under-review, and approved documents requiring active management.</p><a class="card-link" href="/admin/document-intake#intake-management">Open review queue</a></article>
   <article class="summary-card"><h2>Administrative Audit</h2><span class="summary-value">{audit_event_count}</span><p class="summary-detail">Inspect lifecycle actions across document records by timestamp, transition, actor, and note.</p><a class="card-link" href="/admin/audit">Open Administrative Audit</a></article>
+  <article class="summary-card"><h2>Record–Document Associations</h2><span class="summary-value">Open</span><p class="summary-detail">Create and inspect declared relationships between public CDE records and published documents.</p><a class="card-link" href="/admin/associations">Open associations</a></article>
   <article class="summary-card"><h2>Record Evidence</h2><span class="summary-value">Open</span><p class="summary-detail">Inspect record-derived evidence, determinations, provenance, and report modes.</p><a class="card-link" href="#open-record-evidence">Open Record Evidence</a></article>
   <article class="summary-card"><h2>Public Document Library</h2><span class="summary-value">{published_count}</span><p class="summary-detail">Published documents currently eligible for public visibility.</p><a class="card-link" href="/documents">Open Public Document Library</a></article>
 </div>
 <div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
 <section id="open-record-evidence" class="evidence-card"><h2>Open Record Evidence</h2><p>Open the existing administrative evidence workspace for a known record reference. Inspect visible evidence relationships, determination traces, dependency and stability views, provenance, verification details, and Executive, Review, or Full Inspection report modes.</p><p>This navigation does not enumerate records or alter evidence, classifications, hashes, lifecycle states, or public visibility.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
-<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="/admin/associations">Manage Record–Document Associations</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
 
 </main></body></html>"""
 
+
+
+def _association_display(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _association_bool_label(value: Any, true_label: str, false_label: str) -> str:
+    return true_label if int(value or 0) == 1 else false_label
+
+
+def _association_status_label(value: Any) -> str:
+    return _association_bool_label(value, "Active", "Inactive")
+
+
+def _association_visibility_label(value: Any) -> str:
+    return _association_bool_label(value, "Public", "Private")
+
+
+def _association_options(selected: str | None = None) -> str:
+    selected_value = str(selected or "")
+    return "".join(
+        f'<option value="{escape(value)}"{" selected" if selected_value == value else ""}>{escape(label)}</option>'
+        for value, label in rda.RELATIONSHIP_TYPES.items()
+    )
+
+
+def _association_query_string(filters: dict[str, Any], *, page: int | None = None, page_size: int | None = None) -> str:
+    from urllib.parse import urlencode
+    pairs = []
+    for key in (
+        "q",
+        "record_reference",
+        "document_reference",
+        "relationship_type",
+        "actor",
+        "active_status",
+        "public_visibility",
+        "date_from",
+        "date_to",
+    ):
+        value = filters.get(key)
+        if value not in (None, ""):
+            pairs.append((key, str(value)))
+    if page is not None:
+        pairs.append(("page", str(page)))
+    if page_size is not None:
+        pairs.append(("page_size", str(page_size)))
+    return urlencode(pairs)
+
+
+def _association_filter_summary(filters: dict[str, Any]) -> str:
+    labels = {
+        "q": "Search",
+        "record_reference": "Record reference",
+        "document_reference": "Document reference",
+        "relationship_type": "Relationship type",
+        "actor": "Actor",
+        "active_status": "Active status",
+        "public_visibility": "Public visibility",
+        "date_from": "Created from",
+        "date_to": "Created to",
+    }
+    active = [
+        f"{labels[key]}: {escape(str(value))}"
+        for key, value in filters.items()
+        if key in labels and value not in (None, "")
+    ]
+    return "; ".join(active) if active else "No active filters"
+
+
+def _render_association_index(
+    associations: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+    q: str | None = None,
+    record_reference: str | None = None,
+    document_reference: str | None = None,
+    relationship_type: str | None = None,
+    actor: str | None = None,
+    active_status: str | None = None,
+    public_visibility: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int | str | None = 1,
+    page_size: int | str | None = 25,
+) -> str:
+    filters = {
+        "q": str(q or "").strip(),
+        "record_reference": str(record_reference or "").strip(),
+        "document_reference": str(document_reference or "").strip(),
+        "relationship_type": str(relationship_type or "").strip(),
+        "actor": str(actor or "").strip(),
+        "active_status": str(active_status or "").strip(),
+        "public_visibility": str(public_visibility or "").strip(),
+        "date_from": str(date_from or "").strip(),
+        "date_to": str(date_to or "").strip(),
+    }
+    normalized_page_size = _parse_positive_int(page_size, 25, maximum=100)
+    total = len(associations)
+    page_count = max(1, (total + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = min(_parse_positive_int(page, 1), page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    page_associations = associations[start : start + normalized_page_size]
+    rows = "".join(
+        f"""
+        <tr>
+          <td class="association-id">{int(item['id'])}</td>
+          <td class="association-record">{escape(_association_display(item.get('record_reference')))}</td>
+          <td class="association-record-title">{escape(_association_display(item.get('record_title')))}</td>
+          <td class="association-document">{escape(_association_display(item.get('document_title')))}</td>
+          <td class="association-document-reference">{escape(_association_display(item.get('document_reference_identifier')))}</td>
+          <td class="association-type">{escape(_association_display(item.get('relationship_type')))}</td>
+          <td class="association-visibility">{escape(_association_visibility_label(item.get('is_public')))}</td>
+          <td class="association-status">{escape(_association_status_label(item.get('is_active')))}</td>
+          <td class="association-created">{escape(_association_display(item.get('created_by')))}<br>{escape(_association_display(item.get('created_at')))}</td>
+          <td class="association-updated">{escape(_association_display(item.get('updated_by')))}<br>{escape(_association_display(item.get('updated_at')))}</td>
+          <td class="association-actions"><a href="/admin/associations/{int(item['id'])}">Open</a></td>
+        </tr>
+        """
+        for item in page_associations
+    ) or '<tr><td colspan="11">No record-document associations match the selected filters.</td></tr>'
+    previous_link = ""
+    next_link = ""
+    if normalized_page > 1:
+        previous_link = f'<a href="/admin/associations?{escape(_association_query_string(filters, page=normalized_page - 1, page_size=normalized_page_size))}">Previous page</a>'
+    if normalized_page < page_count:
+        next_link = f'<a href="/admin/associations?{escape(_association_query_string(filters, page=normalized_page + 1, page_size=normalized_page_size))}">Next page</a>'
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Associations</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.association-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.association-filter-form input,.association-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-table-wrapper{{overflow-x:auto}}.association-table{{width:100%;min-width:1320px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.association-table th{{background:#143a52;color:#fff;text-align:left}}.association-table th,.association-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.association-id{{min-width:90px}}.association-record{{min-width:180px}}.association-record-title,.association-document{{min-width:220px}}.association-document-reference{{min-width:150px}}.association-type,.association-visibility,.association-status{{min-width:140px}}.association-created,.association-updated{{min-width:190px}}.association-actions{{min-width:110px;white-space:nowrap}}.association-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}@media(max-width:900px){{.association-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.association-filter-form{{grid-template-columns:1fr}}}}</style></head>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Record–Document Associations</h1><p class="notice">Read-only and governed administration of explicit relationships between public CDE records and Published documents. Associations do not alter evidence sufficiency, document lifecycle, record verification, or public/private eligibility.</p><p><a class="button-link" href="/admin/associations/new">Create association</a></p>
+<section class="association-summary" aria-label="Association summary"><p><strong>Total matching associations:</strong> {total}</p><p><strong>Active filters:</strong> {escape(_association_filter_summary(filters))}</p></section>
+<form class="association-filter-form" method="get" action="/admin/associations">
+<label>Search<input name="q" value="{escape(filters['q'])}"></label><label>Record reference<input name="record_reference" value="{escape(filters['record_reference'])}"></label><label>Document reference<input name="document_reference" value="{escape(filters['document_reference'])}"></label><label>Relationship type<select name="relationship_type"><option value="">Any relationship type</option>{_association_options(filters['relationship_type'])}</select></label><label>Actor<input name="actor" value="{escape(filters['actor'])}"></label><label>Active status<select name="active_status"><option value="">Any active status</option><option value="active"{" selected" if filters['active_status'] == "active" else ""}>Active</option><option value="inactive"{" selected" if filters['active_status'] == "inactive" else ""}>Inactive</option></select></label><label>Public visibility<select name="public_visibility"><option value="">Any visibility</option><option value="public"{" selected" if filters['public_visibility'] == "public" else ""}>Public</option><option value="private"{" selected" if filters['public_visibility'] == "private" else ""}>Private</option></select></label><label>Created from<input name="date_from" type="date" value="{escape(filters['date_from'])}"></label><label>Created to<input name="date_to" type="date" value="{escape(filters['date_to'])}"></label><label>Page size<input name="page_size" type="number" min="1" max="100" value="{normalized_page_size}"></label><button type="submit">Apply filters</button>
+</form><div class="association-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><div class="association-table-wrapper"><table class="association-table"><thead><tr><th class="association-id">Association ID</th><th class="association-record">Record reference</th><th class="association-record-title">Record title or summary</th><th class="association-document">Document title</th><th class="association-document-reference">Document reference</th><th class="association-type">Relationship type</th><th class="association-visibility">Public visibility</th><th class="association-status">Active status</th><th class="association-created">Created</th><th class="association-updated">Updated</th><th class="association-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div><div class="association-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div></main></body></html>"""
+
+
+def _render_association_form_page(
+    *,
+    admin_session: dict[str, Any] | None = None,
+    documents: list[dict[str, Any]] | None = None,
+) -> str:
+    document_options = "".join(
+        f'<option value="{escape(item["intake_id"])}">{escape(item["title"])} — {escape(str(item.get("reference_identifier") or "No reference"))} — {escape(document_type_label(item.get("document_type")))}</option>'
+        for item in (documents or [])
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between an existing public CDE record and an existing Published document. This does not add evidence to the record, alter the document lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations"><label>Record reference<input name="record_reference" required></label><label>Published document<select name="document_id" required>{document_options}</select></label><label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label><button type="submit">Create association</button></form></main></body></html>"""
+
+
+def _render_association_detail(
+    association: dict[str, Any],
+    history: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    fields = (
+        ("Association ID", association.get("id")),
+        ("Record reference", association.get("record_reference")),
+        ("Record title or summary", association.get("record_title")),
+        ("Document ID", association.get("document_id")),
+        ("Document title", association.get("document_title")),
+        ("Document reference", association.get("document_reference_identifier")),
+        ("Relationship type", association.get("relationship_type")),
+        ("Public label", association.get("public_label")),
+        ("Public note", association.get("public_note")),
+        ("Administrative note", association.get("admin_note")),
+        ("Public visibility", _association_visibility_label(association.get("is_public"))),
+        ("Active status", _association_status_label(association.get("is_active"))),
+        ("Created", f"{association.get('created_by')} — {association.get('created_at')}"),
+        ("Updated", f"{association.get('updated_by')} — {association.get('updated_at')}"),
+        ("Linked object eligibility", "Eligible" if association.get("record_publicly_eligible") and association.get("document_publicly_eligible") else "Linked object is not currently publicly eligible."),
+    )
+    rows = "".join(f"<tr><th>{escape(label)}</th><td>{escape(_association_display(value))}</td></tr>" for label, value in fields)
+    history_rows = "".join(
+        f"""<tr><td class="association-history-timestamp">{escape(_association_display(item.get('timestamp')))}</td><td class="association-history-action">{escape(rda.ASSOCIATION_ACTION_LABELS.get(str(item.get('action_type')), _association_display(item.get('action_type'))))}</td><td class="association-history-actor">{escape(_association_display(item.get('actor')))}</td><td class="association-history-note">{escape(_association_display(item.get('note')))}</td><td class="association-history-state">{escape(_association_display(item.get('previous_state_json')))}</td><td class="association-history-state">{escape(_association_display(item.get('new_state_json')))}</td></tr>"""
+        for item in history
+    ) or '<tr><td colspan="6">No association history is available.</td></tr>'
+    active_controls = (
+        f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/deactivate"><label>Deactivation note<input name="deactivation_note" required></label><button type="submit">Deactivate association</button></form>"""
+        if int(association.get("is_active") or 0) == 1
+        else f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate association</button></form>"""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2><table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{_association_options(str(association.get('relationship_type') or ''))}</select></label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 def _audit_display_value(value: Any) -> str:
     if value is None or value == "":
@@ -45121,6 +45309,216 @@ def admin_audit_page(
             page_size=page_size,
         )
     )
+
+
+
+@router.get("/admin/associations", response_class=HTMLResponse)
+def admin_associations_page(
+    request: Request,
+    q: str | None = Query(None),
+    record_reference: str | None = Query(None),
+    document_reference: str | None = Query(None),
+    relationship_type: str | None = Query(None),
+    actor: str | None = Query(None),
+    active_status: str | None = Query(None),
+    public_visibility: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    page: int | str | None = Query(1),
+    page_size: int | str | None = Query(25),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        rda.ensure_association_tables(conn)
+        associations = rda.list_associations(
+            conn,
+            root=intake_root(),
+            q=q,
+            record_reference=record_reference,
+            document_reference=document_reference,
+            relationship_type=relationship_type,
+            actor=actor,
+            active_status=active_status,
+            public_visibility=public_visibility,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_association_index(
+            associations,
+            admin_session=session,
+            q=q,
+            record_reference=record_reference,
+            document_reference=document_reference,
+            relationship_type=relationship_type,
+            actor=actor,
+            active_status=active_status,
+            public_visibility=public_visibility,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/admin/associations/new", response_class=HTMLResponse)
+def admin_association_new_page(request: Request):
+    session = require_admin_session(request)
+    return HTMLResponse(
+        content=_render_association_form_page(
+            admin_session=session,
+            documents=rda.list_published_document_options(root=intake_root()),
+        )
+    )
+
+
+@router.get("/admin/associations/{association_id}", response_class=HTMLResponse)
+def admin_association_detail_page(association_id: int, request: Request):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        rda.ensure_association_tables(conn)
+        association = rda.enrich_association(
+            conn,
+            rda.get_association(conn, association_id),
+            root=intake_root(),
+        )
+        history = rda.association_history(conn, association_id)
+    except ValueError as exc:
+        raise _http_error(404, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_association_detail(
+            association,
+            history,
+            admin_session=session,
+        )
+    )
+
+
+@router.post("/api/admin/session/associations", response_class=HTMLResponse)
+def admin_association_create(
+    request: Request,
+    record_reference: str = Form(...),
+    document_id: str = Form(...),
+    relationship_type: str = Form(...),
+    public_label: str | None = Form(None),
+    public_note: str | None = Form(None),
+    admin_note: str | None = Form(None),
+    is_public: str | None = Form("1"),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        association = rda.create_association(
+            conn,
+            record_reference=record_reference,
+            document_id=document_id,
+            relationship_type=relationship_type,
+            public_label=public_label,
+            public_note=public_note,
+            admin_note=admin_note,
+            is_public=is_public,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        association = rda.enrich_association(conn, association, root=intake_root())
+        history = rda.association_history(conn, association["id"])
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail in {"association_record_not_found", "association_document_not_published"} else 409
+        raise _http_error(status_code, detail) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_association_detail(association, history, admin_session=session),
+        status_code=201,
+    )
+
+
+@router.post("/api/admin/session/associations/{association_id}/update", response_class=HTMLResponse)
+def admin_association_update(
+    association_id: int,
+    request: Request,
+    relationship_type: str = Form(...),
+    public_label: str | None = Form(None),
+    public_note: str | None = Form(None),
+    admin_note: str | None = Form(None),
+    is_public: str | None = Form("1"),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        association = rda.update_association(
+            conn,
+            association_id,
+            relationship_type=relationship_type,
+            public_label=public_label,
+            public_note=public_note,
+            admin_note=admin_note,
+            is_public=is_public,
+            actor=_admin_session_actor(session),
+        )
+        association = rda.enrich_association(conn, association, root=intake_root())
+        history = rda.association_history(conn, association_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_association_detail(association, history, admin_session=session))
+
+
+@router.post("/api/admin/session/associations/{association_id}/deactivate", response_class=HTMLResponse)
+def admin_association_deactivate(
+    association_id: int,
+    request: Request,
+    deactivation_note: str = Form(...),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        association = rda.deactivate_association(
+            conn,
+            association_id,
+            actor=_admin_session_actor(session),
+            note=deactivation_note,
+        )
+        association = rda.enrich_association(conn, association, root=intake_root())
+        history = rda.association_history(conn, association_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_association_detail(association, history, admin_session=session))
+
+
+@router.post("/api/admin/session/associations/{association_id}/reactivate", response_class=HTMLResponse)
+def admin_association_reactivate(
+    association_id: int,
+    request: Request,
+    reactivation_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        association = rda.reactivate_association(
+            conn,
+            association_id,
+            actor=_admin_session_actor(session),
+            note=reactivation_note,
+        )
+        association = rda.enrich_association(conn, association, root=intake_root())
+        history = rda.association_history(conn, association_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_association_detail(association, history, admin_session=session))
 
 
 @router.get("/admin/document-intake", response_class=HTMLResponse)

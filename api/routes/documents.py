@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 
+from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
     document_media_type,
@@ -184,6 +185,30 @@ def _render_publication_provenance(item: dict) -> str:
     return f"""<section id="publication-provenance" class="publication-provenance"><h2>Publication Provenance</h2><p class="provenance-boundary">Publication provenance records the administrative pathway by which this document became publicly available through CDE. It does not certify the document’s legal status, evidential truth, authorship, or external validation.</p><dl class="publication-provenance-grid">{rows}</dl><p class="provenance-boundary">The SHA-256 digest identifies the exact original bytes admitted through Document Intake. It supports byte-level comparison of the preserved file but does not independently establish authorship, factual accuracy, legal status, or external authenticity.</p></section>"""
 
 
+
+def _render_associated_records(item: dict) -> str:
+    conn = rda.get_db()
+    try:
+        associations = rda.public_associations_for_document(
+            conn,
+            item["intake_id"],
+            root=intake_root(),
+        )
+    finally:
+        conn.close()
+    if not associations:
+        return ""
+    cards = "".join(
+        f"""<article class="associated-record-card">
+          <h3><a href="/verify/{escape(str(association.get('record_reference') or ''))}">{escape(str(association.get('record_reference') or ''))}</a></h3>
+          <p><strong>{escape(str(association.get('public_label') or 'Related record'))}</strong></p>
+          <p>{escape(_display_value(association.get('record_title')))}</p>
+          <dl><dt>Generated date</dt><dd>{escape(_date(association.get('record_generated_at')))}</dd><dt>Trajectory</dt><dd>{escape(_display_value(association.get('record_trajectory')))}</dd></dl>
+        </article>"""
+        for association in associations
+    )
+    return f"""<section id="associated-records" class="associated-records"><h2>Associated Civic Records</h2><p class="association-boundary">Association records a declared relationship between independently preserved objects. It does not by itself establish proof, sufficiency, factual truth, legal status, or external validation.</p><div class="associated-records-list">{cards}</div></section>"""
+
 def _render_document(item: dict) -> str:
     publication_timestamp = _publication_timestamp(item)
     fields = (
@@ -206,12 +231,13 @@ def _render_document(item: dict) -> str:
         if is_image_document(item)
         else f"""<section id="document-content"><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a></section>"""
     )
+    associated_records_section = _render_associated_records(item)
     provenance_section = _render_publication_provenance(item)
     pathway_section = _render_publication_pathway(item)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
-<body><main><p><a href="/documents">Back to Public Document Library</a></p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav><section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{image_block}{provenance_section}{pathway_section}</main></body></html>"""
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
+<body><main><p><a href="/documents">Back to Public Document Library</a></p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav><section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{image_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
 
 @router.get("/documents", response_class=HTMLResponse)
