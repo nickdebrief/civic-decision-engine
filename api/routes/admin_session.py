@@ -13,7 +13,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 try:
     from fastapi import File, Form, Request, UploadFile
@@ -44530,6 +44530,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/audit">Administrative Audit</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
       {identity}
@@ -44557,23 +44558,281 @@ def _render_admin_dashboard(
     pending_count = counts["pending"]
     review_queue_count = len(active_documents)
     published_count = counts["published"]
+    audit_event_count = sum(len(item.get("status_history") or []) for item in intake_documents)
     queue_rows = "".join(
         f'<tr><td><a href="/admin/document-intake/{escape(item["intake_id"])}">{escape(item["title"])}</a></td><td>{escape(item["institution_source"])}</td><td>{_status_badge(item["status"])}</td><td>{escape(item["upload_date"])}</td></tr>'
         for item in active_documents
     ) or '<tr><td colspan="4">No documents currently require active review.</td></tr>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CDE Administration Console</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:26px}}.summary-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.evidence-card h2{{margin:0 0 8px}}.summary-value{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail{{min-height:42px;color:#555}}.card-link{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:900px){{.summary-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:760px){{.dashboard-grid,.summary-grid{{grid-template-columns:1fr}}.summary-detail{{min-height:0}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;margin-top:26px}}.summary-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.evidence-card h2{{margin:0 0 8px}}.summary-value{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail{{min-height:42px;color:#555}}.card-link{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:900px){{.summary-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:760px){{.dashboard-grid,.summary-grid{{grid-template-columns:1fr}}.summary-detail{{min-height:0}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
 <div class="summary-grid" aria-label="Administration summary">
   <article class="summary-card"><h2>Pending Intake</h2><span class="summary-value">{pending_count}</span><p class="summary-detail">Private uploads awaiting administrative review.</p><a class="card-link" href="/admin/document-intake#intake-management">Open pending intake</a></article>
   <article class="summary-card"><h2>Review Queue</h2><span class="summary-value">{review_queue_count}</span><p class="summary-detail">Pending, under-review, and approved documents requiring active management.</p><a class="card-link" href="/admin/document-intake#intake-management">Open review queue</a></article>
+  <article class="summary-card"><h2>Administrative Audit</h2><span class="summary-value">{audit_event_count}</span><p class="summary-detail">Inspect lifecycle actions across document records by timestamp, transition, actor, and note.</p><a class="card-link" href="/admin/audit">Open Administrative Audit</a></article>
   <article class="summary-card"><h2>Record Evidence</h2><span class="summary-value">Open</span><p class="summary-detail">Inspect record-derived evidence, determinations, provenance, and report modes.</p><a class="card-link" href="#open-record-evidence">Open Record Evidence</a></article>
   <article class="summary-card"><h2>Public Document Library</h2><span class="summary-value">{published_count}</span><p class="summary-detail">Published documents currently eligible for public visibility.</p><a class="card-link" href="/documents">Open Public Document Library</a></article>
 </div>
 <div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
 <section id="open-record-evidence" class="evidence-card"><h2>Open Record Evidence</h2><p>Open the existing administrative evidence workspace for a known record reference. Inspect visible evidence relationships, determination traces, dependency and stability views, provenance, verification details, and Executive, Review, or Full Inspection report modes.</p><p>This navigation does not enumerate records or alter evidence, classifications, hashes, lifecycle states, or public visibility.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
-<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+
+</main></body></html>"""
+
+
+def _audit_display_value(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _audit_status_label(value: Any) -> str:
+    if value is None or value == "":
+        return "Initial state"
+    return STATUS_LABELS.get(str(value), str(value))
+
+
+def _parse_positive_int(value: Any, default: int, *, maximum: int | None = None) -> int:
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        parsed = default
+    if parsed < 1:
+        parsed = default
+    if maximum is not None:
+        parsed = min(parsed, maximum)
+    return parsed
+
+
+def _collect_admin_audit_events(intake_documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for item in intake_documents:
+        history = item.get("status_history") or []
+        for index, event in enumerate(history):
+            events.append(
+                {
+                    "event_index": index,
+                    "intake_id": item.get("intake_id"),
+                    "timestamp": event.get("timestamp"),
+                    "previous_status": event.get("previous_status"),
+                    "new_status": event.get("new_status"),
+                    "actor": event.get("actor"),
+                    "note": event.get("note"),
+                    "document_title": item.get("title"),
+                    "reference_identifier": item.get("reference_identifier"),
+                    "filename": item.get("original_filename"),
+                    "institution_source": item.get("institution_source"),
+                    "document_format": item.get("document_type"),
+                    "current_status": item.get("status"),
+                }
+            )
+    return sorted(
+        events,
+        key=lambda event: (
+            str(event.get("timestamp") or ""),
+            str(event.get("intake_id") or ""),
+            int(event.get("event_index") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def _filter_admin_audit_events(
+    events: list[dict[str, Any]],
+    *,
+    q: str | None = None,
+    actor: str | None = None,
+    previous_status: str | None = None,
+    new_status: str | None = None,
+    current_status: str | None = None,
+    document_format: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_query = str(q or "").strip().casefold()
+    normalized_actor = str(actor or "").strip().casefold()
+    normalized_previous = str(previous_status or "").strip().lower()
+    normalized_new = str(new_status or "").strip().lower()
+    normalized_current = str(current_status or "").strip().lower()
+    normalized_format = str(document_format or "").strip().lower()
+    normalized_from = str(date_from or "").strip()
+    normalized_to = str(date_to or "").strip()
+
+    def matches(event: dict[str, Any]) -> bool:
+        searchable = " ".join(
+            str(event.get(key) or "")
+            for key in (
+                "document_title",
+                "filename",
+                "reference_identifier",
+                "actor",
+                "note",
+                "institution_source",
+            )
+        ).casefold()
+        if normalized_query and normalized_query not in searchable:
+            return False
+        if normalized_actor and str(event.get("actor") or "").casefold() != normalized_actor:
+            return False
+        if normalized_previous and str(event.get("previous_status") or "").lower() != normalized_previous:
+            return False
+        if normalized_new and str(event.get("new_status") or "").lower() != normalized_new:
+            return False
+        if normalized_current and str(event.get("current_status") or "").lower() != normalized_current:
+            return False
+        if normalized_format and str(event.get("document_format") or "").lower() != normalized_format:
+            return False
+        timestamp_date = str(event.get("timestamp") or "")[:10]
+        if normalized_from and timestamp_date < normalized_from:
+            return False
+        if normalized_to and timestamp_date > normalized_to:
+            return False
+        return True
+
+    return [event for event in events if matches(event)]
+
+
+def _audit_query_pairs(filters: dict[str, Any], *, page: int | None = None, page_size: int | None = None) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for key in (
+        "q",
+        "actor",
+        "previous_status",
+        "new_status",
+        "current_status",
+        "document_format",
+        "date_from",
+        "date_to",
+    ):
+        value = filters.get(key)
+        if value not in (None, ""):
+            pairs.append((key, str(value)))
+    if page is not None:
+        pairs.append(("page", str(page)))
+    if page_size is not None:
+        pairs.append(("page_size", str(page_size)))
+    return pairs
+
+
+def _audit_query_string(filters: dict[str, Any], *, page: int | None = None, page_size: int | None = None) -> str:
+    from urllib.parse import urlencode
+
+    pairs = _audit_query_pairs(filters, page=page, page_size=page_size)
+    return urlencode(pairs)
+
+
+def _audit_filter_summary(filters: dict[str, Any]) -> str:
+    labels = {
+        "q": "Search",
+        "actor": "Actor",
+        "previous_status": "Previous status",
+        "new_status": "New status",
+        "current_status": "Current status",
+        "document_format": "Document format",
+        "date_from": "Date from",
+        "date_to": "Date to",
+    }
+    active = [
+        f"{labels[key]}: {escape(str(value))}"
+        for key, value in filters.items()
+        if key in labels and value not in (None, "")
+    ]
+    return "; ".join(active) if active else "No active filters"
+
+
+def _render_admin_audit_page(
+    intake_documents: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+    q: str | None = None,
+    actor: str | None = None,
+    previous_status: str | None = None,
+    new_status: str | None = None,
+    current_status: str | None = None,
+    document_format: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int | str | None = 1,
+    page_size: int | str | None = 25,
+) -> str:
+    filters = {
+        "q": str(q or "").strip(),
+        "actor": str(actor or "").strip(),
+        "previous_status": str(previous_status or "").strip(),
+        "new_status": str(new_status or "").strip(),
+        "current_status": str(current_status or "").strip(),
+        "document_format": str(document_format or "").strip(),
+        "date_from": str(date_from or "").strip(),
+        "date_to": str(date_to or "").strip(),
+    }
+    all_events = _collect_admin_audit_events(intake_documents)
+    filtered_events = _filter_admin_audit_events(all_events, **filters)
+    normalized_page_size = _parse_positive_int(page_size, 25, maximum=100)
+    total_events = len(filtered_events)
+    page_count = max(1, (total_events + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = _parse_positive_int(page, 1)
+    normalized_page = min(normalized_page, page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    end = start + normalized_page_size
+    page_events = filtered_events[start:end]
+    affected_documents = len({event.get("intake_id") for event in filtered_events if event.get("intake_id")})
+    rows = "".join(
+        f"""
+        <tr>
+          <td class="audit-timestamp">{escape(_audit_display_value(event.get('timestamp')))}</td>
+          <td class="audit-document">{escape(_audit_display_value(event.get('document_title')))}</td>
+          <td class="audit-reference">{escape(_audit_display_value(event.get('reference_identifier')))}</td>
+          <td class="audit-filename">{escape(_audit_display_value(event.get('filename')))}</td>
+          <td class="audit-previous-status">{escape(_audit_status_label(event.get('previous_status')))}</td>
+          <td class="audit-new-status">{escape(_audit_status_label(event.get('new_status')))}</td>
+          <td class="audit-actor">{escape(_audit_display_value(event.get('actor')))}</td>
+          <td class="audit-note">{escape(_audit_display_value(event.get('note')))}</td>
+          <td class="audit-current-status">{escape(STATUS_LABELS.get(str(event.get('current_status') or ''), _audit_display_value(event.get('current_status'))))}</td>
+          <td class="audit-actions"><a href="/admin/document-intake/{escape(str(event.get('intake_id') or ''))}">Review document</a></td>
+        </tr>
+        """
+        for event in page_events
+    ) or '<tr><td colspan="10">No administrative audit events match the selected filters.</td></tr>'
+    previous_link = ""
+    next_link = ""
+    if normalized_page > 1:
+        previous_query = _audit_query_string(filters, page=normalized_page - 1, page_size=normalized_page_size)
+        previous_link = f'<a href="/admin/audit?{escape(previous_query)}">Previous page</a>'
+    if normalized_page < page_count:
+        next_query = _audit_query_string(filters, page=normalized_page + 1, page_size=normalized_page_size)
+        next_link = f'<a href="/admin/audit?{escape(next_query)}">Next page</a>'
+    def status_options(selected: str) -> str:
+        return "".join(
+            f'<option value="{escape(status)}"{" selected" if selected == status else ""}>{escape(label)}</option>'
+            for status, label in STATUS_LABELS.items()
+        )
+
+    def format_options(selected: str) -> str:
+        return "".join(
+            f'<option value="{value}"{" selected" if selected == value else ""}>{label}</option>'
+            for value, label in (("pdf", "PDF"), ("jpeg", "JPEG"), ("png", "PNG"))
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Administrative Audit</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.audit-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.audit-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.audit-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.audit-filter-form input,.audit-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.audit-table-wrapper{{overflow-x:auto}}.audit-table{{width:100%;min-width:1280px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.audit-table th{{background:#143a52;color:#fff;text-align:left}}.audit-table th,.audit-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.audit-timestamp{{min-width:180px;white-space:nowrap}}.audit-document{{min-width:210px}}.audit-reference{{min-width:150px}}.audit-filename{{min-width:170px}}.audit-previous-status,.audit-new-status,.audit-current-status{{min-width:145px;overflow-wrap:normal}}.audit-actor{{min-width:120px;overflow-wrap:anywhere}}.audit-note{{min-width:260px;width:100%}}.audit-actions{{min-width:130px;white-space:nowrap}}.audit-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}@media(max-width:900px){{.audit-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.audit-filter-form{{grid-template-columns:1fr}}.audit-table{{min-width:1180px}}}}</style></head>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Administrative Audit</h1><p class="notice">Read-only inspection of stored Document Intake lifecycle history. Audit visibility does not validate evidence, establish legal status, alter public visibility, or change lifecycle state.</p>
+<section class="audit-summary" aria-label="Audit summary"><p><strong>Total matching audit events:</strong> {total_events}</p><p><strong>Total affected documents:</strong> {affected_documents}</p><p><strong>Active filters:</strong> {escape(_audit_filter_summary(filters))}</p></section>
+<form class="audit-filter-form" method="get" action="/admin/audit">
+<label>Search<input name="q" value="{escape(filters['q'])}" placeholder="Title, filename, reference, actor, note, institution"></label>
+<label>Actor<input name="actor" value="{escape(filters['actor'])}"></label>
+<label>Previous status<select name="previous_status"><option value="">Any previous status</option>{status_options(filters['previous_status'].lower())}</select></label>
+<label>New status<select name="new_status"><option value="">Any new status</option>{status_options(filters['new_status'].lower())}</select></label>
+<label>Current status<select name="current_status"><option value="">Any current status</option>{status_options(filters['current_status'].lower())}</select></label>
+<label>Document format<select name="document_format"><option value="">Any format</option>{format_options(filters['document_format'].lower())}</select></label>
+<label>Date from<input name="date_from" type="date" value="{escape(filters['date_from'])}"></label>
+<label>Date to<input name="date_to" type="date" value="{escape(filters['date_to'])}"></label>
+<label>Page size<input name="page_size" type="number" min="1" max="100" value="{normalized_page_size}"></label>
+<button type="submit">Apply filters</button>
+</form>
+<div class="audit-pagination" aria-label="Audit pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
+<div class="audit-table-wrapper"><table class="audit-table"><thead><tr><th class="audit-timestamp">Timestamp</th><th class="audit-document">Document title</th><th class="audit-reference">Reference identifier</th><th class="audit-filename">Filename</th><th class="audit-previous-status">Previous status</th><th class="audit-new-status">New status</th><th class="audit-actor">Actor</th><th class="audit-note">Note</th><th class="audit-current-status">Current document status</th><th class="audit-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div>
+<div class="audit-pagination" aria-label="Audit pagination repeated"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
 </main></body></html>"""
 
 
@@ -44829,6 +45088,39 @@ def admin_session_logout():
     response = JSONResponse(content={"ok": True})
     _clear_session_cookie(response)
     return response
+
+
+@router.get("/admin/audit", response_class=HTMLResponse)
+def admin_audit_page(
+    request: Request,
+    q: str | None = Query(None),
+    actor: str | None = Query(None),
+    previous_status: str | None = Query(None),
+    new_status: str | None = Query(None),
+    current_status: str | None = Query(None),
+    document_format: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    page: int | str | None = Query(1),
+    page_size: int | str | None = Query(25),
+):
+    session = require_admin_session(request)
+    return HTMLResponse(
+        content=_render_admin_audit_page(
+            list_intake_documents(),
+            admin_session=session,
+            q=q,
+            actor=actor,
+            previous_status=previous_status,
+            new_status=new_status,
+            current_status=current_status,
+            document_format=document_format,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+            page_size=page_size,
+        )
+    )
 
 
 @router.get("/admin/document-intake", response_class=HTMLResponse)

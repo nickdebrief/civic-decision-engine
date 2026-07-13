@@ -309,6 +309,23 @@ remain readable without changing lifecycle data, actor attribution, notes,
 authentication, storage, provenance, evidence, verification, database behaviour,
 PDF downloads, footer navigation, or public/private visibility boundaries.
 
+### CDE v12.9 — Administrative Audit Traceability
+
+CDE v12.9 adds an authenticated Administrative Audit page at `/admin/audit`.
+The page consolidates existing Document Intake lifecycle-history entries into a
+read-only traceability table showing timestamp, affected document, reference
+identifier, filename, previous status, new status, actor, transition note,
+current document status, and a link back to the existing review page.
+
+The audit view reads from the authoritative stored lifecycle history already
+held with intake records. It adds conservative server-side filtering,
+deterministic newest-first ordering, bounded pagination, responsive table
+presentation, and shared signed-in administrator identity display without
+creating new lifecycle states, rewriting historical actors, exposing storage
+paths, adding mutation controls, or changing document intake, publication,
+Public Document Library, evidence, verification, hashing, database, footer, or
+public/private visibility behaviour.
+
 ---
 
 ## What it does
