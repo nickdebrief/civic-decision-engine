@@ -5,12 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api.document_intake import store_pending_document, update_intake_status
-from tests.test_admin_session import FakeFileResponse, FakeHTTPException, install_fastapi_stubs
+from api.document_intake import load_pending_document, store_pending_document, update_intake_status
+from tests.test_admin_session import FakeFileResponse, FakeHTTPException, FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
 
-from api.routes import documents
+from api.routes import admin_session, documents
 
 
 JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x02public-jpeg\xff\xd9"
@@ -129,12 +129,44 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             root=self.root,
         )
         if publish:
-            self._move_to("published", item["intake_id"])
+            update_intake_status(
+                item["intake_id"],
+                "under_review",
+                actor="nick",
+                note="Review started.",
+                changed_at="2026-07-09T11:00:00Z",
+                root=self.root,
+            )
+            update_intake_status(
+                item["intake_id"],
+                "approved",
+                actor="nick",
+                note="Approved for publication.",
+                changed_at="2026-07-09T12:00:00Z",
+                root=self.root,
+            )
+            update_intake_status(
+                item["intake_id"],
+                "published",
+                actor="nick",
+                note="Published to Public Document Library.",
+                changed_at="2026-07-09T13:00:00Z",
+                root=self.root,
+            )
         return item["intake_id"]
 
     @staticmethod
     def content(response):
         return response.content
+
+    def _write_metadata(self, document_id, metadata):
+        metadata_path = self.root / document_id / "metadata.json"
+        import json
+
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def test_library_contains_only_published_documents(self):
         response = documents.public_document_library(
@@ -200,13 +232,33 @@ class PublicDocumentLibraryTests(unittest.TestCase):
         document_id = self.ids["published"]
         response = documents.public_document_page(document_id)
         content = self.content(response)
+        digest = hashlib.sha256(b"%PDF-1.7\nfixture-published\n%%EOF\n").hexdigest()
         self.assertIn("Published Document", content)
         self.assertIn("2026-07-08", content)
-        self.assertIn(hashlib.sha256(b"%PDF-1.7\nfixture-published\n%%EOF\n").hexdigest(), content)
+        self.assertIn(digest, content)
         self.assertIn(f'/documents/{document_id}/download', content)
         self.assertIn("Document Format", content)
         self.assertIn("PDF", content)
-        self.assertIn("Provenance Summary", content)
+        self.assertIn("Publication Provenance", content)
+        self.assertIn("Publication Pathway", content)
+        self.assertIn("Server-detected document format", content)
+        self.assertIn("Original filename", content)
+        self.assertIn("published.pdf", content)
+        self.assertIn("File size", content)
+        self.assertIn("SHA-256 digest", content)
+        self.assertIn("Initial intake actor", content)
+        self.assertIn("Review actor", content)
+        self.assertIn("Approval actor", content)
+        self.assertIn("Publication actor", content)
+        self.assertIn("Public presentation mode", content)
+        self.assertIn("Downloadable PDF", content)
+        self.assertIn("Original PDF download available", content)
+        self.assertIn("The SHA-256 digest identifies the exact original bytes", content)
+        self.assertNotIn("digital signature", content.lower())
+        self.assertNotIn("proves truth", content.lower())
+        self.assertNotIn("approval proves", content.lower())
+        self.assertNotIn("Signed in as", content)
+        self.assertNotIn("Private administrative notes", content)
         self.assertNotIn(str(self.root), content)
         self.assertNotIn('class="public-document-image"', content)
 
@@ -316,6 +368,117 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             q=None, institution=None, category=None, publication_year=None
         )
         self.assertNotIn(">Published Document<", self.content(library))
+
+    def test_published_image_pages_include_expanded_provenance_modes(self):
+        for document_id, title, label, mode in (
+            (self.jpeg_id, "Published JPEG Image", "JPEG", "Inline image view and original-file download"),
+            (self.png_id, "Published PNG Image", "PNG", "Inline image view and original-file download"),
+        ):
+            with self.subTest(title=title):
+                content = self.content(documents.public_document_page(document_id))
+                self.assertIn("Publication Provenance", content)
+                self.assertIn("Publication Pathway", content)
+                self.assertIn("Server-detected document format", content)
+                self.assertIn(label, content)
+                self.assertIn(mode, content)
+                self.assertIn("Original image download available", content)
+                self.assertIn("nick", content)
+                self.assertIn("Published to Public Document Library.", content)
+
+    def test_publication_pathway_preserves_stored_events_chronologically(self):
+        content = self.content(documents.public_document_page(self.jpeg_id))
+        expected = [
+            "2026-07-09T10:00:00Z",
+            "2026-07-09T11:00:00Z",
+            "2026-07-09T12:00:00Z",
+            "2026-07-09T13:00:00Z",
+        ]
+        positions = [content.index(value) for value in expected]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("Initial state", content)
+        self.assertIn("Pending Intake", content)
+        self.assertIn("Under Review", content)
+        self.assertIn("Approved", content)
+        self.assertIn("Published", content)
+        self.assertIn("admin", content)
+        self.assertIn("nick", content)
+        self.assertEqual(content.count("Published to Public Document Library."), 1)
+
+    def test_publication_timestamp_uses_earliest_published_transition(self):
+        metadata = load_pending_document(self.jpeg_id, root=self.root)
+        metadata["status_history"].append(
+            {
+                "previous_status": "approved",
+                "new_status": "published",
+                "timestamp": "2026-07-10T13:00:00Z",
+                "actor": "admin",
+                "note": "Historical duplicate publish marker.",
+            }
+        )
+        metadata["publication_date"] = "2026-07-10T13:00:00Z"
+        self._write_metadata(self.jpeg_id, metadata)
+        content = self.content(documents.public_document_page(self.jpeg_id))
+        self.assertIn("Publication timestamp", content)
+        self.assertIn("2026-07-09T13:00:00Z", content)
+        self.assertIn("2026-07-10T13:00:00Z", content)
+        self.assertIn("Historical duplicate publish marker.", content)
+
+    def test_missing_optional_and_historical_fields_render_neutrally(self):
+        metadata = load_pending_document(self.ids["published"], root=self.root)
+        metadata.pop("document_type", None)
+        metadata.pop("content_type", None)
+        metadata["reference_identifier"] = None
+        metadata["status_history"][1].pop("actor", None)
+        metadata["status_history"][2]["note"] = ""
+        self._write_metadata(self.ids["published"], metadata)
+        content = self.content(documents.public_document_page(self.ids["published"]))
+        self.assertIn("PDF", content)
+        self.assertIn("Public reference identifier", content)
+        self.assertIn("—", content)
+        self.assertIn("Publication Pathway", content)
+
+    def test_public_provenance_escapes_malicious_metadata(self):
+        metadata = load_pending_document(self.jpeg_id, root=self.root)
+        metadata["title"] = '<script>alert("title")</script>'
+        metadata["original_filename"] = '<img src=x onerror=alert(1)>.jpg'
+        metadata["reference_identifier"] = '<b>REF</b>'
+        metadata["status_history"][1]["actor"] = '<script>actor</script>'
+        metadata["status_history"][1]["note"] = '<img src=x onerror=alert(2)>'
+        self._write_metadata(self.jpeg_id, metadata)
+        content = self.content(documents.public_document_page(self.jpeg_id))
+        self.assertIn("&lt;script&gt;alert", content)
+        self.assertIn("&lt;img src=x onerror=alert", content)
+        self.assertIn("&lt;b&gt;REF&lt;/b&gt;", content)
+        self.assertNotIn('<script>alert("title")</script>', content)
+        self.assertNotIn('<img src=x onerror=alert(2)>', content)
+
+    def test_public_provenance_has_semantic_classes_and_no_mutation_forms(self):
+        content = self.content(documents.public_document_page(self.jpeg_id))
+        for snippet in (
+            'class="publication-provenance"',
+            'class="publication-provenance-grid"',
+            'class="publication-provenance-label"',
+            'class="publication-provenance-value"',
+            'class="publication-pathway-wrapper"',
+            'class="publication-pathway-table"',
+            'class="publication-pathway-timestamp"',
+            'class="publication-pathway-previous-status"',
+            'class="publication-pathway-new-status"',
+            'class="publication-pathway-actor"',
+            'class="publication-pathway-note"',
+            'class="provenance-boundary"',
+            "overflow-wrap:anywhere",
+            "overflow-x:auto",
+        ):
+            self.assertIn(snippet, content)
+        self.assertNotIn('name="new_status"', content)
+        self.assertNotIn("Declare published", content)
+        self.assertNotIn("Update private notes", content)
+
+    def test_public_provenance_does_not_add_public_audit_endpoint(self):
+        self.assertFalse(hasattr(documents, "public_audit_page"))
+        with self.assertRaises(FakeHTTPException):
+            admin_session.admin_audit_page(FakeRequest())
 
     def test_unknown_and_malformed_ids_do_not_expose_files(self):
         for document_id in ("missing", "0" * 64):

@@ -326,6 +326,25 @@ paths, adding mutation controls, or changing document intake, publication,
 Public Document Library, evidence, verification, hashing, database, footer, or
 public/private visibility behaviour.
 
+### CDE v12.10 — Publication Provenance Expansion
+
+CDE v12.10 expands the public document detail page with structured Publication
+Provenance and Publication Pathway sections for Published documents. The public
+page now presents the intake timestamp, server-detected format, original
+filename, file size, SHA-256 digest, recorded lifecycle actors, review, approval
+and publication timestamps, current lifecycle state, public reference identifier,
+presentation mode, and original-file download availability.
+
+The provenance layer is derived from existing document metadata and stored
+Document Intake lifecycle history. It preserves historical actor values, uses the
+earliest stored transition into Published as the displayed publication timestamp,
+keeps PDF/JPEG/PNG view and download behaviour unchanged, and explains that
+SHA-256 identifies exact admitted bytes without certifying authorship, factual
+truth, legal status, or external authenticity. No lifecycle, publication,
+storage, hashing, Administrative Audit, Public Document Library search/filter,
+evidence, database, footer, or public/private visibility behaviour changes are
+introduced.
+
 ---
 
 ## What it does
