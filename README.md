@@ -345,6 +345,23 @@ storage, hashing, Administrative Audit, Public Document Library search/filter,
 evidence, database, footer, or public/private visibility behaviour changes are
 introduced.
 
+### CDE v12.11 — Public Record–Document Association
+
+CDE v12.11 introduces a governed association layer between the Public Record
+Index and the Public Document Library. Authenticated administrators can create,
+inspect, update, deactivate, and reactivate explicit relationships between an
+existing public CDE record and an existing Published document. Associations are
+separate governed objects with their own identity, relationship type, public
+label, public/private visibility, active state, administrative note, public note,
+actor attribution, timestamps, and immutable association history.
+
+Public record pages now show active, public, eligible associated documents, and
+public document pages show active, public, eligible associated civic records. The
+association does not make a document part of a record's evidence, does not alter
+record verification hashes, does not change document lifecycle or SHA-256 values,
+and does not imply evidential sufficiency, factual verification, legal status,
+authorship, responsibility, or endorsement.
+
 ---
 
 ## What it does

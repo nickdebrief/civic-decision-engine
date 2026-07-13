@@ -26,6 +26,7 @@ except ImportError:
         pass
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from api import record_document_associations as rda
 from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
@@ -6301,6 +6302,32 @@ async def graph_page():
     return HTMLResponse(content=html, status_code=200)
 
 
+
+
+def render_associated_public_documents_section(conn: sqlite3.Connection, reference: str) -> str:
+    associations = rda.public_associations_for_record(conn, reference)
+    if not associations:
+        return ""
+    cards = "".join(
+        f"""<article class="associated-document-card">
+          <h3><a href="/documents/{escape(str(association.get('document_id') or ''))}">{escape(str(association.get('document_title') or 'Published document'))}</a></h3>
+          <p><strong>{escape(str(association.get('public_label') or 'Related document'))}</strong></p>
+          {f'<p>{escape(str(association.get("public_note") or ""))}</p>' if association.get('public_note') else ''}
+          <table class="associated-document-table"><tbody>
+            <tr><td>Reference identifier</td><td>{escape(str(association.get('document_reference_identifier') or '—'))}</td></tr>
+            <tr><td>Category</td><td>{escape(str(association.get('document_category') or '—'))}</td></tr>
+            <tr><td>Document format</td><td>{escape(str(association.get('document_format') or '—'))}</td></tr>
+            <tr><td>Publication date</td><td>{escape(str(association.get('document_publication_date') or '—').split('T', 1)[0])}</td></tr>
+          </tbody></table>
+        </article>"""
+        for association in associations
+    )
+    return f"""<section class="section associated-documents">
+      <h2 class="section-title">Associated Public Documents</h2>
+      <p class="association-boundary">These associations record declared relationships between independently preserved public records and documents. An association does not by itself establish evidential sufficiency, factual verification, legal status, authorship, or proof of the linked record.</p>
+      <div class="associated-documents-list">{cards}</div>
+    </section>"""
+
 @router.get("/verify/{reference}", response_class=HTMLResponse)
 async def verify_record(reference: str):
     conn = get_db()
@@ -6711,6 +6738,7 @@ async def verify_record(reference: str):
             record_version=record["version"],
         )
         attachments_section = render_public_attachments_section(public_attachments)
+        associated_documents_section = render_associated_public_documents_section(conn, record["reference"])
 
         json_ld = json.dumps(
             {
@@ -7098,6 +7126,28 @@ async def verify_record(reference: str):
       font-size: 0.82rem;
       margin: 0;
     }}
+    .association-boundary {{
+      font-size: 0.8rem;
+      color: #777;
+      line-height: 1.6;
+      font-style: italic;
+      background: #f8f7f4;
+      border-left: 3px solid #2E8B9A;
+      padding: 10px 12px;
+      margin: 0 0 14px;
+    }}
+    .associated-documents-list {{ display: grid; gap: 14px; }}
+    .associated-document-card {{
+      border: 1px solid #e8e6e0;
+      border-radius: 4px;
+      background: #fff;
+      padding: 14px;
+      overflow-wrap: anywhere;
+    }}
+    .associated-document-card h3 {{ margin: 0 0 8px; font-size: 0.98rem; }}
+    .associated-document-table {{ width: 100%; border-collapse: collapse; font-size: 0.76rem; }}
+    .associated-document-table td {{ padding: 7px 8px; border-bottom: 1px solid #f4f2ee; vertical-align: top; }}
+    .associated-document-table td:first-child {{ width: 170px; font-family: ui-monospace, monospace; color: #888; text-transform: uppercase; font-size: 0.66rem; }}
     .attachment-card {{
       border: 1px solid #e8e6e0;
       border-radius: 4px;
@@ -7199,6 +7249,7 @@ async def verify_record(reference: str):
     {history_section}
     {narrative_section}
     {attachments_section}
+    {associated_documents_section}
     <section class="section cite-section">
 
       <h2 class="section-title">Cite this record</h2>
