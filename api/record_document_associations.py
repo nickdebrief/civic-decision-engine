@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,8 @@ RELATIONSHIP_TYPES: dict[str, str] = {
     "evidence_audit": "Evidence audit",
 }
 
+PUBLIC_REFERENCE_RE = re.compile(r"^CDE-ASSOC-\d{8}-\d{3,}$")
+
 ASSOCIATION_ACTION_LABELS = {
     "created": "Created",
     "updated": "Updated",
@@ -44,6 +47,7 @@ def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     ensure_association_tables(conn)
+    conn.commit()
     return conn
 
 
@@ -52,6 +56,7 @@ def ensure_association_tables(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS record_document_associations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            public_reference TEXT,
             record_reference TEXT NOT NULL,
             document_id TEXT NOT NULL,
             document_reference_identifier TEXT,
@@ -71,6 +76,9 @@ def ensure_association_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(record_document_associations)")}
+    if "public_reference" not in columns:
+        conn.execute("ALTER TABLE record_document_associations ADD COLUMN public_reference TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS record_document_association_history (
@@ -111,6 +119,58 @@ def ensure_association_tables(conn: sqlite3.Connection) -> None:
         WHERE is_active = 1
         """
     )
+    backfill_public_references(conn)
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_record_document_associations_public_reference
+        ON record_document_associations(public_reference)
+        """
+    )
+
+
+def _reference_date(timestamp: str | None) -> str:
+    raw = str(timestamp or utc_now())[:10]
+    digits = raw.replace("-", "")
+    return digits if len(digits) == 8 and digits.isdigit() else utc_now()[:10].replace("-", "")
+
+
+def generate_public_reference(conn: sqlite3.Connection, timestamp: str | None = None) -> str:
+    date_part = _reference_date(timestamp)
+    prefix = f"CDE-ASSOC-{date_part}-"
+    rows = conn.execute(
+        "SELECT public_reference FROM record_document_associations WHERE public_reference LIKE ?",
+        (prefix + "%",),
+    ).fetchall()
+    highest = 0
+    for row in rows:
+        value = str(row[0] or "")
+        try:
+            highest = max(highest, int(value.rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"{prefix}{highest + 1:03d}"
+
+
+def backfill_public_references(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        """
+        SELECT id, created_at FROM record_document_associations
+        WHERE public_reference IS NULL OR public_reference = ''
+        ORDER BY created_at ASC, id ASC
+        """
+    ).fetchall()
+    for row in rows:
+        conn.execute(
+            "UPDATE record_document_associations SET public_reference = ? WHERE id = ?",
+            (generate_public_reference(conn, row["created_at"]), row["id"]),
+        )
+
+
+def validate_public_reference(value: str) -> str:
+    reference = str(value or "").strip()
+    if not PUBLIC_REFERENCE_RE.fullmatch(reference):
+        raise ValueError("association_public_reference_invalid")
+    return reference
 
 
 def normalize_bool(value: Any, *, default: bool = True) -> bool:
@@ -137,17 +197,20 @@ def relationship_label(relationship_type: str, public_label: str | None = None) 
 
 def record_context(conn: sqlite3.Connection, reference: str) -> dict[str, Any] | None:
     ensure_association_tables(conn)
-    row = conn.execute(
-        """
-        SELECT reference, finding, generated_at, exported_at, trajectory,
-               system_state, version, language
-        FROM records
-        WHERE reference = ? AND is_latest = 1
-        ORDER BY version DESC
-        LIMIT 1
-        """,
-        (str(reference or "").strip(),),
-    ).fetchone()
+    try:
+        row = conn.execute(
+            """
+            SELECT reference, finding, generated_at, exported_at, trajectory,
+                   system_state, version, language
+            FROM records
+            WHERE reference = ? AND is_latest = 1
+            ORDER BY version DESC
+            LIMIT 1
+            """,
+            (str(reference or "").strip(),),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
     return dict(row) if row else None
 
 
@@ -183,6 +246,7 @@ def _association_state(row: sqlite3.Row | dict[str, Any] | None) -> dict[str, An
     data = dict(row)
     return {
         "id": data.get("id"),
+        "public_reference": data.get("public_reference"),
         "record_reference": data.get("record_reference"),
         "document_id": data.get("document_id"),
         "document_reference_identifier": data.get("document_reference_identifier"),
@@ -294,17 +358,19 @@ def create_association(
     if existing:
         raise ValueError("association_inactive_duplicate_exists")
     timestamp = created_at or utc_now()
+    public_reference = generate_public_reference(conn, timestamp)
     label = relationship_label(rel_type, public_label)
     public_flag = 1 if normalize_bool(is_public, default=True) else 0
     cursor = conn.execute(
         """
         INSERT INTO record_document_associations (
-            record_reference, document_id, document_reference_identifier,
+            public_reference, record_reference, document_id, document_reference_identifier,
             relationship_type, public_label, public_note, admin_note,
             is_active, is_public, created_at, created_by, updated_at, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
         """,
         (
+            public_reference,
             reference,
             document["intake_id"],
             document.get("reference_identifier"),
@@ -479,6 +545,7 @@ def _association_matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
         searchable = " ".join(
             str(row.get(key) or "")
             for key in (
+                "public_reference",
                 "record_reference",
                 "document_id",
                 "document_reference_identifier",
@@ -559,8 +626,10 @@ def enrich_association(
     row["document_reference_identifier"] = (
         (document or {}).get("reference_identifier") or row.get("document_reference_identifier")
     )
+    row["document_institution_source"] = (document or {}).get("institution_source")
     row["document_category"] = (document or {}).get("category")
     row["document_format"] = document_type_label((document or {}).get("document_type")) if document else "—"
+    row["document_date"] = (document or {}).get("document_date")
     row["document_publication_date"] = (document or {}).get("publication_date")
     row["document_status"] = (document or {}).get("status")
     row["document_publicly_eligible"] = bool(document and document.get("status") == "published")
@@ -573,6 +642,7 @@ def public_associations_for_record(
     *,
     root: Path | None = None,
 ) -> list[dict[str, Any]]:
+    ensure_association_tables(conn)
     if public_record_context(conn, record_reference) is None:
         return []
     rows = conn.execute(
@@ -597,6 +667,7 @@ def public_associations_for_document(
     *,
     root: Path | None = None,
 ) -> list[dict[str, Any]]:
+    ensure_association_tables(conn)
     if published_document_context(document_id, root=root) is None:
         return []
     rows = conn.execute(
@@ -613,3 +684,111 @@ def public_associations_for_document(
         if enriched.get("record_publicly_eligible"):
             associations.append(enriched)
     return associations
+
+
+
+def get_public_association(
+    conn: sqlite3.Connection,
+    public_reference: str,
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    ensure_association_tables(conn)
+    reference = validate_public_reference(public_reference)
+    row = conn.execute(
+        "SELECT * FROM record_document_associations WHERE public_reference = ?",
+        (reference,),
+    ).fetchone()
+    if not row:
+        raise ValueError("public_association_not_found")
+    enriched = enrich_association(conn, dict(row), root=root)
+    if not public_association_is_eligible(enriched):
+        raise ValueError("public_association_not_found")
+    return enriched
+
+
+def public_association_is_eligible(association: dict[str, Any]) -> bool:
+    return (
+        int(association.get("is_active") or 0) == 1
+        and int(association.get("is_public") or 0) == 1
+        and bool(association.get("record_publicly_eligible"))
+        and bool(association.get("document_publicly_eligible"))
+    )
+
+
+def public_association_history(conn: sqlite3.Connection, association_id: int | str) -> list[dict[str, Any]]:
+    association = get_association(conn, association_id)
+    events = association_history(conn, association_id)
+    projected: list[dict[str, Any]] = []
+    for event in events:
+        action_type = str(event.get("action_type") or "")
+        previous_state = _decode_state(event.get("previous_state_json"))
+        new_state = _decode_state(event.get("new_state_json"))
+        if action_type == "updated" and not _public_fields_changed(previous_state, new_state):
+            continue
+        if action_type == "deactivated" and int(association.get("is_active") or 0) == 0:
+            continue
+        projected.append(
+            {
+                "timestamp": event.get("timestamp"),
+                "action_type": action_type,
+                "action_label": ASSOCIATION_ACTION_LABELS.get(action_type, action_type or "Association event"),
+                "actor": event.get("actor"),
+                "previous_state": _public_state_label(previous_state),
+                "new_state": _public_state_label(new_state),
+                "note": _public_history_note(action_type, previous_state, new_state),
+            }
+        )
+    return projected
+
+
+def _decode_state(raw: Any) -> dict[str, Any] | None:
+    if not raw:
+        return None
+    try:
+        decoded = json.loads(str(raw))
+    except json.JSONDecodeError:
+        return None
+    return decoded if isinstance(decoded, dict) else None
+
+
+def _public_fields_changed(previous: dict[str, Any] | None, new: dict[str, Any] | None) -> bool:
+    if previous is None or new is None:
+        return True
+    public_fields = ("relationship_type", "public_label", "public_note", "is_active", "is_public")
+    return any(previous.get(field) != new.get(field) for field in public_fields)
+
+
+def _public_state_label(state: dict[str, Any] | None) -> str:
+    if not state:
+        return "—"
+    active = "Active" if int(state.get("is_active") or 0) == 1 else "Inactive"
+    visibility = "Public" if int(state.get("is_public") or 0) == 1 else "Private"
+    return f"{active}, {visibility}"
+
+
+def _public_history_note(
+    action_type: str,
+    previous: dict[str, Any] | None,
+    new: dict[str, Any] | None,
+) -> str:
+    if action_type == "created":
+        return "Association created."
+    if action_type == "reactivated":
+        return "Association reactivated."
+    if action_type == "deactivated":
+        return "Association deactivated."
+    if action_type == "updated":
+        changes = []
+        labels = {
+            "relationship_type": "relationship type",
+            "public_label": "public label",
+            "public_note": "public note",
+            "is_public": "public visibility",
+            "is_active": "active state",
+        }
+        for field, label in labels.items():
+            if (previous or {}).get(field) != (new or {}).get(field):
+                changes.append(label)
+        return "Public association fields updated: " + ", ".join(changes) if changes else "Association updated."
+    return "Association event recorded."

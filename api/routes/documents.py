@@ -202,6 +202,7 @@ def _render_associated_records(item: dict) -> str:
         f"""<article class="associated-record-card">
           <h3><a href="/verify/{escape(str(association.get('record_reference') or ''))}">{escape(str(association.get('record_reference') or ''))}</a></h3>
           <p><strong>{escape(str(association.get('public_label') or 'Related record'))}</strong></p>
+          <p><a href="/associations/{escape(str(association.get('public_reference') or ''))}">View association</a> · <a href="/verify/{escape(str(association.get('record_reference') or ''))}">View linked record</a></p>
           <p>{escape(_display_value(association.get('record_title')))}</p>
           <dl><dt>Generated date</dt><dd>{escape(_date(association.get('record_generated_at')))}</dd><dt>Trajectory</dt><dd>{escape(_display_value(association.get('record_trajectory')))}</dd></dl>
         </article>"""

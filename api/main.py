@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from api.routes import records
 
-from api.routes import health, civic, adaptation, timeline, pattern, admin_session, documents
+from api.routes import health, civic, adaptation, timeline, pattern, admin_session, documents, associations
 
 app = FastAPI(
     title="Civic Decision Engine API",
@@ -26,4 +26,5 @@ app.include_router(timeline.router)
 app.include_router(pattern.router)
 app.include_router(admin_session.router)
 app.include_router(documents.router)
+app.include_router(associations.router)
 app.include_router(records.router)

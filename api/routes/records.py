@@ -6312,6 +6312,7 @@ def render_associated_public_documents_section(conn: sqlite3.Connection, referen
         f"""<article class="associated-document-card">
           <h3><a href="/documents/{escape(str(association.get('document_id') or ''))}">{escape(str(association.get('document_title') or 'Published document'))}</a></h3>
           <p><strong>{escape(str(association.get('public_label') or 'Related document'))}</strong></p>
+          <p><a href="/associations/{escape(str(association.get('public_reference') or ''))}">View association</a> · <a href="/documents/{escape(str(association.get('document_id') or ''))}">View linked document</a></p>
           {f'<p>{escape(str(association.get("public_note") or ""))}</p>' if association.get('public_note') else ''}
           <table class="associated-document-table"><tbody>
             <tr><td>Reference identifier</td><td>{escape(str(association.get('document_reference_identifier') or '—'))}</td></tr>
