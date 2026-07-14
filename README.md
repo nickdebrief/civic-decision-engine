@@ -362,6 +362,24 @@ record verification hashes, does not change document lifecycle or SHA-256 values
 and does not imply evidential sufficiency, factual verification, legal status,
 authorship, responsibility, or endorsement.
 
+### CDE v12.12 — Association Governance and Public Traceability
+
+CDE v12.12 adds stable public association references and a public traceability
+page for eligible record-document associations. Association references use the
+format `CDE-ASSOC-YYYYMMDD-NNN`; existing associations are backfilled
+idempotently without changing their original creation metadata or stored
+association history.
+
+Public association pages at `/associations/{association_reference}` show the
+association summary, linked public record, linked Published document, governance
+boundary, and a public-safe Association Pathway derived from authoritative
+association-history entries. Public record and document pages now retain their
+direct linked-object actions and add a `View association` link when the
+association is active, public, and both linked objects remain publicly eligible.
+The stage does not change record verification hashes, document SHA-256 values,
+document lifecycle, Publication Provenance, Administrative Audit, search,
+filters, publication eligibility, or public/private visibility boundaries.
+
 ---
 
 ## What it does
