@@ -716,6 +716,189 @@ def public_association_is_eligible(association: dict[str, Any]) -> bool:
     )
 
 
+PUBLIC_ASSOCIATION_PAGE_SIZE_OPTIONS = (10, 25, 50, 100)
+PUBLIC_ASSOCIATION_FORMATS = {"PDF", "JPEG", "PNG"}
+PUBLIC_ASSOCIATION_SORTS = {"newest", "oldest", "association_reference", "record_reference", "document_title"}
+
+
+def _parse_positive_int(value: Any, default: int, *, maximum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    if parsed < 1:
+        parsed = default
+    if maximum is not None and parsed > maximum:
+        return maximum
+    return parsed
+
+
+def _normalize_public_page_size(value: Any) -> int:
+    parsed = _parse_positive_int(value, 25, maximum=100)
+    return parsed if parsed in PUBLIC_ASSOCIATION_PAGE_SIZE_OPTIONS else 25
+
+
+def _public_association_projection(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "public_reference": row.get("public_reference"),
+        "relationship_type": row.get("relationship_type"),
+        "relationship_label": relationship_label(str(row.get("relationship_type") or ""), row.get("public_label")),
+        "public_note": row.get("public_note"),
+        "created_at": row.get("created_at"),
+        "created_year": str(row.get("created_at") or "")[:4],
+        "record_reference": row.get("record_reference"),
+        "record_title": row.get("record_title"),
+        "record_generated_at": row.get("record_generated_at"),
+        "record_trajectory": row.get("record_trajectory"),
+        "document_id": row.get("document_id"),
+        "document_title": row.get("document_title"),
+        "document_reference_identifier": row.get("document_reference_identifier"),
+        "document_institution_source": row.get("document_institution_source"),
+        "document_category": row.get("document_category"),
+        "document_format": row.get("document_format"),
+        "_internal_id": row.get("id"),
+    }
+
+
+def _public_index_search_matches(row: dict[str, Any], query: str) -> bool:
+    if not query:
+        return True
+    searchable = " ".join(
+        str(row.get(key) or "")
+        for key in (
+            "public_reference",
+            "relationship_label",
+            "relationship_type",
+            "public_note",
+            "record_reference",
+            "record_title",
+            "document_title",
+            "document_reference_identifier",
+            "document_institution_source",
+            "document_category",
+        )
+    ).casefold()
+    return query.casefold() in searchable
+
+
+def _public_index_filter_matches(row: dict[str, Any], filters: dict[str, str]) -> bool:
+    if not _public_index_search_matches(row, filters["q"]):
+        return False
+    relationship_type = filters["relationship_type"]
+    if relationship_type and row.get("relationship_type") != relationship_type:
+        return False
+    for filter_key, row_key in (
+        ("record_reference", "record_reference"),
+        ("document_reference", "document_reference_identifier"),
+        ("institution", "document_institution_source"),
+        ("category", "document_category"),
+    ):
+        value = filters[filter_key].casefold()
+        if value and value not in str(row.get(row_key) or "").casefold():
+            return False
+    created_year = filters["created_year"]
+    if created_year and row.get("created_year") != created_year:
+        return False
+    document_format = filters["document_format"]
+    if document_format and row.get("document_format") != document_format:
+        return False
+    return True
+
+
+def _public_index_sort_key(row: dict[str, Any], sort: str) -> tuple[Any, ...]:
+    if sort == "oldest":
+        return (str(row.get("created_at") or ""), str(row.get("public_reference") or ""), int(row.get("_internal_id") or 0))
+    if sort == "association_reference":
+        return (str(row.get("public_reference") or ""), int(row.get("_internal_id") or 0))
+    if sort == "record_reference":
+        return (str(row.get("record_reference") or "").casefold(), str(row.get("public_reference") or ""), int(row.get("_internal_id") or 0))
+    if sort == "document_title":
+        return (str(row.get("document_title") or "").casefold(), str(row.get("public_reference") or ""), int(row.get("_internal_id") or 0))
+    return (str(row.get("created_at") or ""), str(row.get("public_reference") or ""), int(row.get("_internal_id") or 0))
+
+
+def public_association_index_options(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+    return {
+        "institutions": sorted({str(row.get("document_institution_source") or "") for row in rows if row.get("document_institution_source")}),
+        "categories": sorted({str(row.get("document_category") or "") for row in rows if row.get("document_category")}),
+        "created_years": sorted({str(row.get("created_year") or "") for row in rows if row.get("created_year")}, reverse=True),
+        "document_formats": [fmt for fmt in ("PDF", "JPEG", "PNG") if any(row.get("document_format") == fmt for row in rows)],
+    }
+
+
+def list_public_association_index(
+    conn: sqlite3.Connection,
+    *,
+    root: Path | None = None,
+    q: Any = "",
+    relationship_type: Any = "",
+    record_reference: Any = "",
+    document_reference: Any = "",
+    institution: Any = "",
+    category: Any = "",
+    created_year: Any = "",
+    document_format: Any = "",
+    page: Any = 1,
+    page_size: Any = 25,
+    sort: Any = "newest",
+) -> dict[str, Any]:
+    ensure_association_tables(conn)
+    raw_relationship_type = str(relationship_type or "").strip()
+    normalized_relationship_type = raw_relationship_type if raw_relationship_type in RELATIONSHIP_TYPES else ""
+    raw_format = str(document_format or "").strip().upper()
+    normalized_format = raw_format if raw_format in PUBLIC_ASSOCIATION_FORMATS else ""
+    raw_year = str(created_year or "").strip()
+    normalized_year = raw_year if len(raw_year) == 4 and raw_year.isdigit() else ""
+    normalized_sort = str(sort or "newest").strip()
+    if normalized_sort not in PUBLIC_ASSOCIATION_SORTS:
+        normalized_sort = "newest"
+    filters = {
+        "q": str(q or "").strip(),
+        "relationship_type": normalized_relationship_type,
+        "record_reference": str(record_reference or "").strip(),
+        "document_reference": str(document_reference or "").strip(),
+        "institution": str(institution or "").strip(),
+        "category": str(category or "").strip(),
+        "created_year": normalized_year,
+        "document_format": normalized_format,
+        "sort": normalized_sort,
+    }
+    rows = [
+        dict(row)
+        for row in conn.execute(
+            """
+            SELECT * FROM record_document_associations
+            WHERE is_active = 1 AND is_public = 1
+              AND public_reference IS NOT NULL AND public_reference != ''
+            ORDER BY created_at DESC, public_reference DESC, id DESC
+            """
+        ).fetchall()
+    ]
+    eligible_rows = [
+        _public_association_projection(enriched)
+        for enriched in (enrich_association(conn, row, root=root) for row in rows)
+        if public_association_is_eligible(enriched)
+    ]
+    options = public_association_index_options(eligible_rows)
+    filtered_rows = [row for row in eligible_rows if _public_index_filter_matches(row, filters)]
+    reverse = normalized_sort == "newest"
+    filtered_rows.sort(key=lambda row: _public_index_sort_key(row, normalized_sort), reverse=reverse)
+    normalized_page_size = _normalize_public_page_size(page_size)
+    total = len(filtered_rows)
+    page_count = max(1, (total + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = min(_parse_positive_int(page, 1), page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    return {
+        "rows": filtered_rows[start : start + normalized_page_size],
+        "total": total,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "page_count": page_count,
+        "filters": filters,
+        "options": options,
+    }
+
+
 def public_association_history(conn: sqlite3.Connection, association_id: int | str) -> list[dict[str, Any]]:
     association = get_association(conn, association_id)
     events = association_history(conn, association_id)

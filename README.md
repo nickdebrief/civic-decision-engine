@@ -380,6 +380,23 @@ The stage does not change record verification hashes, document SHA-256 values,
 document lifecycle, Publication Provenance, Administrative Audit, search,
 filters, publication eligibility, or public/private visibility boundaries.
 
+### CDE v12.13 — Public Association Index and Discovery
+
+CDE v12.13 expands association traceability with a public discovery index at
+`/associations`. The page lists only active, public, dynamically eligible
+record-document associations with stable public association references, public
+relationship labels, linked civic-record context, linked Published-document
+context, and separate actions for the association, record, and document.
+
+The public index adds public-safe search, filters, deterministic ordering,
+bounded pagination, count summaries, responsive result presentation, and clear
+non-evidential boundary wording. It does not create, infer, validate, rank,
+mutate, or expose associations beyond the existing v12.12 eligibility rules,
+and it does not change record verification, document lifecycle, SHA-256 values,
+Publication Provenance, Administrative Audit, Public Record Index behaviour,
+Public Document Library behaviour, image/PDF behaviour, authentication, footer
+navigation, or public/private visibility boundaries.
+
 ---
 
 ## What it does
