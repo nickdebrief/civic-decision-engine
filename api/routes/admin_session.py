@@ -47,6 +47,7 @@ from api.attachments import (
     validate_document_date,
     validate_publication_status,
 )
+from api import archive_collections as ac
 from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
@@ -44533,6 +44534,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
       <a style="color:#245d61;font-weight:650" href="/admin/audit">Administrative Audit</a>
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
       {identity}
@@ -44574,12 +44576,13 @@ def _render_admin_dashboard(
   <article class="summary-card"><h2>Review Queue</h2><span class="summary-value">{review_queue_count}</span><p class="summary-detail">Pending, under-review, and approved documents requiring active management.</p><a class="card-link" href="/admin/document-intake#intake-management">Open review queue</a></article>
   <article class="summary-card"><h2>Administrative Audit</h2><span class="summary-value">{audit_event_count}</span><p class="summary-detail">Inspect lifecycle actions across document records by timestamp, transition, actor, and note.</p><a class="card-link" href="/admin/audit">Open Administrative Audit</a></article>
   <article class="summary-card"><h2>Record–Document Associations</h2><span class="summary-value">Open</span><p class="summary-detail">Create and inspect declared relationships between public CDE records and published documents.</p><a class="card-link" href="/admin/associations">Open associations</a></article>
+  <article class="summary-card"><h2>Archive Collections</h2><span class="summary-value">Open</span><p class="summary-detail">Create and govern public archive identities without altering independently preserved documents.</p><a class="card-link" href="/admin/collections">Open Archive Collections</a></article>
   <article class="summary-card"><h2>Record Evidence</h2><span class="summary-value">Open</span><p class="summary-detail">Inspect record-derived evidence, determinations, provenance, and report modes.</p><a class="card-link" href="#open-record-evidence">Open Record Evidence</a></article>
   <article class="summary-card"><h2>Public Document Library</h2><span class="summary-value">{published_count}</span><p class="summary-detail">Published documents currently eligible for public visibility.</p><a class="card-link" href="/documents">Open Public Document Library</a></article>
 </div>
 <div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
 <section id="open-record-evidence" class="evidence-card"><h2>Open Record Evidence</h2><p>Open the existing administrative evidence workspace for a known record reference. Inspect visible evidence relationships, determination traces, dependency and stability views, provenance, verification details, and Executive, Review, or Full Inspection report modes.</p><p>This navigation does not enumerate records or alter evidence, classifications, hashes, lifecycle states, or public visibility.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
-<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="/admin/associations">Manage Record–Document Associations</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="/admin/associations">Manage Record–Document Associations</a></li><li><a href="/admin/collections">Manage Archive Collections</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
 
 </main></body></html>"""
 
@@ -44779,6 +44782,203 @@ def _render_association_detail(
         else f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate association</button></form>"""
     )
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{_association_options(str(association.get('relationship_type') or ''))}</select></label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+
+
+def _collection_display(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _collection_status_label(value: Any) -> str:
+    return "Active" if int(value or 0) == 1 else "Inactive"
+
+
+def _collection_visibility_label(value: Any) -> str:
+    return "Public" if int(value or 0) == 1 else "Private"
+
+
+def _collection_date_range(collection: dict[str, Any]) -> str:
+    start = collection.get("date_from")
+    end = collection.get("date_to")
+    if start and end:
+        return f"{start} to {end}"
+    if start:
+        return f"From {start}"
+    if end:
+        return f"To {end}"
+    return "—"
+
+
+def _collection_options(selected: str | None = None) -> str:
+    selected_value = str(selected or "")
+    return "".join(
+        f'<option value="{escape(value)}"{" selected" if selected_value == value else ""}>{escape(label)}</option>'
+        for value, label in ac.COLLECTION_CATEGORIES.items()
+    )
+
+
+def _collection_query_string(filters: dict[str, Any], *, page: int | None = None, page_size: int | None = None) -> str:
+    from urllib.parse import urlencode
+    pairs = []
+    for key in (
+        "q",
+        "public_reference",
+        "title",
+        "institution_source",
+        "category",
+        "active_status",
+        "public_visibility",
+        "created_date_from",
+        "created_date_to",
+    ):
+        value = filters.get(key)
+        if value not in (None, ""):
+            pairs.append((key, str(value)))
+    if page is not None:
+        pairs.append(("page", str(page)))
+    if page_size is not None:
+        pairs.append(("page_size", str(page_size)))
+    return urlencode(pairs)
+
+
+def _collection_filter_summary(filters: dict[str, Any]) -> str:
+    labels = {
+        "q": "Search",
+        "public_reference": "Public reference",
+        "title": "Title",
+        "institution_source": "Institution / source",
+        "category": "Category",
+        "active_status": "Active status",
+        "public_visibility": "Public visibility",
+        "created_date_from": "Created from",
+        "created_date_to": "Created to",
+    }
+    active = [
+        f"{labels[key]}: {escape(str(value))}"
+        for key, value in filters.items()
+        if key in labels and value not in (None, "")
+    ]
+    return "; ".join(active) if active else "No active filters"
+
+
+def _render_collection_index(
+    collections: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+    q: str | None = None,
+    public_reference: str | None = None,
+    title: str | None = None,
+    institution_source: str | None = None,
+    category: str | None = None,
+    active_status: str | None = None,
+    public_visibility: str | None = None,
+    created_date_from: str | None = None,
+    created_date_to: str | None = None,
+    page: int | str | None = 1,
+    page_size: int | str | None = 25,
+) -> str:
+    filters = {
+        "q": str(q or "").strip(),
+        "public_reference": str(public_reference or "").strip(),
+        "title": str(title or "").strip(),
+        "institution_source": str(institution_source or "").strip(),
+        "category": str(category or "").strip(),
+        "active_status": str(active_status or "").strip(),
+        "public_visibility": str(public_visibility or "").strip(),
+        "created_date_from": str(created_date_from or "").strip(),
+        "created_date_to": str(created_date_to or "").strip(),
+    }
+    normalized_page_size = _parse_positive_int(page_size, 25, maximum=100)
+    total = len(collections)
+    page_count = max(1, (total + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = min(_parse_positive_int(page, 1), page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    page_collections = collections[start : start + normalized_page_size]
+    rows = "".join(
+        f"""
+        <tr>
+          <td class="collection-admin-id">{int(item['id'])}</td>
+          <td class="collection-admin-reference">{escape(_collection_display(item.get('public_reference')))}</td>
+          <td class="collection-admin-title">{escape(_collection_display(item.get('title')))}</td>
+          <td class="collection-admin-source">{escape(_collection_display(item.get('institution_source')))}</td>
+          <td class="collection-admin-category">{escape(ac.category_label(item.get('category')))}</td>
+          <td class="collection-admin-date-range">{escape(_collection_date_range(item))}</td>
+          <td class="collection-admin-visibility">{escape(_collection_visibility_label(item.get('is_public')))}</td>
+          <td class="collection-admin-status">{escape(_collection_status_label(item.get('is_active')))}</td>
+          <td class="collection-admin-created">{escape(_collection_display(item.get('created_by')))}<br>{escape(_collection_display(item.get('created_at')))}</td>
+          <td class="collection-admin-updated">{escape(_collection_display(item.get('updated_by')))}<br>{escape(_collection_display(item.get('updated_at')))}</td>
+          <td class="collection-admin-actions"><a href="/admin/collections/{int(item['id'])}">Open</a></td>
+        </tr>
+        """
+        for item in page_collections
+    ) or '<tr><td colspan="11">No archive collections match the selected filters.</td></tr>'
+    previous_link = ""
+    next_link = ""
+    if normalized_page > 1:
+        previous_link = f'<a href="/admin/collections?{escape(_collection_query_string(filters, page=normalized_page - 1, page_size=normalized_page_size))}">Previous page</a>'
+    if normalized_page < page_count:
+        next_link = f'<a href="/admin/collections?{escape(_collection_query_string(filters, page=normalized_page + 1, page_size=normalized_page_size))}">Next page</a>'
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collections</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.collection-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.collection-filter-form input,.collection-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-admin-table-wrapper{{overflow-x:auto}}.collection-admin-table{{width:100%;min-width:1260px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.collection-admin-table th{{background:#143a52;color:#fff;text-align:left}}.collection-admin-table th,.collection-admin-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.collection-admin-id{{min-width:90px}}.collection-admin-reference{{min-width:210px;font-family:ui-monospace,monospace}}.collection-admin-title{{min-width:210px}}.collection-admin-source,.collection-admin-category{{min-width:170px}}.collection-admin-created,.collection-admin-updated{{min-width:190px}}.collection-admin-actions{{min-width:110px;white-space:nowrap}}.collection-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}@media(max-width:900px){{.collection-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.collection-filter-form{{grid-template-columns:1fr}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Archive Collections</h1><p class="notice">Govern public archive identities without altering independently preserved documents. Document membership is not part of CDE v12.14.</p><p><a class="button-link" href="/admin/collections/new">Create collection</a></p><section class="collection-summary"><p><strong>Total matching collections:</strong> {total}</p><p><strong>Active filters:</strong> {escape(_collection_filter_summary(filters))}</p></section><form class="collection-filter-form" method="get" action="/admin/collections"><label>Search<input name="q" value="{escape(filters['q'])}"></label><label>Public reference<input name="public_reference" value="{escape(filters['public_reference'])}"></label><label>Title<input name="title" value="{escape(filters['title'])}"></label><label>Institution / source<input name="institution_source" value="{escape(filters['institution_source'])}"></label><label>Category<select name="category"><option value="">Any category</option>{_collection_options(filters['category'])}</select></label><label>Active status<select name="active_status"><option value="">Any active status</option><option value="active"{" selected" if filters['active_status'] == "active" else ""}>Active</option><option value="inactive"{" selected" if filters['active_status'] == "inactive" else ""}>Inactive</option></select></label><label>Public visibility<select name="public_visibility"><option value="">Any visibility</option><option value="public"{" selected" if filters['public_visibility'] == "public" else ""}>Public</option><option value="private"{" selected" if filters['public_visibility'] == "private" else ""}>Private</option></select></label><label>Created from<input name="created_date_from" type="date" value="{escape(filters['created_date_from'])}"></label><label>Created to<input name="created_date_to" type="date" value="{escape(filters['created_date_to'])}"></label><label>Page size<input name="page_size" type="number" min="1" max="100" value="{normalized_page_size}"></label><button type="submit">Apply filters</button></form><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><div class="collection-admin-table-wrapper"><table class="collection-admin-table"><thead><tr><th class="collection-admin-id">Collection ID</th><th class="collection-admin-reference">Public collection reference</th><th class="collection-admin-title">Title</th><th class="collection-admin-source">Institution / source</th><th class="collection-admin-category">Category</th><th class="collection-admin-date-range">Date range</th><th class="collection-admin-visibility">Visibility</th><th class="collection-admin-status">Active status</th><th class="collection-admin-created">Created</th><th class="collection-admin-updated">Updated</th><th class="collection-admin-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div></main></body></html>"""
+
+
+def _render_collection_form_page(
+    *,
+    admin_session: dict[str, Any] | None = None,
+    collection: dict[str, Any] | None = None,
+) -> str:
+    item = collection or {}
+    is_edit = bool(collection)
+    action = f"/api/admin/session/collections/{int(item['id'])}/update" if is_edit else "/api/admin/session/collections"
+    heading = "Edit Archive Collection" if is_edit else "Create Archive Collection"
+    submit = "Update collection" if is_edit else "Create collection"
+    visibility = int(item.get("is_public") or 0)
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{heading}</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>{heading}</h1><p class="notice">Collection identity does not create document membership, alter document provenance, or change any record or document hash. Public reference and actor attribution are generated server-side.</p><form method="post" action="{action}"><label>Title<input name="title" required value="{escape(str(item.get('title') or ''))}"></label><label>Subtitle<input name="subtitle" value="{escape(str(item.get('subtitle') or ''))}"></label><label>Institution / source<input name="institution_source" required value="{escape(str(item.get('institution_source') or ''))}"></label><label>Category<select name="category" required>{_collection_options(str(item.get('category') or ''))}</select></label><label>Description<textarea name="description" required>{escape(str(item.get('description') or ''))}</textarea></label><label>Public visibility<select name="is_public" required><option value="0"{' selected' if visibility == 0 else ''}>Private</option><option value="1"{' selected' if visibility == 1 else ''}>Public</option></select></label><label>Date from<input name="date_from" type="date" value="{escape(str(item.get('date_from') or ''))}"></label><label>Date to<input name="date_to" type="date" value="{escape(str(item.get('date_to') or ''))}"></label><label>Public note<textarea name="public_note">{escape(str(item.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(item.get('admin_note') or ''))}</textarea></label><button type="submit">{submit}</button></form></main></body></html>"""
+
+
+def _render_collection_detail(
+    collection: dict[str, Any],
+    history: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    public_reference = collection.get("public_reference")
+    public_url = f"/collections/{public_reference}" if public_reference else ""
+    public_available = ac.public_collection_is_eligible(collection)
+    fields = (
+        ("Collection ID", collection.get("id")),
+        ("Public collection reference", public_reference),
+        ("Public collection URL", public_url if public_available else "Public collection page is not currently available."),
+        ("Title", collection.get("title")),
+        ("Subtitle", collection.get("subtitle")),
+        ("Institution / source", collection.get("institution_source")),
+        ("Category", ac.category_label(collection.get("category"))),
+        ("Description", collection.get("description")),
+        ("Public note", collection.get("public_note")),
+        ("Administrative note", collection.get("admin_note")),
+        ("Declared date range", _collection_date_range(collection)),
+        ("Public visibility", _collection_visibility_label(collection.get("is_public"))),
+        ("Active status", _collection_status_label(collection.get("is_active"))),
+        ("Created", f"{collection.get('created_by')} — {collection.get('created_at')}"),
+        ("Updated", f"{collection.get('updated_by')} — {collection.get('updated_at')}"),
+        ("Public eligibility", "Eligible" if public_available else "Inactive or private."),
+    )
+    rows = "".join(f"<tr><th>{escape(label)}</th><td>{escape(_collection_display(value))}</td></tr>" for label, value in fields)
+    history_rows = "".join(
+        f"""<tr><td class="collection-history-timestamp">{escape(_collection_display(item.get('timestamp')))}</td><td class="collection-history-action">{escape(ac.COLLECTION_ACTION_LABELS.get(str(item.get('action_type')), _collection_display(item.get('action_type'))))}</td><td class="collection-history-actor">{escape(_collection_display(item.get('actor')))}</td><td class="collection-history-note">{escape(_collection_display(item.get('note')))}</td><td class="collection-history-state">{escape(_collection_display(item.get('previous_state_json')))}</td><td class="collection-history-state">{escape(_collection_display(item.get('new_state_json')))}</td></tr>"""
+        for item in history
+    ) or '<tr><td colspan="6">No collection history is available.</td></tr>'
+    public_action = (
+        f'<p><a class="collection-public-action" href="{escape(public_url)}">Open public collection</a></p>'
+        if public_available and public_url
+        else '<p class="collection-warning">Public collection page is not currently available.</p>'
+    )
+    active_controls = (
+        f"""<form method="post" action="/api/admin/session/collections/{int(collection['id'])}/deactivate"><label>Deactivation note<input name="deactivation_note" required></label><button type="submit">Deactivate collection</button></form>"""
+        if int(collection.get("is_active") or 0) == 1
+        else f"""<form method="post" action="/api/admin/session/collections/{int(collection['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate collection</button></form>"""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.collection-public-action,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-history-wrapper{{overflow-x:auto}}.collection-history-table{{min-width:1120px;table-layout:auto}}.collection-history-timestamp{{min-width:180px;white-space:nowrap}}.collection-history-action,.collection-history-actor{{min-width:130px}}.collection-history-note{{min-width:220px}}.collection-history-state{{min-width:280px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>Archive Collection</h1><p class="notice">Document membership is not part of CDE v12.14. Documents will be added through a separately governed collection-membership layer.</p><h2>Collection metadata</h2>{public_action}<p><a class="button-link" href="/admin/collections/{int(collection['id'])}/edit">Edit collection</a></p><table class="metadata"><tbody>{rows}</tbody></table><h2>Activation</h2>{active_controls}<h2>Collection history</h2><div class="collection-history-wrapper"><table class="collection-history-table"><thead><tr><th class="collection-history-timestamp">Timestamp</th><th class="collection-history-action">Action</th><th class="collection-history-actor">Actor</th><th class="collection-history-note">Note</th><th class="collection-history-state">Previous state</th><th class="collection-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 def _audit_display_value(value: Any) -> str:
     if value is None or value == "":
@@ -45530,6 +45730,219 @@ def admin_association_reactivate(
     finally:
         conn.close()
     return HTMLResponse(content=_render_association_detail(association, history, admin_session=session))
+
+
+@router.get("/admin/collections", response_class=HTMLResponse)
+def admin_collections_page(
+    request: Request,
+    q: str | None = Query(None),
+    public_reference: str | None = Query(None),
+    title: str | None = Query(None),
+    institution_source: str | None = Query(None),
+    category: str | None = Query(None),
+    active_status: str | None = Query(None),
+    public_visibility: str | None = Query(None),
+    created_date_from: str | None = Query(None),
+    created_date_to: str | None = Query(None),
+    page: int | str | None = Query(1),
+    page_size: int | str | None = Query(25),
+):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collections = ac.list_collections(
+            conn,
+            q=q,
+            public_reference=public_reference,
+            title=title,
+            institution_source=institution_source,
+            category=category,
+            active_status=active_status,
+            public_visibility=public_visibility,
+            created_date_from=created_date_from,
+            created_date_to=created_date_to,
+        )
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_collection_index(
+            collections,
+            admin_session=session,
+            q=q,
+            public_reference=public_reference,
+            title=title,
+            institution_source=institution_source,
+            category=category,
+            active_status=active_status,
+            public_visibility=public_visibility,
+            created_date_from=created_date_from,
+            created_date_to=created_date_to,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/admin/collections/new", response_class=HTMLResponse)
+def admin_collection_new_page(request: Request):
+    session = require_admin_session(request)
+    return HTMLResponse(content=_render_collection_form_page(admin_session=session))
+
+
+@router.get("/admin/collections/{collection_id}", response_class=HTMLResponse)
+def admin_collection_detail_page(collection_id: int, request: Request):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.get_collection(conn, collection_id)
+        history = ac.collection_history(conn, collection_id)
+    except ValueError as exc:
+        raise _http_error(404, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session))
+
+
+@router.get("/admin/collections/{collection_id}/edit", response_class=HTMLResponse)
+def admin_collection_edit_page(collection_id: int, request: Request):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.get_collection(conn, collection_id)
+    except ValueError as exc:
+        raise _http_error(404, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_collection_form_page(admin_session=session, collection=collection))
+
+
+@router.post("/api/admin/session/collections", response_class=HTMLResponse)
+def admin_collection_create(
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    is_public: str | None = Form("0"),
+    subtitle: str | None = Form(None),
+    date_from: str | None = Form(None),
+    date_to: str | None = Form(None),
+    public_note: str | None = Form(None),
+    admin_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.create_collection(
+            conn,
+            title=title,
+            subtitle=subtitle,
+            institution_source=institution_source,
+            category=category,
+            description=description,
+            public_note=public_note,
+            admin_note=admin_note,
+            date_from=date_from,
+            date_to=date_to,
+            is_public=is_public,
+            actor=_admin_session_actor(session),
+        )
+        history = ac.collection_history(conn, collection["id"])
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_collection_detail(collection, history, admin_session=session),
+        status_code=201,
+    )
+
+
+@router.post("/api/admin/session/collections/{collection_id}/update", response_class=HTMLResponse)
+def admin_collection_update(
+    collection_id: int,
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    is_public: str | None = Form("0"),
+    subtitle: str | None = Form(None),
+    date_from: str | None = Form(None),
+    date_to: str | None = Form(None),
+    public_note: str | None = Form(None),
+    admin_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.update_collection(
+            conn,
+            collection_id,
+            title=title,
+            subtitle=subtitle,
+            institution_source=institution_source,
+            category=category,
+            description=description,
+            public_note=public_note,
+            admin_note=admin_note,
+            date_from=date_from,
+            date_to=date_to,
+            is_public=is_public,
+            actor=_admin_session_actor(session),
+        )
+        history = ac.collection_history(conn, collection_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session))
+
+
+@router.post("/api/admin/session/collections/{collection_id}/deactivate", response_class=HTMLResponse)
+def admin_collection_deactivate(
+    collection_id: int,
+    request: Request,
+    deactivation_note: str = Form(...),
+):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.deactivate_collection(
+            conn,
+            collection_id,
+            actor=_admin_session_actor(session),
+            note=deactivation_note,
+        )
+        history = ac.collection_history(conn, collection_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session))
+
+
+@router.post("/api/admin/session/collections/{collection_id}/reactivate", response_class=HTMLResponse)
+def admin_collection_reactivate(
+    collection_id: int,
+    request: Request,
+    reactivation_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = ac.get_db()
+    try:
+        collection = ac.reactivate_collection(
+            conn,
+            collection_id,
+            actor=_admin_session_actor(session),
+            note=reactivation_note,
+        )
+        history = ac.collection_history(conn, collection_id)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session))
 
 
 @router.get("/admin/document-intake", response_class=HTMLResponse)

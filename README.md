@@ -397,6 +397,24 @@ Publication Provenance, Administrative Audit, Public Record Index behaviour,
 Public Document Library behaviour, image/PDF behaviour, authentication, footer
 navigation, or public/private visibility boundaries.
 
+### CDE v12.14 — Governed Archive Collections
+
+CDE v12.14 introduces first-class governed Archive Collection objects with
+stable public references using the format `CDE-COLL-YYYYMMDD-NNN`.
+Authenticated administrators can create, update, deactivate, reactivate, and
+inspect collection identities and immutable collection history through the
+Administration Console.
+
+Public collection pages at `/collections/{collection_reference}` and the public
+index at `/collections` expose only active, public collections. Collections
+provide governed context for independently preserved documents, but CDE v12.14
+does not implement document membership, sequence positions, previous/next
+navigation, automatic grouping, document copying, or changes to document
+provenance, lifecycle, SHA-256 values, record verification, associations,
+Publication Provenance, Administrative Audit, Public Record Index, Public
+Document Library, authentication, footer navigation, or public/private
+visibility rules.
+
 ---
 
 ## What it does
