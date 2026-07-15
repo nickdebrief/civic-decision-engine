@@ -48,6 +48,7 @@ from api.attachments import (
     validate_publication_status,
 )
 from api import archive_collections as ac
+from api import document_intake_corrections as dic
 from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
@@ -44532,6 +44533,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/intake-corrections">Intake Corrections</a>
       <a style="color:#245d61;font-weight:650" href="/admin/audit">Administrative Audit</a>
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
@@ -44582,7 +44584,7 @@ def _render_admin_dashboard(
 </div>
 <div class="dashboard-grid"><section><h2>Intake status</h2><table>{count_rows}</table></section><section><h2>Review queue</h2><table class="queue"><thead><tr><th>Title</th><th>Institution / Source</th><th>Status</th><th>Upload Date</th></tr></thead><tbody>{queue_rows}</tbody></table><p><a href="/admin/document-intake#intake-management">Open full intake management</a></p></section></div>
 <section id="open-record-evidence" class="evidence-card"><h2>Open Record Evidence</h2><p>Open the existing administrative evidence workspace for a known record reference. Inspect visible evidence relationships, determination traces, dependency and stability views, provenance, verification details, and Executive, Review, or Full Inspection report modes.</p><p>This navigation does not enumerate records or alter evidence, classifications, hashes, lifecycle states, or public visibility.</p><form class="record-form" onsubmit="event.preventDefault();const reference=this.elements.reference.value.trim();if(reference){{window.location.href='/admin/records/'+encodeURIComponent(reference)+'/evidence';}}"><input name="reference" aria-label="Record reference" placeholder="Record reference" required><button type="submit">Open Record Evidence</button></form></section>
-<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="/admin/associations">Manage Record–Document Associations</a></li><li><a href="/admin/collections">Manage Archive Collections</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
+<section><h2>Administration tools</h2><ul><li><a href="/admin/document-intake#new-intake">Upload a document for private intake</a></li><li><a href="/admin/document-intake#intake-management">Review and manage intake lifecycle</a></li><li><a href="/admin/intake-corrections">Manage Intake Corrections</a></li><li><a href="/admin/audit">Inspect Administrative Audit</a></li><li><a href="/admin/associations">Manage Record–Document Associations</a></li><li><a href="/admin/collections">Manage Archive Collections</a></li><li><a href="#open-record-evidence">Inspect Admin Record Evidence</a></li><li><a href="/documents">Verify the Public Document Library</a></li></ul><form method="post" action="/api/admin/session/logout"><button type="submit">Sign out</button></form></section>
 
 </main></body></html>"""
 
@@ -44790,6 +44792,17 @@ def _collection_display(value: Any) -> str:
     return str(value)
 
 
+def _collection_history_state_details(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return (
+        '<details class="collection-history-state-details">'
+        "<summary>State details</summary>"
+        f"<pre>{escape(str(value))}</pre>"
+        "</details>"
+    )
+
+
 def _collection_status_label(value: Any) -> str:
     return "Active" if int(value or 0) == 1 else "Inactive"
 
@@ -44919,7 +44932,7 @@ def _render_collection_index(
         previous_link = f'<a href="/admin/collections?{escape(_collection_query_string(filters, page=normalized_page - 1, page_size=normalized_page_size))}">Previous page</a>'
     if normalized_page < page_count:
         next_link = f'<a href="/admin/collections?{escape(_collection_query_string(filters, page=normalized_page + 1, page_size=normalized_page_size))}">Next page</a>'
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collections</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.collection-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.collection-filter-form input,.collection-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-admin-table-wrapper{{overflow-x:auto}}.collection-admin-table{{width:100%;min-width:1260px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.collection-admin-table th{{background:#143a52;color:#fff;text-align:left}}.collection-admin-table th,.collection-admin-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.collection-admin-id{{min-width:90px}}.collection-admin-reference{{min-width:210px;font-family:ui-monospace,monospace}}.collection-admin-title{{min-width:210px}}.collection-admin-source,.collection-admin-category{{min-width:170px}}.collection-admin-created,.collection-admin-updated{{min-width:190px}}.collection-admin-actions{{min-width:110px;white-space:nowrap}}.collection-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}@media(max-width:900px){{.collection-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.collection-filter-form{{grid-template-columns:1fr}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Archive Collections</h1><p class="notice">Govern public archive identities without altering independently preserved documents. Document membership is not part of CDE v12.14.</p><p><a class="button-link" href="/admin/collections/new">Create collection</a></p><section class="collection-summary"><p><strong>Total matching collections:</strong> {total}</p><p><strong>Active filters:</strong> {escape(_collection_filter_summary(filters))}</p></section><form class="collection-filter-form" method="get" action="/admin/collections"><label>Search<input name="q" value="{escape(filters['q'])}"></label><label>Public reference<input name="public_reference" value="{escape(filters['public_reference'])}"></label><label>Title<input name="title" value="{escape(filters['title'])}"></label><label>Institution / source<input name="institution_source" value="{escape(filters['institution_source'])}"></label><label>Category<select name="category"><option value="">Any category</option>{_collection_options(filters['category'])}</select></label><label>Active status<select name="active_status"><option value="">Any active status</option><option value="active"{" selected" if filters['active_status'] == "active" else ""}>Active</option><option value="inactive"{" selected" if filters['active_status'] == "inactive" else ""}>Inactive</option></select></label><label>Public visibility<select name="public_visibility"><option value="">Any visibility</option><option value="public"{" selected" if filters['public_visibility'] == "public" else ""}>Public</option><option value="private"{" selected" if filters['public_visibility'] == "private" else ""}>Private</option></select></label><label>Created from<input name="created_date_from" type="date" value="{escape(filters['created_date_from'])}"></label><label>Created to<input name="created_date_to" type="date" value="{escape(filters['created_date_to'])}"></label><label>Page size<input name="page_size" type="number" min="1" max="100" value="{normalized_page_size}"></label><button type="submit">Apply filters</button></form><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><div class="collection-admin-table-wrapper"><table class="collection-admin-table"><thead><tr><th class="collection-admin-id">Collection ID</th><th class="collection-admin-reference">Public collection reference</th><th class="collection-admin-title">Title</th><th class="collection-admin-source">Institution / source</th><th class="collection-admin-category">Category</th><th class="collection-admin-date-range">Date range</th><th class="collection-admin-visibility">Visibility</th><th class="collection-admin-status">Active status</th><th class="collection-admin-created">Created</th><th class="collection-admin-updated">Updated</th><th class="collection-admin-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collections</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.collection-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.collection-filter-form input,.collection-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-admin-table-wrapper{{overflow-x:auto}}.collection-admin-table{{width:100%;min-width:1340px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.collection-admin-table th{{background:#143a52;color:#fff;text-align:left;white-space:nowrap}}.collection-admin-table th,.collection-admin-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.collection-admin-id{{min-width:90px}}.collection-admin-reference{{min-width:210px;font-family:ui-monospace,monospace}}.collection-admin-title{{min-width:210px}}.collection-admin-source,.collection-admin-category{{min-width:170px}}.collection-admin-date-range{{min-width:165px}}.collection-admin-visibility,.collection-admin-status{{min-width:130px;white-space:nowrap}}.collection-admin-created,.collection-admin-updated{{min-width:190px}}.collection-admin-actions{{min-width:110px;white-space:nowrap}}.collection-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}@media(max-width:900px){{.collection-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.collection-filter-form{{grid-template-columns:1fr}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Archive Collections</h1><p class="notice">Govern public archive identities without altering independently preserved documents. Document membership is not part of CDE v12.14.</p><p><a class="button-link" href="/admin/collections/new">Create collection</a></p><section class="collection-summary"><p><strong>Total matching collections:</strong> {total}</p><p><strong>Active filters:</strong> {escape(_collection_filter_summary(filters))}</p></section><form class="collection-filter-form" method="get" action="/admin/collections"><label>Search<input name="q" value="{escape(filters['q'])}"></label><label>Public reference<input name="public_reference" value="{escape(filters['public_reference'])}"></label><label>Title<input name="title" value="{escape(filters['title'])}"></label><label>Institution / source<input name="institution_source" value="{escape(filters['institution_source'])}"></label><label>Category<select name="category"><option value="">Any category</option>{_collection_options(filters['category'])}</select></label><label>Active status<select name="active_status"><option value="">Any active status</option><option value="active"{" selected" if filters['active_status'] == "active" else ""}>Active</option><option value="inactive"{" selected" if filters['active_status'] == "inactive" else ""}>Inactive</option></select></label><label>Public visibility<select name="public_visibility"><option value="">Any visibility</option><option value="public"{" selected" if filters['public_visibility'] == "public" else ""}>Public</option><option value="private"{" selected" if filters['public_visibility'] == "private" else ""}>Private</option></select></label><label>Created from<input name="created_date_from" type="date" value="{escape(filters['created_date_from'])}"></label><label>Created to<input name="created_date_to" type="date" value="{escape(filters['created_date_to'])}"></label><label>Page size<input name="page_size" type="number" min="1" max="100" value="{normalized_page_size}"></label><button type="submit">Apply filters</button></form><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><div class="collection-admin-table-wrapper"><table class="collection-admin-table"><thead><tr><th class="collection-admin-id">Collection ID</th><th class="collection-admin-reference">Public collection reference</th><th class="collection-admin-title">Title</th><th class="collection-admin-source">Institution / source</th><th class="collection-admin-category">Category</th><th class="collection-admin-date-range">Date range</th><th class="collection-admin-visibility">Visibility</th><th class="collection-admin-status">Active status</th><th class="collection-admin-created">Created</th><th class="collection-admin-updated">Updated</th><th class="collection-admin-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div><div class="collection-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div></main></body></html>"""
 
 
 def _render_collection_form_page(
@@ -44965,7 +44978,7 @@ def _render_collection_detail(
     )
     rows = "".join(f"<tr><th>{escape(label)}</th><td>{escape(_collection_display(value))}</td></tr>" for label, value in fields)
     history_rows = "".join(
-        f"""<tr><td class="collection-history-timestamp">{escape(_collection_display(item.get('timestamp')))}</td><td class="collection-history-action">{escape(ac.COLLECTION_ACTION_LABELS.get(str(item.get('action_type')), _collection_display(item.get('action_type'))))}</td><td class="collection-history-actor">{escape(_collection_display(item.get('actor')))}</td><td class="collection-history-note">{escape(_collection_display(item.get('note')))}</td><td class="collection-history-state">{escape(_collection_display(item.get('previous_state_json')))}</td><td class="collection-history-state">{escape(_collection_display(item.get('new_state_json')))}</td></tr>"""
+        f"""<tr><td class="collection-history-timestamp">{escape(_collection_display(item.get('timestamp')))}</td><td class="collection-history-action">{escape(ac.COLLECTION_ACTION_LABELS.get(str(item.get('action_type')), _collection_display(item.get('action_type'))))}</td><td class="collection-history-actor">{escape(_collection_display(item.get('actor')))}</td><td class="collection-history-note">{escape(_collection_display(item.get('note')))}</td><td class="collection-history-state">{_collection_history_state_details(item.get('previous_state_json'))}</td><td class="collection-history-state">{_collection_history_state_details(item.get('new_state_json'))}</td></tr>"""
         for item in history
     ) or '<tr><td colspan="6">No collection history is available.</td></tr>'
     public_action = (
@@ -44978,7 +44991,137 @@ def _render_collection_detail(
         if int(collection.get("is_active") or 0) == 1
         else f"""<form method="post" action="/api/admin/session/collections/{int(collection['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate collection</button></form>"""
     )
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.collection-public-action,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-history-wrapper{{overflow-x:auto}}.collection-history-table{{min-width:1120px;table-layout:auto}}.collection-history-timestamp{{min-width:180px;white-space:nowrap}}.collection-history-action,.collection-history-actor{{min-width:130px}}.collection-history-note{{min-width:220px}}.collection-history-state{{min-width:280px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>Archive Collection</h1><p class="notice">Document membership is not part of CDE v12.14. Documents will be added through a separately governed collection-membership layer.</p><h2>Collection metadata</h2>{public_action}<p><a class="button-link" href="/admin/collections/{int(collection['id'])}/edit">Edit collection</a></p><table class="metadata"><tbody>{rows}</tbody></table><h2>Activation</h2>{active_controls}<h2>Collection history</h2><div class="collection-history-wrapper"><table class="collection-history-table"><thead><tr><th class="collection-history-timestamp">Timestamp</th><th class="collection-history-action">Action</th><th class="collection-history-actor">Actor</th><th class="collection-history-note">Note</th><th class="collection-history-state">Previous state</th><th class="collection-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.collection-public-action,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-history-wrapper{{overflow-x:auto}}.collection-history-table{{min-width:1120px;table-layout:auto}}.collection-history-timestamp{{min-width:180px;white-space:nowrap}}.collection-history-action,.collection-history-actor{{min-width:130px}}.collection-history-note{{min-width:220px}}.collection-history-state{{min-width:280px}}.collection-history-state-details summary{{cursor:pointer;color:#245d61;font-weight:650}}.collection-history-state-details pre{{max-width:420px;max-height:220px;overflow:auto;white-space:pre-wrap;margin:8px 0 0;font:.78rem ui-monospace,monospace;background:#faf9f5;border:1px solid #e1dfd8;padding:8px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>Archive Collection</h1><p class="notice">Document membership is not part of CDE v12.14. Documents will be added through a separately governed collection-membership layer.</p><h2>Collection metadata</h2>{public_action}<p><a class="button-link" href="/admin/collections/{int(collection['id'])}/edit">Edit collection</a></p><table class="metadata"><tbody>{rows}</tbody></table><h2>Activation</h2>{active_controls}<h2>Collection history</h2><div class="collection-history-wrapper"><table class="collection-history-table"><thead><tr><th class="collection-history-timestamp">Timestamp</th><th class="collection-history-action">Action</th><th class="collection-history-actor">Actor</th><th class="collection-history-note">Note</th><th class="collection-history-state">Previous state</th><th class="collection-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+
+
+def _correction_display(value: Any) -> str:
+    if value is None or value == "":
+        return "—"
+    return str(value)
+
+
+def _correction_type_options(selected: str | None = None) -> str:
+    selected_value = str(selected or "")
+    return "".join(
+        f'<option value="{escape(value)}"{" selected" if selected_value == value else ""}>{escape(label)}</option>'
+        for value, label in dic.CORRECTION_TYPES.items()
+    )
+
+
+def _render_correction_create_page(source: dict[str, Any], *, admin_session: dict[str, Any] | None = None) -> str:
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Begin Governed Correction</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff}}table{{width:100%;border-collapse:collapse;background:#fff;margin-bottom:18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:220px;background:#faf9f5;color:#555}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(source['intake_id'])}">Back to source intake</a></p><h1>Begin Governed Intake Correction</h1><p class="notice">This action creates a correction record only. It does not create the corrected intake, alter document bytes, change SHA-256, or rewrite the archived source intake.</p><h2>Source intake</h2><table><tr><th>Source intake</th><td>{escape(source['intake_id'])}</td></tr><tr><th>Title</th><td>{escape(str(source.get('title') or ''))}</td></tr><tr><th>Filename</th><td>{escape(str(source.get('original_filename') or ''))}</td></tr><tr><th>Document format</th><td>{escape(document_type_label(source.get('document_type')))}</td></tr><tr><th>Status</th><td>{escape(STATUS_LABELS.get(source.get('status'), source.get('status')))}</td></tr><tr><th>SHA-256</th><td>{escape(str(source.get('sha256_hash') or ''))}</td></tr></table><h2>Proposed corrected metadata</h2><form method="post" action="/api/admin/session/intake-corrections"><input type="hidden" name="source_intake_id" value="{escape(source['intake_id'])}"><label>Correction type<select name="correction_type" required>{_correction_type_options('metadata_document_mismatch')}</select></label><label>Correction reason<textarea name="correction_reason" required></textarea></label><label>Correction description<textarea name="correction_description" required></textarea></label><label>Corrected title<input name="corrected_title" required></label><label>Corrected institution / source<input name="corrected_institution_source" required value="{escape(str(source.get('institution_source') or ''))}"></label><label>Corrected document date<input name="corrected_document_date" type="date" required value="{escape(str(source.get('document_date') or ''))}"></label><label>Corrected category<input name="corrected_category" required value="{escape(str(source.get('category') or ''))}"></label><label>Corrected reference identifier<input name="corrected_reference_identifier"></label><label>Corrected visibility<select name="corrected_visibility" required><option value="private">Private</option><option value="restricted">Restricted</option></select></label><label>Corrected description<textarea name="corrected_description" required></textarea></label><label>Corrected internal notes<textarea name="corrected_notes" required></textarea></label><button type="submit">Create correction record</button></form></main></body></html>"""
+
+
+def _render_correction_index(corrections: list[dict[str, Any]], *, admin_session: dict[str, Any] | None = None, page: int | str | None = 1, page_size: int | str | None = 25, **filters: Any) -> str:
+    normalized_page_size = _parse_positive_int(page_size, 25, maximum=100)
+    if normalized_page_size not in {10, 25, 50, 100}:
+        normalized_page_size = 25
+    total = len(corrections)
+    page_count = max(1, (total + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = min(_parse_positive_int(page, 1), page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    rows = "".join(
+        f"""<tr><td class="correction-reference"><a href="/admin/intake-corrections/{escape(str(item['correction_reference']))}">{escape(str(item['correction_reference']))}</a></td><td>{escape(dic.correction_type_label(item.get('correction_type')))}</td><td>{escape(_correction_display(item.get('source_intake_id')))}</td><td>{escape(_correction_display(item.get('destination_intake_id')))}</td><td>{escape(_correction_display(item.get('correction_state')))}</td><td>{escape(_correction_display(item.get('created_by')))}<br>{escape(_correction_display(item.get('created_at')))}</td><td>{escape(_correction_display(item.get('completed_at')))}</td><td><a href="/admin/intake-corrections/{escape(str(item['correction_reference']))}">Open</a></td></tr>"""
+        for item in corrections[start : start + normalized_page_size]
+    ) or '<tr><td colspan="8">No intake corrections match the selected filters.</td></tr>'
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Intake Corrections</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.table-wrap{{overflow-x:auto}}table{{width:100%;min-width:980px;border-collapse:collapse;background:#fff}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.correction-reference{{min-width:210px;font-family:ui-monospace,monospace}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Intake Corrections</h1><p class="notice">Governed intake corrections reassign an existing preserved document to a corrected intake identity only after review and authorisation. They do not release hashes, bypass duplicate detection, or rewrite archived intake history.</p><section class="summary"><p><strong>Total matching corrections:</strong> {total}</p><p><strong>Page:</strong> {normalized_page} of {page_count}</p></section><div class="table-wrap"><table><thead><tr><th>Correction reference</th><th>Type</th><th>Source intake</th><th>Destination intake</th><th>State</th><th>Created</th><th>Completed</th><th>Actions</th></tr></thead><tbody>{rows}</tbody></table></div></main></body></html>"""
+
+
+def _render_correction_detail(correction: dict[str, Any], history: list[dict[str, Any]], *, admin_session: dict[str, Any] | None = None) -> str:
+    try:
+        source = load_pending_document(correction["source_intake_id"])
+    except ValueError:
+        source = {}
+    destination = {}
+    if correction.get("destination_intake_id"):
+        try:
+            destination = load_pending_document(correction["destination_intake_id"])
+        except ValueError:
+            destination = {}
+    def table_rows(fields: tuple[tuple[str, Any], ...]) -> str:
+        return "".join(f"<tr><th>{escape(label)}</th><td>{escape(_correction_display(value))}</td></tr>" for label, value in fields)
+    summary_rows = table_rows((("Correction reference", correction.get("correction_reference")), ("Correction type", dic.correction_type_label(correction.get("correction_type"))), ("Correction state", correction.get("correction_state")), ("Correction reason", correction.get("correction_reason")), ("Correction description", correction.get("correction_description")), ("Created", f"{correction.get('created_by')} — {correction.get('created_at')}")))
+    source_rows = table_rows((("Source intake", correction.get("source_intake_id")), ("Source title", source.get("title")), ("Original filename", source.get("original_filename")), ("Document format", document_type_label(source.get("document_type")) if source else None), ("SHA-256", correction.get("source_sha256")), ("Lifecycle state", STATUS_LABELS.get(source.get("status"), source.get("status")) if source else None)))
+    proposed_rows = table_rows((("Corrected title", correction.get("corrected_title")), ("Corrected institution / source", correction.get("corrected_institution_source")), ("Corrected document date", correction.get("corrected_document_date")), ("Corrected category", correction.get("corrected_category")), ("Corrected reference identifier", correction.get("corrected_reference_identifier")), ("Corrected description", correction.get("corrected_description")), ("Corrected notes", correction.get("corrected_notes"))))
+    destination_rows = table_rows((("Destination intake", correction.get("destination_intake_id")), ("Destination title", destination.get("title")), ("Destination reference", destination.get("reference_identifier")), ("Unchanged SHA-256", correction.get("destination_sha256")), ("Current lifecycle state", STATUS_LABELS.get(destination.get("status"), destination.get("status")) if destination else None)))
+    history_rows = "".join(f"<tr><td>{escape(_correction_display(item.get('timestamp')))}</td><td>{escape(dic.ACTION_LABELS.get(str(item.get('action')), _correction_display(item.get('action'))))}</td><td>{escape(_correction_display(item.get('actor')))}</td><td>{escape(_correction_display(item.get('previous_state')))} → {escape(_correction_display(item.get('new_state')))}</td><td>{escape(_correction_display(item.get('note')))}</td><td>{escape(_correction_display(item.get('source_intake_id')))}</td><td>{escape(_correction_display(item.get('destination_intake_id')))}</td></tr>" for item in history) or '<tr><td colspan="7">No correction history is available.</td></tr>'
+    state = correction.get("correction_state")
+    actions = []
+    if state == "draft":
+        actions.append(f'<form method="post" action="/api/admin/session/intake-corrections/{escape(correction["correction_reference"])}/transition"><input type="hidden" name="new_state" value="under_review"><label>Review note<input name="note" required></label><button type="submit">Begin correction review</button></form>')
+    if state == "under_review":
+        actions.append(f'<form method="post" action="/api/admin/session/intake-corrections/{escape(correction["correction_reference"])}/transition"><input type="hidden" name="new_state" value="reviewed"><label>Review note<input name="note" required></label><button type="submit">Mark reviewed</button></form>')
+    if state == "reviewed":
+        actions.append(f'<form method="post" action="/api/admin/session/intake-corrections/{escape(correction["correction_reference"])}/transition"><input type="hidden" name="new_state" value="authorised"><label>Authorisation note<input name="note" required></label><button type="submit">Authorise document reassignment</button></form>')
+    if state == "authorised":
+        actions.append(f'<form method="post" action="/api/admin/session/intake-corrections/{escape(correction["correction_reference"])}/execute"><button type="submit">Create corrected intake</button></form>')
+    if state in {"draft", "under_review", "reviewed"}:
+        actions.append(f'<form method="post" action="/api/admin/session/intake-corrections/{escape(correction["correction_reference"])}/transition"><input type="hidden" name="new_state" value="cancelled"><label>Cancellation reason<input name="note" required></label><button type="submit">Cancel correction</button></form>')
+    action_html = "".join(actions) or "<p>No further correction actions are available.</p>"
+    destination_link = f'<p><a href="/admin/document-intake/{escape(str(correction.get("destination_intake_id")))}">View corrected intake</a></p>' if correction.get("destination_intake_id") else ""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Intake Correction</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff;margin-bottom:18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:240px;background:#faf9f5;color:#555}}.history-wrap{{overflow-x:auto}}.history{{min-width:980px}}form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff;margin:10px 0}}input{{padding:8px;border:1px solid #c9c6bd}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/intake-corrections">Back to Intake Corrections</a> · <a href="/admin/document-intake/{escape(str(correction.get('source_intake_id')))}">View source intake</a></p><h1>Intake Correction</h1><p class="notice">This correction preserves the archived source intake and the exact document bytes. It creates a corrected intake identity only after review and authorisation.</p><h2>Correction summary</h2><table class="metadata">{summary_rows}</table><h2>Source intake</h2><table class="metadata">{source_rows}</table><h2>Proposed corrected metadata</h2><table class="metadata">{proposed_rows}</table><h2>Destination intake</h2>{destination_link}<table class="metadata">{destination_rows}</table><h2>Available correction actions</h2>{action_html}<h2>Correction pathway</h2><div class="history-wrap"><table class="history"><thead><tr><th>Timestamp</th><th>Action</th><th>Actor</th><th>State</th><th>Note</th><th>Source intake</th><th>Destination intake</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+
+
+def _render_intake_correction_notice(item: dict[str, Any]) -> str:
+    intake_id = str(item.get("intake_id") or "")
+    if not intake_id:
+        return ""
+    conn = dic.get_db()
+    try:
+        destination = dic.destination_correction_for_intake(conn, intake_id)
+        if destination:
+            reference = str(destination.get("correction_reference") or "")
+            source_intake = str(destination.get("source_intake_id") or "")
+            completed_at = _correction_display(destination.get("completed_at"))
+            source_sha = _correction_display(destination.get("source_sha256"))
+            return (
+                '<p class="notice correction-lineage-notice">'
+                "<strong>Governed correction lineage:</strong> "
+                "This intake was created through a completed governed correction using the exact preserved source bytes. "
+                f"Correction <a href=\"/admin/intake-corrections/{escape(reference)}\">{escape(reference)}</a>; "
+                f"source intake <a href=\"/admin/document-intake/{escape(source_intake)}\">{escape(source_intake)}</a>; "
+                f"source SHA-256 {escape(source_sha)}; completed {escape(completed_at)}."
+                "</p>"
+            )
+        source = dic.source_correction_for_intake(conn, intake_id)
+        if source and source.get("correction_state") == "completed":
+            reference = str(source.get("correction_reference") or "")
+            destination_intake = str(source.get("destination_intake_id") or "")
+            completed_at = _correction_display(source.get("completed_at"))
+            return (
+                '<p class="notice correction-lineage-notice">'
+                "<strong>Governed correction lineage:</strong> "
+                "This archived intake is preserved unchanged and has a completed corrected intake identity. "
+                f"Correction <a href=\"/admin/intake-corrections/{escape(reference)}\">{escape(reference)}</a>; "
+                f"corrected intake <a href=\"/admin/document-intake/{escape(destination_intake)}\">{escape(destination_intake)}</a>; "
+                f"completed {escape(completed_at)}."
+                "</p>"
+            )
+        if source:
+            reference = str(source.get("correction_reference") or "")
+            state = _correction_display(source.get("correction_state"))
+            return (
+                '<p class="notice correction-lineage-notice">'
+                "<strong>Governed correction in progress:</strong> "
+                f"Correction <a href=\"/admin/intake-corrections/{escape(reference)}\">{escape(reference)}</a> "
+                f"is currently {escape(state)}. The source intake remains unchanged."
+                "</p>"
+            )
+        if item.get("status") == "archived":
+            try:
+                dic.validate_source_eligibility(conn, intake_id, root=intake_root())
+            except ValueError:
+                return ""
+            return (
+                '<p class="notice correction-lineage-notice">'
+                "<strong>Governed correction available:</strong> "
+                "This archived intake may be used as the source for a governed metadata correction. "
+                f"<a href=\"/admin/document-intake/{escape(intake_id)}/correction/new\">Begin governed correction</a>."
+                "</p>"
+            )
+    finally:
+        conn.close()
+    return ""
 
 def _audit_display_value(value: Any) -> str:
     if value is None or value == "":
@@ -45328,6 +45471,7 @@ def _render_document_intake_preview(
     *,
     admin_session: dict[str, Any] | None = None,
 ) -> str:
+    correction_notice = _render_intake_correction_notice(item)
     fields = (
         ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
@@ -45383,7 +45527,7 @@ def _render_document_intake_preview(
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:anywhere}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
-<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p><table class="metadata">{rows}</table>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
 {image_preview}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
@@ -45943,6 +46087,175 @@ def admin_collection_reactivate(
     finally:
         conn.close()
     return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session))
+
+
+@router.get("/admin/intake-corrections", response_class=HTMLResponse)
+def admin_intake_corrections_page(
+    request: Request,
+    correction_reference: str | None = Query(None),
+    source_intake: str | None = Query(None),
+    destination_intake: str | None = Query(None),
+    correction_type: str | None = Query(None),
+    correction_state: str | None = Query(None),
+    created_actor: str | None = Query(None),
+    created_date_from: str | None = Query(None),
+    created_date_to: str | None = Query(None),
+    completed_date_from: str | None = Query(None),
+    completed_date_to: str | None = Query(None),
+    page: int | str | None = Query(1),
+    page_size: int | str | None = Query(25),
+):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        corrections = dic.list_corrections(
+            conn,
+            correction_reference=correction_reference,
+            source_intake=source_intake,
+            destination_intake=destination_intake,
+            correction_type=correction_type,
+            correction_state=correction_state,
+            created_actor=created_actor,
+            created_date_from=created_date_from,
+            created_date_to=created_date_to,
+            completed_date_from=completed_date_from,
+            completed_date_to=completed_date_to,
+        )
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_correction_index(
+            corrections,
+            admin_session=session,
+            page=page,
+            page_size=page_size,
+            correction_reference=correction_reference,
+            source_intake=source_intake,
+            destination_intake=destination_intake,
+            correction_type=correction_type,
+            correction_state=correction_state,
+            created_actor=created_actor,
+            created_date_from=created_date_from,
+            created_date_to=created_date_to,
+            completed_date_from=completed_date_from,
+            completed_date_to=completed_date_to,
+        )
+    )
+
+
+@router.get("/admin/document-intake/{intake_id}/correction/new", response_class=HTMLResponse)
+def admin_intake_correction_new_page(intake_id: str, request: Request):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        source = dic.validate_source_eligibility(conn, intake_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_correction_create_page(source, admin_session=session))
+
+
+@router.get("/admin/intake-corrections/{correction_reference}", response_class=HTMLResponse)
+def admin_intake_correction_detail_page(correction_reference: str, request: Request):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        correction = dic.get_correction(conn, correction_reference)
+        history = dic.correction_history(conn, correction_reference)
+    except ValueError as exc:
+        raise _http_error(404, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_correction_detail(correction, history, admin_session=session))
+
+
+@router.post("/api/admin/session/intake-corrections", response_class=HTMLResponse)
+def admin_intake_correction_create(
+    request: Request,
+    source_intake_id: str = Form(...),
+    correction_type: str = Form(...),
+    correction_reason: str = Form(...),
+    correction_description: str = Form(...),
+    corrected_title: str = Form(...),
+    corrected_description: str = Form(...),
+    corrected_institution_source: str = Form(...),
+    corrected_category: str = Form(...),
+    corrected_document_date: str = Form(...),
+    corrected_reference_identifier: str | None = Form(None),
+    corrected_visibility: str = Form("private"),
+    corrected_notes: str = Form(...),
+):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        correction = dic.create_correction(
+            conn,
+            source_intake_id=source_intake_id,
+            correction_type=correction_type,
+            correction_reason=correction_reason,
+            correction_description=correction_description,
+            corrected_title=corrected_title,
+            corrected_description=corrected_description,
+            corrected_institution_source=corrected_institution_source,
+            corrected_category=corrected_category,
+            corrected_document_date=corrected_document_date,
+            corrected_reference_identifier=corrected_reference_identifier,
+            corrected_visibility=corrected_visibility,
+            corrected_notes=corrected_notes,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        history = dic.correction_history(conn, correction["correction_reference"])
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_correction_detail(correction, history, admin_session=session), status_code=201)
+
+
+@router.post("/api/admin/session/intake-corrections/{correction_reference}/transition", response_class=HTMLResponse)
+def admin_intake_correction_transition(
+    correction_reference: str,
+    request: Request,
+    new_state: str = Form(...),
+    note: str = Form(...),
+):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        correction = dic.transition_correction(
+            conn,
+            correction_reference,
+            new_state=new_state,
+            note=note,
+            actor=_admin_session_actor(session),
+        )
+        history = dic.correction_history(conn, correction_reference)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_correction_detail(correction, history, admin_session=session))
+
+
+@router.post("/api/admin/session/intake-corrections/{correction_reference}/execute", response_class=HTMLResponse)
+def admin_intake_correction_execute(correction_reference: str, request: Request):
+    session = require_admin_session(request)
+    conn = dic.get_db()
+    try:
+        correction = dic.execute_correction(
+            conn,
+            correction_reference,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        history = dic.correction_history(conn, correction_reference)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_correction_detail(correction, history, admin_session=session))
 
 
 @router.get("/admin/document-intake", response_class=HTMLResponse)

@@ -415,6 +415,25 @@ Publication Provenance, Administrative Audit, Public Record Index, Public
 Document Library, authentication, footer navigation, or public/private
 visibility rules.
 
+### CDE v12.15 — Governed Intake Correction and Document Reassignment
+
+CDE v12.15 introduces a governed correction path for archived Document Intake
+records whose exact preserved document bytes were assigned to incorrect
+metadata. Authenticated administrators can create an Intake Correction, review
+it, authorise it, and execute it through the controlled lifecycle:
+Draft, Under Review, Reviewed, Authorised, and Completed.
+
+Completion creates a new corrected intake identity from the exact same
+preserved bytes and SHA-256 digest while leaving the archived source intake and
+its history unchanged. The destination intake begins as ordinary Pending Intake
+and must still pass through the existing review, approval, and publication
+workflow. Ordinary duplicate detection remains unchanged, client-supplied actor
+or reference overrides are not accepted, and no record, document lifecycle,
+publication, provenance, evidence, hash, storage, database, Public Document
+Library, Public Record Index, association, collection, footer, or
+public/private visibility behaviour is changed beyond the correction workflow
+and related administrative presentation.
+
 ---
 
 ## What it does
