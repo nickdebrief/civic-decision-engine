@@ -434,6 +434,22 @@ Library, Public Record Index, association, collection, footer, or
 public/private visibility behaviour is changed beyond the correction workflow
 and related administrative presentation.
 
+### CDE v12.16 — Administration Console Navigation and Governance Table Readability
+
+CDE v12.16 refines the authenticated Administration Console as a navigation and
+readability stage. The dashboard now presents Document Intake and Intake
+Corrections as first-class administrative destinations alongside Pending
+Intake, Review Queue, Administrative Audit, Associations, Archive Collections,
+Record Evidence, and the Public Document Library.
+
+Wide authenticated governance tables now use shared responsive wrappers and
+semantic column classes so intake, correction, audit, and collection records
+remain readable on desktop while preserving horizontal scrolling on narrower
+screens. The stage changes presentation only. It does not alter authentication,
+session handling, actor attribution, lifecycle rules, correction execution,
+publication behaviour, evidence, hashing, storage, database schema, public
+routes, or public/private visibility boundaries.
+
 ---
 
 ## What it does
