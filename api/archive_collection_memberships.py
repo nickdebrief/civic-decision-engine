@@ -39,6 +39,15 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
     "inactive": {"active"},
 }
 
+CONTINUITY_STATES: dict[str, str] = {
+    "empty": "Empty",
+    "single_member": "Single Member",
+    "continuous": "Continuous",
+    "gap_present": "Gap Present",
+    "duplicate_position": "Duplicate Position",
+    "invalid_position": "Invalid Position",
+}
+
 
 def ensure_membership_tables(conn: sqlite3.Connection) -> None:
     ac.ensure_collection_tables(conn)
@@ -143,6 +152,32 @@ def _normalize_sequence(value: Any) -> int | None:
     if parsed < 0:
         raise ValueError("membership_display_sequence_invalid")
     return parsed
+
+
+def _normalize_positive_sequence(value: Any) -> int:
+    if value is None or value == "":
+        raise ValueError("collection_membership_sequence_required")
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("collection_membership_sequence_invalid") from exc
+    if parsed <= 0:
+        raise ValueError("collection_membership_sequence_invalid")
+    return parsed
+
+
+def _sequence_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _valid_active_sequence(value: Any) -> bool:
+    parsed = _sequence_int(value)
+    return parsed is not None and parsed > 0
 
 
 def _membership_state(row: sqlite3.Row | dict[str, Any] | None) -> dict[str, Any] | None:
@@ -287,7 +322,7 @@ def list_collection_memberships(
               CASE WHEN display_sequence IS NULL THEN 1 ELSE 0 END ASC,
               display_sequence ASC,
               created_at ASC,
-              id ASC
+              membership_reference ASC
             """,
             (int(collection_id),),
         ).fetchall()
@@ -303,9 +338,140 @@ def list_public_collection_memberships(
 ) -> list[dict[str, Any]]:
     return [
         item
-        for item in list_collection_memberships(conn, collection_id, root=root)
+        for item in collection_sequence(conn, collection_id, root=root, public_only=True)["members"]
         if item.get("publicly_eligible")
     ]
+
+
+def _active_position_conflict(
+    conn: sqlite3.Connection,
+    *,
+    collection_id: int,
+    display_sequence: int,
+    exclude_id: int | None = None,
+) -> dict[str, Any] | None:
+    params: list[Any] = [collection_id, display_sequence]
+    extra = ""
+    if exclude_id is not None:
+        extra = "AND id != ?"
+        params.append(exclude_id)
+    row = conn.execute(
+        f"""
+        SELECT * FROM archive_collection_memberships
+        WHERE collection_id = ? AND display_sequence = ?
+          AND is_active = 1 AND membership_status = 'active' {extra}
+        ORDER BY created_at ASC, membership_reference ASC
+        LIMIT 1
+        """,
+        params,
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _sequence_sort_key(item: dict[str, Any]) -> tuple[int, int, str, str]:
+    sequence = _sequence_int(item.get("display_sequence"))
+    return (
+        1 if sequence is None else 0,
+        sequence if sequence is not None else 999999999,
+        str(item.get("created_at") or ""),
+        str(item.get("membership_reference") or ""),
+    )
+
+
+def _sequence_eligible(item: dict[str, Any], *, public_only: bool = False) -> bool:
+    if int(item.get("is_active") or 0) != 1:
+        return False
+    if item.get("membership_status") != "active":
+        return False
+    if int(item.get("collection_is_active") or 0) != 1:
+        return False
+    if public_only and not item.get("publicly_eligible"):
+        return False
+    return True
+
+
+def collection_sequence(
+    conn: sqlite3.Connection,
+    collection_id: int | str,
+    *,
+    root: Path | None = None,
+    public_only: bool = False,
+) -> dict[str, Any]:
+    members = [
+        item
+        for item in list_collection_memberships(conn, collection_id, root=root)
+        if _sequence_eligible(item, public_only=public_only)
+    ]
+    members = sorted(members, key=_sequence_sort_key)
+    positions = [_sequence_int(item.get("display_sequence")) for item in members]
+    invalid_positions = [
+        item.get("membership_reference")
+        for item, position in zip(members, positions)
+        if position is None or position <= 0
+    ]
+    duplicates: list[int] = []
+    seen: set[int] = set()
+    for position in positions:
+        if position is None or position <= 0:
+            continue
+        if position in seen and position not in duplicates:
+            duplicates.append(position)
+        seen.add(position)
+    valid_positions = [position for position in positions if position is not None and position > 0]
+    missing_positions: list[int] = []
+    if valid_positions:
+        expected = set(range(1, max(valid_positions) + 1))
+        missing_positions = sorted(expected.difference(valid_positions))
+    if not members:
+        state = "empty"
+    elif invalid_positions:
+        state = "invalid_position"
+    elif len(members) == 1:
+        state = "single_member"
+    elif duplicates:
+        state = "duplicate_position"
+    elif valid_positions == list(range(1, len(members) + 1)):
+        state = "continuous"
+    else:
+        state = "gap_present"
+
+    total = len(members)
+    for index, item in enumerate(members):
+        item["sequence_position"] = index + 1
+        item["sequence_total"] = total
+        item["previous_membership_reference"] = members[index - 1]["membership_reference"] if index > 0 else None
+        item["previous_document_id"] = members[index - 1].get("document_id") if index > 0 else None
+        item["previous_document_title"] = members[index - 1].get("document_title") if index > 0 else None
+        item["next_membership_reference"] = members[index + 1]["membership_reference"] if index < total - 1 else None
+        item["next_document_id"] = members[index + 1].get("document_id") if index < total - 1 else None
+        item["next_document_title"] = members[index + 1].get("document_title") if index < total - 1 else None
+
+    return {
+        "state": state,
+        "state_label": CONTINUITY_STATES[state],
+        "active_member_count": total,
+        "first_position": valid_positions[0] if valid_positions else None,
+        "last_position": valid_positions[-1] if valid_positions else None,
+        "missing_positions": missing_positions,
+        "duplicate_positions": duplicates,
+        "invalid_memberships": invalid_positions,
+        "members": members,
+    }
+
+
+def sequence_neighbors(
+    conn: sqlite3.Connection,
+    membership_reference: str,
+    *,
+    root: Path | None = None,
+    public_only: bool = False,
+) -> dict[str, Any]:
+    membership = get_membership_by_reference(conn, membership_reference)
+    sequence = collection_sequence(conn, membership["collection_id"], root=root, public_only=public_only)
+    for item in sequence["members"]:
+        if item.get("membership_reference") == membership["membership_reference"]:
+            return {"membership": item, "sequence": sequence}
+    return {"membership": enrich_membership(conn, membership, root=root), "sequence": sequence}
 
 
 def _active_duplicate_exists(
@@ -400,6 +566,7 @@ def transition_membership(
     actor: str,
     note: str | None = None,
     timestamp: str | None = None,
+    display_sequence: Any = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
     ensure_membership_tables(conn)
@@ -420,13 +587,36 @@ def transition_membership(
     }[(current, status)]
     now = timestamp or ac.utc_now()
     is_active = 0 if status == "inactive" else 1
+    sequence = previous.get("display_sequence")
+    if status == "active":
+        if _active_duplicate_exists(
+            conn,
+            collection_id=int(previous["collection_id"]),
+            document_id=str(previous["document_id"]),
+            exclude_id=int(previous["id"]),
+        ):
+            raise ValueError("membership_duplicate_active")
+        if display_sequence not in (None, ""):
+            sequence = _normalize_positive_sequence(display_sequence)
+        else:
+            sequence = _normalize_positive_sequence(sequence)
+        conflict = _active_position_conflict(
+            conn,
+            collection_id=int(previous["collection_id"]),
+            display_sequence=int(sequence),
+            exclude_id=int(previous["id"]),
+        )
+        if conflict:
+            if current == "inactive":
+                raise ValueError("collection_membership_restore_position_conflict")
+            raise ValueError("collection_membership_sequence_conflict")
     conn.execute(
         """
         UPDATE archive_collection_memberships
-        SET membership_status = ?, is_active = ?, updated_at = ?, updated_by = ?
+        SET membership_status = ?, is_active = ?, display_sequence = ?, updated_at = ?, updated_by = ?
         WHERE id = ?
         """,
-        (status, is_active, now, actor_value, int(previous["id"])),
+        (status, is_active, sequence, now, actor_value, int(previous["id"])),
     )
     updated = get_membership(conn, previous["id"])
     _record_history(
@@ -455,8 +645,18 @@ def update_sequence(
 ) -> dict[str, Any]:
     ensure_membership_tables(conn)
     actor_value = _clean_required(actor, "membership_actor_required")
+    note_value = _clean_required(note, "collection_membership_sequence_note_required")
     previous = get_membership_by_reference(conn, membership_reference)
-    sequence = _normalize_sequence(display_sequence)
+    sequence = _normalize_positive_sequence(display_sequence)
+    if previous.get("membership_status") == "active" and int(previous.get("is_active") or 0) == 1:
+        conflict = _active_position_conflict(
+            conn,
+            collection_id=int(previous["collection_id"]),
+            display_sequence=sequence,
+            exclude_id=int(previous["id"]),
+        )
+        if conflict:
+            raise ValueError("collection_membership_sequence_conflict")
     now = timestamp or ac.utc_now()
     conn.execute(
         """
@@ -475,7 +675,7 @@ def update_sequence(
         timestamp=now,
         previous_state=_membership_state(previous),
         new_state=_membership_state(updated),
-        note=note or "Membership display sequence changed.",
+        note=note_value,
     )
     conn.commit()
     return enrich_membership(conn, updated, root=root)

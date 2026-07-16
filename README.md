@@ -469,6 +469,25 @@ intake, corrections, record-document associations, Publication Provenance,
 Administrative Audit, Public Record Index, Public Document Library behaviour,
 authentication, footer navigation, or public/private visibility boundaries.
 
+### CDE v12.18 — Ordered Sequence and Continuity
+
+CDE v12.18 makes governed collection membership sequence operationally
+inspectable. The existing membership `display_sequence` remains the source of
+truth, with deterministic ordering by sequence, creation timestamp, and
+membership reference. Archive Collection detail pages now show Collection
+Sequence diagnostics, continuity state, active member count, sequence range,
+missing or duplicate positions, and previous/next membership context.
+
+Sequence changes are explicit governed membership actions requiring an
+administrative note and signed-session actor attribution. Active memberships
+must use positive sequence positions and duplicate active positions within a
+collection are rejected. Public collection pages project only public-eligible
+members into safe member numbering and previous/next document navigation,
+without revealing hidden memberships or administrative gaps. The stage does not
+alter document identity, lifecycle, publication, provenance, SHA-256 values,
+record associations, collection identity, membership identity, evidence,
+verification, authentication, or public/private visibility boundaries.
+
 ---
 
 ## What it does
