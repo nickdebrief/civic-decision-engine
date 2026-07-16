@@ -30,6 +30,7 @@ RELATIONSHIP_TYPES: dict[str, str] = {
 }
 
 PUBLIC_REFERENCE_RE = re.compile(r"^CDE-ASSOC-\d{8}-\d{3,}$")
+MULTIPLE_RECORD_REFERENCE_RE = re.compile(r"[,;\r\n]")
 
 ASSOCIATION_ACTION_LABELS = {
     "created": "Created",
@@ -222,6 +223,73 @@ def public_record_context(conn: sqlite3.Connection, reference: str) -> dict[str,
     return record_context(conn, reference)
 
 
+def _record_reference_exists_any_version(conn: sqlite3.Connection, reference: str) -> bool:
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM records WHERE reference = ? LIMIT 1",
+            (str(reference or "").strip(),),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return False
+    return row is not None
+
+
+def normalize_selected_record_reference(value: Any) -> str:
+    reference = str(value or "").strip()
+    if not reference:
+        raise ValueError("association_record_required")
+    if MULTIPLE_RECORD_REFERENCE_RE.search(reference):
+        raise ValueError("association_record_multiple_not_allowed")
+    return reference
+
+
+def list_public_record_options(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    ensure_association_tables(conn)
+    try:
+        rows = conn.execute(
+            """
+            SELECT reference, finding, generated_at, exported_at, trajectory,
+                   system_state, version
+            FROM records
+            WHERE is_latest = 1 AND reference IS NOT NULL AND TRIM(reference) != ''
+            ORDER BY reference ASC
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(row) for row in rows]
+
+
+def _document_reference_matches_published_document(
+    value: str,
+    *,
+    root: Path | None = None,
+) -> bool:
+    reference = str(value or "").strip()
+    if not reference:
+        return False
+    for document in list_published_document_options(root=root):
+        if str(document.get("reference_identifier") or "").strip() == reference:
+            return True
+    return False
+
+
+def validate_public_record_reference(
+    conn: sqlite3.Connection,
+    value: Any,
+    *,
+    root: Path | None = None,
+) -> str:
+    reference = normalize_selected_record_reference(value)
+    if public_record_context(conn, reference) is not None:
+        return reference
+    if _record_reference_exists_any_version(conn, reference):
+        raise ValueError("association_record_not_public")
+    if _document_reference_matches_published_document(reference, root=root):
+        raise ValueError("association_record_reference_is_document")
+    raise ValueError("association_record_not_found")
+
+
 def published_document_context(document_id: str, *, root: Path | None = None) -> dict[str, Any] | None:
     try:
         return load_published_document(document_id, root=root or intake_root())
@@ -338,9 +406,7 @@ def create_association(
     actor_value = str(actor or "").strip()
     if not actor_value:
         raise ValueError("association_actor_required")
-    reference = str(record_reference or "").strip()
-    if not record_exists(conn, reference):
-        raise ValueError("association_record_not_found")
+    reference = validate_public_record_reference(conn, record_reference, root=root)
     document = published_document_context(str(document_id or "").strip(), root=root)
     if document is None:
         raise ValueError("association_document_not_published")
