@@ -104,6 +104,24 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
             admin_session.admin_collections_page(forged)
         self.assertEqual(forged_ctx.exception.status_code, 401)
 
+    def test_admin_archive_collections_banner_reflects_membership_governance(self):
+        content = admin_session.admin_collections_page(self.request).content
+        self.assertNotIn("Document membership is not part of CDE v12.14.", content)
+        self.assertIn(
+            "Govern public archive identities through governed collection memberships.",
+            content,
+        )
+        self.assertIn(
+            "Documents, memberships, and collections each retain their own identity, lifecycle, provenance, and history while remaining independently governed.",
+            content,
+        )
+        self.assertIn('href="/admin/collections/new"', content)
+        collection = self._create()
+        detail = admin_session.admin_collection_detail_page(collection["id"], self.request).content
+        self.assertIn("Collection Members", detail)
+        self.assertIn('href="/admin/collections/', detail)
+        self.assertIn("/members/new", detail)
+
     def test_admin_navigation_and_dashboard_include_archive_collections(self):
         content = admin_session.admin_dashboard_page(self.request).content
         self.assertIn("Archive Collections", content)
