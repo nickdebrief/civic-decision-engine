@@ -45013,6 +45013,26 @@ def _render_collection_members_section(
     return f"""<section class="collection-members"><h2>Collection Members</h2><p class="notice">Collection membership is a governed object. It references a member document without copying it, moving it, changing its lifecycle, or altering its SHA-256 provenance.</p><p><a class="button-link" href="/admin/collections/{int(collection['id'])}/members/new">Add document</a></p><div class="collection-members-wrapper admin-table-scroll" role="region" aria-label="Collection Members table"><table class="collection-members-table admin-data-table"><thead><tr><th scope="col" class="collection-member-sequence col-sequence">Sequence</th><th scope="col" class="collection-member-reference col-reference">Membership reference</th><th scope="col" class="collection-member-title col-title">Document title</th><th scope="col" class="collection-member-document-reference col-reference">Document reference</th><th scope="col" class="collection-member-publication-status col-status">Publication status</th><th scope="col" class="collection-member-status col-status">Membership status</th><th scope="col" class="collection-member-created col-timestamp">Created</th><th scope="col" class="collection-member-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
 
 
+def _render_collection_sequence_section(collection: dict[str, Any], sequence: dict[str, Any]) -> str:
+    missing = ", ".join(str(item) for item in sequence.get("missing_positions") or []) or "—"
+    duplicates = ", ".join(str(item) for item in sequence.get("duplicate_positions") or []) or "—"
+    rows = "".join(
+        f"""<tr>
+          <td class="collection-sequence-position col-sequence">{escape(_membership_sequence(item.get('display_sequence')))}</td>
+          <td class="collection-sequence-reference col-reference">{escape(_membership_display(item.get('membership_reference')))}</td>
+          <td class="collection-sequence-document col-title">{escape(_membership_display(item.get('document_title')))}</td>
+          <td class="collection-sequence-document-reference col-reference">{escape(_membership_display(item.get('document_reference')))}</td>
+          <td class="collection-sequence-membership-status col-status">{escape(_membership_status_label(item.get('membership_status')))}</td>
+          <td class="collection-sequence-document-status col-status">{escape(_membership_display(item.get('document_status_label')))}</td>
+          <td class="collection-sequence-previous col-reference">{escape(_membership_display(item.get('previous_membership_reference') or 'Beginning of collection sequence'))}</td>
+          <td class="collection-sequence-next col-reference">{escape(_membership_display(item.get('next_membership_reference') or 'End of collection sequence'))}</td>
+          <td class="collection-sequence-actions col-actions"><a href="/admin/collections/{int(collection['id'])}/members/{escape(str(item.get('membership_reference') or ''))}">Open membership</a></td>
+        </tr>"""
+        for item in sequence.get("members", [])
+    ) or '<tr><td colspan="9">No active governed memberships are currently in the collection sequence.</td></tr>'
+    return f"""<section class="collection-sequence"><h2>Collection Sequence</h2><p class="notice">Sequence records navigational order between governed memberships. It does not establish causation, chronology, evidential sufficiency, authorship, legal status, or document dependency.</p><section class="collection-summary"><p><strong>Continuity state:</strong> {escape(_membership_display(sequence.get('state_label')))}</p><p><strong>Active governed member count:</strong> {int(sequence.get('active_member_count') or 0)}</p><p><strong>First sequence position:</strong> {escape(_membership_sequence(sequence.get('first_position')))}</p><p><strong>Last sequence position:</strong> {escape(_membership_sequence(sequence.get('last_position')))}</p><p><strong>Missing positions:</strong> {escape(missing)}</p><p><strong>Duplicate positions:</strong> {escape(duplicates)}</p></section><div class="collection-sequence-wrapper admin-table-scroll" role="region" aria-label="Collection Sequence table"><table class="collection-sequence-table admin-data-table"><thead><tr><th scope="col" class="collection-sequence-position col-sequence">Sequence</th><th scope="col" class="collection-sequence-reference col-reference">Membership reference</th><th scope="col" class="collection-sequence-document col-title">Document title</th><th scope="col" class="collection-sequence-document-reference col-reference">Document reference</th><th scope="col" class="collection-sequence-membership-status col-status">Membership status</th><th scope="col" class="collection-sequence-document-status col-status">Document publication status</th><th scope="col" class="collection-sequence-previous col-reference">Previous</th><th scope="col" class="collection-sequence-next col-reference">Next</th><th scope="col" class="collection-sequence-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
+
+
 def _membership_document_options(documents: list[dict[str, Any]], selected: str | None = None) -> str:
     selected_value = str(selected or "")
     return "".join(
@@ -45046,7 +45066,10 @@ def _membership_transition_controls(membership: dict[str, Any]) -> str:
     if not action:
         return "<p>No membership lifecycle actions are available.</p>"
     new_status, label, note_label = action
-    return f"""<form method="post" action="/api/admin/session/collections/{collection_id}/members/{reference}/transition"><input type="hidden" name="new_status" value="{escape(new_status)}"><label>{escape(note_label)}<input name="note" required></label><button type="submit">{escape(label)}</button></form>"""
+    sequence_input = ""
+    if status == "inactive":
+        sequence_input = '<label>Restore sequence position<input name="display_sequence" type="number" min="1" placeholder="Leave blank to reuse prior position"></label>'
+    return f"""<form method="post" action="/api/admin/session/collections/{collection_id}/members/{reference}/transition"><input type="hidden" name="new_status" value="{escape(new_status)}">{sequence_input}<label>{escape(note_label)}<input name="note" required></label><button type="submit">{escape(label)}</button></form>"""
 
 
 def _render_membership_detail(
@@ -45055,7 +45078,11 @@ def _render_membership_detail(
     history: list[dict[str, Any]],
     *,
     admin_session: dict[str, Any] | None = None,
+    sequence_context: dict[str, Any] | None = None,
 ) -> str:
+    sequence_context = sequence_context or {"sequence": {}, "membership": membership}
+    sequence = sequence_context.get("sequence") or {}
+    sequence_membership = sequence_context.get("membership") or membership
     fields = (
         ("Membership reference", membership.get("membership_reference")),
         ("Collection reference", membership.get("collection_reference")),
@@ -45063,6 +45090,11 @@ def _render_membership_detail(
         ("Document reference", membership.get("document_reference")),
         ("Document title", membership.get("document_title")),
         ("Display sequence", _membership_sequence(membership.get("display_sequence"))),
+        ("Current sequence position", _membership_sequence(membership.get("display_sequence"))),
+        ("Position within active sequence", f"{sequence_membership.get('sequence_position')} of {sequence_membership.get('sequence_total')}" if sequence_membership.get("sequence_position") else "Not currently in active sequence"),
+        ("Previous active membership", sequence_membership.get("previous_membership_reference") or "Beginning of collection sequence"),
+        ("Next active membership", sequence_membership.get("next_membership_reference") or "End of collection sequence"),
+        ("Parent continuity state", sequence.get("state_label")),
         ("Lifecycle", _membership_status_label(membership.get("membership_status"))),
         ("Created", f"{membership.get('created_by')} — {membership.get('created_at')}"),
         ("Updated", f"{membership.get('updated_by')} — {membership.get('updated_at')}"),
@@ -45077,7 +45109,7 @@ def _render_membership_detail(
         for item in history
     ) or '<tr><td colspan="6">No membership history is available.</td></tr>'
     reference = escape(str(membership.get("membership_reference") or ""))
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.membership-history-wrapper{{overflow-x:auto}}.membership-history-table{{min-width:1120px;table-layout:auto}}.membership-history-timestamp{{min-width:180px;white-space:nowrap}}.membership-history-action,.membership-history-actor{{min-width:130px}}.membership-history-note{{min-width:220px}}.membership-history-state{{min-width:280px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Collection Membership</h1><p class="notice">Membership is a governed reference to an independently preserved member document. It does not alter document identity, lifecycle, publication, provenance, evidence, verification, or SHA-256.</p><h2>Membership metadata</h2><table class="metadata"><tbody>{rows}</tbody></table><h2>Membership lifecycle</h2>{_membership_transition_controls(membership)}<h2>Display sequence</h2><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members/{reference}/sequence"><label>Display sequence<input name="display_sequence" type="number" min="0" value="{escape(str(membership.get('display_sequence') if membership.get('display_sequence') is not None else ''))}"></label><label>Sequence note<input name="note" required></label><button type="submit">Update display sequence</button></form><h2>Membership history</h2><div class="membership-history-wrapper admin-table-scroll" role="region" aria-label="Collection Membership history table"><table class="membership-history-table admin-data-table"><thead><tr><th scope="col" class="membership-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="membership-history-action col-action">Action</th><th scope="col" class="membership-history-actor col-actor">Actor</th><th scope="col" class="membership-history-note col-note">Note</th><th scope="col" class="membership-history-state col-history-state">Previous state</th><th scope="col" class="membership-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.membership-history-wrapper{{overflow-x:auto}}.membership-history-table{{min-width:1120px;table-layout:auto}}.membership-history-timestamp{{min-width:180px;white-space:nowrap}}.membership-history-action,.membership-history-actor{{min-width:130px}}.membership-history-note{{min-width:220px}}.membership-history-state{{min-width:280px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Collection Membership</h1><p class="notice">Membership is a governed reference to an independently preserved member document. It does not alter document identity, lifecycle, publication, provenance, evidence, verification, or SHA-256.</p><h2>Membership metadata</h2><table class="metadata"><tbody>{rows}</tbody></table><h2>Membership lifecycle</h2>{_membership_transition_controls(membership)}<h2>Change sequence position</h2><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members/{reference}/sequence"><label>New sequence position<input name="display_sequence" type="number" min="1" value="{escape(str(membership.get('display_sequence') if membership.get('display_sequence') is not None else ''))}" required></label><label>Sequence note<input name="note" required></label><button type="submit">Change sequence position</button></form><h2>Sequence Pathway</h2><h3>Membership history</h3><p class="notice">Sequence Pathway is derived from immutable membership history. It remains separate from document Publication Pathway, document provenance, record verification, and record-document association history.</p><div class="membership-history-wrapper admin-table-scroll" role="region" aria-label="Sequence Pathway table"><table class="membership-history-table admin-data-table"><thead><tr><th scope="col" class="membership-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="membership-history-action col-action">Action</th><th scope="col" class="membership-history-actor col-actor">Actor</th><th scope="col" class="membership-history-note col-note">Note</th><th scope="col" class="membership-history-state col-history-state">Previous state</th><th scope="col" class="membership-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
 def _render_collection_detail(
@@ -45086,6 +45118,7 @@ def _render_collection_detail(
     *,
     admin_session: dict[str, Any] | None = None,
     memberships: list[dict[str, Any]] | None = None,
+    sequence: dict[str, Any] | None = None,
 ) -> str:
     public_reference = collection.get("public_reference")
     public_url = f"/collections/{public_reference}" if public_reference else ""
@@ -45124,7 +45157,8 @@ def _render_collection_detail(
         else f"""<form method="post" action="/api/admin/session/collections/{int(collection['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate collection</button></form>"""
     )
     member_section = _render_collection_members_section(collection, memberships or [])
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.collection-public-action,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-members-wrapper,.collection-history-wrapper{{overflow-x:auto}}.collection-members-table{{min-width:1180px;table-layout:auto}}.collection-member-sequence{{min-width:100px;white-space:nowrap}}.collection-member-reference{{min-width:220px;font-family:ui-monospace,monospace}}.collection-member-title{{min-width:240px}}.collection-member-document-reference{{min-width:180px}}.collection-member-publication-status,.collection-member-status{{min-width:150px;white-space:nowrap}}.collection-member-created{{min-width:190px}}.collection-member-actions{{min-width:150px;white-space:nowrap}}.collection-history-table{{min-width:1120px;table-layout:auto}}.collection-history-timestamp{{min-width:180px;white-space:nowrap}}.collection-history-action,.collection-history-actor{{min-width:130px}}.collection-history-note{{min-width:220px}}.collection-history-state{{min-width:280px}}.collection-history-state-details summary{{cursor:pointer;color:#245d61;font-weight:650}}.collection-history-state-details pre{{max-width:420px;max-height:220px;overflow:auto;white-space:pre-wrap;margin:8px 0 0;font:.78rem ui-monospace,monospace;background:#faf9f5;border:1px solid #e1dfd8;padding:8px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>Archive Collection</h1><p class="notice">Collection identity and governed memberships provide archive context without altering independently preserved documents or public records.</p><h2>Collection metadata</h2>{public_action}<p><a class="button-link" href="/admin/collections/{int(collection['id'])}/edit">Edit collection</a></p><table class="metadata"><tbody>{rows}</tbody></table>{member_section}<h2>Activation</h2>{active_controls}<h2>Collection history</h2><div class="collection-history-wrapper admin-table-scroll" role="region" aria-label="Archive Collection history table"><table class="collection-history-table admin-data-table"><thead><tr><th scope="col" class="collection-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="collection-history-action col-action">Action</th><th scope="col" class="collection-history-actor col-actor">Actor</th><th scope="col" class="collection-history-note col-note">Note</th><th scope="col" class="collection-history-state col-history-state">Previous state</th><th scope="col" class="collection-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    sequence_section = _render_collection_sequence_section(collection, sequence or {"members": [], "state_label": "Empty", "active_member_count": 0})
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Collection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.collection-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.collection-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.collection-public-action,.button-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.collection-members-wrapper,.collection-sequence-wrapper,.collection-history-wrapper{{overflow-x:auto}}.collection-members-table{{min-width:1180px;table-layout:auto}}.collection-sequence-table{{min-width:1360px;table-layout:auto}}.collection-member-sequence,.collection-sequence-position{{min-width:100px;white-space:nowrap}}.collection-member-reference,.collection-sequence-reference{{min-width:220px;font-family:ui-monospace,monospace}}.collection-member-title,.collection-sequence-document{{min-width:240px}}.collection-member-document-reference,.collection-sequence-document-reference{{min-width:180px}}.collection-member-publication-status,.collection-member-status,.collection-sequence-membership-status,.collection-sequence-document-status{{min-width:150px;white-space:nowrap}}.collection-member-created{{min-width:190px}}.collection-member-actions,.collection-sequence-actions{{min-width:150px;white-space:nowrap}}.collection-sequence-previous,.collection-sequence-next{{min-width:220px}}.collection-history-table{{min-width:1120px;table-layout:auto}}.collection-history-timestamp{{min-width:180px;white-space:nowrap}}.collection-history-action,.collection-history-actor{{min-width:130px}}.collection-history-note{{min-width:220px}}.collection-history-state{{min-width:280px}}.collection-history-state-details summary{{cursor:pointer;color:#245d61;font-weight:650}}.collection-history-state-details pre{{max-width:420px;max-height:220px;overflow:auto;white-space:pre-wrap;margin:8px 0 0;font:.78rem ui-monospace,monospace;background:#faf9f5;border:1px solid #e1dfd8;padding:8px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections">Back to collections</a></p><h1>Archive Collection</h1><p class="notice">Collection identity and governed memberships provide archive context without altering independently preserved documents or public records.</p><h2>Collection metadata</h2>{public_action}<p><a class="button-link" href="/admin/collections/{int(collection['id'])}/edit">Edit collection</a></p><table class="metadata"><tbody>{rows}</tbody></table>{member_section}{sequence_section}<h2>Activation</h2>{active_controls}<h2>Collection history</h2><div class="collection-history-wrapper admin-table-scroll" role="region" aria-label="Archive Collection history table"><table class="collection-history-table admin-data-table"><thead><tr><th scope="col" class="collection-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="collection-history-action col-action">Action</th><th scope="col" class="collection-history-actor col-actor">Actor</th><th scope="col" class="collection-history-note col-note">Note</th><th scope="col" class="collection-history-state col-history-state">Previous state</th><th scope="col" class="collection-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
 def _correction_display(value: Any) -> str:
@@ -46075,11 +46109,12 @@ def admin_collection_detail_page(collection_id: int, request: Request):
         collection = ac.get_collection(conn, collection_id)
         history = ac.collection_history(conn, collection_id)
         memberships = acm.list_collection_memberships(conn, collection_id, root=intake_root())
+        sequence = acm.collection_sequence(conn, collection_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships))
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships, sequence=sequence))
 
 
 @router.get("/admin/collections/{collection_id}/members/new", response_class=HTMLResponse)
@@ -46112,11 +46147,12 @@ def admin_collection_membership_detail_page(collection_id: int, membership_refer
             raise ValueError("membership_collection_mismatch")
         membership = acm.enrich_membership(conn, membership, root=intake_root())
         history = acm.membership_history(conn, membership["id"])
+        sequence_context = acm.sequence_neighbors(conn, membership_reference, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session))
+    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session, sequence_context=sequence_context))
 
 
 @router.get("/admin/collections/{collection_id}/edit", response_class=HTMLResponse)
@@ -46200,12 +46236,13 @@ def admin_collection_membership_create(
             root=intake_root(),
         )
         history = acm.membership_history(conn, membership["id"])
+        sequence_context = acm.sequence_neighbors(conn, membership["membership_reference"], root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
     return HTMLResponse(
-        content=_render_membership_detail(collection, membership, history, admin_session=session),
+        content=_render_membership_detail(collection, membership, history, admin_session=session, sequence_context=sequence_context),
         status_code=201,
     )
 
@@ -46217,6 +46254,7 @@ def admin_collection_membership_transition(
     request: Request,
     new_status: str = Form(...),
     note: str = Form(...),
+    display_sequence: str | None = Form(None),
 ):
     session = require_admin_session(request)
     conn = ac.get_db()
@@ -46231,14 +46269,16 @@ def admin_collection_membership_transition(
             new_status=new_status,
             actor=_admin_session_actor(session),
             note=note,
+            display_sequence=display_sequence,
             root=intake_root(),
         )
         history = acm.membership_history(conn, membership["id"])
+        sequence_context = acm.sequence_neighbors(conn, membership_reference, root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session))
+    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session, sequence_context=sequence_context))
 
 
 @router.post("/api/admin/session/collections/{collection_id}/members/{membership_reference}/sequence", response_class=HTMLResponse)
@@ -46265,11 +46305,12 @@ def admin_collection_membership_sequence(
             root=intake_root(),
         )
         history = acm.membership_history(conn, membership["id"])
+        sequence_context = acm.sequence_neighbors(conn, membership_reference, root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session))
+    return HTMLResponse(content=_render_membership_detail(collection, membership, history, admin_session=session, sequence_context=sequence_context))
 
 
 @router.post("/api/admin/session/collections/{collection_id}/update", response_class=HTMLResponse)
@@ -46307,11 +46348,12 @@ def admin_collection_update(
         )
         history = ac.collection_history(conn, collection_id)
         memberships = acm.list_collection_memberships(conn, collection_id, root=intake_root())
+        sequence = acm.collection_sequence(conn, collection_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships))
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships, sequence=sequence))
 
 
 @router.post("/api/admin/session/collections/{collection_id}/deactivate", response_class=HTMLResponse)
@@ -46331,11 +46373,12 @@ def admin_collection_deactivate(
         )
         history = ac.collection_history(conn, collection_id)
         memberships = acm.list_collection_memberships(conn, collection_id, root=intake_root())
+        sequence = acm.collection_sequence(conn, collection_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships))
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships, sequence=sequence))
 
 
 @router.post("/api/admin/session/collections/{collection_id}/reactivate", response_class=HTMLResponse)
@@ -46355,11 +46398,12 @@ def admin_collection_reactivate(
         )
         history = ac.collection_history(conn, collection_id)
         memberships = acm.list_collection_memberships(conn, collection_id, root=intake_root())
+        sequence = acm.collection_sequence(conn, collection_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(409, str(exc)) from exc
     finally:
         conn.close()
-    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships))
+    return HTMLResponse(content=_render_collection_detail(collection, history, admin_session=session, memberships=memberships, sequence=sequence))
 
 
 @router.get("/admin/intake-corrections", response_class=HTMLResponse)
