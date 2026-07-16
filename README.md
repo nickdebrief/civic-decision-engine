@@ -450,6 +450,25 @@ session handling, actor attribution, lifecycle rules, correction execution,
 publication behaviour, evidence, hashing, storage, database schema, public
 routes, or public/private visibility boundaries.
 
+### CDE v12.17 — Collection Membership Governance
+
+CDE v12.17 introduces governed Archive Collection Memberships as independent
+objects with immutable `CDE-MEM-YYYYMMDD-NNN` references. Authenticated
+administrators can create, review, approve, activate, remove, restore, and
+sequence memberships that reference existing document-intake records without
+copying documents or changing document identity, lifecycle, publication,
+provenance, SHA-256 values, evidence, verification, or public eligibility.
+
+Archive Collection detail pages now include a Collection Members section and
+membership detail/history views. Public collection pages render only active,
+publicly eligible governed member documents ordered by membership
+`display_sequence`, linking to the existing Public Document Library detail page
+for each document. The collection presents governed memberships, not document
+copies, and the stage does not alter archive collection identity, document
+intake, corrections, record-document associations, Publication Provenance,
+Administrative Audit, Public Record Index, Public Document Library behaviour,
+authentication, footer navigation, or public/private visibility boundaries.
+
 ---
 
 ## What it does

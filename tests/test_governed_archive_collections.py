@@ -271,7 +271,7 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
         self.assertIn(public["public_reference"], content)
         self.assertIn("Public Strike Archive", content)
         self.assertIn("Collection Governance Boundary", content)
-        self.assertIn("No governed document memberships are currently recorded", content)
+        self.assertIn("No active governed member documents are currently publicly visible", content)
         self.assertNotIn("Private collection note", content)
         self.assertNotIn("Signed in as", content)
         self.assertNotIn("previous_state_json", content)
@@ -356,13 +356,14 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
             self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", content)
         self.assertIn("&lt;img src=x onerror=alert(1)&gt;", detail)
 
-    def test_no_document_membership_or_public_mutation_routes_exist(self):
+    def test_empty_collection_membership_state_does_not_mutate_public_documents(self):
         item = self._create(is_public=True)
         content = collection_routes.public_collection_page(item["public_reference"]).content
-        self.assertIn("Collection membership will be introduced through a separate governed stage", content)
+        self.assertIn("Governed Member Documents", content)
+        self.assertIn("No active governed member documents are currently publicly visible", content)
         self.assertNotIn("Add document", content)
         self.assertNotIn("Remove document", content)
-        self.assertFalse(hasattr(admin_session, "admin_collection_membership_create"))
+        self.assertTrue(hasattr(admin_session, "admin_collection_membership_create"))
         conn = self._conn()
         try:
             tables = {
@@ -371,7 +372,13 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
             }
         finally:
             conn.close()
-        self.assertNotIn("archive_collection_memberships", tables)
+        self.assertIn("archive_collection_memberships", tables)
+        conn = self._conn()
+        try:
+            member_count = conn.execute("SELECT COUNT(*) FROM archive_collection_memberships").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(member_count, 0)
 
     def test_public_pages_do_not_render_credentials_storage_or_admin_state(self):
         item = self._create(is_public=True)
