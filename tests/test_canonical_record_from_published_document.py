@@ -135,6 +135,17 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
             content,
         )
 
+    def test_published_document_detail_page_exposes_protected_admin_action(self):
+        content = documents.public_document_page(self.document_id).content
+
+        self.assertIn("Administrative Actions", content)
+        self.assertIn("Create canonical record from this document", content)
+        self.assertIn(
+            f'href="/admin/document-intake/{self.document_id}/canonical-record/new"',
+            content,
+        )
+        self.assertIn("existing authenticated workflow", content)
+
     def test_create_form_prefills_medical_council_complaint_metadata(self):
         content = admin_session.admin_canonical_record_from_document_page(
             self.document_id, self.request
