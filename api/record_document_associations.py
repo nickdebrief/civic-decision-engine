@@ -245,11 +245,41 @@ def normalize_selected_record_reference(value: Any) -> str:
 
 def list_public_record_options(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     ensure_association_tables(conn)
+    preferred_columns = (
+        "reference",
+        "title",
+        "public_title",
+        "record_title",
+        "institution",
+        "institution_type",
+        "institution_source",
+        "trajectory",
+        "finding",
+        "system_state",
+        "conditions_json",
+        "signals_json",
+        "tags",
+        "summary",
+        "public_summary",
+        "report_json",
+        "source_narrative",
+        "generated_at",
+        "exported_at",
+        "version",
+    )
     try:
+        available_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(records)").fetchall()
+        }
+        selected_columns = [
+            column for column in preferred_columns if column in available_columns
+        ]
+        if "reference" not in selected_columns:
+            return []
         rows = conn.execute(
-            """
-            SELECT reference, finding, generated_at, exported_at, trajectory,
-                   system_state, version
+            f"""
+            SELECT {", ".join(selected_columns)}
             FROM records
             WHERE is_latest = 1 AND reference IS NOT NULL AND TRIM(reference) != ''
             ORDER BY reference ASC

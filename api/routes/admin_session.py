@@ -53,6 +53,7 @@ from api import document_intake_corrections as dic
 from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
+    build_document_search_text,
     document_search_index_failures,
     document_media_type,
     document_type_label,
@@ -44687,15 +44688,41 @@ def build_record_selector_label(record: Mapping[str, Any]) -> str:
 def _association_record_search_text(record: Mapping[str, Any]) -> str:
     values = (
         record.get("reference"),
-        record.get("institution_type") or _association_record_institution_label(record.get("reference")),
-        record.get("trajectory"),
-        record.get("system_state"),
-        record.get("finding"),
         record.get("title"),
         record.get("public_title"),
         record.get("record_title"),
+        record.get("institution"),
+        record.get("institution_type") or _association_record_institution_label(record.get("reference")),
+        record.get("institution_source"),
+        record.get("trajectory"),
+        record.get("system_state"),
+        record.get("finding"),
+        record.get("conditions_json"),
+        record.get("signals_json"),
+        record.get("tags"),
+        record.get("summary"),
+        record.get("public_summary"),
+        record.get("report_json"),
+        record.get("source_narrative"),
+        record.get("generated_at"),
+        record.get("exported_at"),
     )
-    return " ".join(str(value or "").strip() for value in values if str(value or "").strip()).casefold()
+    flattened = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        flattened.append(text)
+        if text[:1] in {"[", "{"}:
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                parsed = None
+            if parsed is not None:
+                flattened.append(json.dumps(parsed, sort_keys=True))
+        if "," in text:
+            flattened.extend(part.strip() for part in text.split(",") if part.strip())
+    return " ".join(" ".join(flattened).split()).casefold()
 
 
 def _association_selected_record_contexts(records: list[dict[str, Any]]) -> str:
@@ -44742,6 +44769,20 @@ def _association_record_options(records: list[dict[str, Any]]) -> str:
             f'data-context-index="{index}" '
             f'data-search="{escape(_association_record_search_text(item))}">'
             f"{escape(build_record_selector_label(item))}</option>"
+        )
+    return "".join(options)
+
+
+def _association_document_options(documents: list[dict[str, Any]]) -> str:
+    options = ['<option value="" selected disabled>Select a Published document</option>']
+    for item in documents:
+        options.append(
+            '<option '
+            f'value="{escape(item["intake_id"])}" '
+            f'data-reference="{escape(str(item.get("reference_identifier") or ""))}" '
+            f'data-filename="{escape(str(item.get("original_filename") or ""))}" '
+            f'data-search="{escape(build_document_search_text(item))}">'
+            f'{escape(item["title"])} — {escape(str(item.get("reference_identifier") or "No reference"))} — {escape(document_type_label(item.get("document_type")))}</option>'
         )
     return "".join(options)
 
@@ -44868,14 +44909,16 @@ def _render_association_form_page(
     record_options = _association_record_options(record_items)
     record_contexts = _association_selected_record_contexts(record_items)
     record_count = len(record_items)
-    document_options = "".join(
-        f'<option value="{escape(item["intake_id"])}">{escape(item["title"])} — {escape(str(item.get("reference_identifier") or "No reference"))} — {escape(document_type_label(item.get("document_type")))}</option>'
-        for item in (documents or [])
-    )
+    document_items = documents or []
+    document_options = _association_document_options(document_items)
+    document_count = len(document_items)
     record_control = (
-        f"""<section class="record-selection-control"><label for="record-search">Search public CDE records</label><input id="record-search" type="search" autocomplete="off" placeholder="Search by reference, institution, trajectory, or record text"><div id="record-search-status" class="record-search-status" aria-live="polite">{record_count} eligible records</div><button type="button" id="record-search-clear" class="secondary-button">Clear search</button><label for="record-reference">Public CDE record<select id="record-reference" name="record_reference" required>{record_options}</select><span class="field-help">Search and select the public CDE record that the published document will support. The canonical record reference is preserved as the association value.</span></label><section id="selected-record-context" class="selected-record-context" aria-live="polite"><h2>Selected record</h2><p class="field-help" data-empty-record-context>Select a record to view public record context. This panel is informational only and does not alter form submission.</p>{record_contexts}</section><p id="record-search-empty" class="empty-state" hidden>No eligible public CDE records match this search.</p></section>"""
+        f"""<section class="record-selection-control"><label for="record-search">Search public CDE records</label><input id="record-search" type="search" autocomplete="off" placeholder="Search by reference, title, institution, trajectory, finding, system state, conditions, signals, or tags"><span class="field-help">Search covers public record reference, title where present, institution, trajectory, finding, system state, conditions, signals, tags, and public summary fields.</span><div id="record-search-status" class="record-search-status" aria-live="polite">{record_count} eligible records</div><button type="button" id="record-search-clear" class="secondary-button">Clear search</button><label for="record-reference">Public CDE record<select id="record-reference" name="record_reference" required>{record_options}</select><span class="field-help">Search and select the public CDE record that the published document will support. The canonical record reference is preserved as the association value.</span></label><section id="selected-record-context" class="selected-record-context" aria-live="polite"><h2>Selected record</h2><p class="field-help" data-empty-record-context>Select a record to view public record context. This panel is informational only and does not alter form submission.</p>{record_contexts}</section><p id="record-search-empty" class="empty-state" hidden>No eligible public CDE records match this search.</p></section>"""
         if record_items
         else """<p class="empty-state">No eligible public CDE records are currently available for association.</p>"""
+    )
+    document_control = (
+        f"""<section class="document-selection-control"><label for="document-search">Search Published documents</label><input id="document-search" type="search" autocomplete="off" placeholder="Search by title, description, institution, reference, dates, category, filename, OCR text, body text, or tags"><span class="field-help">Search uses the same combined Published-document metadata and extracted-content fields as the Public Document Library.</span><div id="document-search-status" class="document-search-status" aria-live="polite">{document_count} Published documents</div><button type="button" id="document-search-clear" class="secondary-button">Clear document search</button><label for="document-id">Published document<select id="document-id" name="document_id" required>{document_options}</select></label><p id="document-search-empty" class="empty-state" hidden>No Published documents match this search.</p></section>"""
     )
     submit_button = (
         '<button type="submit">Create association</button>'
@@ -44884,11 +44927,22 @@ def _render_association_form_page(
     )
     search_script = """<script>
 (() => {
+  const tokenAndMatch = (haystack, query) => {
+    const tokens = query.trim().toLocaleLowerCase().split(/\\s+/).filter(Boolean);
+    if (!tokens.length) return true;
+    const normalized = (haystack || "").toLocaleLowerCase();
+    return tokens.every((token) => normalized.includes(token));
+  };
   const search = document.getElementById("record-search");
   const clear = document.getElementById("record-search-clear");
   const select = document.getElementById("record-reference");
   const status = document.getElementById("record-search-status");
   const empty = document.getElementById("record-search-empty");
+  const documentSearch = document.getElementById("document-search");
+  const documentClear = document.getElementById("document-search-clear");
+  const documentSelect = document.getElementById("document-id");
+  const documentStatus = document.getElementById("document-search-status");
+  const documentEmpty = document.getElementById("document-search-empty");
   const emptyContext = document.querySelector("[data-empty-record-context]");
   const contexts = Array.from(document.querySelectorAll("[data-record-context]"));
   if (!search || !select || !status) return;
@@ -44906,12 +44960,12 @@ def _render_association_form_page(
     if (emptyContext) emptyContext.hidden = shown;
   };
   const applyFilter = () => {
-    const term = search.value.trim().toLocaleLowerCase();
+    const term = search.value.trim();
     const selectedValue = select.value;
     let visible = 0;
     options.forEach((option) => {
       const haystack = (option.dataset.search || "").toLocaleLowerCase();
-      const matches = !term || haystack.includes(term);
+      const matches = tokenAndMatch(haystack, term);
       const keepSelected = selectedValue && option.value === selectedValue;
       option.hidden = !(matches || keepSelected);
       if (matches) visible += 1;
@@ -44930,9 +44984,36 @@ def _render_association_form_page(
   }
   updateContext();
   applyFilter();
+  if (documentSearch && documentSelect && documentStatus) {
+    const documentOptions = Array.from(documentSelect.options).filter((option) => option.value);
+    const documentTotal = documentOptions.length;
+    const applyDocumentFilter = () => {
+      const term = documentSearch.value.trim();
+      const selectedValue = documentSelect.value;
+      let visible = 0;
+      documentOptions.forEach((option) => {
+        const matches = tokenAndMatch(option.dataset.search || "", term);
+        const keepSelected = selectedValue && option.value === selectedValue;
+        option.hidden = !(matches || keepSelected);
+        if (matches) visible += 1;
+      });
+      documentStatus.textContent = term ? `${visible} of ${documentTotal} Published documents shown` : `${documentTotal} Published documents`;
+      if (documentEmpty) documentEmpty.hidden = visible !== 0;
+    };
+    documentSearch.addEventListener("input", applyDocumentFilter);
+    documentSelect.addEventListener("change", applyDocumentFilter);
+    if (documentClear) {
+      documentClear.addEventListener("click", () => {
+        documentSearch.value = "";
+        applyDocumentFilter();
+        documentSearch.focus();
+      });
+    }
+    applyDocumentFilter();
+  }
 })();
 </script>"""
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control{{display:grid;gap:10px}}.record-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}<label>Published document<select name="document_id" required>{document_options}</select></label><label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
 
 
 def _render_association_detail(

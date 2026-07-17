@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -8,7 +9,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api.document_intake import store_pending_document, update_intake_status
+from api.document_intake import (
+    build_document_search_text,
+    load_pending_document,
+    store_pending_document,
+    update_intake_status,
+)
 from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
@@ -167,6 +173,16 @@ class SearchableRecordSelectionTests(unittest.TestCase):
                 changed_at=timestamp,
                 root=self.root,
             )
+        metadata = load_pending_document(item["intake_id"], root=self.root)
+        metadata["original_filename"] = "1st_Files_for_complaints@mirl.zip"
+        metadata["ocr_text"] = "OCR-only Medical Council intake transcript."
+        metadata["body_text"] = "Body-only initial complaint evidence marker."
+        metadata["tags"] = ["medical-council-tag", "evidence package"]
+        metadata_path = self.root / item["intake_id"] / "metadata.json"
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         return item["intake_id"]
 
     def _conn(self):
@@ -206,6 +222,7 @@ class SearchableRecordSelectionTests(unittest.TestCase):
         content = self._content()
         self.assertIn('<label for="record-search">Search public CDE records</label>', content)
         self.assertIn('id="record-search" type="search" autocomplete="off"', content)
+        self.assertIn("Search covers public record reference, title where present, institution, trajectory, finding, system state, conditions, signals, tags, and public summary fields.", content)
         self.assertNotIn('name="record-search"', content)
         self.assertIn('id="record-reference" name="record_reference" required', content)
         self.assertIn('<option value="" selected disabled>Select a public CDE record</option>', content)
@@ -217,6 +234,25 @@ class SearchableRecordSelectionTests(unittest.TestCase):
         self.assertLess(content.index('value="Strike-ED-20260510-006"'), content.index('value="Strike-LA-20260606-038"'))
         self.assertNotIn("PRIVATE-LA-20260606-001", content)
         self.assertIn("Published document", content)
+
+    def test_published_document_selector_uses_public_library_search_text(self):
+        content = self._content()
+        metadata = load_pending_document(self.document_id, root=self.root)
+        expected_search_text = build_document_search_text(metadata)
+        option = self._option_html(content, self.document_id)
+        self.assertIn('<label for="document-search">Search Published documents</label>', content)
+        self.assertIn('id="document-search" type="search" autocomplete="off"', content)
+        self.assertIn("Search uses the same combined Published-document metadata and extracted-content fields as the Public Document Library.", content)
+        self.assertIn('id="document-id" name="document_id" required', content)
+        self.assertIn('data-search="' + expected_search_text + '"', option)
+        self.assertIn("medical council", option)
+        self.assertIn("nm-evid-inv-20191202-001", option)
+        self.assertIn("1st_files_for_complaints@mirl.zip", option)
+        self.assertIn("medical-council-tag", option)
+        self.assertIn("ocr-only", option)
+        self.assertIn("body-only", option)
+        self.assertIn("document-search-clear", content)
+        self.assertIn("No Published documents match this search.", content)
 
     def test_label_helper_fallbacks_are_deterministic_and_do_not_leak_internal_values(self):
         self.assertEqual(
@@ -252,11 +288,14 @@ class SearchableRecordSelectionTests(unittest.TestCase):
         self.assertIn('data-institution="LA"', option)
         self.assertIn('data-trajectory="Stable"', option)
         self.assertIn('data-search="strike-la-20260606-038 la stable', option)
+        self.assertIn("stable public record system state", option)
         self.assertNotIn("Private administrative notes", option)
         self.assertNotIn("NM-EVID-INV-20191202-001", option)
         self.assertIn("toLocaleLowerCase", content)
+        self.assertIn("tokens.every", content)
         self.assertIn("record-search-clear", content)
         self.assertIn("No eligible public CDE records match this search.", content)
+        self.assertIn("document-search-clear", content)
         self.assertIn('aria-live="polite"', content)
         self.assertIn("keepSelected", content)
         self.assertNotRegex(content, r"option\.value\s*=[^=]")
