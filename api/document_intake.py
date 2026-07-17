@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -53,6 +54,10 @@ VALID_STATUS_TRANSITIONS = {
     "archived": set(),
 }
 _SAFE_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+_WHITESPACE_RE = re.compile(r"\s+")
+_SEARCH_SPLIT_RE = re.compile(r"\s+")
+
+LOGGER = logging.getLogger(__name__)
 
 
 def intake_root() -> Path:
@@ -368,6 +373,133 @@ def _write_metadata(
         temporary_path.unlink(missing_ok=True)
 
 
+def _flatten_search_value(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        values = [stripped]
+        if stripped[:1] in {"[", "{"}:
+            try:
+                parsed = json.loads(stripped)
+            except (TypeError, json.JSONDecodeError):
+                parsed = None
+            if parsed is not None:
+                values.extend(_flatten_search_value(parsed))
+        if "," in stripped:
+            values.extend(part.strip() for part in stripped.split(",") if part.strip())
+        return values
+    if isinstance(value, dict):
+        values: list[str] = []
+        for key, nested in value.items():
+            values.extend(_flatten_search_value(key))
+            values.extend(_flatten_search_value(nested))
+        return values
+    if isinstance(value, (list, tuple, set)):
+        values = []
+        for nested in value:
+            values.extend(_flatten_search_value(nested))
+        return values
+    return [str(value).strip()] if str(value).strip() else []
+
+
+def build_document_search_text(document: dict[str, Any]) -> str:
+    """Return stable derived search text without mutating document metadata."""
+    field_values: list[Any] = [
+        document.get("title"),
+        document.get("description"),
+        document.get("institution_source"),
+        document.get("institution"),
+        document.get("reference_identifier"),
+        document.get("document_date"),
+        document.get("publication_date"),
+        document.get("category"),
+        document.get("original_filename"),
+        document.get("filename"),
+        document.get("ocr_text"),
+        document.get("body_text"),
+        document.get("tags"),
+    ]
+    flattened: list[str] = []
+    seen: set[str] = set()
+    for value in field_values:
+        for text in _flatten_search_value(value):
+            normalized = _WHITESPACE_RE.sub(" ", text).strip()
+            if not normalized:
+                continue
+            key = normalized.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            flattened.append(normalized)
+    return " ".join(flattened).casefold()
+
+
+def document_search_tokens(query: str | None) -> list[str]:
+    return [
+        token.casefold()
+        for token in _SEARCH_SPLIT_RE.split(str(query or "").strip())
+        if token.strip()
+    ]
+
+
+def document_matches_search(document: dict[str, Any], query: str | None) -> bool:
+    tokens = document_search_tokens(query)
+    if not tokens:
+        return True
+    searchable = build_document_search_text(document)
+    return all(token in searchable for token in tokens)
+
+
+def document_search_index_failures(*, root: Path | None = None) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for item in list_intake_documents(root=root):
+        if item.get("status") != "published":
+            continue
+        try:
+            build_document_search_text(item)
+        except Exception as exc:  # pragma: no cover - defensive reporting path.
+            LOGGER.exception(
+                "Failed to derive public document search text for %s",
+                item.get("intake_id"),
+            )
+            failures.append(
+                {
+                    "intake_id": item.get("intake_id"),
+                    "title": item.get("title"),
+                    "error": exc.__class__.__name__,
+                }
+            )
+    return failures
+
+
+def reindex_published_document_search(*, root: Path | None = None) -> dict[str, Any]:
+    indexed = 0
+    failures = []
+    for item in list_intake_documents(root=root):
+        if item.get("status") != "published":
+            continue
+        try:
+            build_document_search_text(item)
+        except Exception as exc:  # pragma: no cover - defensive reporting path.
+            LOGGER.exception(
+                "Failed to derive public document search text for %s",
+                item.get("intake_id"),
+            )
+            failures.append(
+                {
+                    "intake_id": item.get("intake_id"),
+                    "title": item.get("title"),
+                    "error": exc.__class__.__name__,
+                }
+            )
+        else:
+            indexed += 1
+    return {"indexed": indexed, "failures": failures}
+
+
 def list_published_documents(
     *,
     query: str | None = None,
@@ -383,17 +515,20 @@ def list_published_documents(
         normalized_item = dict(item)
         normalized_item["publication_date"] = _publication_date(item)
         documents.append(normalized_item)
-    normalized_query = str(query or "").strip().casefold()
     normalized_institution = str(institution or "").strip().casefold()
     normalized_category = str(category or "").strip().casefold()
     normalized_year = str(publication_year or "").strip()
 
     def matches(item: dict[str, Any]) -> bool:
-        searchable = " ".join(
-            str(item.get(key) or "")
-            for key in ("title", "institution_source", "category", "reference_identifier")
-        ).casefold()
-        if normalized_query and normalized_query not in searchable:
+        try:
+            query_matches = document_matches_search(item, query)
+        except Exception:
+            LOGGER.exception(
+                "Failed to derive public document search text for %s",
+                item.get("intake_id"),
+            )
+            query_matches = False
+        if not query_matches:
             return False
         if normalized_institution and str(item.get("institution_source") or "").casefold() != normalized_institution:
             return False

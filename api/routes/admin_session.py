@@ -53,6 +53,7 @@ from api import document_intake_corrections as dic
 from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
+    document_search_index_failures,
     document_media_type,
     document_type_label,
     intake_root,
@@ -45719,6 +45720,17 @@ def _render_document_intake_page(
     *,
     admin_session: dict[str, Any] | None = None,
 ) -> str:
+    search_failures = document_search_index_failures(root=intake_root())
+    search_failure_notice = ""
+    if search_failures:
+        failure_items = "".join(
+            f"<li>{escape(str(item.get('title') or item.get('intake_id') or 'Unknown document'))} ({escape(str(item.get('error') or 'search indexing error'))})</li>"
+            for item in search_failures
+        )
+        search_failure_notice = (
+            '<section class="notice" role="alert"><strong>Public document search indexing needs attention.</strong>'
+            f"<ul>{failure_items}</ul></section>"
+        )
     rows = "".join(
         f"""
         <tr>
@@ -45773,6 +45785,7 @@ def _render_document_intake_page(
     {_render_admin_console_navigation(admin_session=admin_session)}
     <h1>Admin Document Intake</h1>
     <p class="notice">Documents uploaded here remain private and pending until a later approval stage. <strong>This upload has not created or modified any public record.</strong></p>
+    {search_failure_notice}
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">

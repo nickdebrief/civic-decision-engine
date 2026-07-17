@@ -1,11 +1,18 @@
 import hashlib
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api.document_intake import load_pending_document, store_pending_document, update_intake_status
+from api.document_intake import (
+    build_document_search_text,
+    load_pending_document,
+    reindex_published_document_search,
+    store_pending_document,
+    update_intake_status,
+)
 from tests.test_admin_session import FakeFileResponse, FakeHTTPException, FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
@@ -161,12 +168,65 @@ class PublicDocumentLibraryTests(unittest.TestCase):
 
     def _write_metadata(self, document_id, metadata):
         metadata_path = self.root / document_id / "metadata.json"
-        import json
 
         metadata_path.write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+
+    def _store_expanded_search_fixture(self, *, publish=True):
+        data = (
+            b"%PDF-1.7\nexpanded-search-fixture-published\n%%EOF\n"
+            if publish
+            else b"%PDF-1.7\nexpanded-search-fixture-private\n%%EOF\n"
+        )
+        item = store_pending_document(
+            data=data,
+            original_filename="evidence_package.pdf",
+            content_type="application/pdf",
+            title="Initial Complaint Evidence Package",
+            institution_source="Nick Moloney",
+            document_date="2019-12-02",
+            category="Complaint Evidence",
+            description="Council correspondence and supporting documents for the intake package.",
+            visibility="private",
+            notes="Private administrative notes.",
+            reference_identifier="NM-EVID-PKG-20191202-001",
+            uploaded_at="2026-07-15T09:00:00Z",
+            root=self.root,
+        )
+        if publish:
+            update_intake_status(
+                item["intake_id"],
+                "under_review",
+                actor="nick",
+                note="Review started.",
+                changed_at="2026-07-16T10:00:00Z",
+                root=self.root,
+            )
+            update_intake_status(
+                item["intake_id"],
+                "approved",
+                actor="nick",
+                note="Approved.",
+                changed_at="2026-07-16T11:00:00Z",
+                root=self.root,
+            )
+            update_intake_status(
+                item["intake_id"],
+                "published",
+                actor="nick",
+                note="Published.",
+                changed_at="2026-07-16T12:00:00Z",
+                root=self.root,
+            )
+        metadata = load_pending_document(item["intake_id"], root=self.root)
+        metadata["original_filename"] = "1st_Files_for_complaints@mirl.zip"
+        metadata["ocr_text"] = "OCR-only memorandum transcript."
+        metadata["body_text"] = "Body-only procedural bundle marker."
+        metadata["tags"] = ["medical", "council-tag", "evidence-package-tag"]
+        self._write_metadata(item["intake_id"], metadata)
+        return item["intake_id"]
 
     def test_library_contains_only_published_documents(self):
         response = documents.public_document_library(
@@ -203,6 +263,79 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             q="no match", institution=None, category=None, publication_year=None
         )
         self.assertIn("No published documents match", self.content(response))
+
+    def test_search_matches_expanded_public_document_fields(self):
+        self._store_expanded_search_fixture()
+        for query in (
+            "Medical Council",
+            "Initial Complaint",
+            "Nick Moloney",
+            "Evidence Package",
+            "NM-EVID-PKG-20191202-001",
+            "2019-12-02",
+            "2026-07-16",
+            "1st_Files_for_complaints@mirl.zip",
+            "correspondence",
+            "council-tag",
+            "OCR-only",
+            "Body-only",
+            "initial correspondence",
+            "medical",
+            "nm-evid-pkg",
+            "20191202",
+        ):
+            with self.subTest(query=query):
+                response = documents.public_document_library(
+                    q=query,
+                    institution=None,
+                    category=None,
+                    publication_year=None,
+                )
+                content = self.content(response)
+                self.assertIn("Initial Complaint Evidence Package", content)
+                self.assertIn("NM-EVID-PKG-20191202-001", content)
+
+    def test_search_handles_empty_null_and_serialized_tag_values(self):
+        document_id = self._store_expanded_search_fixture()
+        metadata = load_pending_document(document_id, root=self.root)
+        metadata["ocr_text"] = None
+        metadata["body_text"] = ""
+        metadata["tags"] = json.dumps(["serialized-tag-only", "Council Archive"])
+        self._write_metadata(document_id, metadata)
+
+        search_text = build_document_search_text(metadata)
+        self.assertIn("serialized-tag-only", search_text)
+        self.assertIn("council archive", search_text)
+        response = documents.public_document_library(
+            q="serialized-tag-only",
+            institution=None,
+            category=None,
+            publication_year=None,
+        )
+        self.assertIn("Initial Complaint Evidence Package", self.content(response))
+
+    def test_search_excludes_unpublished_documents_with_matching_metadata(self):
+        self._store_expanded_search_fixture(publish=False)
+        response = documents.public_document_library(
+            q="NM-EVID-PKG-20191202-001",
+            institution=None,
+            category=None,
+            publication_year=None,
+        )
+        self.assertNotIn("Initial Complaint Evidence Package", self.content(response))
+
+    def test_existing_published_documents_are_searchable_after_reindex_backfill(self):
+        self._store_expanded_search_fixture()
+        result = reindex_published_document_search(root=self.root)
+        self.assertGreaterEqual(result["indexed"], 1)
+        self.assertEqual([], result["failures"])
+        response = documents.public_document_library(
+            q="1st_Files_for_complaints@mirl.zip",
+            institution=None,
+            category=None,
+            publication_year=None,
+        )
+        self.assertIn("Initial Complaint Evidence Package", self.content(response))
 
     def test_institution_category_and_publication_year_filters(self):
         matching = documents.public_document_library(
