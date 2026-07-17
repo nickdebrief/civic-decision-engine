@@ -488,6 +488,25 @@ alter document identity, lifecycle, publication, provenance, SHA-256 values,
 record associations, collection identity, membership identity, evidence,
 verification, authentication, or public/private visibility boundaries.
 
+### CDE v12.19 — Governed Record Selection for Record–Document Associations
+
+CDE v12.19 replaces free-text record entry in the authenticated
+Record–Document Association creation workflow with a governed selector
+populated from existing public CDE records. The form now distinguishes the
+Public CDE record, Published document, and Association reference, submitting
+only the exact canonical stored record reference while keeping readable labels
+as presentation text.
+
+Server-side validation remains authoritative. Crafted submissions must contain
+exactly one public record reference, reject multiple-reference syntax, reject
+display labels or prefixes, and reject document references submitted as record
+references. The stage preserves existing association semantics, actor
+attribution, relationship types, duplicate-association behaviour, public/private
+visibility rules, record verification hashes, document SHA-256 values,
+document lifecycle, evidence handling, archive collections, collection
+membership sequence, Public Record Index behaviour, and Public Document Library
+behaviour.
+
 ---
 
 ## What it does

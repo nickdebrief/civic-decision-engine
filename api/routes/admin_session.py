@@ -44646,6 +44646,25 @@ def _association_options(selected: str | None = None) -> str:
     )
 
 
+def _association_record_label(record: dict[str, Any]) -> str:
+    reference = _association_display(record.get("reference"))
+    summary = (
+        str(record.get("finding") or "").strip()
+        or str(record.get("system_state") or "").strip()
+        or f"Record {reference}"
+    )
+    trajectory = str(record.get("trajectory") or "").strip()
+    suffix = f" — {trajectory}" if trajectory else ""
+    return f"{reference} — {summary}{suffix}"
+
+
+def _association_record_options(records: list[dict[str, Any]]) -> str:
+    return "".join(
+        f'<option value="{escape(str(item.get("reference") or ""))}">{escape(_association_record_label(item))}</option>'
+        for item in records
+    )
+
+
 def _association_query_string(filters: dict[str, Any], *, page: int | None = None, page_size: int | None = None) -> str:
     from urllib.parse import urlencode
     pairs = []
@@ -44762,12 +44781,24 @@ def _render_association_form_page(
     *,
     admin_session: dict[str, Any] | None = None,
     documents: list[dict[str, Any]] | None = None,
+    records: list[dict[str, Any]] | None = None,
 ) -> str:
+    record_options = _association_record_options(records or [])
     document_options = "".join(
         f'<option value="{escape(item["intake_id"])}">{escape(item["title"])} — {escape(str(item.get("reference_identifier") or "No reference"))} — {escape(document_type_label(item.get("document_type")))}</option>'
         for item in (documents or [])
     )
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between an existing public CDE record and an existing Published document. This does not add evidence to the record, alter the document lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations"><label>Record reference<input name="record_reference" required></label><label>Published document<select name="document_id" required>{document_options}</select></label><label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label><button type="submit">Create association</button></form></main></body></html>"""
+    record_control = (
+        f"""<label>Public CDE record<select name="record_reference" required>{record_options}</select><span class="field-help">Select the public CDE record that the published document will support. The association does not change either object.</span></label>"""
+        if record_options
+        else """<p class="empty-state">No eligible public CDE records are currently available for association.</p>"""
+    )
+    submit_button = (
+        '<button type="submit">Create association</button>'
+        if record_options
+        else '<button type="submit" disabled aria-disabled="true">Create association</button>'
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}<label>Published document<select name="document_id" required>{document_options}</select></label><label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form></main></body></html>"""
 
 
 def _render_association_detail(
@@ -45891,10 +45922,16 @@ def admin_associations_page(
 @router.get("/admin/associations/new", response_class=HTMLResponse)
 def admin_association_new_page(request: Request):
     session = require_admin_session(request)
+    conn = get_db()
+    try:
+        record_options = rda.list_public_record_options(conn)
+    finally:
+        conn.close()
     return HTMLResponse(
         content=_render_association_form_page(
             admin_session=session,
             documents=rda.list_published_document_options(root=intake_root()),
+            records=record_options,
         )
     )
 
@@ -45955,6 +45992,14 @@ def admin_association_create(
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if detail in {"association_record_not_found", "association_document_not_published"} else 409
+        if detail in {
+            "association_record_required",
+            "association_record_invalid",
+            "association_record_not_public",
+            "association_record_multiple_not_allowed",
+            "association_record_reference_is_document",
+        }:
+            status_code = 400
         raise _http_error(status_code, detail) from exc
     finally:
         conn.close()
