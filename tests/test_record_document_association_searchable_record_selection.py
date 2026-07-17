@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import os
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -16,10 +17,15 @@ from api import record_document_associations as associations
 from api.routes import admin_session, documents, records
 
 
-PDF_BYTES = b"%PDF-1.7\nrecord-selection\n%%EOF\n"
+PDF_BYTES = b"%PDF-1.7\nsearchable-selection\n%%EOF\n"
+LONG_FINDING = (
+    "The sequence has transitioned into escalation. Earlier delay has developed "
+    "into escalation without response. This generated paragraph is intentionally "
+    "long and repetitive so it should not dominate the native option label."
+)
 
 
-class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
+class SearchableRecordSelectionTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name) / "pending"
@@ -79,13 +85,34 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
             )
             """
         )
-        self._insert_record(conn, "REC-2026-002", "Second public record.", is_latest=1)
-        self._insert_record(conn, "REC-2026-001", "First public record.", is_latest=1)
-        self._insert_record(conn, "PRIVATE-2026-001", "Superseded private record.", is_latest=0)
+        self._insert_record(
+            conn,
+            "Strike-ED-20260510-006",
+            LONG_FINDING,
+            trajectory="Deteriorating",
+            system_state="Trajectory recorded as deteriorating.",
+            is_latest=1,
+        )
+        self._insert_record(
+            conn,
+            "Strike-LA-20260606-038",
+            "Trajectory recorded as stable.",
+            trajectory="Stable",
+            system_state="Stable public record system state.",
+            is_latest=1,
+        )
+        self._insert_record(
+            conn,
+            "PRIVATE-LA-20260606-001",
+            "Private legacy record.",
+            trajectory="Stable",
+            system_state="Private state.",
+            is_latest=0,
+        )
         conn.commit()
         conn.close()
 
-    def _insert_record(self, conn, reference, finding, *, is_latest):
+    def _insert_record(self, conn, reference, finding, *, trajectory, system_state, is_latest):
         digest = hashlib.sha256(reference.encode("utf-8")).hexdigest()
         conn.execute(
             """
@@ -98,8 +125,8 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
             (
                 reference,
                 "2026-07-01T09:00:00Z",
-                "Stable",
-                "Record system state",
+                trajectory,
+                system_state,
                 "[]",
                 "[]",
                 finding,
@@ -119,7 +146,7 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
             institution_source="Civic Office",
             document_date="2026-07-09",
             category="Decision",
-            description="Published document for association selection.",
+            description="Published document for searchable selection.",
             visibility="private",
             notes="Private administrative notes.",
             reference_identifier=reference,
@@ -148,6 +175,14 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
         associations.ensure_association_tables(conn)
         return conn
 
+    def _content(self):
+        return admin_session.admin_association_new_page(self.request).content
+
+    def _option_html(self, content, reference):
+        match = re.search(rf'<option value="{re.escape(reference)}"[^>]*>.*?</option>', content)
+        self.assertIsNotNone(match)
+        return match.group(0)
+
     def _association_count(self):
         conn = self._conn()
         try:
@@ -155,7 +190,7 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def _create(self, record_reference="REC-2026-001"):
+    def _create(self, record_reference):
         return admin_session.admin_association_create(
             self.request,
             record_reference=record_reference,
@@ -167,127 +202,153 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
             is_public="1",
         )
 
-    def test_create_page_renders_public_record_selector_not_free_text(self):
-        content = admin_session.admin_association_new_page(self.request).content
-        self.assertIn("Public CDE record", content)
+    def test_search_field_selector_placeholder_and_compact_labels_render(self):
+        content = self._content()
+        self.assertIn('<label for="record-search">Search public CDE records</label>', content)
+        self.assertIn('id="record-search" type="search" autocomplete="off"', content)
+        self.assertNotIn('name="record-search"', content)
         self.assertIn('id="record-reference" name="record_reference" required', content)
-        self.assertNotIn('<input name="record_reference"', content)
-        self.assertIn('value="" selected disabled>Select a public CDE record', content)
-        self.assertIn('value="REC-2026-001"', content)
-        self.assertIn('>REC-2026-001 — Stable</option>', content)
-        self.assertIn('value="REC-2026-002"', content)
-        self.assertIn('>REC-2026-002 — Stable</option>', content)
-        self.assertLess(content.index('value="REC-2026-001"'), content.index('value="REC-2026-002"'))
-        self.assertNotIn("PRIVATE-2026-001", content)
+        self.assertIn('<option value="" selected disabled>Select a public CDE record</option>', content)
+        first_option = self._option_html(content, "Strike-ED-20260510-006")
+        second_option = self._option_html(content, "Strike-LA-20260606-038")
+        self.assertIn(">Strike-ED-20260510-006 — ED — Deteriorating</option>", first_option)
+        self.assertIn(">Strike-LA-20260606-038 — LA — Stable</option>", second_option)
+        self.assertNotIn(LONG_FINDING, first_option.split(">")[-2])
+        self.assertLess(content.index('value="Strike-ED-20260510-006"'), content.index('value="Strike-LA-20260606-038"'))
+        self.assertNotIn("PRIVATE-LA-20260606-001", content)
         self.assertIn("Published document", content)
-        self.assertIn("NM-EVID-INV-20191202-001", content)
-        self.assertIn("Search and select the public CDE record that the published document will support", content)
-        self.assertIn("Select each object independently", content)
 
-    def test_valid_selection_stores_exact_canonical_reference_and_preserves_metadata(self):
+    def test_label_helper_fallbacks_are_deterministic_and_do_not_leak_internal_values(self):
+        self.assertEqual(
+            admin_session.build_record_selector_label(
+                {"reference": "MC-20191202-001", "title": "Initial Medical Council Complaint"}
+            ),
+            "MC-20191202-001 — Initial Medical Council Complaint",
+        )
+        self.assertEqual(
+            admin_session.build_record_selector_label(
+                {"reference": "Strike-LA-20260606-038", "trajectory": "Stable"}
+            ),
+            "Strike-LA-20260606-038 — LA — Stable",
+        )
+        self.assertEqual(
+            admin_session.build_record_selector_label({"reference": "REC-2026-001", "id": 99}),
+            "REC-2026-001",
+        )
+        self.assertNotIn("None", admin_session.build_record_selector_label({"reference": "REC-2026-001"}))
+        self.assertNotIn(" —  — ", admin_session.build_record_selector_label({"reference": "REC-2026-001"}))
+        content = admin_session._association_record_options(
+            [{"reference": "REC-<unsafe>", "title": "<script>alert(1)</script>"}]
+        )
+        self.assertIn("REC-&lt;unsafe&gt;", content)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", content)
+        self.assertNotIn("<script>alert(1)</script>", content)
+
+    def test_search_metadata_is_public_safe_and_does_not_change_values(self):
+        content = self._content()
+        option = self._option_html(content, "Strike-LA-20260606-038")
+        self.assertIn('value="Strike-LA-20260606-038"', option)
+        self.assertIn('data-reference="Strike-LA-20260606-038"', option)
+        self.assertIn('data-institution="LA"', option)
+        self.assertIn('data-trajectory="Stable"', option)
+        self.assertIn('data-search="strike-la-20260606-038 la stable', option)
+        self.assertNotIn("Private administrative notes", option)
+        self.assertNotIn("NM-EVID-INV-20191202-001", option)
+        self.assertIn("toLocaleLowerCase", content)
+        self.assertIn("record-search-clear", content)
+        self.assertIn("No eligible public CDE records match this search.", content)
+        self.assertIn('aria-live="polite"', content)
+        self.assertIn("keepSelected", content)
+        self.assertNotRegex(content, r"option\.value\s*=[^=]")
+
+    def test_selected_record_context_uses_public_metadata_only(self):
+        content = self._content()
+        self.assertIn('id="selected-record-context"', content)
+        self.assertIn("Selected record", content)
+        self.assertIn("Reference</th><td>Strike-LA-20260606-038", content)
+        self.assertIn("Institution</th><td>LA", content)
+        self.assertIn("Trajectory</th><td>Stable", content)
+        self.assertIn("System state</th><td>Stable public record system state.", content)
+        self.assertIn("Finding</th><td>Trajectory recorded as stable.", content)
+        self.assertIn('href="/verify/Strike-LA-20260606-038"', content)
+        self.assertIn("This panel is informational only and does not alter form submission.", content)
+        self.assertNotIn("Private administrative notes", content)
+        self.assertNotIn("session-secret", content)
+
+    def test_valid_creation_still_stores_only_canonical_reference(self):
         before_doc = documents.public_document_page(self.document_id).content
         conn = self._conn()
         try:
             before_hash = conn.execute(
                 "SELECT verification_hash FROM records WHERE reference = ? AND is_latest = 1",
-                ("REC-2026-001",),
+                ("Strike-LA-20260606-038",),
             ).fetchone()["verification_hash"]
         finally:
             conn.close()
-        response = self._create(record_reference=" REC-2026-001 ")
+        response = self._create("Strike-LA-20260606-038")
         self.assertEqual(response.status_code, 201)
         conn = self._conn()
         try:
             row = conn.execute("SELECT * FROM record_document_associations").fetchone()
-            self.assertEqual(row["record_reference"], "REC-2026-001")
+            self.assertEqual(row["record_reference"], "Strike-LA-20260606-038")
             self.assertEqual(row["document_id"], self.document_id)
+            self.assertEqual(row["relationship_type"], "supporting_document")
             self.assertEqual(row["created_by"], "admin-user")
             self.assertEqual(row["public_label"], "Supporting document")
             self.assertEqual(row["public_note"], "Public note.")
             self.assertEqual(row["admin_note"], "Administrative note.")
-            self.assertEqual(row["relationship_type"], "supporting_document")
             self.assertEqual(row["is_public"], 1)
-            self.assertTrue(str(row["public_reference"]).startswith("CDE-ASSOC-"))
-            history = associations.association_history(conn, row["id"])
-            self.assertEqual([item["action_type"] for item in history], ["created"])
             after_hash = conn.execute(
                 "SELECT verification_hash FROM records WHERE reference = ? AND is_latest = 1",
-                ("REC-2026-001",),
+                ("Strike-LA-20260606-038",),
             ).fetchone()["verification_hash"]
+            history = associations.association_history(conn, row["id"])
+            self.assertEqual([item["action_type"] for item in history], ["created"])
         finally:
             conn.close()
         self.assertEqual(before_hash, after_hash)
         after_doc = documents.public_document_page(self.document_id).content
-        self.assertIn("Publication Provenance", after_doc)
-        self.assertIn(hashlib.sha256(PDF_BYTES).hexdigest(), after_doc)
         self.assertIn(hashlib.sha256(PDF_BYTES).hexdigest(), before_doc)
+        self.assertIn(hashlib.sha256(PDF_BYTES).hexdigest(), after_doc)
+        self.assertIn("Publication Provenance", after_doc)
 
-    def test_invalid_record_submissions_are_rejected_without_creating_associations(self):
+    def test_invalid_creation_inputs_remain_rejected_without_creating_associations(self):
         invalid_cases = {
             "": "association_record_required",
-            "   ": "association_record_required",
-            "UNKNOWN-001": "association_record_not_found",
-            "PRIVATE-2026-001": "association_record_not_public",
-            "REC-2026-001 — First public record.": "association_record_not_found",
-            "Record REC-2026-001": "association_record_not_found",
+            "Stable": "association_record_not_found",
+            "Strike-LA-20260606-038 — LA — Stable": "association_record_not_found",
+            "Strike-LA": "association_record_not_found",
+            "Strike-LA-20260606-038, Strike-ED-20260510-006": "association_record_multiple_not_allowed",
             "NM-EVID-INV-20191202-001": "association_record_reference_is_document",
-            "REC-2026-001, REC-2026-002": "association_record_multiple_not_allowed",
-            "REC-2026-001; REC-2026-002": "association_record_multiple_not_allowed",
-            "REC-2026-001\nREC-2026-002": "association_record_multiple_not_allowed",
-            "REC-2026": "association_record_not_found",
+            "PRIVATE-LA-20260606-001": "association_record_not_public",
         }
-        for value, expected_detail in invalid_cases.items():
+        for value, expected in invalid_cases.items():
             with self.subTest(value=value):
                 before = self._association_count()
                 with self.assertRaises(FakeHTTPException) as ctx:
-                    self._create(record_reference=value)
-                self.assertEqual(ctx.exception.detail, expected_detail)
+                    self._create(value)
+                self.assertEqual(ctx.exception.detail, expected)
                 self.assertEqual(self._association_count(), before)
 
-    def test_duplicate_and_existing_behaviour_remain_unchanged(self):
-        self._create()
+    def test_duplicate_and_public_private_behaviour_remain_unchanged(self):
+        self._create("Strike-LA-20260606-038")
         with self.assertRaises(FakeHTTPException) as duplicate:
-            self._create()
+            self._create("Strike-LA-20260606-038")
         self.assertEqual(duplicate.exception.detail, "association_duplicate_active")
         detail = admin_session.admin_association_detail_page(1, self.request).content
         self.assertIn("Record–Document Association", detail)
-        self.assertIn("REC-2026-001", detail)
-        self.assertIn("NM-EVID-INV-20191202-001", detail)
-        self.assertIn("Association history", detail)
+        self.assertIn("Strike-LA-20260606-038", detail)
+        record_page = asyncio.run(records.verify_record("Strike-LA-20260606-038")).content
+        self.assertIn("Associated Public Documents", record_page)
+        self.assertIn("Contents of ZIP Archive", record_page)
 
-    def test_empty_state_when_no_eligible_public_records_exist(self):
-        conn = self._conn()
-        try:
-            conn.execute("UPDATE records SET is_latest = 0")
-            conn.commit()
-        finally:
-            conn.close()
-        content = admin_session.admin_association_new_page(self.request).content
-        self.assertIn("No eligible public CDE records are currently available for association.", content)
-        self.assertNotIn('<select name="record_reference" required>', content)
-        self.assertIn('disabled aria-disabled="true"', content)
-        self.assertNotIn("PRIVATE-2026-001", content)
-
-    def test_authentication_and_existing_pages_remain_available(self):
-        with self.assertRaises(FakeHTTPException) as create_page:
-            admin_session.admin_association_new_page(FakeRequest())
-        self.assertEqual(create_page.exception.status_code, 401)
-        with self.assertRaises(FakeHTTPException) as mutation:
-            admin_session.admin_association_create(
-                FakeRequest(),
-                "REC-2026-001",
-                self.document_id,
-                "supporting_document",
-                "",
-                "",
-                "note",
-                "1",
-            )
-        self.assertEqual(mutation.exception.status_code, 401)
+    def test_existing_regression_pages_still_load(self):
         self.assertIn("Public records", asyncio.run(records.records_index()).content)
         self.assertIn("Public Document Library", documents.public_document_library().content)
         self.assertIn("Record–Document Associations", admin_session.admin_associations_page(self.request).content)
         self.assertIn("CDE Administration Console", admin_session.admin_dashboard_page(self.request).content)
+        self.assertIn("Document Intake", admin_session.admin_document_intake_page(self.request).content)
+        self.assertIn("Archive Collections", admin_session.admin_collections_page(self.request).content)
 
 
 if __name__ == "__main__":

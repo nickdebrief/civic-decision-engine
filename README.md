@@ -507,6 +507,25 @@ document lifecycle, evidence handling, archive collections, collection
 membership sequence, Public Record Index behaviour, and Public Document Library
 behaviour.
 
+### CDE v12.20 — Searchable and Readable Record Selection
+
+CDE v12.20 improves the governed Record–Document Association creation
+workflow by making the public-record selector searchable and easier to read.
+The form now uses compact canonical-reference-first option labels, an explicit
+empty placeholder, a client-side search field, safe public search metadata, and
+a selected-record context panel showing public record reference, institution
+code, trajectory, system state, finding summary, and public record link.
+
+The selector remains progressively enhanced: JavaScript improves filtering and
+context display, but ordinary form submission still uses the original
+`record_reference` select field. Backend validation from v12.19 remains
+authoritative, and search text, display labels, metadata attributes, and
+context-panel content are never stored as association values. No schema,
+eligibility, association lifecycle, record lifecycle, document lifecycle,
+evidence, publication, provenance, verification hash, SHA-256, archive
+collection, membership, authentication, public/private visibility, footer,
+search, filtering, or pagination behaviour is changed.
+
 ---
 
 ## What it does
