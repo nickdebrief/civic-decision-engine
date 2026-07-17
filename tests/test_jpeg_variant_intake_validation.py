@@ -27,6 +27,11 @@ EXIF_JPEG_BYTES = jpeg_bytes(0xE1, b"Exif\x00\x00redacted")
 ICC_JPEG_BYTES = jpeg_bytes(0xE2, b"ICC_PROFILE\x00redacted")
 ADOBE_JPEG_BYTES = jpeg_bytes(0xEE, b"Adobe\x00redacted")
 DQT_JPEG_BYTES = jpeg_bytes(0xDB, b"\x00" * 12)
+PROGRESSIVE_JPEG_BYTES = jpeg_bytes(0xC2, b"progressive")
+JP2_BYTES = b"\x00\x00\x00\x0cjP  \r\n\x87\n\x00\x00\x00\x14ftypjp2 \x00\x00\x00\x00jp2 "
+TIFF_BYTES = b"II*\x00\x08\x00\x00\x00fixture"
+HEIC_BYTES = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00heicfixture"
+WEBP_BYTES = b"RIFF\x1a\x00\x00\x00WEBPVP8 fixture"
 
 
 class JpegVariantIntakeValidationTests(unittest.TestCase):
@@ -71,6 +76,7 @@ class JpegVariantIntakeValidationTests(unittest.TestCase):
             ("redacted-icc.jpg", ICC_JPEG_BYTES),
             ("redacted-adobe.jpg", ADOBE_JPEG_BYTES),
             ("redacted-dqt.jpg", DQT_JPEG_BYTES),
+            ("redacted-progressive.jpg", PROGRESSIVE_JPEG_BYTES),
         )
         for filename, data in cases:
             with self.subTest(filename=filename):
@@ -106,6 +112,10 @@ class JpegVariantIntakeValidationTests(unittest.TestCase):
             ("jpeg-renamed.png", EXIF_JPEG_BYTES, "image/png", "document_intake_file_type_mismatch"),
             ("arbitrary.jpeg", b"not a jpeg", "image/jpeg", "document_intake_file_type_not_allowed"),
             ("truncated.jpeg", b"\xff\xd8\xff\xe1\x00\x10Exif", "image/jpeg", "document_intake_file_type_not_allowed"),
+            ("redacted-jp2.jpeg", JP2_BYTES, "image/jpeg", "document_intake_file_type_not_allowed"),
+            ("tiff-renamed.jpeg", TIFF_BYTES, "image/jpeg", "document_intake_file_type_not_allowed"),
+            ("heic-renamed.jpeg", HEIC_BYTES, "image/jpeg", "document_intake_file_type_not_allowed"),
+            ("webp-renamed.jpeg", WEBP_BYTES, "image/jpeg", "document_intake_file_type_not_allowed"),
         )
         for filename, data, content_type, error in cases:
             with self.subTest(filename=filename), self.assertRaisesRegex(ValueError, error):
@@ -122,6 +132,19 @@ class JpegVariantIntakeValidationTests(unittest.TestCase):
         self.assertIn("declared_content_type=image/jpeg", diagnostic)
         self.assertIn("expected_format=jpeg", diagnostic)
         self.assertIn("detected_format=png", diagnostic)
+        self.assertIn("leading_signature_hex=", diagnostic)
+        self.assertNotIn(str(self.root), diagnostic)
+
+    def test_known_unsupported_jpeg_suffix_logs_detected_signature(self):
+        with self.assertLogs("api.document_intake", level="WARNING") as logs:
+            with self.assertRaisesRegex(ValueError, "document_intake_file_type_not_allowed"):
+                self._store(data=JP2_BYTES, filename="redacted-jp2.jpeg", content_type="image/jpeg")
+
+        diagnostic = "\n".join(logs.output)
+        self.assertIn("redacted-jp2.jpeg", diagnostic)
+        self.assertIn("extension=.jpeg", diagnostic)
+        self.assertIn("detected_format=jpeg2000", diagnostic)
+        self.assertIn("detected_mime_type=image/jp2", diagnostic)
         self.assertIn("leading_signature_hex=", diagnostic)
         self.assertNotIn(str(self.root), diagnostic)
 
