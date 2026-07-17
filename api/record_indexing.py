@@ -8,6 +8,8 @@ from typing import Any
 
 INDEXED_RECORD_FIELDS = (
     "reference",
+    "record_type",
+    "record_type_label",
     "generated_at",
     "finding",
     "trajectory",
@@ -15,6 +17,23 @@ INDEXED_RECORD_FIELDS = (
     "system_state",
     "generated_by",
 )
+
+RECORD_TYPE_LABELS = {
+    "strike": "Strike",
+    "complaint": "Complaint",
+    "investigation": "Investigation",
+    "decision": "Decision",
+    "proceeding": "Proceeding",
+    "administrative_action": "Administrative Action",
+    "public_submission": "Public Submission",
+    "policy_event": "Policy Event",
+    "research_record": "Research Record",
+}
+
+
+def _record_type(value: Any) -> str:
+    normalized = str(value or "strike").strip().lower() or "strike"
+    return normalized if normalized in RECORD_TYPE_LABELS else "strike"
 
 
 def _value(record: Mapping[str, Any], field: str, default: Any = "") -> Any:
@@ -46,6 +65,10 @@ def build_indexed_fields(record: Mapping[str, Any]) -> dict[str, Any]:
     conditions = parse_conditions(record)
     return {
         "reference": str(_value(record, "reference")),
+        "record_type": _record_type(_value(record, "record_type", "strike")),
+        "record_type_label": RECORD_TYPE_LABELS[
+            _record_type(_value(record, "record_type", "strike"))
+        ],
         "generated_at": str(_value(record, "generated_at")),
         "finding": str(_value(record, "finding")),
         "trajectory": str(_value(record, "trajectory")),

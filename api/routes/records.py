@@ -49,6 +49,67 @@ ALLOWED_ATTACHMENT_CONTENT_TYPES = {
     "image/png",
     "text/plain",
 }
+RECORD_TYPE_LABELS = {
+    "strike": "Strike",
+    "complaint": "Complaint",
+    "investigation": "Investigation",
+    "decision": "Decision",
+    "proceeding": "Proceeding",
+    "administrative_action": "Administrative Action",
+    "public_submission": "Public Submission",
+    "policy_event": "Policy Event",
+    "research_record": "Research Record",
+}
+RECORD_TYPE_PREFIXES = {
+    "complaint": "CMP",
+    "investigation": "INV",
+    "decision": "DEC",
+    "proceeding": "PRC",
+    "administrative_action": "ADM",
+    "public_submission": "SUB",
+    "policy_event": "POL",
+    "research_record": "RSR",
+}
+DEFAULT_RECORD_TYPE = "strike"
+
+
+def normalize_record_type(value: object) -> str:
+    record_type = str(value or DEFAULT_RECORD_TYPE).strip().lower()
+    if not record_type:
+        record_type = DEFAULT_RECORD_TYPE
+    if record_type not in RECORD_TYPE_LABELS:
+        raise ValueError("record_type_invalid")
+    return record_type
+
+
+def record_type_label(value: object) -> str:
+    try:
+        return RECORD_TYPE_LABELS[normalize_record_type(value)]
+    except ValueError:
+        return RECORD_TYPE_LABELS[DEFAULT_RECORD_TYPE]
+
+
+def records_table_columns(conn: sqlite3.Connection) -> set[str]:
+    try:
+        return {row[1] for row in conn.execute("PRAGMA table_info(records)").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def ensure_record_type_column(conn: sqlite3.Connection) -> None:
+    columns = records_table_columns(conn)
+    if "record_type" not in columns:
+        conn.execute(
+            "ALTER TABLE records ADD COLUMN record_type TEXT NOT NULL DEFAULT 'strike'"
+        )
+
+
+def record_type_sql_expression(conn: sqlite3.Connection) -> str:
+    return (
+        "COALESCE(NULLIF(record_type, ''), 'strike')"
+        if "record_type" in records_table_columns(conn)
+        else "'strike'"
+    )
 
 
 def seed_condition_relationships(conn):
@@ -146,6 +207,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS records (
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
             reference         TEXT NOT NULL,
+            record_type       TEXT NOT NULL DEFAULT 'strike',
             version           INTEGER NOT NULL DEFAULT 1,
             supersedes        TEXT,
             generated_at      TEXT NOT NULL,
@@ -164,6 +226,10 @@ def init_db():
     """)
     try:
         conn.execute("ALTER TABLE records ADD COLUMN source_narrative TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        ensure_record_type_column(conn)
     except sqlite3.OperationalError:
         pass
 
@@ -188,6 +254,10 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_records_reference_latest
         ON records(reference, is_latest)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_records_type_latest
+        ON records(record_type, is_latest)
     """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS record_embeddings (
@@ -647,6 +717,11 @@ CONDITION_REGISTRY = [
 async def create_record(payload: RecordPayload):
     conn = get_db()
     try:
+        ensure_record_type_column(conn)
+        try:
+            normalized_record_type = normalize_record_type(payload.record_type)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="record_type_invalid") from exc
         cur = conn.cursor()
 
         cur.execute(
@@ -681,15 +756,16 @@ async def create_record(payload: RecordPayload):
         cur.execute(
             """
             INSERT INTO records (
-                reference, version, supersedes, generated_at,
+                reference, record_type, version, supersedes, generated_at,
                 trajectory, system_state, conditions_json,
                 signals_json, finding, report_json, language,
                 verification_hash, exported_at, is_latest,
                 source_narrative
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             """,
             (
                 payload.reference,
+                normalized_record_type,
                 new_version,
                 supersedes,
                 payload.generated_at,
@@ -712,6 +788,7 @@ async def create_record(payload: RecordPayload):
 
         return RecordResponse(
             reference=payload.reference,
+            record_type=normalized_record_type,
             version=new_version,
             verification_hash=verification_hash,
             verify_url=verify_url,
@@ -771,7 +848,11 @@ async def admin_upload_record_attachment(
 
 @router.get("/records", response_class=HTMLResponse)
 async def records_index(
-    trajectory: str = None, institution: str = None, search: str = None, page: int = 1
+    trajectory: str = None,
+    institution: str = None,
+    search: str = None,
+    record_type: str = None,
+    page: int = 1,
 ):
     page = max(1, page)
 
@@ -782,6 +863,7 @@ async def records_index(
         # Build filtered query
         conditions_parts = ["is_latest = 1"]
         params = []
+        record_type_expr = record_type_sql_expression(conn)
 
         if trajectory:
             conditions_parts.append("LOWER(trajectory) = LOWER(?)")
@@ -791,19 +873,38 @@ async def records_index(
             conditions_parts.append("reference LIKE ?")
             params.append(f"Strike-{institution.upper()}-%")
 
+        if record_type:
+            try:
+                normalized_type_filter = normalize_record_type(record_type)
+            except ValueError:
+                normalized_type_filter = "__invalid__"
+            conditions_parts.append(f"{record_type_expr} = ?")
+            params.append(normalized_type_filter)
+
+        search_tokens = [token for token in str(search or "").split() if token.strip()]
         if search:
-            conditions_parts.append(
-                "(LOWER(reference) LIKE LOWER(?) OR LOWER(conditions_json) LIKE LOWER(?))"
-            )
+            for _token in search_tokens:
+                conditions_parts.append(
+                    "("
+                    "LOWER(reference) LIKE LOWER(?) OR "
+                    "LOWER(conditions_json) LIKE LOWER(?) OR "
+                    "LOWER(finding) LIKE LOWER(?) OR "
+                    "LOWER(system_state) LIKE LOWER(?) OR "
+                    "LOWER(trajectory) LIKE LOWER(?) OR "
+                    f"LOWER({record_type_expr}) LIKE LOWER(?)"
+                    ")"
+                )
 
         where = " AND ".join(conditions_parts)
 
         PER_PAGE = 25
         offset = (page - 1) * PER_PAGE
 
-        # Search needs its param twice (reference + conditions_json)
-        count_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
-        records_params = params + ([f"%{search}%", f"%{search}%"] if search else [])
+        search_params = []
+        for token in search_tokens:
+            search_params.extend([f"%{token}%"] * 6)
+        count_params = params + search_params
+        records_params = params + search_params
 
         # Total count for pagination
         cur.execute(f"SELECT COUNT(*) FROM records WHERE {where}", count_params)
@@ -817,7 +918,7 @@ async def records_index(
             return RedirectResponse(url=redirect_url, status_code=302)
 
         cur.execute(
-            f"SELECT reference, trajectory, system_state, conditions_json, "
+            f"SELECT reference, {record_type_expr} AS record_type, trajectory, system_state, conditions_json, "
             f"exported_at, language, version FROM records "
             f"WHERE {where} ORDER BY exported_at DESC "
             f"LIMIT ? OFFSET ?",
@@ -830,6 +931,11 @@ async def records_index(
             "SELECT DISTINCT trajectory FROM records WHERE is_latest = 1 AND trajectory != '' ORDER BY trajectory"
         )
         trajectories = [r["trajectory"] for r in cur.fetchall()]
+
+        cur.execute(
+            f"SELECT DISTINCT {record_type_expr} AS record_type FROM records WHERE is_latest = 1 ORDER BY record_type"
+        )
+        record_types = [r["record_type"] for r in cur.fetchall()]
 
         cur.execute("SELECT DISTINCT reference FROM records WHERE is_latest = 1")
         all_refs = cur.fetchall()
@@ -871,6 +977,8 @@ async def records_index(
                 href = f"{base_url}?{param}={value}"
                 if other_value:
                     href += f"&{other_param}={other_value}"
+                if record_type:
+                    href += f"&record_type={record_type}"
                 cls = "pill"
             return f'<a href="{escape(href)}" class="{cls}">{escape(label)}</a>'
 
@@ -891,16 +999,36 @@ async def records_index(
                 f"{code} — {label}", "institution", code, institution
             )
 
+        type_pills = '<a href="/records{}" class="pill {}">All</a>'.format(
+            f"?trajectory={trajectory}" if trajectory else "",
+            "pill-active" if not record_type else "",
+        )
+        for value in record_types:
+            label = record_type_label(value)
+            active = record_type == value
+            href = "/records"
+            query_parts = []
+            if trajectory:
+                query_parts.append(f"trajectory={trajectory}")
+            if institution:
+                query_parts.append(f"institution={institution}")
+            if not active:
+                query_parts.append(f"record_type={value}")
+            if query_parts:
+                href += "?" + "&".join(query_parts)
+            type_pills += f'<a href="{escape(href)}" class="pill {"pill-active" if active else ""}">{escape(label)}</a>'
+
         # Build record rows
         rows_html = ""
         if not records:
-            rows_html = '<tr><td colspan="5" class="empty-state">No records match the current filters.</td></tr>'
+            rows_html = '<tr><td colspan="6" class="empty-state">No records match the current filters.</td></tr>'
         else:
             for rec in records:
                 conditions = json.loads(rec["conditions_json"] or "[]")
                 cond_text = ", ".join(conditions) if conditions else "—"
                 inst_code = extract_institution_type(rec["reference"])
                 inst_label = INSTITUTION_LABELS.get(inst_code, inst_code)
+                type_label = record_type_label(rec["record_type"])
                 exported = rec["exported_at"][:10] if rec["exported_at"] else "—"
                 version_badge = (
                     f' <span class="version-badge">v{rec["version"]}</span>'
@@ -914,6 +1042,7 @@ async def records_index(
                       {escape(rec['reference'])}{version_badge}
                     </a>
                   </td>
+                  <td class="col-type">{escape(type_label)}</td>
                   <td class="col-inst">{escape(inst_label)}</td>
                   <td class="col-traj">{escape(rec['trajectory'] or '—')}</td>
                   <td class="col-cond">{escape(cond_text)}</td>
@@ -921,7 +1050,7 @@ async def records_index(
                 </tr>"""
 
         active_filter_note = ""
-        if trajectory or institution or search:
+        if trajectory or institution or search or record_type:
             parts = []
             if trajectory:
                 parts.append(f"Trajectory: {escape(trajectory)}")
@@ -931,6 +1060,8 @@ async def records_index(
                 )
             if search:
                 parts.append(f"Search: {escape(search)}")
+            if record_type:
+                parts.append(f"Record type: {escape(record_type_label(record_type))}")
             active_filter_note = (
                 f'<p class="filter-note">Filtered by — {" · ".join(parts)}</p>'
             )
@@ -942,6 +1073,8 @@ async def records_index(
             )
         if institution:
             filter_base += f'<input type="hidden" name="institution" value="{escape(institution)}">'
+        if record_type:
+            filter_base += f'<input type="hidden" name="record_type" value="{escape(record_type)}">'
 
         def page_url(p: int) -> str:
             parts = []
@@ -951,6 +1084,8 @@ async def records_index(
                 parts.append(f"institution={institution}")
             if search:
                 parts.append(f"search={escape(search)}")
+            if record_type:
+                parts.append(f"record_type={escape(record_type)}")
             if p > 1:
                 parts.append(f"page={p}")
             return "/records" + (f"?{'&'.join(parts)}" if parts else "")
@@ -1003,7 +1138,7 @@ async def records_index(
               type="text"
               name="search"
               value="{escape(search) if search else ""}"
-              placeholder="Search by reference or condition..."
+              placeholder="Search by reference, type, finding, state, trajectory, or condition..."
               autocomplete="off"
             >
             <button class="search-btn" type="submit">Search</button>
@@ -1184,6 +1319,7 @@ async def records_index(
         color: #333;
     }}
     .col-ref {{ width: 220px; }}
+    .col-type {{ width: 130px; }}
     .col-inst {{ width: 140px; }}
     .col-traj {{ width: 130px; }}
     .col-cond {{ }}
@@ -1411,6 +1547,8 @@ async def records_index(
     <div class="filter-section">
       <p class="filter-label">Trajectory</p>
       <div class="pill-group">{traj_pills}</div>
+      <p class="filter-label">Record type</p>
+      <div class="pill-group">{type_pills}</div>
       <p class="filter-label">Institution type</p>
       <div class="pill-group">{inst_pills}</div>
     </div>
@@ -1421,6 +1559,7 @@ async def records_index(
       <thead>
         <tr>
           <th>Reference</th>
+          <th>Type</th>
           <th>Institution</th>
           <th>Trajectory</th>
           <th>Conditions</th>
@@ -1549,6 +1688,7 @@ async def api_records_index(
     institution: str = Query(
         default=None, description="Filter by institution type code e.g. LA, HS, ED"
     ),
+    record_type: str = Query(default=None, description="Filter by canonical record type"),
     limit: int = Query(default=50, le=200, description="Maximum records to return"),
     offset: int = Query(default=0, description="Pagination offset"),
     full: bool = Query(default=False, description="Include full fields per record"),
@@ -1559,6 +1699,7 @@ async def api_records_index(
 
         conditions_parts = ["is_latest = 1"]
         params: list = []
+        record_type_expr = record_type_sql_expression(conn)
 
         if trajectory:
             conditions_parts.append("LOWER(trajectory) = LOWER(?)")
@@ -1567,6 +1708,14 @@ async def api_records_index(
         if institution:
             conditions_parts.append("reference LIKE ?")
             params.append(f"Strike-{institution.upper()}-%")
+
+        if record_type:
+            try:
+                normalized_type_filter = normalize_record_type(record_type)
+            except ValueError:
+                normalized_type_filter = "__invalid__"
+            conditions_parts.append(f"{record_type_expr} = ?")
+            params.append(normalized_type_filter)
 
         where = " AND ".join(conditions_parts)
 
@@ -1587,6 +1736,12 @@ async def api_records_index(
             conditions = json.loads(rec["conditions_json"] or "[]")
             item: dict = {
                 "reference": rec["reference"],
+                "record_type": normalize_record_type(
+                    rec["record_type"] if "record_type" in rec.keys() else None
+                ),
+                "record_type_label": record_type_label(
+                    rec["record_type"] if "record_type" in rec.keys() else None
+                ),
                 "trajectory": rec["trajectory"] or "",
                 "conditions": conditions,
                 "system_state": rec["system_state"] or "",
@@ -1615,6 +1770,7 @@ async def api_records_index(
                 "filters": {
                     "trajectory": trajectory,
                     "institution": institution,
+                    "record_type": record_type,
                 },
                 "records": records_out,
             }
@@ -6627,6 +6783,11 @@ async def verify_record(reference: str):
         safe = {
             "lang": escape(lang),
             "reference": escape(record["reference"] or ""),
+            "record_type": escape(
+                record_type_label(
+                    record["record_type"] if "record_type" in record.keys() else None
+                )
+            ),
             "finding": escape(record["finding"] or ""),
             "generated_at": escape(record["generated_at"] or ""),
             "exported_at": escape(record["exported_at"] or ""),
@@ -6747,6 +6908,9 @@ async def verify_record(reference: str):
                 "@type": "GovernmentDocument",
                 "name": record["reference"],
                 "identifier": record["reference"],
+                "additionalType": record_type_label(
+                    record["record_type"] if "record_type" in record.keys() else None
+                ),
                 "description": (record["finding"] or "")[:200],
                 "datePublished": (record["exported_at"] or "")[:10],
                 "dateModified": (record["exported_at"] or "")[:10],
@@ -7224,6 +7388,7 @@ async def verify_record(reference: str):
       <table class="detail-table">
         <tbody>
           <tr><td>{s["field_reference"]}</td><td>{safe['reference']}</td></tr>
+          <tr><td>Record Type</td><td>{safe['record_type']}</td></tr>
           <tr><td>{s["field_date"]}</td><td>{safe['generated_at']}</td></tr>
           <tr><td>{s["field_exported"]}</td><td>{safe['exported_at']}</td></tr>
           <tr><td>{s["field_trajectory"]}</td><td>{safe['trajectory']}</td></tr>
@@ -7387,6 +7552,12 @@ async def record_manifest(reference: str):
             "manifest_version": "1.0",
             "manifest_type": "civic_decision_engine_record",
             "reference": record["reference"],
+            "record_type": normalize_record_type(
+                record["record_type"] if "record_type" in record.keys() else None
+            ),
+            "record_type_label": record_type_label(
+                record["record_type"] if "record_type" in record.keys() else None
+            ),
             "version": record["version"],
             "supersedes": record["supersedes"],
             "generated_at": record["generated_at"] or "",

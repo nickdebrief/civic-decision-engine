@@ -65,6 +65,21 @@ def _ensure_optional_column(
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def _records_table_columns(conn: sqlite3.Connection) -> set[str]:
+    try:
+        return {str(row[1]) for row in conn.execute("PRAGMA table_info(records)").fetchall()}
+    except sqlite3.OperationalError:
+        return set()
+
+
+def _record_type_search_expression(conn: sqlite3.Connection) -> str:
+    return (
+        "COALESCE(NULLIF(record_type, ''), 'strike')"
+        if "record_type" in _records_table_columns(conn)
+        else "'strike'"
+    )
+
+
 def search_records(
     conn: sqlite3.Connection,
     query: str,
@@ -149,9 +164,11 @@ def keyword_search_records(
         params.append(f"Strike-{institution.upper()}-%")
 
     like = f"%{query}%"
+    record_type_expr = _record_type_search_expression(conn)
     where_parts.append(
         "("
         "LOWER(reference) LIKE LOWER(?) OR "
+        f"LOWER({record_type_expr}) LIKE LOWER(?) OR "
         "LOWER(generated_at) LIKE LOWER(?) OR "
         "LOWER(finding) LIKE LOWER(?) OR "
         "LOWER(trajectory) LIKE LOWER(?) OR "
@@ -160,7 +177,7 @@ def keyword_search_records(
         "LOWER(generated_by) LIKE LOWER(?)"
         ")"
     )
-    params.extend([like] * 7)
+    params.extend([like] * 8)
     where = " AND ".join(where_parts)
 
     cur = conn.cursor()

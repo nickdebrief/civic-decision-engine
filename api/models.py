@@ -137,6 +137,7 @@ class AdaptationRunResponse(BaseModel):
 
 class RecordPayload(BaseModel):
     reference: str
+    record_type: str = "strike"
     generated_at: str
 
     trajectory: str = ""
@@ -158,6 +159,7 @@ class RecordPayload(BaseModel):
 
 class RecordResponse(BaseModel):
     reference: str
+    record_type: str = "strike"
     version: int
     verification_hash: str
     verify_url: str
@@ -167,6 +169,7 @@ class RecordResponse(BaseModel):
 # ── API Response Models ───────────────────────────────────────
 class RecordMinimalResponse(BaseModel):
     reference: str
+    record_type: str = "strike"
     finding: str
     trajectory: str
     conditions: list[str]
@@ -177,6 +180,7 @@ class RecordMinimalResponse(BaseModel):
 
 class RecordFullResponse(BaseModel):
     reference: str
+    record_type: str = "strike"
     finding: str
     trajectory: str
     conditions: list[str]
@@ -193,6 +197,7 @@ class RecordFullResponse(BaseModel):
 
 class RecordIndexItem(BaseModel):
     reference: str
+    record_type: str = "strike"
     trajectory: str
     conditions: list[str]
     system_state: str

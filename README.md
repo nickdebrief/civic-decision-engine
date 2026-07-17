@@ -526,6 +526,24 @@ evidence, publication, provenance, verification hash, SHA-256, archive
 collection, membership, authentication, public/private visibility, footer,
 search, filtering, or pagination behaviour is changed.
 
+### Canonical Record Types
+
+The canonical record model now supports a governed `record_type` field so CDE
+records can represent distinct civic and administrative events, including
+Strike, Complaint, Investigation, Decision, Proceeding, Administrative Action,
+Public Submission, Policy Event, and Research Record. Existing records without
+an explicit type continue to behave as Strike records without changing their
+references, URLs, lifecycle state, verification hashes, associations, or
+history.
+
+Record type is stored as a stable machine value and displayed with a public
+label on public record and verification views. It is searchable in the Public
+Record Index and included in governed Record–Document Association selection so
+published documents can be attached to the correct canonical record type, such
+as a Complaint record, without using an unrelated Strike record. Record type is
+not added to legacy verification-hash inputs; existing hashes remain
+verifiable.
+
 ---
 
 ## What it does
