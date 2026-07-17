@@ -590,6 +590,17 @@ waveform extraction, transcoding, automatic associations, automatic canonical
 records, or changes to record verification hashes. The email that refers to an
 audio file and the audio artefact itself remain independently governed objects.
 
+### JPEG Variant Intake Validation
+
+Admin Document Intake accepts valid JPEG files produced by different editors and
+redaction tools, including JFIF, EXIF, ICC-profile, Adobe, and other legitimate
+JPEG marker variants. `.jpg` and `.jpeg` remain equivalent governed JPEG
+extensions, compared case-insensitively.
+
+Server-side byte detection remains authoritative. Extension spoofing, malformed
+JPEGs, PNG files renamed as JPEGs, and JPEG files renamed as PNGs remain
+rejected. Original bytes and SHA-256 semantics are unchanged.
+
 ---
 
 ## What it does
