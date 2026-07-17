@@ -17,17 +17,42 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "pdf": ".pdf",
     "jpeg": ".jpg",
     "png": ".png",
+    "m4a": ".m4a",
+    "mp3": ".mp3",
+    "wav": ".wav",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
     "jpeg": "image/jpeg",
     "png": "image/png",
+    "m4a": "audio/mp4",
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+}
+DOCUMENT_TYPE_LABELS = {
+    "pdf": "PDF",
+    "jpeg": "JPEG",
+    "png": "PNG",
+    "m4a": "M4A",
+    "mp3": "MP3",
+    "wav": "WAV",
+}
+DOCUMENT_TYPE_MEDIA_FAMILIES = {
+    "pdf": "document",
+    "jpeg": "image",
+    "png": "image",
+    "m4a": "audio",
+    "mp3": "audio",
+    "wav": "audio",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
     ".jpg": "jpeg",
     ".jpeg": "jpeg",
     ".png": "png",
+    ".m4a": "m4a",
+    ".mp3": "mp3",
+    ".wav": "wav",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -88,6 +113,14 @@ def _detected_document_type(data: bytes) -> str:
         return "jpeg"
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "png"
+    if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] == b"M4A ":
+        return "m4a"
+    if data.startswith(b"ID3") or (
+        len(data) >= 2 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0
+    ):
+        return "mp3"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "wav"
     raise ValueError("document_intake_file_type_not_allowed")
 
 
@@ -114,7 +147,7 @@ def validate_pdf(data: bytes, content_type: str | None) -> str:
 
 def document_type_label(document_type: str | None) -> str:
     normalized = normalized_document_type({"document_type": document_type})
-    return {"pdf": "PDF", "jpeg": "JPEG", "png": "PNG"}[normalized]
+    return DOCUMENT_TYPE_LABELS[normalized]
 
 
 def normalized_document_type(metadata: dict[str, Any]) -> str:
@@ -126,6 +159,12 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "jpeg"
     if content_type == "image/png":
         return "png"
+    if content_type in {"audio/mp4", "audio/x-m4a"}:
+        return "m4a"
+    if content_type == "audio/mpeg":
+        return "mp3"
+    if content_type in {"audio/wav", "audio/x-wav", "audio/wave"}:
+        return "wav"
     return "pdf"
 
 
@@ -139,6 +178,14 @@ def document_storage_extension(metadata: dict[str, Any]) -> str:
 
 def is_image_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"jpeg", "png"}
+
+
+def is_audio_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) in {"m4a", "mp3", "wav"}
+
+
+def document_media_family(metadata: dict[str, Any]) -> str:
+    return DOCUMENT_TYPE_MEDIA_FAMILIES[normalized_document_type(metadata)]
 
 
 def normalize_document_keywords(value: Any) -> list[str]:

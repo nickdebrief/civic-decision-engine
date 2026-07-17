@@ -576,6 +576,20 @@ document bytes, SHA-256, lifecycle status, publication rules, associations,
 record Conditions, record Signals, evidence, verification, or public/private
 visibility boundaries.
 
+### Governed Audio Artefact Support
+
+Admin Document Intake now accepts original M4A, MP3, and WAV audio files
+alongside PDF, JPEG, and PNG. Audio artefacts use the same private intake,
+review, approval, publication, provenance, lifecycle history, SHA-256, Keywords,
+and Public Document Library search paths as existing published files.
+
+Published audio detail pages provide governed metadata, publication provenance,
+an HTML5 audio player using the original published file, and an original-file
+download. Audio support does not introduce transcription, speech recognition,
+waveform extraction, transcoding, automatic associations, automatic canonical
+records, or changes to record verification hashes. The email that refers to an
+audio file and the audio artefact itself remain independently governed objects.
+
 ---
 
 ## What it does
