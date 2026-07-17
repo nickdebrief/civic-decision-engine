@@ -81,6 +81,42 @@ VALID_STATUS_TRANSITIONS = {
 _SAFE_ID_RE = re.compile(r"^[a-f0-9]{64}$")
 _WHITESPACE_RE = re.compile(r"\s+")
 _SEARCH_SPLIT_RE = re.compile(r"\s+")
+_JPEG_FIRST_MARKERS = {
+    0xC0,
+    0xC1,
+    0xC2,
+    0xC3,
+    0xC5,
+    0xC6,
+    0xC7,
+    0xC9,
+    0xCA,
+    0xCB,
+    0xCD,
+    0xCE,
+    0xCF,
+    0xC4,
+    0xDA,
+    0xDB,
+    0xDD,
+    0xE0,
+    0xE1,
+    0xE2,
+    0xE3,
+    0xE4,
+    0xE5,
+    0xE6,
+    0xE7,
+    0xE8,
+    0xE9,
+    0xEA,
+    0xEB,
+    0xEC,
+    0xED,
+    0xEE,
+    0xEF,
+    0xFE,
+}
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,6 +138,19 @@ def intake_max_bytes() -> int:
     return value
 
 
+def _leading_signature_hex(data: bytes, *, length: int = 16) -> str:
+    return data[:length].hex()
+
+
+def _is_supported_jpeg(data: bytes) -> bool:
+    if len(data) < 6 or not data.startswith(b"\xff\xd8\xff"):
+        return False
+    marker = data[3]
+    if marker not in _JPEG_FIRST_MARKERS:
+        return False
+    return b"\xff\xd9" in data[4:]
+
+
 def _detected_document_type(data: bytes) -> str:
     if not data:
         raise ValueError("document_intake_file_required")
@@ -109,7 +158,7 @@ def _detected_document_type(data: bytes) -> str:
         raise ValueError("document_intake_file_too_large")
     if data.startswith(b"%PDF-"):
         return "pdf"
-    if data.startswith(b"\xff\xd8\xff"):
+    if _is_supported_jpeg(data):
         return "jpeg"
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "png"
@@ -131,9 +180,29 @@ def validate_document_file(
     extension = Path(filename).suffix.lower()
     if not filename or extension not in EXTENSION_DOCUMENT_TYPES:
         raise ValueError("document_intake_file_type_not_allowed")
-    detected_type = _detected_document_type(data)
+    try:
+        detected_type = _detected_document_type(data)
+    except ValueError:
+        LOGGER.warning(
+            "Document intake rejected unsupported media: filename=%s extension=%s declared_content_type=%s detected_format=unknown detected_mime_type=unknown leading_signature_hex=%s",
+            filename,
+            extension,
+            content_type,
+            _leading_signature_hex(data),
+        )
+        raise
     expected_type = EXTENSION_DOCUMENT_TYPES[extension]
     if detected_type != expected_type:
+        LOGGER.warning(
+            "Document intake file type mismatch: filename=%s extension=%s declared_content_type=%s expected_format=%s detected_format=%s detected_mime_type=%s leading_signature_hex=%s",
+            filename,
+            extension,
+            content_type,
+            expected_type,
+            detected_type,
+            DOCUMENT_TYPE_MEDIA_TYPES.get(detected_type, "unknown"),
+            _leading_signature_hex(data),
+        )
         raise ValueError("document_intake_file_type_mismatch")
     return detected_type, DOCUMENT_TYPE_MEDIA_TYPES[detected_type], filename
 
