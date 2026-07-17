@@ -80,6 +80,10 @@ def _record_type_search_expression(conn: sqlite3.Connection) -> str:
     )
 
 
+def _optional_record_text_expression(conn: sqlite3.Connection, column: str) -> str:
+    return column if column in _records_table_columns(conn) else "''"
+
+
 def search_records(
     conn: sqlite3.Connection,
     query: str,
@@ -165,10 +169,18 @@ def keyword_search_records(
 
     like = f"%{query}%"
     record_type_expr = _record_type_search_expression(conn)
+    record_title_expr = _optional_record_text_expression(conn, "record_title")
+    institution_expr = _optional_record_text_expression(conn, "institution")
+    event_date_expr = _optional_record_text_expression(conn, "event_date")
+    summary_expr = _optional_record_text_expression(conn, "summary")
     where_parts.append(
         "("
         "LOWER(reference) LIKE LOWER(?) OR "
         f"LOWER({record_type_expr}) LIKE LOWER(?) OR "
+        f"LOWER({record_title_expr}) LIKE LOWER(?) OR "
+        f"LOWER({institution_expr}) LIKE LOWER(?) OR "
+        f"LOWER({event_date_expr}) LIKE LOWER(?) OR "
+        f"LOWER({summary_expr}) LIKE LOWER(?) OR "
         "LOWER(generated_at) LIKE LOWER(?) OR "
         "LOWER(finding) LIKE LOWER(?) OR "
         "LOWER(trajectory) LIKE LOWER(?) OR "
@@ -177,7 +189,7 @@ def keyword_search_records(
         "LOWER(generated_by) LIKE LOWER(?)"
         ")"
     )
-    params.extend([like] * 8)
+    params.extend([like] * 12)
     where = " AND ".join(where_parts)
 
     cur = conn.cursor()

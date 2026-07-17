@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Mapping
 
 from fastapi import APIRouter, HTTPException, Query
@@ -51,6 +52,7 @@ from api import archive_collection_memberships as acm
 from api import archive_collections as ac
 from api import document_intake_corrections as dic
 from api import record_document_associations as rda
+from api.routes import records as record_routes
 from api.document_intake import (
     STATUS_LABELS,
     build_document_search_text,
@@ -44678,6 +44680,199 @@ def _association_record_type_label(value: Any) -> str:
     return ASSOCIATION_RECORD_TYPE_LABELS.get(normalized, "Strike")
 
 
+DOCUMENT_CATEGORY_RECORD_TYPE_SUGGESTIONS = {
+    "evidence package": "complaint",
+    "complaint": "complaint",
+    "investigation material": "investigation",
+    "decision": "decision",
+    "submission": "public_submission",
+    "proceeding": "proceeding",
+    "research": "research_record",
+}
+
+RECORD_TYPE_REFERENCE_PREFIXES = {
+    "strike": "Strike",
+    "complaint": "CMP",
+    "investigation": "INV",
+    "decision": "DEC",
+    "proceeding": "PRC",
+    "administrative_action": "ADM",
+    "public_submission": "SUB",
+    "policy_event": "POL",
+    "research_record": "RSR",
+}
+
+
+def _record_type_options(selected: str | None = None) -> str:
+    selected_value = str(selected or "strike").strip().lower() or "strike"
+    return "".join(
+        f'<option value="{escape(value)}"{" selected" if value == selected_value else ""}>{escape(label)}</option>'
+        for value, label in ASSOCIATION_RECORD_TYPE_LABELS.items()
+    )
+
+
+def _split_terms(value: Any) -> list[str]:
+    text = str(value or "")
+    return [part.strip() for part in re.split(r"[,;\n\r]+", text) if part.strip()]
+
+
+def _suggest_record_type_from_document(item: Mapping[str, Any]) -> str:
+    category = str(item.get("category") or "").strip().casefold()
+    return DOCUMENT_CATEGORY_RECORD_TYPE_SUGGESTIONS.get(category, "strike")
+
+
+def _suggest_institution_from_document(item: Mapping[str, Any]) -> str:
+    title = str(item.get("title") or "")
+    description = str(item.get("description") or "")
+    combined = f"{title} {description}"
+    if "Medical Council of Ireland" in combined:
+        return "Medical Council of Ireland"
+    if "—" in title:
+        candidate = title.rsplit("—", 1)[1].strip()
+        if candidate:
+            return candidate
+    return str(item.get("institution_source") or "").strip()
+
+
+def _suggest_record_title_from_document(item: Mapping[str, Any], institution: str) -> str:
+    title = str(item.get("title") or "").strip()
+    if "Initial Complaint Evidence Package" in title and "Medical Council of Ireland" in institution:
+        return "Initial Complaint to the Medical Council of Ireland"
+    cleaned = re.sub(r"\s+Evidence Package\b", "", title, flags=re.IGNORECASE).strip()
+    return cleaned or title or "Canonical record from published document"
+
+
+def _suggest_record_summary_from_document(item: Mapping[str, Any], institution: str) -> str:
+    document_date = str(item.get("document_date") or "").strip()
+    title = str(item.get("title") or "")
+    description = str(item.get("description") or "").strip()
+    if (
+        "Initial Complaint Evidence Package" in title
+        and "Medical Council of Ireland" in institution
+        and document_date == "2019-12-02"
+    ):
+        return (
+            "Formal complaint submitted to the Medical Council of Ireland on "
+            "2 December 2019, accompanied by an initial evidence package and "
+            "supporting material."
+        )
+    return description or title or "Canonical record created from a Published document."
+
+
+def _institution_reference_code(institution: str, fallback: str = "OT") -> str:
+    normalized = re.sub(r"[^A-Za-z0-9 ]+", " ", institution or "").strip()
+    if not normalized:
+        return fallback
+    known = {
+        "medical council of ireland": "MC",
+        "medical council": "MC",
+        "legal aid": "LA",
+    }
+    key = normalized.casefold()
+    if key in known:
+        return known[key]
+    words = [word for word in normalized.split() if word]
+    initials = "".join(word[0] for word in words[:3]).upper()
+    return (initials or fallback)[:4]
+
+
+def _reference_date(value: Any) -> str:
+    text = str(value or "").strip()
+    match = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", text)
+    if match:
+        return "".join(match.groups())
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def _next_record_reference(
+    conn: sqlite3.Connection,
+    *,
+    record_type: str,
+    institution: str,
+    event_date: str,
+) -> str:
+    prefix = RECORD_TYPE_REFERENCE_PREFIXES.get(record_type, "REC")
+    code = _institution_reference_code(institution)
+    date_part = _reference_date(event_date)
+    stem = f"{prefix}-{code}-{date_part}-"
+    rows = conn.execute(
+        "SELECT reference FROM records WHERE reference LIKE ? ORDER BY reference ASC",
+        (stem + "%",),
+    ).fetchall()
+    highest = 0
+    for row in rows:
+        try:
+            highest = max(highest, int(str(row["reference"]).rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"{stem}{highest + 1:03d}"
+
+
+def _source_document_record_links(
+    conn: sqlite3.Connection, item: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    try:
+        columns = _record_table_columns(conn)
+        required = {
+            "source_document_id",
+            "source_document_reference",
+            "record_type",
+            "record_title",
+            "institution",
+            "event_date",
+        }
+        if not required.issubset(columns):
+            return []
+        rows = conn.execute(
+            """
+            SELECT reference, record_type, record_title, institution, event_date
+            FROM records
+            WHERE is_latest = 1
+              AND (
+                source_document_id = ?
+                OR (
+                  source_document_reference IS NOT NULL
+                  AND source_document_reference != ''
+                  AND source_document_reference = ?
+                )
+              )
+            ORDER BY exported_at DESC
+            """,
+            (
+                str(item.get("intake_id") or ""),
+                str(item.get("reference_identifier") or ""),
+            ),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(row) for row in rows]
+
+
+def _canonical_record_proposal(item: Mapping[str, Any], conn: sqlite3.Connection) -> dict[str, str]:
+    record_type = _suggest_record_type_from_document(item)
+    institution = _suggest_institution_from_document(item)
+    event_date = str(item.get("document_date") or "").strip()
+    title = _suggest_record_title_from_document(item, institution)
+    summary = _suggest_record_summary_from_document(item, institution)
+    return {
+        "record_type": record_type,
+        "reference": _next_record_reference(
+            conn,
+            record_type=record_type,
+            institution=institution,
+            event_date=event_date,
+        ),
+        "title": title,
+        "institution": institution,
+        "event_date": event_date,
+        "summary": summary,
+        "trajectory": "Submitted" if record_type == "complaint" else "Stable",
+        "system_state": f"{_association_record_type_label(record_type)} record created from Published document context.",
+        "conditions": "FORMAL_COMPLAINT_SUBMITTED" if record_type == "complaint" else "PUBLISHED_DOCUMENT_CONTEXT",
+        "signals": "INITIAL_EVIDENCE_PACKAGE_PRESENT" if record_type == "complaint" else "SOURCE_DOCUMENT_PRESENT",
+    }
+
+
 def _word_safe_truncate(value: Any, limit: int = 180) -> str:
     text = " ".join(str(value or "").split())
     if len(text) <= limit:
@@ -45928,12 +46123,79 @@ def _render_document_intake_page(
 </html>"""
 
 
+def _canonical_record_section_for_document(item: Mapping[str, Any]) -> str:
+    if str(item.get("status") or "").lower() != "published":
+        return ""
+    conn = get_db()
+    try:
+        linked_records = _source_document_record_links(conn, item)
+    finally:
+        conn.close()
+
+    if linked_records:
+        rows = "".join(
+            "<tr>"
+            f'<td><a href="/verify/{escape(str(row.get("reference") or ""))}">{escape(str(row.get("reference") or ""))}</a></td>'
+            f'<td>{escape(_association_record_type_label(row.get("record_type")))}</td>'
+            f'<td>{escape(str(row.get("record_title") or "—"))}</td>'
+            f'<td><a href="/admin/associations/new">Create association</a></td>'
+            "</tr>"
+            for row in linked_records
+        )
+        body = (
+            '<p class="notice">Canonical record linked from this Published document.</p>'
+            f'<table class="metadata"><thead><tr><th>Reference</th><th>Type</th><th>Title</th><th>Actions</th></tr></thead><tbody>{rows}</tbody></table>'
+        )
+    else:
+        body = (
+            '<p class="notice">No canonical record linked.</p>'
+            f'<p><a class="button-link" href="/admin/document-intake/{escape(str(item.get("intake_id") or ""))}/canonical-record/new">Create canonical record from this document</a></p>'
+        )
+    return f"<section><h2>Canonical record</h2>{body}</section>"
+
+
+def _render_canonical_record_from_document_form(
+    item: Mapping[str, Any],
+    *,
+    proposal: Mapping[str, str],
+    duplicate_links: list[dict[str, Any]],
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    duplicate_warning = ""
+    if duplicate_links:
+        links = ", ".join(str(row.get("reference") or "") for row in duplicate_links)
+        duplicate_warning = (
+            '<p class="notice"><strong>A canonical record may already exist for this Published document.</strong> '
+            f"Existing source-linked record: {escape(links)}. Continue only if this is a distinct governed record.</p>"
+        )
+    source_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value or '—'))}</td></tr>"
+        for label, value in (
+            ("Published document", item.get("title")),
+            ("Document reference", item.get("reference_identifier")),
+            ("Document date", item.get("document_date")),
+            ("Institution / source", item.get("institution_source")),
+            ("Category", item.get("category")),
+            ("SHA-256", item.get("sha256_hash")),
+        )
+    )
+    source_reference = str(item.get("reference_identifier") or item.get("intake_id") or "")
+    default_public_label = str(item.get("title") or "Supporting document")
+    default_public_note = str(item.get("description") or "").strip()
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Canonical Record from Published Document</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(str(item.get('intake_id') or ''))}">Back to Published document</a></p><h1>Create Canonical Record from Published Document</h1><p class="notice">This workflow proposes a new canonical CDE record from Published document metadata. The document remains an independently preserved evidential artefact. Creating a record does not copy bytes, reuse the document SHA-256 as the record verification hash, or silently create an association.</p>{duplicate_warning}<h2>Source Published document</h2><table>{source_rows}</table><form method="post" action="/api/admin/session/document-intake/{escape(str(item.get('intake_id') or ''))}/canonical-record"><label>Record type<select name="record_type" required>{_record_type_options(proposal.get('record_type'))}</select><span class="field-help">Suggested from document category; administrator confirmation is required.</span></label><label>Canonical record reference<input name="reference" required value="{escape(str(proposal.get('reference') or ''))}"></label><label>Title<input name="record_title" required value="{escape(str(proposal.get('title') or ''))}"></label><label>Institution<input name="institution" required value="{escape(str(proposal.get('institution') or ''))}"></label><label>Event date<input name="event_date" required value="{escape(str(proposal.get('event_date') or ''))}"></label><label>Summary<textarea name="summary" required>{escape(str(proposal.get('summary') or ''))}</textarea></label><label>Trajectory<input name="trajectory" required value="{escape(str(proposal.get('trajectory') or ''))}"></label><label>System state<textarea name="system_state" required>{escape(str(proposal.get('system_state') or ''))}</textarea></label><label>Conditions<input name="conditions" value="{escape(str(proposal.get('conditions') or ''))}"><span class="field-help">Comma-separated governed condition labels. No conditions are inferred from document text.</span></label><label>Signals<input name="signals" value="{escape(str(proposal.get('signals') or ''))}"><span class="field-help">Comma-separated governed signal labels. No signals are inferred from document text.</span></label><label>Source provenance<textarea name="source_narrative" required>Created from Published document: {escape(source_reference)}
+Document title: {escape(str(item.get('title') or ''))}
+Document reference identifier: {escape(str(item.get('reference_identifier') or ''))}
+Document intake ID: {escape(str(item.get('intake_id') or ''))}
+Document SHA-256 is preserved on the document and is not reused as the record verification hash.</textarea></label><label><input type="checkbox" name="create_association" value="1"> Create association to source document</label><label>Association public label<input name="association_public_label" value="{escape(default_public_label)}"></label><label>Association public note<textarea name="association_public_note">{escape(default_public_note)}</textarea></label><button type="submit">Create canonical record</button></form></main></body></html>"""
+
+
 def _render_document_intake_preview(
     item: dict[str, Any],
     *,
     admin_session: dict[str, Any] | None = None,
 ) -> str:
     correction_notice = _render_intake_correction_notice(item)
+    canonical_record_section = _canonical_record_section_for_document(item)
     fields = (
         ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
@@ -45991,6 +46253,7 @@ def _render_document_intake_preview(
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:anywhere}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
 {image_preview}
+{canonical_record_section}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
 <h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
@@ -46904,6 +47167,32 @@ def admin_document_intake_preview_page(intake_id: str, request: Request):
     return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
 
 
+@router.get("/admin/document-intake/{intake_id}/canonical-record/new", response_class=HTMLResponse)
+def admin_canonical_record_from_document_page(intake_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        item = load_pending_document(intake_id)
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    if str(item.get("status") or "").lower() != "published":
+        raise _http_error(400, "source_document_not_published")
+    conn = get_db()
+    try:
+        record_routes.ensure_record_metadata_columns(conn)
+        proposal = _canonical_record_proposal(item, conn)
+        duplicates = _source_document_record_links(conn, item)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_canonical_record_from_document_form(
+            item,
+            proposal=proposal,
+            duplicate_links=duplicates,
+            admin_session=session,
+        )
+    )
+
+
 @router.get("/admin/document-intake/{intake_id}/preview")
 def admin_document_intake_image_preview(intake_id: str, request: Request):
     require_admin_session(request)
@@ -46964,6 +47253,140 @@ def admin_document_intake_upload(
         content=_render_document_intake_preview(item, admin_session=session),
         status_code=201,
     )
+
+
+@router.post(
+    "/api/admin/session/document-intake/{intake_id}/canonical-record",
+    response_class=HTMLResponse,
+)
+def admin_canonical_record_from_document_create(
+    intake_id: str,
+    request: Request,
+    record_type: str = Form(...),
+    reference: str = Form(...),
+    record_title: str = Form(...),
+    institution: str = Form(...),
+    event_date: str = Form(...),
+    summary: str = Form(...),
+    trajectory: str = Form(...),
+    system_state: str = Form(...),
+    conditions: str | None = Form(None),
+    signals: str | None = Form(None),
+    source_narrative: str = Form(...),
+    create_association: str | None = Form(None),
+    association_public_label: str | None = Form(None),
+    association_public_note: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    actor = _admin_session_actor(session)
+    try:
+        item = load_pending_document(intake_id)
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    if str(item.get("status") or "").lower() != "published":
+        raise _http_error(400, "source_document_not_published")
+
+    normalized_reference = str(reference or "").strip()
+    if not normalized_reference:
+        raise _http_error(400, "record_reference_required")
+
+    conn = get_db()
+    try:
+        record_routes.ensure_record_metadata_columns(conn)
+        existing = conn.execute(
+            "SELECT 1 FROM records WHERE reference = ? LIMIT 1",
+            (normalized_reference,),
+        ).fetchone()
+        if existing:
+            raise _http_error(409, "record_reference_already_exists")
+    finally:
+        conn.close()
+
+    provenance = "\n".join(
+        part
+        for part in (
+            str(source_narrative or "").strip(),
+            f"Created from Published document: {item.get('reference_identifier') or item.get('intake_id')}",
+            f"Source document intake ID: {item.get('intake_id')}",
+            f"Source document SHA-256: {item.get('sha256_hash')}",
+            f"Canonical record creation initiated from Published document by {actor}.",
+            f"Canonical record created from Published document by {actor}.",
+        )
+        if part
+    )
+    generated_at = (
+        str(event_date or "").strip() + "T00:00:00Z"
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", str(event_date or "").strip())
+        else datetime.now(timezone.utc).isoformat()
+    )
+    payload = SimpleNamespace(
+        reference=normalized_reference,
+        record_type=str(record_type or "strike").strip(),
+        record_title=str(record_title or "").strip(),
+        institution=str(institution or "").strip(),
+        event_date=str(event_date or "").strip(),
+        summary=str(summary or "").strip(),
+        source_document_id=str(item.get("intake_id") or ""),
+        source_document_reference=str(item.get("reference_identifier") or ""),
+        generated_at=generated_at,
+        trajectory=str(trajectory or "").strip(),
+        system_state=str(system_state or "").strip(),
+        conditions=_split_terms(conditions),
+        signals=_split_terms(signals),
+        finding=str(summary or "").strip(),
+        report={
+            "record_title": str(record_title or "").strip(),
+            "institution": str(institution or "").strip(),
+            "event_date": str(event_date or "").strip(),
+            "source_document_reference": str(item.get("reference_identifier") or ""),
+        },
+        language="en",
+        supersedes=None,
+        source_narrative=provenance,
+    )
+
+    try:
+        record_routes.create_record_entry(payload)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _http_error(400, str(exc)) from exc
+
+    association_notice = ""
+    if str(create_association or "").strip() == "1":
+        conn = get_db()
+        try:
+            association = rda.create_association(
+                conn,
+                record_reference=normalized_reference,
+                document_id=str(item.get("intake_id") or ""),
+                relationship_type="supporting_document",
+                public_label=association_public_label or "Supporting document",
+                public_note=association_public_note or "",
+                admin_note="Created during canonical-record-from-document workflow.",
+                is_public="1",
+                actor=actor,
+                root=intake_root(),
+            )
+            association_notice = (
+                f'<p class="notice">Source document association created: '
+                f'{escape(str(association.get("public_reference") or ""))}</p>'
+            )
+        except ValueError as exc:
+            raise _http_error(409, str(exc)) from exc
+        finally:
+            conn.close()
+
+    page = (
+        '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Canonical record created</title>'
+        '<style>body{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}main{width:min(900px,calc(100% - 32px));margin:32px auto}.notice{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}a{color:#245d61}</style></head>'
+        f'<body><main>{_render_admin_console_navigation(admin_session=session)}<h1>Canonical record created</h1>'
+        f'<p class="notice">Created canonical record <strong>{escape(normalized_reference)}</strong> from Published document context. The source document remains unchanged.</p>'
+        f'{association_notice}<p><a href="/verify/{escape(normalized_reference)}">View canonical record</a> · '
+        f'<a href="/admin/document-intake/{escape(intake_id)}">Return to source document</a> · '
+        '<a href="/admin/associations/new">Create association</a></p></main></body></html>'
+    )
+    return HTMLResponse(content=page, status_code=201)
 
 
 @router.post(

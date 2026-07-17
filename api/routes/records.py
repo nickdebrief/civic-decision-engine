@@ -104,12 +104,31 @@ def ensure_record_type_column(conn: sqlite3.Connection) -> None:
         )
 
 
+def ensure_record_metadata_columns(conn: sqlite3.Connection) -> None:
+    columns = records_table_columns(conn)
+    optional_columns = {
+        "record_title": "TEXT",
+        "institution": "TEXT",
+        "event_date": "TEXT",
+        "summary": "TEXT",
+        "source_document_id": "TEXT",
+        "source_document_reference": "TEXT",
+    }
+    for column, definition in optional_columns.items():
+        if column not in columns:
+            conn.execute(f"ALTER TABLE records ADD COLUMN {column} {definition}")
+
+
 def record_type_sql_expression(conn: sqlite3.Connection) -> str:
     return (
         "COALESCE(NULLIF(record_type, ''), 'strike')"
         if "record_type" in records_table_columns(conn)
         else "'strike'"
     )
+
+
+def optional_record_text_expression(conn: sqlite3.Connection, column: str) -> str:
+    return column if column in records_table_columns(conn) else "''"
 
 
 def seed_condition_relationships(conn):
@@ -208,6 +227,12 @@ def init_db():
             id                INTEGER PRIMARY KEY AUTOINCREMENT,
             reference         TEXT NOT NULL,
             record_type       TEXT NOT NULL DEFAULT 'strike',
+            record_title      TEXT,
+            institution       TEXT,
+            event_date        TEXT,
+            summary           TEXT,
+            source_document_id TEXT,
+            source_document_reference TEXT,
             version           INTEGER NOT NULL DEFAULT 1,
             supersedes        TEXT,
             generated_at      TEXT NOT NULL,
@@ -230,6 +255,7 @@ def init_db():
         pass
     try:
         ensure_record_type_column(conn)
+        ensure_record_metadata_columns(conn)
     except sqlite3.OperationalError:
         pass
 
@@ -713,11 +739,11 @@ CONDITION_REGISTRY = [
 ]
 
 
-@router.post("/records", response_model=RecordResponse)
-async def create_record(payload: RecordPayload):
+def create_record_entry(payload: RecordPayload) -> dict[str, Any]:
     conn = get_db()
     try:
         ensure_record_type_column(conn)
+        ensure_record_metadata_columns(conn)
         try:
             normalized_record_type = normalize_record_type(payload.record_type)
         except ValueError as exc:
@@ -756,16 +782,24 @@ async def create_record(payload: RecordPayload):
         cur.execute(
             """
             INSERT INTO records (
-                reference, record_type, version, supersedes, generated_at,
+                reference, record_type, record_title, institution, event_date,
+                summary, source_document_id, source_document_reference,
+                version, supersedes, generated_at,
                 trajectory, system_state, conditions_json,
                 signals_json, finding, report_json, language,
                 verification_hash, exported_at, is_latest,
                 source_narrative
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             """,
             (
                 payload.reference,
                 normalized_record_type,
+                getattr(payload, "record_title", None),
+                getattr(payload, "institution", None),
+                getattr(payload, "event_date", None),
+                getattr(payload, "summary", None),
+                getattr(payload, "source_document_id", None),
+                getattr(payload, "source_document_reference", None),
                 new_version,
                 supersedes,
                 payload.generated_at,
@@ -786,17 +820,23 @@ async def create_record(payload: RecordPayload):
 
         verify_url = f"https://civic-decision-engine-production.up.railway.app/verify/{payload.reference}"
 
-        return RecordResponse(
-            reference=payload.reference,
-            record_type=normalized_record_type,
-            version=new_version,
-            verification_hash=verification_hash,
-            verify_url=verify_url,
-            is_superseding=is_superseding,
-        )
+        return {
+            "reference": payload.reference,
+            "record_type": normalized_record_type,
+            "record_title": getattr(payload, "record_title", None),
+            "version": new_version,
+            "verification_hash": verification_hash,
+            "verify_url": verify_url,
+            "is_superseding": is_superseding,
+        }
 
     finally:
         conn.close()
+
+
+@router.post("/records", response_model=RecordResponse)
+async def create_record(payload: RecordPayload):
+    return RecordResponse(**create_record_entry(payload))
 
 
 @router.post("/api/admin/records/{reference}/attachments")
@@ -864,6 +904,10 @@ async def records_index(
         conditions_parts = ["is_latest = 1"]
         params = []
         record_type_expr = record_type_sql_expression(conn)
+        record_title_expr = optional_record_text_expression(conn, "record_title")
+        institution_expr = optional_record_text_expression(conn, "institution")
+        event_date_expr = optional_record_text_expression(conn, "event_date")
+        summary_expr = optional_record_text_expression(conn, "summary")
 
         if trajectory:
             conditions_parts.append("LOWER(trajectory) = LOWER(?)")
@@ -891,7 +935,11 @@ async def records_index(
                     "LOWER(finding) LIKE LOWER(?) OR "
                     "LOWER(system_state) LIKE LOWER(?) OR "
                     "LOWER(trajectory) LIKE LOWER(?) OR "
-                    f"LOWER({record_type_expr}) LIKE LOWER(?)"
+                    f"LOWER({record_type_expr}) LIKE LOWER(?) OR "
+                    f"LOWER({record_title_expr}) LIKE LOWER(?) OR "
+                    f"LOWER({institution_expr}) LIKE LOWER(?) OR "
+                    f"LOWER({event_date_expr}) LIKE LOWER(?) OR "
+                    f"LOWER({summary_expr}) LIKE LOWER(?)"
                     ")"
                 )
 
@@ -902,7 +950,7 @@ async def records_index(
 
         search_params = []
         for token in search_tokens:
-            search_params.extend([f"%{token}%"] * 6)
+            search_params.extend([f"%{token}%"] * 10)
         count_params = params + search_params
         records_params = params + search_params
 
@@ -918,7 +966,9 @@ async def records_index(
             return RedirectResponse(url=redirect_url, status_code=302)
 
         cur.execute(
-            f"SELECT reference, {record_type_expr} AS record_type, trajectory, system_state, conditions_json, "
+            f"SELECT reference, {record_type_expr} AS record_type, "
+            f"{record_title_expr} AS record_title, {institution_expr} AS institution, "
+            "trajectory, system_state, conditions_json, "
             f"exported_at, language, version FROM records "
             f"WHERE {where} ORDER BY exported_at DESC "
             f"LIMIT ? OFFSET ?",
@@ -1029,6 +1079,14 @@ async def records_index(
                 inst_code = extract_institution_type(rec["reference"])
                 inst_label = INSTITUTION_LABELS.get(inst_code, inst_code)
                 type_label = record_type_label(rec["record_type"])
+                title_line = str(rec["record_title"] or "").strip()
+                institution_line = str(rec["institution"] or "").strip()
+                detail_bits = [bit for bit in (title_line, institution_line) if bit]
+                detail_html = (
+                    f'<div class="record-row-detail">{escape(" — ".join(detail_bits))}</div>'
+                    if detail_bits
+                    else ""
+                )
                 exported = rec["exported_at"][:10] if rec["exported_at"] else "—"
                 version_badge = (
                     f' <span class="version-badge">v{rec["version"]}</span>'
@@ -1041,6 +1099,7 @@ async def records_index(
                     <a href="/verify/{escape(rec['reference'])}" class="ref-link">
                       {escape(rec['reference'])}{version_badge}
                     </a>
+                    {detail_html}
                   </td>
                   <td class="col-type">{escape(type_label)}</td>
                   <td class="col-inst">{escape(inst_label)}</td>
@@ -1332,6 +1391,12 @@ async def records_index(
       border-bottom: 1px solid #ccc;
     }}
     .ref-link:hover {{ border-color: #1a1a1a; }}
+    .record-row-detail {{
+      margin-top: 5px;
+      color: #666;
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }}
     .version-badge {{
       display: inline-block;
       font-size: 0.6rem;
@@ -6788,6 +6853,18 @@ async def verify_record(reference: str):
                     record["record_type"] if "record_type" in record.keys() else None
                 )
             ),
+            "record_title": escape(
+                record["record_title"] if "record_title" in record.keys() and record["record_title"] else ""
+            ),
+            "institution": escape(
+                record["institution"] if "institution" in record.keys() and record["institution"] else ""
+            ),
+            "event_date": escape(
+                record["event_date"] if "event_date" in record.keys() and record["event_date"] else ""
+            ),
+            "summary": escape(
+                record["summary"] if "summary" in record.keys() and record["summary"] else ""
+            ),
             "finding": escape(record["finding"] or ""),
             "generated_at": escape(record["generated_at"] or ""),
             "exported_at": escape(record["exported_at"] or ""),
@@ -6871,6 +6948,15 @@ async def verify_record(reference: str):
                 f"<tbody>{history_rows}</tbody>"
                 f"</table></section>"
             )
+        optional_metadata_rows = ""
+        for label, value in (
+            ("Title", safe["record_title"]),
+            ("Institution", safe["institution"]),
+            ("Event Date", safe["event_date"]),
+            ("Summary", safe["summary"]),
+        ):
+            if value:
+                optional_metadata_rows += f"<tr><td>{label}</td><td>{value}</td></tr>"
         # ── Source narrative section ──────────────────────────────
         source_narrative = (
             record["source_narrative"] if "source_narrative" in record.keys() else ""
@@ -7389,6 +7475,7 @@ async def verify_record(reference: str):
         <tbody>
           <tr><td>{s["field_reference"]}</td><td>{safe['reference']}</td></tr>
           <tr><td>Record Type</td><td>{safe['record_type']}</td></tr>
+          {optional_metadata_rows}
           <tr><td>{s["field_date"]}</td><td>{safe['generated_at']}</td></tr>
           <tr><td>{s["field_exported"]}</td><td>{safe['exported_at']}</td></tr>
           <tr><td>{s["field_trajectory"]}</td><td>{safe['trajectory']}</td></tr>

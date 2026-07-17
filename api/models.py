@@ -138,6 +138,12 @@ class AdaptationRunResponse(BaseModel):
 class RecordPayload(BaseModel):
     reference: str
     record_type: str = "strike"
+    record_title: str | None = None
+    institution: str | None = None
+    event_date: str | None = None
+    summary: str | None = None
+    source_document_id: str | None = None
+    source_document_reference: str | None = None
     generated_at: str
 
     trajectory: str = ""
@@ -160,6 +166,7 @@ class RecordPayload(BaseModel):
 class RecordResponse(BaseModel):
     reference: str
     record_type: str = "strike"
+    record_title: str | None = None
     version: int
     verification_hash: str
     verify_url: str
