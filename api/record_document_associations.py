@@ -247,6 +247,7 @@ def list_public_record_options(conn: sqlite3.Connection) -> list[dict[str, Any]]
     ensure_association_tables(conn)
     preferred_columns = (
         "reference",
+        "record_type",
         "title",
         "public_title",
         "record_title",

@@ -16,6 +16,7 @@ class RecordIndexingTests(unittest.TestCase):
     def sample_record(self):
         return {
             "reference": "Strike-LA-20260521-001",
+            "record_type": "complaint",
             "generated_at": "2026-05-21T10:00:00Z",
             "finding": "Institutional delay has become structurally visible.",
             "trajectory": "Deteriorating",
@@ -36,6 +37,8 @@ class RecordIndexingTests(unittest.TestCase):
             set(fields.keys()),
             {
                 "reference",
+                "record_type",
+                "record_type_label",
                 "generated_at",
                 "finding",
                 "trajectory",
@@ -45,6 +48,8 @@ class RecordIndexingTests(unittest.TestCase):
             },
         )
         self.assertEqual(fields["reference"], "Strike-LA-20260521-001")
+        self.assertEqual(fields["record_type"], "complaint")
+        self.assertEqual(fields["record_type_label"], "Complaint")
         self.assertEqual(
             fields["conditions"], ["Institutional Delay", "Transfer of Burden"]
         )
@@ -53,6 +58,8 @@ class RecordIndexingTests(unittest.TestCase):
         text = build_indexable_text(self.sample_record())
 
         self.assertIn("Strike-LA-20260521-001", text)
+        self.assertIn("complaint", text)
+        self.assertIn("Complaint", text)
         self.assertIn("Institutional delay has become structurally visible.", text)
         self.assertIn("Institutional Delay", text)
         self.assertNotIn("private narrative", text)

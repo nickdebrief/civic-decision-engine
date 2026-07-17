@@ -520,6 +520,9 @@ def _record_metadata_from_record(record: sqlite3.Row) -> dict[str, Any]:
     keys = set(record.keys())
     return {
         "reference": str(record["reference"]) if "reference" in keys else "",
+        "record_type": _association_record_type_label(
+            record["record_type"] if "record_type" in keys else None
+        ),
         "version": record["version"] if "version" in keys else None,
         "supersedes": record["supersedes"] if "supersedes" in keys else None,
         "generated_at": record["generated_at"] if "generated_at" in keys else None,
@@ -559,6 +562,7 @@ def _record_version_history(
         "generated_at",
         "exported_at",
         "verification_hash",
+        "record_type",
         "trajectory",
         "system_state",
         "finding",
@@ -43867,6 +43871,7 @@ def _admin_record_select_fields(conn: sqlite3.Connection) -> str:
     columns = _record_table_columns(conn)
     fields = ["reference", "version", "conditions_json", "signals_json", "finding"]
     for optional_field in (
+        "record_type",
         "trajectory",
         "system_state",
         "supersedes",
@@ -44655,6 +44660,24 @@ def _association_record_institution_label(reference: Any) -> str:
     return ""
 
 
+ASSOCIATION_RECORD_TYPE_LABELS = {
+    "strike": "Strike",
+    "complaint": "Complaint",
+    "investigation": "Investigation",
+    "decision": "Decision",
+    "proceeding": "Proceeding",
+    "administrative_action": "Administrative Action",
+    "public_submission": "Public Submission",
+    "policy_event": "Policy Event",
+    "research_record": "Research Record",
+}
+
+
+def _association_record_type_label(value: Any) -> str:
+    normalized = str(value or "strike").strip().lower() or "strike"
+    return ASSOCIATION_RECORD_TYPE_LABELS.get(normalized, "Strike")
+
+
 def _word_safe_truncate(value: Any, limit: int = 180) -> str:
     text = " ".join(str(value or "").split())
     if len(text) <= limit:
@@ -44674,8 +44697,12 @@ def build_record_selector_label(record: Mapping[str, Any]) -> str:
         or ""
     ).strip()
     institution = str(record.get("institution_type") or "").strip() or _association_record_institution_label(reference)
+    record_type_value = str(record.get("record_type") or "").strip().lower()
+    type_label = _association_record_type_label(record_type_value)
     trajectory = str(record.get("trajectory") or "").strip()
     parts = [reference]
+    if record_type_value and record_type_value != "strike":
+        parts.append(type_label)
     if title and title != reference:
         parts.append(title)
     elif institution and institution != reference:
@@ -44686,6 +44713,7 @@ def build_record_selector_label(record: Mapping[str, Any]) -> str:
 
 
 def _association_record_search_text(record: Mapping[str, Any]) -> str:
+    record_type_value = str(record.get("record_type") or "").strip().lower()
     values = (
         record.get("reference"),
         record.get("title"),
@@ -44695,6 +44723,8 @@ def _association_record_search_text(record: Mapping[str, Any]) -> str:
         record.get("institution_type") or _association_record_institution_label(record.get("reference")),
         record.get("institution_source"),
         record.get("trajectory"),
+        record_type_value,
+        _association_record_type_label(record_type_value),
         record.get("system_state"),
         record.get("finding"),
         record.get("conditions_json"),
@@ -44730,11 +44760,14 @@ def _association_selected_record_contexts(records: list[dict[str, Any]]) -> str:
     for index, item in enumerate(records):
         reference = str(item.get("reference") or "").strip()
         institution = str(item.get("institution_type") or "").strip() or _association_record_institution_label(reference)
+        record_type_value = str(item.get("record_type") or "").strip().lower()
+        type_label = _association_record_type_label(record_type_value)
         trajectory = str(item.get("trajectory") or "").strip()
         system_state = str(item.get("system_state") or "").strip()
         finding = _word_safe_truncate(item.get("finding"), limit=200)
         fields = (
             ("Reference", reference),
+            ("Record type", type_label),
             ("Institution", institution),
             ("Trajectory", trajectory),
             ("System state", system_state),
@@ -44757,12 +44790,15 @@ def _association_record_options(records: list[dict[str, Any]]) -> str:
     for index, item in enumerate(records):
         reference = str(item.get("reference") or "").strip()
         institution = str(item.get("institution_type") or "").strip() or _association_record_institution_label(reference)
+        record_type_value = str(item.get("record_type") or "").strip().lower()
+        type_label = _association_record_type_label(record_type_value)
         trajectory = str(item.get("trajectory") or "").strip()
         system_state = str(item.get("system_state") or "").strip()
         options.append(
             '<option '
             f'value="{escape(reference)}" '
             f'data-reference="{escape(reference)}" '
+            f'data-record-type="{escape(record_type_value or "strike")}" '
             f'data-institution="{escape(institution)}" '
             f'data-trajectory="{escape(trajectory)}" '
             f'data-system-state="{escape(system_state)}" '
