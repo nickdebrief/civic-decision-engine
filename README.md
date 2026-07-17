@@ -544,6 +544,23 @@ as a Complaint record, without using an unrelated Strike record. Record type is
 not added to legacy verification-hash inputs; existing hashes remain
 verifiable.
 
+### Create Canonical Record from Published Document
+
+Administrators can now use an existing Published document as source context for
+creating a distinct canonical CDE record. The Published document admin view
+offers a governed **Create canonical record from this document** action that
+prefills editable record metadata from the document title, description,
+institution/source, document date, category, tags, and reference identifier
+where available.
+
+The workflow preserves object boundaries: the document remains a published
+evidential artefact, the record is created as a separate canonical public
+record, and any Record-Document Association is created only when explicitly
+confirmed. The document SHA-256 is not reused as the record verification hash,
+document bytes are not copied into the record, OCR/body text is not converted
+into findings, and associations continue to pass the existing Published-only
+document and public-record validation rules.
+
 ---
 
 ## What it does

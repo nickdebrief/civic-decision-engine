@@ -17,6 +17,10 @@ class RecordIndexingTests(unittest.TestCase):
         return {
             "reference": "Strike-LA-20260521-001",
             "record_type": "complaint",
+            "record_title": "Initial Complaint to the Medical Council of Ireland",
+            "institution": "Medical Council of Ireland",
+            "event_date": "2019-12-02",
+            "summary": "Formal complaint submitted with supporting material.",
             "generated_at": "2026-05-21T10:00:00Z",
             "finding": "Institutional delay has become structurally visible.",
             "trajectory": "Deteriorating",
@@ -39,6 +43,10 @@ class RecordIndexingTests(unittest.TestCase):
                 "reference",
                 "record_type",
                 "record_type_label",
+                "record_title",
+                "institution",
+                "event_date",
+                "summary",
                 "generated_at",
                 "finding",
                 "trajectory",
@@ -50,6 +58,9 @@ class RecordIndexingTests(unittest.TestCase):
         self.assertEqual(fields["reference"], "Strike-LA-20260521-001")
         self.assertEqual(fields["record_type"], "complaint")
         self.assertEqual(fields["record_type_label"], "Complaint")
+        self.assertEqual(fields["record_title"], "Initial Complaint to the Medical Council of Ireland")
+        self.assertEqual(fields["institution"], "Medical Council of Ireland")
+        self.assertEqual(fields["event_date"], "2019-12-02")
         self.assertEqual(
             fields["conditions"], ["Institutional Delay", "Transfer of Burden"]
         )
@@ -60,6 +71,8 @@ class RecordIndexingTests(unittest.TestCase):
         self.assertIn("Strike-LA-20260521-001", text)
         self.assertIn("complaint", text)
         self.assertIn("Complaint", text)
+        self.assertIn("Medical Council of Ireland", text)
+        self.assertIn("2019-12-02", text)
         self.assertIn("Institutional delay has become structurally visible.", text)
         self.assertIn("Institutional Delay", text)
         self.assertNotIn("private narrative", text)

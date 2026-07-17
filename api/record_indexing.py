@@ -10,6 +10,10 @@ INDEXED_RECORD_FIELDS = (
     "reference",
     "record_type",
     "record_type_label",
+    "record_title",
+    "institution",
+    "event_date",
+    "summary",
     "generated_at",
     "finding",
     "trajectory",
@@ -69,6 +73,10 @@ def build_indexed_fields(record: Mapping[str, Any]) -> dict[str, Any]:
         "record_type_label": RECORD_TYPE_LABELS[
             _record_type(_value(record, "record_type", "strike"))
         ],
+        "record_title": str(_value(record, "record_title")),
+        "institution": str(_value(record, "institution")),
+        "event_date": str(_value(record, "event_date")),
+        "summary": str(_value(record, "summary")),
         "generated_at": str(_value(record, "generated_at")),
         "finding": str(_value(record, "finding")),
         "trajectory": str(_value(record, "trajectory")),
