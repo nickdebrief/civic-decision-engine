@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from api import record_document_associations as rda
 from api.document_intake import (
     STATUS_LABELS,
+    document_keywords_display,
     document_media_type,
     document_type_label,
     intake_root,
@@ -212,17 +213,22 @@ def _render_associated_records(item: dict) -> str:
 
 def _render_document(item: dict) -> str:
     publication_timestamp = _publication_timestamp(item)
-    fields = (
+    fields = [
         ("Title", item["title"]),
         ("Description", item["description"]),
         ("Institution / Source", item["institution_source"]),
         ("Category", item["category"]),
+    ]
+    keywords = document_keywords_display(item.get("keywords") or item.get("tags"))
+    if keywords:
+        fields.append(("Keywords", keywords))
+    fields.extend((
         ("Publication Date", _date(publication_timestamp or item.get("publication_date"))),
         ("Document Date", item["document_date"]),
         ("Document Format", document_type_label(item.get("document_type"))),
         ("SHA-256", item["sha256_hash"]),
         ("Reference Identifier", item.get("reference_identifier") or "Not provided"),
-    )
+    ))
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields

@@ -550,7 +550,7 @@ Administrators can now use an existing Published document as source context for
 creating a distinct canonical CDE record. The Published document admin view
 offers a governed **Create canonical record from this document** action that
 prefills editable record metadata from the document title, description,
-institution/source, document date, category, tags, and reference identifier
+institution/source, document date, category, Keywords, and reference identifier
 where available.
 
 The workflow preserves object boundaries: the document remains a published
@@ -560,6 +560,21 @@ confirmed. The document SHA-256 is not reused as the record verification hash,
 document bytes are not copied into the record, OCR/body text is not converted
 into findings, and associations continue to pass the existing Published-only
 document and public-record validation rules.
+
+### Governed Document Keywords
+
+Admin Document Intake now includes a governed **KEYWORDS** field for
+comma-separated descriptive discovery metadata. Keywords are normalized into a
+stable keyword set, preserved through review, approval, publication, governed
+correction, and archival workflows, and displayed on Published document detail
+pages when present.
+
+Keywords are included in the existing `build_document_search_text()` path used
+by the Public Document Library and the Published Document selector in
+Record-Document Association creation. They improve discovery without changing
+document bytes, SHA-256, lifecycle status, publication rules, associations,
+record Conditions, record Signals, evidence, verification, or public/private
+visibility boundaries.
 
 ---
 
