@@ -61,6 +61,7 @@ from api.document_intake import (
     document_keywords_display,
     document_keywords_input_value,
     document_type_label,
+    document_intake_upload_error_detail,
     intake_root,
     intake_document_file,
     is_audio_document,
@@ -47267,7 +47268,13 @@ def admin_document_intake_upload(
             "document_intake_file_too_large": 413,
             "document_intake_duplicate": 409,
         }.get(detail, 400)
-        raise _http_error(status_code, detail) from exc
+        response_detail = document_intake_upload_error_detail(
+            detail,
+            data=data,
+            original_filename=getattr(file, "filename", None) or "document.pdf",
+            content_type=getattr(file, "content_type", None),
+        )
+        raise _http_error(status_code, response_detail) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),
         status_code=201,

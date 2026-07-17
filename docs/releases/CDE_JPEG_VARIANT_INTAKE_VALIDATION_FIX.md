@@ -9,6 +9,10 @@ The immediate acceptance case is a redacted HR Walk-In Clinic receipt image save
 as `.jpg` or `.jpeg` after address redaction. The file is preserved exactly as
 uploaded and enters the existing governed Document Intake lifecycle.
 
+Follow-up diagnosis found that one remaining Redacted export used a `.jpeg`
+filename but contained a JPEG 2000 Part 1 (JP2) container. JP2 is not baseline
+or progressive JPEG and remains outside the governed supported-format list.
+
 ## Validation Boundary
 
 Server-side byte detection remains authoritative. The filename extension and
@@ -41,6 +45,11 @@ Extension spoofing remains rejected. PNG bytes renamed as `.jpg`, JPEG bytes
 renamed as `.png`, arbitrary bytes, and truncated malformed JPEGs are not
 accepted.
 
+JPEG 2000 / JP2, TIFF, HEIC/HEIF, and WebP files renamed with `.jpg` or `.jpeg`
+also remain rejected. Administrators should export those files explicitly as
+JPEG through Preview or another trusted image editor before intake when JPEG is
+the intended governed format.
+
 ## Diagnostics
 
 Authenticated intake failures now emit safe diagnostic log fields:
@@ -54,6 +63,10 @@ Authenticated intake failures now emit safe diagnostic log fields:
 
 The logs do not include uploaded file contents, private storage paths, session
 data, credentials, or secrets.
+
+Authenticated upload failures now return a structured diagnostic for known
+unsupported signatures. A `.jpeg` upload whose bytes are JP2 reports that the
+server detected JPEG 2000 and recommends exporting explicitly as JPEG.
 
 ## Preserved Behaviour
 

@@ -601,6 +601,10 @@ Server-side byte detection remains authoritative. Extension spoofing, malformed
 JPEGs, PNG files renamed as JPEGs, and JPEG files renamed as PNGs remain
 rejected. Original bytes and SHA-256 semantics are unchanged.
 
+JPEG 2000 / JP2 files renamed with `.jpg` or `.jpeg` are not accepted as JPEG.
+Export them explicitly as JPEG before intake when JPEG is the intended governed
+format.
+
 ---
 
 ## What it does

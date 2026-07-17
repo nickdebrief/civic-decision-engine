@@ -142,6 +142,96 @@ def _leading_signature_hex(data: bytes, *, length: int = 16) -> str:
     return data[:length].hex()
 
 
+def _unsupported_media_signature(data: bytes) -> tuple[str, str, str] | None:
+    if data.startswith(b"\x00\x00\x00\x0cjP  \r\n\x87\n") or data.startswith(
+        b"\xff\x4f\xff\x51"
+    ):
+        return "jpeg2000", "image/jp2", "JPEG 2000 (JP2)"
+    if data.startswith(b"II*\x00") or data.startswith(b"MM\x00*"):
+        return "tiff", "image/tiff", "TIFF"
+    if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in {
+        b"heic",
+        b"heix",
+        b"hevc",
+        b"hevx",
+        b"mif1",
+        b"msf1",
+    }:
+        return "heic", "image/heic", "HEIC/HEIF"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp", "image/webp", "WebP"
+    return None
+
+
+def document_intake_upload_error_detail(
+    code: str,
+    *,
+    data: bytes,
+    original_filename: str,
+    content_type: str | None = None,
+) -> dict[str, Any] | str:
+    if code not in {
+        "document_intake_file_type_not_allowed",
+        "document_intake_file_type_mismatch",
+    }:
+        return code
+
+    filename = PurePath(str(original_filename or "").replace("\\", "/")).name
+    extension = Path(filename).suffix.lower()
+    expected_type = EXTENSION_DOCUMENT_TYPES.get(extension)
+    expected_label = DOCUMENT_TYPE_LABELS.get(expected_type or "", "supported file")
+    unsupported = _unsupported_media_signature(data)
+    detected_type = None
+    try:
+        detected_type = _detected_document_type(data)
+    except ValueError:
+        detected_type = None
+
+    if code == "document_intake_file_type_mismatch" and detected_type:
+        detected_label = DOCUMENT_TYPE_LABELS.get(detected_type, detected_type.upper())
+        message = (
+            f"The filename extension is {expected_label}, but the server detected "
+            f"{detected_label}."
+        )
+        detected_format = detected_type
+        detected_mime_type = DOCUMENT_TYPE_MEDIA_TYPES.get(detected_type, "unknown")
+    elif expected_type == "jpeg" and unsupported:
+        detected_format, detected_mime_type, detected_label = unsupported
+        message = (
+            "The filename extension is JPEG, but the server detected "
+            f"{detected_label}, which is not a supported JPEG format. Export the "
+            "file explicitly as JPEG and upload the new .jpg or .jpeg file."
+        )
+    elif expected_type == "jpeg":
+        detected_format = "unknown"
+        detected_mime_type = "unknown"
+        message = (
+            "The uploaded file has a JPEG extension but could not be verified as "
+            "a valid supported JPEG."
+        )
+    elif unsupported:
+        detected_format, detected_mime_type, detected_label = unsupported
+        message = (
+            f"The server detected {detected_label}, which is not a supported "
+            "Document Intake format."
+        )
+    else:
+        detected_format = "unknown"
+        detected_mime_type = "unknown"
+        message = "The server could not recognise the uploaded file as a supported format."
+
+    return {
+        "code": code,
+        "message": message,
+        "filename": filename,
+        "extension": extension,
+        "declared_content_type": content_type,
+        "expected_format": expected_type,
+        "detected_format": detected_format,
+        "detected_mime_type": detected_mime_type,
+    }
+
+
 def _is_supported_jpeg(data: bytes) -> bool:
     if len(data) < 6 or not data.startswith(b"\xff\xd8\xff"):
         return False
@@ -183,11 +273,16 @@ def validate_document_file(
     try:
         detected_type = _detected_document_type(data)
     except ValueError:
+        unsupported = _unsupported_media_signature(data)
+        detected_format = unsupported[0] if unsupported else "unknown"
+        detected_mime_type = unsupported[1] if unsupported else "unknown"
         LOGGER.warning(
-            "Document intake rejected unsupported media: filename=%s extension=%s declared_content_type=%s detected_format=unknown detected_mime_type=unknown leading_signature_hex=%s",
+            "Document intake rejected unsupported media: filename=%s extension=%s declared_content_type=%s detected_format=%s detected_mime_type=%s leading_signature_hex=%s",
             filename,
             extension,
             content_type,
+            detected_format,
+            detected_mime_type,
             _leading_signature_hex(data),
         )
         raise

@@ -26,6 +26,7 @@ from api.routes import admin_session
 PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
 JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x02strike-jpeg\xff\xd9"
 PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRstrike-png"
+JP2_BYTES = b"\x00\x00\x00\x0cjP  \r\n\x87\n\x00\x00\x00\x14ftypjp2 \x00\x00\x00\x00jp2 "
 
 
 class AdminDocumentIntakeTests(unittest.TestCase):
@@ -218,6 +219,26 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             with self.subTest(case=case), self.assertRaises(FakeHTTPException) as ctx:
                 self.upload(**case)
             self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_jpeg2000_named_as_jpeg_is_rejected_with_admin_diagnostic(self):
+        with self.assertRaises(FakeHTTPException) as ctx:
+            self.upload(
+                data=JP2_BYTES,
+                filename="HR_Walk_In_Clinic_Receipt_2018_Redacted.jpeg",
+                content_type="image/jpeg",
+            )
+
+        self.assertEqual(ctx.exception.status_code, 415)
+        detail = ctx.exception.detail
+        self.assertEqual(detail["code"], "document_intake_file_type_not_allowed")
+        self.assertEqual(detail["filename"], "HR_Walk_In_Clinic_Receipt_2018_Redacted.jpeg")
+        self.assertEqual(detail["extension"], ".jpeg")
+        self.assertEqual(detail["expected_format"], "jpeg")
+        self.assertEqual(detail["detected_format"], "jpeg2000")
+        self.assertEqual(detail["detected_mime_type"], "image/jp2")
+        self.assertIn("JPEG 2000", detail["message"])
+        self.assertIn("Export the file explicitly as JPEG", detail["message"])
         self.assertEqual(list_pending_documents(root=self.root), [])
 
     def test_empty_upload_is_rejected(self):
