@@ -141,6 +141,64 @@ def is_image_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"jpeg", "png"}
 
 
+def normalize_document_keywords(value: Any) -> list[str]:
+    """Return stable administrator-confirmed discovery keywords."""
+    raw_values: list[Any] = []
+    if value is None:
+        raw_values = []
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if stripped[:1] in {"[", "{"}:
+            try:
+                parsed = json.loads(stripped)
+            except (TypeError, json.JSONDecodeError):
+                parsed = None
+            if parsed is not None:
+                raw_values.extend(normalize_document_keywords(parsed))
+            else:
+                raw_values.extend(stripped.split(","))
+        else:
+            raw_values.extend(stripped.split(","))
+    elif isinstance(value, dict):
+        raw_values.extend(value.values())
+    elif isinstance(value, (list, tuple, set)):
+        raw_values.extend(value)
+    else:
+        raw_values.append(value)
+
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        if isinstance(raw, (list, tuple, set, dict)):
+            candidates = normalize_document_keywords(raw)
+        else:
+            candidates = [str(raw or "")]
+        for candidate in candidates:
+            normalized = _WHITESPACE_RE.sub(" ", str(candidate or "")).strip()
+            if not normalized:
+                continue
+            parts = normalized.split(",") if "," in normalized else [normalized]
+            for part in parts:
+                keyword = _WHITESPACE_RE.sub(" ", part).strip()
+                if not keyword:
+                    continue
+                key = keyword.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                keywords.append(keyword)
+    return keywords
+
+
+def document_keywords_display(value: Any, *, separator: str = " · ") -> str:
+    keywords = normalize_document_keywords(value)
+    return separator.join(keywords)
+
+
+def document_keywords_input_value(value: Any) -> str:
+    return ", ".join(normalize_document_keywords(value))
+
+
 def store_pending_document(
     *,
     data: bytes,
@@ -154,6 +212,7 @@ def store_pending_document(
     visibility: str,
     notes: str,
     reference_identifier: str | None = None,
+    keywords: Any = None,
     actor: str = "admin",
     uploaded_at: str | None = None,
     root: Path | None = None,
@@ -182,6 +241,7 @@ def store_pending_document(
         raise ValueError("document_intake_document_date_invalid") from exc
 
     digest = hashlib.sha256(data).hexdigest()
+    normalized_keywords = normalize_document_keywords(keywords)
     destination_root = (root or intake_root()).resolve(strict=False)
     destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     item_dir = destination_root / digest
@@ -214,6 +274,8 @@ def store_pending_document(
         "visibility": normalized["visibility"],
         "notes": normalized["notes"],
         "reference_identifier": str(reference_identifier or "").strip() or None,
+        "keywords": normalized_keywords,
+        "tags": normalized_keywords,
         "proposed_storage_location": str(file_path),
         "public_record_mutation": False,
         "status_updated_at": timestamp,
@@ -253,6 +315,8 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     metadata.setdefault("document_type", normalized_document_type(metadata))
     metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
     metadata.setdefault("content_type", document_media_type(metadata))
+    metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
+    metadata.setdefault("tags", metadata["keywords"])
     return metadata
 
 
@@ -270,6 +334,8 @@ def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
             metadata.setdefault("document_type", normalized_document_type(metadata))
             metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
             metadata.setdefault("content_type", document_media_type(metadata))
+            metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
+            metadata.setdefault("tags", metadata["keywords"])
             items.append(metadata)
     return sorted(items, key=lambda item: (item.get("upload_date", ""), item["intake_id"]), reverse=True)
 
@@ -420,6 +486,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
         document.get("filename"),
         document.get("ocr_text"),
         document.get("body_text"),
+        document.get("keywords"),
         document.get("tags"),
     ]
     flattened: list[str] = []

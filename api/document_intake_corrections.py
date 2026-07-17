@@ -13,6 +13,7 @@ from api.document_intake import (
     DOCUMENT_TYPE_EXTENSIONS,
     STATUS_LABELS,
     document_media_type,
+    normalize_document_keywords,
     document_type_label,
     intake_document_file,
     intake_root,
@@ -85,6 +86,7 @@ def ensure_correction_tables(conn: sqlite3.Connection) -> None:
             corrected_category TEXT NOT NULL,
             corrected_document_date TEXT NOT NULL,
             corrected_reference_identifier TEXT,
+            corrected_keywords TEXT,
             corrected_visibility TEXT NOT NULL,
             corrected_notes TEXT NOT NULL,
             correction_state TEXT NOT NULL,
@@ -111,6 +113,11 @@ def ensure_correction_tables(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        "ALTER TABLE document_intake_corrections ADD COLUMN corrected_keywords TEXT"
+    ) if "corrected_keywords" not in {
+        row[1] for row in conn.execute("PRAGMA table_info(document_intake_corrections)")
+    } else None
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS document_intake_correction_history (
@@ -367,6 +374,7 @@ def create_correction(
     corrected_visibility: str,
     corrected_notes: str,
     actor: str,
+    corrected_keywords: Any = None,
     created_at: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
@@ -387,6 +395,7 @@ def create_correction(
         raise ValueError("intake_correction_visibility_invalid")
     notes = _required(corrected_notes, "intake_correction_metadata_required")
     reference = generate_correction_reference(conn, timestamp)
+    keywords = normalize_document_keywords(corrected_keywords)
     cursor = conn.execute(
         """
         INSERT INTO document_intake_corrections (
@@ -395,9 +404,9 @@ def create_correction(
             correction_reason, correction_description, corrected_title,
             corrected_description, corrected_institution_source, corrected_category,
             corrected_document_date, corrected_reference_identifier,
-            corrected_visibility, corrected_notes, correction_state,
+            corrected_keywords, corrected_visibility, corrected_notes, correction_state,
             created_at, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
         """,
         (
             reference,
@@ -414,6 +423,7 @@ def create_correction(
             category,
             document_date,
             _optional(corrected_reference_identifier),
+            json.dumps(keywords, ensure_ascii=False),
             visibility,
             notes,
             timestamp,
@@ -546,6 +556,8 @@ def _write_corrected_intake(
         "visibility": correction["corrected_visibility"],
         "notes": correction["corrected_notes"],
         "reference_identifier": correction.get("corrected_reference_identifier"),
+        "keywords": normalize_document_keywords(correction.get("corrected_keywords")),
+        "tags": normalize_document_keywords(correction.get("corrected_keywords")),
         "proposed_storage_location": str(destination_file),
         "public_record_mutation": False,
         "status_updated_at": timestamp,
