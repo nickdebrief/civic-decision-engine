@@ -526,6 +526,23 @@ evidence, publication, provenance, verification hash, SHA-256, archive
 collection, membership, authentication, public/private visibility, footer,
 search, filtering, or pagination behaviour is changed.
 
+### CDE v12.21 — Public Collection Pages
+
+CDE v12.21 expands governed Archive Collection public presentation so published
+collections can present ordered memberships across independently governed public
+objects: Canonical Records, Published Documents, and governed Record–Document
+Associations. Public routes remain `/collections` and
+`/collections/{collection_reference}`.
+
+Collection membership remains its own governed object with immutable membership
+history and sequence. Existing document memberships remain backward compatible,
+while new typed member references let each visible item link to its own
+independent public page. Public rendering dynamically omits unavailable members
+without deleting memberships or rewriting history, and no document bytes,
+SHA-256 values, record verification hashes, lifecycle states, publication rules,
+association semantics, evidence, Administrative Audit, or public/private
+visibility boundaries are changed.
+
 ### Canonical Record Types
 
 The canonical record model now supports a governed `record_type` field so CDE

@@ -45482,16 +45482,17 @@ def _render_collection_members_section(
         f"""<tr>
           <td class="collection-member-sequence col-sequence">{escape(_membership_sequence(item.get('display_sequence')))}</td>
           <td class="collection-member-reference col-reference">{escape(_membership_display(item.get('membership_reference')))}</td>
-          <td class="collection-member-title col-title">{escape(_membership_display(item.get('document_title')))}</td>
-          <td class="collection-member-document-reference col-reference">{escape(_membership_display(item.get('document_reference')))}</td>
-          <td class="collection-member-publication-status col-status">{escape(_membership_display(item.get('document_status_label')))}</td>
+          <td class="collection-member-type col-category">{escape(_membership_display(item.get('member_type_label')))}</td>
+          <td class="collection-member-title col-title">{escape(_membership_display(item.get('member_title') or item.get('document_title')))}</td>
+          <td class="collection-member-object-reference col-reference">{escape(_membership_display(item.get('member_public_reference') or item.get('document_reference')))}</td>
+          <td class="collection-member-publication-status col-status">{escape(_membership_display(item.get('member_status_label') or item.get('document_status_label')))}</td>
           <td class="collection-member-status col-status">{escape(_membership_status_label(item.get('membership_status')))}</td>
           <td class="collection-member-created col-timestamp">{escape(_membership_display(item.get('created_by')))}<br>{escape(_membership_display(item.get('created_at')))}</td>
           <td class="collection-member-actions col-actions"><a href="/admin/collections/{int(collection['id'])}/members/{escape(str(item.get('membership_reference') or ''))}">Open membership</a></td>
         </tr>"""
         for item in memberships
-    ) or '<tr><td colspan="8">No governed memberships are recorded for this collection.</td></tr>'
-    return f"""<section class="collection-members"><h2>Collection Members</h2><p class="notice">Collection membership is a governed object. It references a member document without copying it, moving it, changing its lifecycle, or altering its SHA-256 provenance.</p><p><a class="button-link" href="/admin/collections/{int(collection['id'])}/members/new">Add document</a></p><div class="collection-members-wrapper admin-table-scroll" role="region" aria-label="Collection Members table"><table class="collection-members-table admin-data-table"><thead><tr><th scope="col" class="collection-member-sequence col-sequence">Sequence</th><th scope="col" class="collection-member-reference col-reference">Membership reference</th><th scope="col" class="collection-member-title col-title">Document title</th><th scope="col" class="collection-member-document-reference col-reference">Document reference</th><th scope="col" class="collection-member-publication-status col-status">Publication status</th><th scope="col" class="collection-member-status col-status">Membership status</th><th scope="col" class="collection-member-created col-timestamp">Created</th><th scope="col" class="collection-member-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
+    ) or '<tr><td colspan="9">No governed memberships are recorded for this collection.</td></tr>'
+    return f"""<section class="collection-members"><h2>Collection Members</h2><p class="notice">Collection membership is a governed object. It references an independently governed public object without copying it, moving it, changing its lifecycle, or altering provenance, evidence, verification, or SHA-256 values.</p><p><a class="button-link" href="/admin/collections/{int(collection['id'])}/members/new">Add member</a></p><div class="collection-members-wrapper admin-table-scroll" role="region" aria-label="Collection Members table"><table class="collection-members-table admin-data-table"><thead><tr><th scope="col" class="collection-member-sequence col-sequence">Sequence</th><th scope="col" class="collection-member-reference col-reference">Membership reference</th><th scope="col" class="collection-member-type col-category">Member type</th><th scope="col" class="collection-member-title col-title">Member title</th><th scope="col" class="collection-member-object-reference col-reference">Public reference</th><th scope="col" class="collection-member-publication-status col-status">Public status</th><th scope="col" class="collection-member-status col-status">Membership status</th><th scope="col" class="collection-member-created col-timestamp">Created</th><th scope="col" class="collection-member-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
 
 
 def _render_collection_sequence_section(collection: dict[str, Any], sequence: dict[str, Any]) -> str:
@@ -45501,17 +45502,18 @@ def _render_collection_sequence_section(collection: dict[str, Any], sequence: di
         f"""<tr>
           <td class="collection-sequence-position col-sequence">{escape(_membership_sequence(item.get('display_sequence')))}</td>
           <td class="collection-sequence-reference col-reference">{escape(_membership_display(item.get('membership_reference')))}</td>
-          <td class="collection-sequence-document col-title">{escape(_membership_display(item.get('document_title')))}</td>
-          <td class="collection-sequence-document-reference col-reference">{escape(_membership_display(item.get('document_reference')))}</td>
+          <td class="collection-sequence-type col-category">{escape(_membership_display(item.get('member_type_label')))}</td>
+          <td class="collection-sequence-document col-title">{escape(_membership_display(item.get('member_title') or item.get('document_title')))}</td>
+          <td class="collection-sequence-document-reference col-reference">{escape(_membership_display(item.get('member_public_reference') or item.get('document_reference')))}</td>
           <td class="collection-sequence-membership-status col-status">{escape(_membership_status_label(item.get('membership_status')))}</td>
-          <td class="collection-sequence-document-status col-status">{escape(_membership_display(item.get('document_status_label')))}</td>
+          <td class="collection-sequence-document-status col-status">{escape(_membership_display(item.get('member_status_label') or item.get('document_status_label')))}</td>
           <td class="collection-sequence-previous col-reference">{escape(_membership_display(item.get('previous_membership_reference') or 'Beginning of collection sequence'))}</td>
           <td class="collection-sequence-next col-reference">{escape(_membership_display(item.get('next_membership_reference') or 'End of collection sequence'))}</td>
           <td class="collection-sequence-actions col-actions"><a href="/admin/collections/{int(collection['id'])}/members/{escape(str(item.get('membership_reference') or ''))}">Open membership</a></td>
         </tr>"""
         for item in sequence.get("members", [])
-    ) or '<tr><td colspan="9">No active governed memberships are currently in the collection sequence.</td></tr>'
-    return f"""<section class="collection-sequence"><h2>Collection Sequence</h2><p class="notice">Sequence records navigational order between governed memberships. It does not establish causation, chronology, evidential sufficiency, authorship, legal status, or document dependency.</p><section class="collection-summary"><p><strong>Continuity state:</strong> {escape(_membership_display(sequence.get('state_label')))}</p><p><strong>Active governed member count:</strong> {int(sequence.get('active_member_count') or 0)}</p><p><strong>First sequence position:</strong> {escape(_membership_sequence(sequence.get('first_position')))}</p><p><strong>Last sequence position:</strong> {escape(_membership_sequence(sequence.get('last_position')))}</p><p><strong>Missing positions:</strong> {escape(missing)}</p><p><strong>Duplicate positions:</strong> {escape(duplicates)}</p></section><div class="collection-sequence-wrapper admin-table-scroll" role="region" aria-label="Collection Sequence table"><table class="collection-sequence-table admin-data-table"><thead><tr><th scope="col" class="collection-sequence-position col-sequence">Sequence</th><th scope="col" class="collection-sequence-reference col-reference">Membership reference</th><th scope="col" class="collection-sequence-document col-title">Document title</th><th scope="col" class="collection-sequence-document-reference col-reference">Document reference</th><th scope="col" class="collection-sequence-membership-status col-status">Membership status</th><th scope="col" class="collection-sequence-document-status col-status">Document publication status</th><th scope="col" class="collection-sequence-previous col-reference">Previous</th><th scope="col" class="collection-sequence-next col-reference">Next</th><th scope="col" class="collection-sequence-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
+    ) or '<tr><td colspan="10">No active governed memberships are currently in the collection sequence.</td></tr>'
+    return f"""<section class="collection-sequence"><h2>Collection Sequence</h2><p class="notice">Sequence records navigational order between governed memberships. It does not establish causation, chronology, evidential sufficiency, authorship, legal status, document dependency, or association truth.</p><section class="collection-summary"><p><strong>Continuity state:</strong> {escape(_membership_display(sequence.get('state_label')))}</p><p><strong>Active governed member count:</strong> {int(sequence.get('active_member_count') or 0)}</p><p><strong>First sequence position:</strong> {escape(_membership_sequence(sequence.get('first_position')))}</p><p><strong>Last sequence position:</strong> {escape(_membership_sequence(sequence.get('last_position')))}</p><p><strong>Missing positions:</strong> {escape(missing)}</p><p><strong>Duplicate positions:</strong> {escape(duplicates)}</p></section><div class="collection-sequence-wrapper admin-table-scroll" role="region" aria-label="Collection Sequence table"><table class="collection-sequence-table admin-data-table"><thead><tr><th scope="col" class="collection-sequence-position col-sequence">Sequence</th><th scope="col" class="collection-sequence-reference col-reference">Membership reference</th><th scope="col" class="collection-sequence-type col-category">Member type</th><th scope="col" class="collection-sequence-document col-title">Member title</th><th scope="col" class="collection-sequence-document-reference col-reference">Public reference</th><th scope="col" class="collection-sequence-membership-status col-status">Membership status</th><th scope="col" class="collection-sequence-document-status col-status">Public status</th><th scope="col" class="collection-sequence-previous col-reference">Previous</th><th scope="col" class="collection-sequence-next col-reference">Next</th><th scope="col" class="collection-sequence-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
 
 
 def _membership_document_options(documents: list[dict[str, Any]], selected: str | None = None) -> str:
@@ -45522,14 +45524,57 @@ def _membership_document_options(documents: list[dict[str, Any]], selected: str 
     )
 
 
+def _membership_member_type_options(selected: str | None = "published_document") -> str:
+    selected_value = acm.normalize_member_type(selected or "published_document")
+    return "".join(
+        f'<option value="{escape(value)}"{" selected" if selected_value == value else ""}>{escape(label)}</option>'
+        for value, label in acm.MEMBER_TYPES.items()
+    )
+
+
+def _membership_record_options(records: list[dict[str, Any]], selected: str | None = None) -> str:
+    selected_value = str(selected or "")
+    rendered = ['<option value="">Select a public canonical record</option>']
+    for item in records:
+        reference = str(item.get("reference") or "")
+        label = build_record_selector_label(item)
+        rendered.append(
+            f'<option value="{escape(reference)}"{" selected" if selected_value == reference else ""}>{escape(label)}</option>'
+        )
+    return "".join(rendered)
+
+
+def _membership_association_options(associations: list[dict[str, Any]], selected: str | None = None) -> str:
+    selected_value = str(selected or "")
+    rendered = ['<option value="">Select a public association</option>']
+    for item in associations:
+        reference = str(item.get("public_reference") or "")
+        label_parts = [
+            reference,
+            rda.RELATIONSHIP_TYPES.get(str(item.get("relationship_type") or ""), str(item.get("relationship_type") or "")),
+            str(item.get("record_reference") or ""),
+            str(item.get("document_reference_identifier") or ""),
+        ]
+        label = " — ".join(part for part in label_parts if part)
+        rendered.append(
+            f'<option value="{escape(reference)}"{" selected" if selected_value == reference else ""}>{escape(label)}</option>'
+        )
+    return "".join(rendered)
+
+
 def _render_membership_create_page(
     collection: dict[str, Any],
     documents: list[dict[str, Any]],
     *,
+    records: list[dict[str, Any]] | None = None,
+    associations: list[dict[str, Any]] | None = None,
     admin_session: dict[str, Any] | None = None,
 ) -> str:
     options = _membership_document_options(documents)
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Add Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Add document</h1><p class="notice">This creates a governed membership only. The selected document is not copied, moved, republished, reclassified, or altered.</p><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members"><label>Existing document<select name="document_id" required>{options}</select></label><label>Display sequence<input name="display_sequence" type="number" min="0"></label><label>Effective from<input name="effective_from" type="date"></label><label>Effective to<input name="effective_to" type="date"></label><label>Membership note<textarea name="membership_note" required></textarea></label><button type="submit">Create governed membership</button></form></main></body></html>"""
+    record_options = _membership_record_options(records or [])
+    association_options = _membership_association_options(associations or [])
+    type_options = _membership_member_type_options()
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Add Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.field-help{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.field-help{{padding:10px 12px;border-left-color:#d8d4ca;font:.9rem system-ui,sans-serif;text-transform:none;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Add member</h1><p class="notice">This creates a governed membership only. The selected record, document, or association is not copied, moved, republished, reclassified, merged, or altered.</p><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members"><label>Member type<select name="member_type" required>{type_options}</select></label><label>Existing document<select name="document_id">{options}</select><span class="field-help">Use this when the member type is Published Document. Existing document membership behaviour is preserved.</span></label><label>Public canonical record<select name="record_member_reference">{record_options}</select><span class="field-help">Use this when the member type is Canonical Record. The stored membership value is the canonical public record reference.</span></label><label>Public record-document association<select name="association_member_reference">{association_options}</select><span class="field-help">Use this when the member type is Record-Document Association. The stored membership value is the public association reference.</span></label><label>Display sequence<input name="display_sequence" type="number" min="0"></label><label>Section label<input name="section_label"></label><label>Effective from<input name="effective_from" type="date"></label><label>Effective to<input name="effective_to" type="date"></label><label>Membership note<textarea name="membership_note" required></textarea></label><label>Curator note<textarea name="curator_note"></textarea></label><button type="submit">Create governed membership</button></form></main></body></html>"""
 
 
 def _membership_transition_controls(membership: dict[str, Any]) -> str:
@@ -45567,10 +45612,15 @@ def _render_membership_detail(
     fields = (
         ("Membership reference", membership.get("membership_reference")),
         ("Collection reference", membership.get("collection_reference")),
+        ("Member type", membership.get("member_type_label")),
+        ("Member reference", membership.get("member_public_reference") or membership.get("member_reference")),
+        ("Member title", membership.get("member_title") or membership.get("document_title")),
+        ("Member public URL", membership.get("member_url") or "Not currently publicly available."),
+        ("Member public status", membership.get("member_status_label") or membership.get("document_status_label")),
+        ("Member format or type", membership.get("member_format") or membership.get("document_format")),
         ("Document ID", membership.get("document_id")),
-        ("Document reference", membership.get("document_reference")),
-        ("Document title", membership.get("document_title")),
         ("Display sequence", _membership_sequence(membership.get("display_sequence"))),
+        ("Section label", membership.get("section_label")),
         ("Current sequence position", _membership_sequence(membership.get("display_sequence"))),
         ("Position within active sequence", f"{sequence_membership.get('sequence_position')} of {sequence_membership.get('sequence_total')}" if sequence_membership.get("sequence_position") else "Not currently in active sequence"),
         ("Previous active membership", sequence_membership.get("previous_membership_reference") or "Beginning of collection sequence"),
@@ -45582,6 +45632,7 @@ def _render_membership_detail(
         ("Effective from", membership.get("effective_from")),
         ("Effective to", membership.get("effective_to")),
         ("Membership note", membership.get("membership_note")),
+        ("Curator note", membership.get("curator_note")),
         ("Public eligibility", "Eligible" if membership.get("publicly_eligible") else "Not currently publicly eligible."),
     )
     rows = "".join(f"<tr><th>{escape(label)}</th><td>{escape(_membership_display(value))}</td></tr>" for label, value in fields)
@@ -45590,7 +45641,7 @@ def _render_membership_detail(
         for item in history
     ) or '<tr><td colspan="6">No membership history is available.</td></tr>'
     reference = escape(str(membership.get("membership_reference") or ""))
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.membership-history-wrapper{{overflow-x:auto}}.membership-history-table{{min-width:1120px;table-layout:auto}}.membership-history-timestamp{{min-width:180px;white-space:nowrap}}.membership-history-action,.membership-history-actor{{min-width:130px}}.membership-history-note{{min-width:220px}}.membership-history-state{{min-width:280px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Collection Membership</h1><p class="notice">Membership is a governed reference to an independently preserved member document. It does not alter document identity, lifecycle, publication, provenance, evidence, verification, or SHA-256.</p><h2>Membership metadata</h2><table class="metadata"><tbody>{rows}</tbody></table><h2>Membership lifecycle</h2>{_membership_transition_controls(membership)}<h2>Change sequence position</h2><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members/{reference}/sequence"><label>New sequence position<input name="display_sequence" type="number" min="1" value="{escape(str(membership.get('display_sequence') if membership.get('display_sequence') is not None else ''))}" required></label><label>Sequence note<input name="note" required></label><button type="submit">Change sequence position</button></form><h2>Sequence Pathway</h2><h3>Membership history</h3><p class="notice">Sequence Pathway is derived from immutable membership history. It remains separate from document Publication Pathway, document provenance, record verification, and record-document association history.</p><div class="membership-history-wrapper admin-table-scroll" role="region" aria-label="Sequence Pathway table"><table class="membership-history-table admin-data-table"><thead><tr><th scope="col" class="membership-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="membership-history-action col-action">Action</th><th scope="col" class="membership-history-actor col-actor">Actor</th><th scope="col" class="membership-history-note col-note">Note</th><th scope="col" class="membership-history-state col-history-state">Previous state</th><th scope="col" class="membership-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Collection Membership</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.membership-history-wrapper{{overflow-x:auto}}.membership-history-table{{min-width:1120px;table-layout:auto}}.membership-history-timestamp{{min-width:180px;white-space:nowrap}}.membership-history-action,.membership-history-actor{{min-width:130px}}.membership-history-note{{min-width:220px}}.membership-history-state{{min-width:280px}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/collections/{int(collection['id'])}">Back to collection</a></p><h1>Collection Membership</h1><p class="notice">Membership is a governed reference to an independently governed member object. It does not alter record identity, document identity, association identity, lifecycle, publication, provenance, evidence, verification, or SHA-256 values.</p><h2>Membership metadata</h2><table class="metadata"><tbody>{rows}</tbody></table><h2>Membership lifecycle</h2>{_membership_transition_controls(membership)}<h2>Change sequence position</h2><form method="post" action="/api/admin/session/collections/{int(collection['id'])}/members/{reference}/sequence"><label>New sequence position<input name="display_sequence" type="number" min="1" value="{escape(str(membership.get('display_sequence') if membership.get('display_sequence') is not None else ''))}" required></label><label>Sequence note<input name="note" required></label><button type="submit">Change sequence position</button></form><h2>Sequence Pathway</h2><h3>Membership history</h3><p class="notice">Sequence Pathway is derived from immutable membership history. It remains separate from document Publication Pathway, document provenance, record verification, record-document association history, and Administrative Audit.</p><div class="membership-history-wrapper admin-table-scroll" role="region" aria-label="Sequence Pathway table"><table class="membership-history-table admin-data-table"><thead><tr><th scope="col" class="membership-history-timestamp col-timestamp">Timestamp</th><th scope="col" class="membership-history-action col-action">Action</th><th scope="col" class="membership-history-actor col-actor">Actor</th><th scope="col" class="membership-history-note col-note">Note</th><th scope="col" class="membership-history-state col-history-state">Previous state</th><th scope="col" class="membership-history-state col-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
 def _render_collection_detail(
@@ -46710,6 +46761,8 @@ def admin_collection_membership_new_page(collection_id: int, request: Request):
     conn = ac.get_db()
     try:
         collection = ac.get_collection(conn, collection_id)
+        records = rda.list_public_record_options(conn)
+        associations = rda.list_public_association_index(conn, root=intake_root(), page_size=100)["rows"]
     except ValueError as exc:
         raise _http_error(404, str(exc)) from exc
     finally:
@@ -46718,6 +46771,8 @@ def admin_collection_membership_new_page(collection_id: int, request: Request):
         content=_render_membership_create_page(
             collection,
             list_intake_documents(root=intake_root()),
+            records=records,
+            associations=associations,
             admin_session=session,
         )
     )
@@ -46801,11 +46856,17 @@ def admin_collection_create(
 def admin_collection_membership_create(
     collection_id: int,
     request: Request,
-    document_id: str = Form(...),
+    document_id: str | None = Form(None),
     membership_note: str = Form(...),
     display_sequence: str | None = Form(None),
     effective_from: str | None = Form(None),
     effective_to: str | None = Form(None),
+    member_type: str | None = Form("published_document"),
+    member_reference: str | None = Form(None),
+    record_member_reference: str | None = Form(None),
+    association_member_reference: str | None = Form(None),
+    section_label: str | None = Form(None),
+    curator_note: str | None = Form(None),
 ):
     session = require_admin_session(request)
     conn = ac.get_db()
@@ -46815,8 +46876,18 @@ def admin_collection_membership_create(
             conn,
             collection_id=collection_id,
             document_id=document_id,
+            member_type=member_type,
+            member_reference=(
+                association_member_reference
+                if acm.normalize_member_type(member_type or "published_document") == "record_document_association"
+                else record_member_reference
+                if acm.normalize_member_type(member_type or "published_document") == "canonical_record"
+                else member_reference
+            ),
             actor=_admin_session_actor(session),
             membership_note=membership_note,
+            section_label=section_label,
+            curator_note=curator_note,
             display_sequence=display_sequence,
             effective_from=effective_from,
             effective_to=effective_to,
