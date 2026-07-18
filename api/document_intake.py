@@ -5,9 +5,12 @@ import json
 import logging
 import os
 import re
+import zipfile
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path, PurePath
 from typing import Any
+from xml.etree import ElementTree
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -20,6 +23,8 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "m4a": ".m4a",
     "mp3": ".mp3",
     "wav": ".wav",
+    "xls": ".xls",
+    "xlsx": ".xlsx",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -28,6 +33,8 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "m4a": "audio/mp4",
     "mp3": "audio/mpeg",
     "wav": "audio/wav",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -36,6 +43,8 @@ DOCUMENT_TYPE_LABELS = {
     "m4a": "M4A",
     "mp3": "MP3",
     "wav": "WAV",
+    "xls": "XLS",
+    "xlsx": "XLSX",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -44,6 +53,8 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "m4a": "audio",
     "mp3": "audio",
     "wav": "audio",
+    "xls": "spreadsheet",
+    "xlsx": "spreadsheet",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -53,6 +64,8 @@ EXTENSION_DOCUMENT_TYPES = {
     ".m4a": "m4a",
     ".mp3": "mp3",
     ".wav": "wav",
+    ".xls": "xls",
+    ".xlsx": "xlsx",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -117,6 +130,23 @@ _JPEG_FIRST_MARKERS = {
     0xEF,
     0xFE,
 }
+_OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_XLS_WORKBOOK_STREAM_NAMES = {"Workbook", "Book"}
+_OLE_REJECTED_STREAM_NAMES = {
+    "WordDocument",
+    "PowerPoint Document",
+    "EncryptedPackage",
+    "EncryptionInfo",
+    "VBA",
+    "_VBA_PROJECT_CUR",
+    "VBA_PROJECT",
+    "Macros",
+}
+_ZIP_MAX_ENTRIES = 512
+_ZIP_MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+_ZIP_MAX_EXPANSION_RATIO = 100
+_XLSX_REQUIRED_ENTRIES = {"[Content_Types].xml", "xl/workbook.xml"}
+_XLSX_REJECTED_SUFFIXES = (".exe", ".dll", ".js", ".vbs", ".ps1", ".bat", ".cmd")
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,6 +191,176 @@ def _unsupported_media_signature(data: bytes) -> tuple[str, str, str] | None:
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "webp", "image/webp", "WebP"
     return None
+
+
+def _uint32(data: bytes, offset: int) -> int:
+    return int.from_bytes(data[offset : offset + 4], "little", signed=False)
+
+
+def _int32(data: bytes, offset: int) -> int:
+    value = _uint32(data, offset)
+    return -2 if value == 0xFFFFFFFE else -1 if value == 0xFFFFFFFF else value
+
+
+def _ole_sector(data: bytes, sector_id: int, sector_size: int) -> bytes:
+    start = 512 + sector_id * sector_size
+    end = start + sector_size
+    if sector_id < 0 or end > len(data):
+        raise ValueError("document_intake_invalid_workbook")
+    return data[start:end]
+
+
+def _ole_directory_stream_names(data: bytes) -> list[str]:
+    if len(data) < 512 or not data.startswith(_OLE_SIGNATURE):
+        raise ValueError("document_intake_invalid_workbook")
+    sector_shift = int.from_bytes(data[30:32], "little", signed=False)
+    if sector_shift not in {9, 12}:
+        raise ValueError("document_intake_invalid_workbook")
+    sector_size = 1 << sector_shift
+    first_directory_sector = _int32(data, 48)
+    difat = [
+        _uint32(data, offset)
+        for offset in range(76, 512, 4)
+        if _uint32(data, offset) not in {0xFFFFFFFF, 0xFFFFFFFE}
+    ]
+    if first_directory_sector < 0 or not difat:
+        raise ValueError("document_intake_invalid_workbook")
+    fat_entries: list[int] = []
+    for sector_id in difat[:109]:
+        sector = _ole_sector(data, sector_id, sector_size)
+        fat_entries.extend(_uint32(sector, offset) for offset in range(0, sector_size, 4))
+    directory_bytes = bytearray()
+    sector_id = first_directory_sector
+    visited: set[int] = set()
+    while sector_id not in {-1, -2, 0xFFFFFFFF, 0xFFFFFFFE}:
+        if sector_id in visited or sector_id >= len(fat_entries):
+            raise ValueError("document_intake_invalid_workbook")
+        visited.add(sector_id)
+        directory_bytes.extend(_ole_sector(data, sector_id, sector_size))
+        next_id = fat_entries[sector_id]
+        sector_id = -2 if next_id == 0xFFFFFFFE else -1 if next_id == 0xFFFFFFFF else next_id
+        if len(directory_bytes) > 1024 * 1024:
+            raise ValueError("document_intake_invalid_workbook")
+    names: list[str] = []
+    for offset in range(0, len(directory_bytes), 128):
+        entry = bytes(directory_bytes[offset : offset + 128])
+        if len(entry) < 128:
+            continue
+        name_length = int.from_bytes(entry[64:66], "little", signed=False)
+        object_type = entry[66]
+        if object_type not in {1, 2, 5} or name_length < 2 or name_length > 64:
+            continue
+        raw_name = entry[: name_length - 2]
+        try:
+            name = raw_name.decode("utf-16le").strip("\x00")
+        except UnicodeDecodeError:
+            continue
+        if name:
+            names.append(name)
+    return names
+
+
+def _xls_workbook_metadata(data: bytes) -> dict[str, Any]:
+    names = _ole_directory_stream_names(data)
+    if any(name in _OLE_REJECTED_STREAM_NAMES for name in names):
+        if any(name in {"EncryptedPackage", "EncryptionInfo"} for name in names):
+            raise ValueError("document_intake_password_protected_workbook")
+        if any(name in {"VBA", "_VBA_PROJECT_CUR", "VBA_PROJECT", "Macros"} for name in names):
+            raise ValueError("document_intake_macro_enabled_workbook")
+        raise ValueError("document_intake_invalid_workbook")
+    if not any(name in _XLS_WORKBOOK_STREAM_NAMES for name in names):
+        raise ValueError("document_intake_invalid_workbook")
+    return {
+        "workbook_type": "Excel 97-2003 Workbook",
+        "worksheet_names": [],
+        "worksheet_count": None,
+        "hidden_sheets_present": None,
+    }
+
+
+def _zip_path_is_safe(name: str) -> bool:
+    path = PurePath(str(name or ""))
+    return (
+        bool(name)
+        and "\\" not in name
+        and not str(name).startswith("/")
+        and not path.is_absolute()
+        and ".." not in path.parts
+    )
+
+
+def _xlsx_workbook_metadata(data: bytes) -> dict[str, Any]:
+    try:
+        with zipfile.ZipFile(BytesIO(data)) as package:
+            infos = package.infolist()
+            if not infos or len(infos) > _ZIP_MAX_ENTRIES:
+                raise ValueError("document_intake_invalid_workbook")
+            names = {info.filename for info in infos}
+            if not _XLSX_REQUIRED_ENTRIES.issubset(names):
+                raise ValueError("document_intake_invalid_workbook")
+            total_uncompressed = 0
+            total_compressed = 0
+            for info in infos:
+                if not _zip_path_is_safe(info.filename):
+                    raise ValueError("document_intake_unsafe_workbook_package")
+                total_uncompressed += int(info.file_size or 0)
+                total_compressed += max(1, int(info.compress_size or 0))
+                lower_name = info.filename.lower()
+                if lower_name == "xl/vbaproject.bin":
+                    raise ValueError("document_intake_macro_enabled_workbook")
+                if lower_name.startswith("xl/embeddings/"):
+                    raise ValueError("document_intake_unsafe_workbook_package")
+                if lower_name.startswith("xl/externallinks/"):
+                    raise ValueError("document_intake_unsafe_workbook_package")
+                if lower_name.endswith(_XLSX_REJECTED_SUFFIXES):
+                    raise ValueError("document_intake_unsafe_workbook_package")
+            if total_uncompressed > _ZIP_MAX_UNCOMPRESSED_BYTES:
+                raise ValueError("document_intake_workbook_package_too_large")
+            if total_uncompressed > 5 * 1024 * 1024 and total_uncompressed / total_compressed > _ZIP_MAX_EXPANSION_RATIO:
+                raise ValueError("document_intake_workbook_package_too_large")
+            content_types = package.read("[Content_Types].xml", pwd=None)
+            if b"macroEnabled" in content_types or b"vnd.ms-excel.sheet.macroEnabled" in content_types:
+                raise ValueError("document_intake_macro_enabled_workbook")
+            if b"spreadsheetml.sheet.main+xml" not in content_types:
+                raise ValueError("document_intake_invalid_workbook")
+            workbook_xml = package.read("xl/workbook.xml", pwd=None)
+    except zipfile.BadZipFile as exc:
+        raise ValueError("document_intake_invalid_workbook") from exc
+    except RuntimeError as exc:
+        raise ValueError("document_intake_password_protected_workbook") from exc
+
+    try:
+        root = ElementTree.fromstring(workbook_xml)
+    except ElementTree.ParseError as exc:
+        raise ValueError("document_intake_invalid_workbook") from exc
+    namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+    sheets = root.findall(".//main:sheets/main:sheet", namespace)
+    worksheet_names = [
+        str(sheet.attrib.get("name") or "").strip()
+        for sheet in sheets
+        if str(sheet.attrib.get("name") or "").strip()
+    ]
+    hidden = any(
+        str(sheet.attrib.get("state") or "").strip().lower() in {"hidden", "veryhidden"}
+        for sheet in sheets
+    )
+    calc_pr = root.find(".//main:calcPr", namespace)
+    return {
+        "workbook_type": "Excel Workbook",
+        "worksheet_names": worksheet_names,
+        "worksheet_count": len(worksheet_names),
+        "hidden_sheets_present": hidden,
+        "calculation_mode": calc_pr.attrib.get("calcMode") if calc_pr is not None else None,
+    }
+
+
+def spreadsheet_workbook_metadata(data: bytes, document_type: str) -> dict[str, Any]:
+    normalized = str(document_type or "").strip().lower()
+    if normalized == "xls":
+        return _xls_workbook_metadata(data)
+    if normalized == "xlsx":
+        return _xlsx_workbook_metadata(data)
+    return {}
 
 
 def document_intake_upload_error_detail(
@@ -260,6 +460,12 @@ def _detected_document_type(data: bytes) -> str:
         return "mp3"
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return "wav"
+    if data.startswith(_OLE_SIGNATURE):
+        _xls_workbook_metadata(data)
+        return "xls"
+    if data.startswith(b"PK\x03\x04"):
+        _xlsx_workbook_metadata(data)
+        return "xlsx"
     raise ValueError("document_intake_file_type_not_allowed")
 
 
@@ -329,6 +535,10 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "mp3"
     if content_type in {"audio/wav", "audio/x-wav", "audio/wave"}:
         return "wav"
+    if content_type == "application/vnd.ms-excel":
+        return "xls"
+    if content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        return "xlsx"
     return "pdf"
 
 
@@ -346,6 +556,10 @@ def is_image_document(metadata: dict[str, Any]) -> bool:
 
 def is_audio_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"m4a", "mp3", "wav"}
+
+
+def is_spreadsheet_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) in {"xls", "xlsx"}
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -453,6 +667,11 @@ def store_pending_document(
 
     digest = hashlib.sha256(data).hexdigest()
     normalized_keywords = normalize_document_keywords(keywords)
+    workbook_metadata = (
+        spreadsheet_workbook_metadata(data, document_type)
+        if document_type in {"xls", "xlsx"}
+        else None
+    )
     destination_root = (root or intake_root()).resolve(strict=False)
     destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     item_dir = destination_root / digest
@@ -474,6 +693,7 @@ def store_pending_document(
         "content_type": normalized_type,
         "document_type": document_type,
         "document_format": document_type_label(document_type),
+        "media_family": DOCUMENT_TYPE_MEDIA_FAMILIES[document_type],
         "file_size_bytes": len(data),
         "sha256_hash": digest,
         "title": normalized["title"],
@@ -500,6 +720,8 @@ def store_pending_document(
             }
         ],
     }
+    if workbook_metadata:
+        metadata["workbook_metadata"] = workbook_metadata
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)
@@ -526,6 +748,7 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     metadata.setdefault("document_type", normalized_document_type(metadata))
     metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
     metadata.setdefault("content_type", document_media_type(metadata))
+    metadata.setdefault("media_family", document_media_family(metadata))
     metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
     metadata.setdefault("tags", metadata["keywords"])
     return metadata
@@ -545,6 +768,7 @@ def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
             metadata.setdefault("document_type", normalized_document_type(metadata))
             metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
             metadata.setdefault("content_type", document_media_type(metadata))
+            metadata.setdefault("media_family", document_media_family(metadata))
             metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
             metadata.setdefault("tags", metadata["keywords"])
             items.append(metadata)
@@ -695,6 +919,10 @@ def build_document_search_text(document: dict[str, Any]) -> str:
         document.get("category"),
         document.get("original_filename"),
         document.get("filename"),
+        document.get("document_type"),
+        document.get("document_format"),
+        document.get("media_family"),
+        document.get("workbook_metadata"),
         document.get("ocr_text"),
         document.get("body_text"),
         document.get("keywords"),
