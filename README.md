@@ -590,6 +590,21 @@ waveform extraction, transcoding, automatic associations, automatic canonical
 records, or changes to record verification hashes. The email that refers to an
 audio file and the audio artefact itself remain independently governed objects.
 
+### CDE v12.22 — Governed Spreadsheet Artefact Support
+
+Admin Document Intake now accepts original XLS and XLSX spreadsheet workbooks
+alongside PDF, JPEG, PNG, M4A, MP3, and WAV. Spreadsheet artefacts use the same
+private intake, review, approval, publication, provenance, lifecycle history,
+SHA-256, Keywords, and Public Document Library search paths as existing
+published files.
+
+Published spreadsheet detail pages identify the artefact as a spreadsheet,
+display available workbook metadata such as worksheet names, and retain an
+original-file download with attachment behaviour. CDE validates workbook
+structure server-side, rejects macro-enabled, encrypted, malformed, unsafe, or
+mismatched spreadsheet packages, and never executes formulas, macros, external
+links, data connections, scripts, or remote resources.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

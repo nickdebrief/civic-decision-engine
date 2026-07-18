@@ -814,7 +814,7 @@ def public_association_is_eligible(association: dict[str, Any]) -> bool:
 
 
 PUBLIC_ASSOCIATION_PAGE_SIZE_OPTIONS = (10, 25, 50, 100)
-PUBLIC_ASSOCIATION_FORMATS = {"PDF", "JPEG", "PNG"}
+PUBLIC_ASSOCIATION_FORMATS = {"PDF", "JPEG", "PNG", "M4A", "MP3", "WAV", "XLS", "XLSX"}
 PUBLIC_ASSOCIATION_SORTS = {"newest", "oldest", "association_reference", "record_reference", "document_title"}
 
 
@@ -919,7 +919,11 @@ def public_association_index_options(rows: list[dict[str, Any]]) -> dict[str, li
         "institutions": sorted({str(row.get("document_institution_source") or "") for row in rows if row.get("document_institution_source")}),
         "categories": sorted({str(row.get("document_category") or "") for row in rows if row.get("document_category")}),
         "created_years": sorted({str(row.get("created_year") or "") for row in rows if row.get("created_year")}, reverse=True),
-        "document_formats": [fmt for fmt in ("PDF", "JPEG", "PNG") if any(row.get("document_format") == fmt for row in rows)],
+        "document_formats": [
+            fmt
+            for fmt in ("PDF", "JPEG", "PNG", "M4A", "MP3", "WAV", "XLS", "XLSX")
+            if any(row.get("document_format") == fmt for row in rows)
+        ],
     }
 
 
