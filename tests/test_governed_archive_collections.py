@@ -289,7 +289,7 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
         self.assertIn(public["public_reference"], content)
         self.assertIn("Public Strike Archive", content)
         self.assertIn("Collection Governance Boundary", content)
-        self.assertIn("No active governed member documents are currently publicly visible", content)
+        self.assertIn("No active governed public members are currently visible", content)
         self.assertNotIn("Private collection note", content)
         self.assertNotIn("Signed in as", content)
         self.assertNotIn("previous_state_json", content)
@@ -377,8 +377,8 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
     def test_empty_collection_membership_state_does_not_mutate_public_documents(self):
         item = self._create(is_public=True)
         content = collection_routes.public_collection_page(item["public_reference"]).content
-        self.assertIn("Governed Member Documents", content)
-        self.assertIn("No active governed member documents are currently publicly visible", content)
+        self.assertIn("Governed Collection Members", content)
+        self.assertIn("No active governed public members are currently visible", content)
         self.assertNotIn("Add document", content)
         self.assertNotIn("Remove document", content)
         self.assertTrue(hasattr(admin_session, "admin_collection_membership_create"))

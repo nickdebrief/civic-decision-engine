@@ -164,7 +164,7 @@ class ArchiveCollectionMembershipGovernanceTests(unittest.TestCase):
         collection = self._collection()
         document = self._document()
         add_page = admin_session.admin_collection_membership_new_page(collection["id"], self.request).content
-        self.assertIn("Add document", add_page)
+        self.assertIn("Add member", add_page)
         self.assertIn(document["intake_id"], add_page)
         response = admin_session.admin_collection_membership_create(
             collection["id"],
@@ -206,7 +206,7 @@ class ArchiveCollectionMembershipGovernanceTests(unittest.TestCase):
         finally:
             conn.close()
         content = collection_routes.public_collection_page(collection["public_reference"]).content
-        self.assertIn("Governed Member Documents", content)
+        self.assertIn("Governed Collection Members", content)
         self.assertIn(public_member["membership_reference"], content)
         self.assertIn("Published Strike", content)
         self.assertIn(f'href="/documents/{public_doc["intake_id"]}"', content)

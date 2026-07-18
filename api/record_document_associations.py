@@ -199,10 +199,35 @@ def relationship_label(relationship_type: str, public_label: str | None = None) 
 def record_context(conn: sqlite3.Connection, reference: str) -> dict[str, Any] | None:
     ensure_association_tables(conn)
     try:
+        available_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(records)").fetchall()
+        }
+        preferred_columns = (
+            "reference",
+            "record_type",
+            "title",
+            "public_title",
+            "record_title",
+            "institution",
+            "institution_type",
+            "institution_source",
+            "summary",
+            "public_summary",
+            "finding",
+            "generated_at",
+            "exported_at",
+            "trajectory",
+            "system_state",
+            "version",
+            "language",
+        )
+        selected_columns = [column for column in preferred_columns if column in available_columns]
+        if "reference" not in selected_columns:
+            return None
         row = conn.execute(
-            """
-            SELECT reference, finding, generated_at, exported_at, trajectory,
-                   system_state, version, language
+            f"""
+            SELECT {", ".join(selected_columns)}
             FROM records
             WHERE reference = ? AND is_latest = 1
             ORDER BY version DESC
