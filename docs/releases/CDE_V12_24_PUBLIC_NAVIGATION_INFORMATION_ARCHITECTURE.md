@@ -9,6 +9,28 @@ This is a navigation and presentation stage only. It does not create a new
 governance object, change object identity, alter lifecycle state, rewrite
 provenance, modify publication eligibility, or change access-control rules.
 
+## Architectural Position
+
+CDE v12.24 is not a navigation release in the conventional sense. It is the
+release in which the Civic Decision Engine's governance model is expressed
+through a coherent public information architecture.
+
+Previous releases established independently governed public objects with their
+own identities, provenance, publication lifecycles, and public addresses.
+Version 12.24 connects those public objects through consistent navigation,
+breadcrumbs, governed object badges, safe archive return links, and cross-object
+navigation while preserving their independent identities and governance
+semantics.
+
+The result is not a hierarchy of pages, but a navigable public governance graph.
+Navigation exposes governed relationships without implying ownership,
+containment, or absorption. Associations remain independently governed public
+objects. Collections organise public objects without absorbing identity. Each
+governed object remains independently addressable through its own public route.
+
+Public information is not organised by containment. It is organised by
+governance.
+
 ## Relationship to v12.23
 
 CDE v12.23 introduced `/archive` as a unified discovery interface over existing
