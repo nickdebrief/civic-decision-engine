@@ -7440,6 +7440,7 @@ async def verify_record(reference: str):
       <div>
         <div class="doc-engine">{s["engine"]}</div>
         <div class="doc-nav">
+          <a href="/archive">← Archive Explorer</a>
           <a href="/records">← Public record index</a>
           <a href="/patterns">Condition patterns</a>
           <a href="/graph">Interactive graph</a>
