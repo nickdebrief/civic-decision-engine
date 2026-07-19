@@ -36,6 +36,14 @@ from api.attachments import (
     store_attachment_bytes,
 )
 from api.models import RecordPayload, RecordResponse
+from api.public_navigation import (
+    PUBLIC_NAVIGATION_CSS,
+    archive_back_link,
+    object_type_badge,
+    public_breadcrumbs,
+    public_primary_navigation,
+    sanitize_archive_return,
+)
 
 router = APIRouter()
 
@@ -1214,6 +1222,7 @@ async def records_index(
   <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/records">
   <meta name="description" content="Public record index for the Civic Decision Engine. Verified civic records with structured references, conditions, and trajectories.">
   <style>
+    {PUBLIC_NAVIGATION_CSS}
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
       font-family: Georgia, 'Times New Roman', serif;
@@ -6551,7 +6560,7 @@ def render_associated_public_documents_section(conn: sqlite3.Connection, referen
     </section>"""
 
 @router.get("/verify/{reference}", response_class=HTMLResponse)
-async def verify_record(reference: str):
+async def verify_record(reference: str, return_to: str | None = None):
     conn = get_db()
     try:
         cur = conn.cursor()
@@ -6875,6 +6884,21 @@ async def verify_record(reference: str):
             "hash": escape(record["verification_hash"] or ""),
             "version": str(record["version"]),
         }
+        archive_return = sanitize_archive_return(return_to)
+        record_title = (
+            record["record_title"] if "record_title" in record.keys() and record["record_title"] else ""
+        ) or record["reference"]
+        record_public_navigation = public_primary_navigation(active="records")
+        record_breadcrumbs = public_breadcrumbs(
+            [
+                ("Home", "/"),
+                ("Archive", archive_return),
+                ("Canonical Records", "/archive?type=canonical_record"),
+                (str(record_title), None),
+            ]
+        )
+        record_badge = object_type_badge("canonical_record")
+        record_archive_back_link = archive_back_link(archive_return)
 
         # ── Citation data ─────────────────────────────────────────
         verify_url = f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}"
@@ -7436,6 +7460,10 @@ async def verify_record(reference: str):
 </head>
 <body>
 <div class="document">
+    {record_public_navigation}
+    {record_breadcrumbs}
+    {record_archive_back_link}
+    <p>{record_badge}</p>
     <header class="doc-header">
       <div>
         <div class="doc-engine">{s["engine"]}</div>

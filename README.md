@@ -635,6 +635,18 @@ provenance, alter lifecycle state, change verification hashes, mutate
 publication eligibility, expose private metadata, or replace the existing
 `/records`, `/documents`, `/associations`, or `/collections` pages.
 
+### CDE v12.24 — Public Navigation & Information Architecture
+
+CDE v12.24 makes `/archive` discoverable through primary public navigation and
+standardises public breadcrumbs, archive return links, and governed object-type
+badges across Canonical Record, Published Document, Association, and Collection
+pages.
+
+The release improves public orientation and cross-object navigation without
+changing governance semantics, object identity, lifecycle behaviour, publication
+eligibility, provenance, verification hashes, public/private boundaries, or the
+independent public routes for each governed object.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
