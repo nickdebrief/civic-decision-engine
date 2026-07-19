@@ -635,6 +635,50 @@ provenance, alter lifecycle state, change verification hashes, mutate
 publication eligibility, expose private metadata, or replace the existing
 `/records`, `/documents`, `/associations`, or `/collections` pages.
 
+### CDE v12.24 — Public Navigation & Information Architecture
+
+CDE v12.24 makes `/archive` discoverable through primary public navigation and
+standardises public breadcrumbs, archive return links, and governed object-type
+badges across Canonical Record, Published Document, Association, and Collection
+pages.
+
+The release improves public orientation and cross-object navigation without
+changing governance semantics, object identity, lifecycle behaviour, publication
+eligibility, provenance, verification hashes, public/private boundaries, or the
+independent public routes for each governed object.
+
+#### Architectural Position
+
+CDE v12.24 is not a navigation release in the conventional sense. It is the
+release in which the Civic Decision Engine's governance model is expressed
+through a coherent public information architecture.
+
+Previous releases established independently governed public objects with their
+own identities, provenance, publication lifecycles, and public addresses.
+Version 12.24 connects those public objects through consistent navigation,
+breadcrumbs, governed object badges, and cross-object navigation while
+preserving their independent identities and governance semantics.
+
+The result is not a hierarchy of pages, but a navigable public governance graph.
+
+Public information is not organised by containment. It is organised by
+governance.
+
+#### Governance Principles Reinforced
+
+Version 12.24 reinforces the existing architectural principles of the Civic
+Decision Engine:
+
+- Identity exists before association.
+- A record is not its evidence.
+- Evidence is not the record.
+- The relationship is governed.
+- Collections do not absorb identity.
+- Provenance belongs to every object.
+- History should never be overwritten.
+
+Navigation now reflects these principles rather than obscuring them.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
