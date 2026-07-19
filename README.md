@@ -679,6 +679,19 @@ Decision Engine:
 
 Navigation now reflects these principles rather than obscuring them.
 
+#### CDE v12.24.1 — Navigation Completion
+
+CDE v12.24.1 completes the navigation symmetry introduced in v12.24 by
+confirming Canonical Record pages use the same public navigation, breadcrumb,
+governed object badge, and safe Archive return-link model as other governed
+public objects. It also adds **Public Archive Explorer** to the shared
+Administration Console navigation alongside **Public Document Library**.
+
+This is a navigation-only completion. The Administration Console manages
+governance, while the Public Archive Explorer exposes governance for public
+verification. No record, document, association, collection, lifecycle,
+publication, provenance, identifier, search, or access-control semantics change.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
