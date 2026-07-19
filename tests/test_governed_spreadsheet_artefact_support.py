@@ -320,7 +320,7 @@ class GovernedSpreadsheetArtefactSupportTests(unittest.TestCase):
             conn.close()
         self.assertIn("Supporting spreadsheet", documents.public_document_page(item["intake_id"]).content)
         collection_page = collection_routes.public_collection_page(collection["public_reference"]).content
-        self.assertIn("Governed Member Documents", collection_page)
+        self.assertIn("Governed Collection Members", collection_page)
         self.assertIn("XLSX", collection_page)
         self.assertIn(item["title"], collection_page)
         self.assertTrue(association["public_reference"].startswith("CDE-ASSOC-"))

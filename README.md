@@ -622,6 +622,19 @@ structure server-side, rejects macro-enabled, encrypted, malformed, unsafe, or
 mismatched spreadsheet packages, and never executes formulas, macros, external
 links, data connections, scripts, or remote resources.
 
+### CDE v12.23 — Public Archive Explorer
+
+CDE v12.23 adds `/archive`, a unified public discovery doorway across existing
+governed public objects: Canonical Records, Published Documents,
+Record-Document Associations, and Governed Public Collections. The Explorer
+provides public counts, search, filters, sorting, pagination, object-type
+labels, and direct links back to each governed object's own public page.
+
+The Explorer is not a new governance object or collection. It does not duplicate
+provenance, alter lifecycle state, change verification hashes, mutate
+publication eligibility, expose private metadata, or replace the existing
+`/records`, `/documents`, `/associations`, or `/collections` pages.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
