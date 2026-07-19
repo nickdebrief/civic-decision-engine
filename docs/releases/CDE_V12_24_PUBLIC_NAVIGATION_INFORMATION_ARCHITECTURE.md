@@ -44,6 +44,27 @@ governed public objects:
 CDE v12.24 keeps `/archive` as that doorway and makes it reachable from public
 navigation and from governed object detail pages.
 
+## v12.24.1 Navigation Completion
+
+CDE v12.24.1 completes the navigation symmetry introduced in v12.24.
+
+Canonical Record pages participate in the same public information architecture
+as Published Documents, Associations, and Collections. They use the shared
+primary public navigation, semantic breadcrumbs, the reusable `Canonical Record`
+object-type badge, and the validated `Back to Archive Explorer` return-link
+behaviour. Valid `/archive` query state is preserved where supplied, and unsafe
+return destinations fall back to `/archive`.
+
+The shared Administration Console navigation now includes a direct
+`Public Archive Explorer` link to `/archive` while retaining the existing
+`Public Document Library` link. The Administration Console manages governance;
+the Public Archive Explorer exposes governance for public verification.
+
+This is a navigation-only completion. It does not change governance semantics,
+object identity, lifecycle state, publication eligibility, provenance,
+identifiers, search behaviour, association logic, collection membership, or
+public/private access boundaries.
+
 ## Public Navigation
 
 Public pages now include an Archive link in the primary public navigation. The

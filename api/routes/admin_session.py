@@ -44579,6 +44579,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
+      <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
       <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
       {identity}
     </nav>"""

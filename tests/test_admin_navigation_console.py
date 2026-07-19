@@ -144,6 +144,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn(
             'href="/admin/records/RECORD-2026-001/evidence"', content
         )
+        self.assertIn("Public Archive Explorer", content)
+        self.assertIn('href="/archive"', content)
         self.assertIn("Public Document Library", content)
         self.assertNotIn(">Public Library</a>", content)
         self.assertIn("Signed in as:", content)
@@ -157,6 +159,8 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         for content in (intake, review):
             self.assertIn('aria-label="Administration Console"', content)
             self.assertIn('href="/admin"', content)
+            self.assertIn('href="/archive"', content)
+            self.assertIn("Public Archive Explorer", content)
             self.assertIn('href="/documents"', content)
             self.assertIn("Public Document Library", content)
             self.assertIn("Signed in as:", content)
