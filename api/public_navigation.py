@@ -16,6 +16,20 @@ ARCHIVE_QUERY_KEYS = {
     "page",
     "page_size",
 }
+TRACEABILITY_QUERY_KEYS = {
+    "search",
+    "record",
+    "document",
+    "relationship_type",
+    "collection",
+    "institution",
+    "media",
+    "year",
+    "document_year",
+    "sort",
+    "page",
+    "page_size",
+}
 
 OBJECT_TYPE_LABELS = {
     "canonical_record": "Canonical Record",
@@ -75,6 +89,34 @@ def archive_back_link(return_to: object | None) -> str:
     return f'<a class="archive-return-link" href="{escape(sanitize_archive_return(return_to))}">Back to Archive Explorer</a>'
 
 
+def sanitize_traceability_return(value: object | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "/traceability"
+    try:
+        parsed = urlsplit(raw)
+    except ValueError:
+        return "/traceability"
+    if parsed.scheme or parsed.netloc or parsed.path != "/traceability":
+        return "/traceability"
+    params = [
+        (key, item_value)
+        for key, item_value in parse_qsl(parsed.query, keep_blank_values=False)
+        if key in TRACEABILITY_QUERY_KEYS
+    ]
+    query = urlencode(params)
+    return f"/traceability?{query}" if query else "/traceability"
+
+
+def traceability_return_param(value: object | None) -> str:
+    return urlencode({"return_to": sanitize_traceability_return(value)})
+
+
+def append_traceability_return(url: str, return_to: object | None) -> str:
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{traceability_return_param(return_to)}"
+
+
 def object_type_badge(object_type: str) -> str:
     label = OBJECT_TYPE_LABELS.get(object_type, str(object_type or "Governed Object"))
     legacy_label = (
@@ -98,6 +140,7 @@ def public_primary_navigation(active: str = "") -> str:
     links = (
         ("Home", "/"),
         ("Archive", "/archive"),
+        ("Traceability", "/traceability"),
         ("Records", "/records"),
         ("Documents", "/documents"),
         ("Associations", "/associations"),

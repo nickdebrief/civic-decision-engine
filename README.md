@@ -724,6 +724,42 @@ change public eligibility, search semantics, object identity, provenance,
 lifecycle state, publication rules, associations, collection membership,
 verification hashes, or existing public routes.
 
+### CDE v12.27 — Public Traceability Map
+
+CDE v12.27 adds `/traceability`, a public Traceability Map that shows declared
+relationships between independently governed public objects.
+
+Traceability reveals declared relationships without erasing the identity of the
+governed objects involved.
+
+The Traceability Map is a discovery interface over the public governance graph.
+It is not itself a governed object.
+
+One traceability result represents one governed Association chain:
+
+```text
+Canonical Record
+        |
+        | declared by
+        v
+Governed Association
+        |
+        | links to
+        v
+Published Document
+```
+
+Associations remain independently governed and navigable public objects.
+Collections appear only as governed membership context and do not own, contain,
+or absorb Records, Documents, or Associations. The route provides a visual map,
+a structured accessible view, public-safe filters, unique object counts,
+bounded pagination, and safe Traceability return links.
+
+The release does not create or infer relationships, alter governance semantics,
+change object identities, rewrite provenance, change lifecycle states, alter
+publication rules, expose private objects, or replace any governed object's own
+public page.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
