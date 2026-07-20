@@ -46055,7 +46055,17 @@ def _render_admin_audit_page(
     def format_options(selected: str) -> str:
         return "".join(
             f'<option value="{value}"{" selected" if selected == value else ""}>{label}</option>'
-            for value, label in (("pdf", "PDF"), ("jpeg", "JPEG"), ("png", "PNG"))
+            for value, label in (
+                ("pdf", "PDF"),
+                ("jpeg", "JPEG"),
+                ("png", "PNG"),
+                ("m4a", "M4A"),
+                ("mp3", "MP3"),
+                ("wav", "WAV"),
+                ("xls", "XLS"),
+                ("xlsx", "XLSX"),
+                ("rtf", "RTF"),
+            )
         )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Administrative Audit</title>
@@ -46160,8 +46170,8 @@ def _render_document_intake_page(
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), and Excel Workbook (.xlsx).</p>
+        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf" required></label>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), and Rich Text Format (.rtf).</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>

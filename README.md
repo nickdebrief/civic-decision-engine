@@ -692,6 +692,21 @@ governance, while the Public Archive Explorer exposes governance for public
 verification. No record, document, association, collection, lifecycle,
 publication, provenance, identifier, search, or access-control semantics change.
 
+### CDE v12.25 — Governed Rich Text Format Artefact Support
+
+Admin Document Intake now accepts original Rich Text Format (`.rtf`) artefacts
+alongside PDF, JPEG, PNG, M4A, MP3, WAV, XLS, and XLSX. RTF files use the same
+private intake, review, approval, publication, provenance, lifecycle history,
+SHA-256, Keywords, Public Document Library, and Public Archive Explorer paths as
+existing published files.
+
+Published RTF detail pages identify the artefact as Rich Text, display governed
+metadata and publication provenance, and retain an original-file download with
+attachment behaviour. CDE validates RTF structure server-side, recognises
+`application/rtf`, `text/rtf`, and `application/x-rtf` MIME variants, rejects
+renamed or inconsistent files, and does not convert, render, execute, or extract
+full text from the RTF during intake or publication.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

@@ -48,6 +48,7 @@ MEDIA_FILTERS = {
     "image": "Image",
     "audio": "Audio",
     "spreadsheet": "Spreadsheet",
+    "rich_text": "Rich Text",
 }
 SORTS = {
     "newest": "Newest first",
@@ -120,7 +121,7 @@ def _media_filter_value(document: dict[str, Any]) -> str:
     family = document_media_family(document)
     if family == "document" and document_type_label(document.get("document_type")) == "PDF":
         return "pdf"
-    if family in {"image", "audio", "spreadsheet"}:
+    if family in {"image", "audio", "spreadsheet", "rich_text"}:
         return family
     return ""
 

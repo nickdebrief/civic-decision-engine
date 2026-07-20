@@ -25,6 +25,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "wav": ".wav",
     "xls": ".xls",
     "xlsx": ".xlsx",
+    "rtf": ".rtf",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -35,6 +36,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "wav": "audio/wav",
     "xls": "application/vnd.ms-excel",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "rtf": "application/rtf",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -45,6 +47,7 @@ DOCUMENT_TYPE_LABELS = {
     "wav": "WAV",
     "xls": "XLS",
     "xlsx": "XLSX",
+    "rtf": "RTF",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -55,6 +58,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "wav": "audio",
     "xls": "spreadsheet",
     "xlsx": "spreadsheet",
+    "rtf": "rich_text",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -66,6 +70,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".wav": "wav",
     ".xls": "xls",
     ".xlsx": "xlsx",
+    ".rtf": "rtf",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -441,6 +446,22 @@ def _is_supported_jpeg(data: bytes) -> bool:
     return b"\xff\xd9" in data[4:]
 
 
+def _is_supported_rtf(data: bytes) -> bool:
+    if not data:
+        return False
+    candidate = data
+    if candidate.startswith(b"\xef\xbb\xbf"):
+        candidate = candidate[3:]
+    candidate = candidate.lstrip(b" \t\r\n")
+    if not candidate.startswith(b"{\\rtf"):
+        return False
+    if len(candidate) < 6 or not bytes(candidate[5:6]).isdigit():
+        return False
+    if b"\x00" in candidate[:128]:
+        return False
+    return b"}" in candidate[6:]
+
+
 def _detected_document_type(data: bytes) -> str:
     if not data:
         raise ValueError("document_intake_file_required")
@@ -466,6 +487,8 @@ def _detected_document_type(data: bytes) -> str:
     if data.startswith(b"PK\x03\x04"):
         _xlsx_workbook_metadata(data)
         return "xlsx"
+    if _is_supported_rtf(data):
+        return "rtf"
     raise ValueError("document_intake_file_type_not_allowed")
 
 
@@ -539,6 +562,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "xls"
     if content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
         return "xlsx"
+    if content_type in {"application/rtf", "text/rtf", "application/x-rtf"}:
+        return "rtf"
     return "pdf"
 
 
@@ -560,6 +585,10 @@ def is_audio_document(metadata: dict[str, Any]) -> bool:
 
 def is_spreadsheet_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"xls", "xlsx"}
+
+
+def is_rich_text_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) == "rtf"
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
