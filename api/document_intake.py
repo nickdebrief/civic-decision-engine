@@ -437,6 +437,92 @@ def document_intake_upload_error_detail(
     }
 
 
+def document_intake_duplicate_detail(
+    data: bytes,
+    *,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    digest = hashlib.sha256(data).hexdigest()
+    try:
+        existing = load_pending_document(digest, root=root)
+    except ValueError:
+        existing = {
+            "intake_id": digest,
+            "status": "unknown",
+            "title": "",
+            "reference_identifier": None,
+        }
+    lifecycle_state = str(existing.get("status") or "unknown")
+    lifecycle_label = STATUS_LABELS.get(lifecycle_state, lifecycle_state.replace("_", " ").title())
+    message, recommended_action, action_label = _duplicate_lifecycle_guidance(
+        lifecycle_state,
+        lifecycle_label,
+    )
+    return {
+        "detail": "document_intake_duplicate",
+        "code": "document_intake_duplicate",
+        "message": message,
+        "duplicate_reason": "sha256",
+        "existing_document": {
+            "id": str(existing.get("intake_id") or digest),
+            "title": str(existing.get("title") or ""),
+            "reference_identifier": existing.get("reference_identifier"),
+            "lifecycle_state": lifecycle_state,
+            "lifecycle_label": lifecycle_label,
+        },
+        "recommended_action": recommended_action,
+        "action_label": action_label,
+        "admin_url": f"/admin/document-intake/{digest}",
+    }
+
+
+def _duplicate_lifecycle_guidance(
+    lifecycle_state: str,
+    lifecycle_label: str,
+) -> tuple[str, str, str]:
+    if lifecycle_state == "pending":
+        return (
+            "This document already exists in Pending Intake and is awaiting review.",
+            "Continue review of the existing pending document.",
+            "Continue review",
+        )
+    if lifecycle_state == "under_review":
+        return (
+            "This document already exists and is currently under review.",
+            "Continue review of the existing document.",
+            "Continue review",
+        )
+    if lifecycle_state == "approved":
+        return (
+            "This document already exists and has been approved but not yet declared published.",
+            "Continue the publication workflow for the existing document.",
+            "Continue publication workflow",
+        )
+    if lifecycle_state == "published":
+        return (
+            "This document has already been declared published.",
+            "Open the existing published document instead of creating a duplicate intake.",
+            "Open existing document",
+        )
+    if lifecycle_state == "rejected":
+        return (
+            "This document already exists in Rejected state.",
+            "Review the existing rejected intake record before deciding any governed next step.",
+            "Open existing intake record",
+        )
+    if lifecycle_state == "archived":
+        return (
+            "This document already exists in Archived state.",
+            "Review the existing archived intake record before deciding any governed next step.",
+            "Open existing intake record",
+        )
+    return (
+        f"This document already exists in {lifecycle_label}.",
+        "Review the existing intake record before continuing.",
+        "Open existing intake record",
+    )
+
+
 def _is_supported_jpeg(data: bytes) -> bool:
     if len(data) < 6 or not data.startswith(b"\xff\xd8\xff"):
         return False

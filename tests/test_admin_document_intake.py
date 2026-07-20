@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from api.document_intake import (
     STATUS_LABELS,
+    document_intake_duplicate_detail,
     list_intake_documents,
     list_pending_documents,
     load_pending_document,
@@ -20,7 +21,7 @@ from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fas
 
 install_fastapi_stubs()
 
-from api.routes import admin_session
+from api.routes import admin_session, documents
 
 
 PDF_BYTES = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n"
@@ -252,6 +253,107 @@ class AdminDocumentIntakeTests(unittest.TestCase):
                 self.upload(data=PNG_BYTES, filename="large.png", content_type="image/png")
         self.assertEqual(ctx.exception.status_code, 413)
         self.assertEqual(list_pending_documents(root=self.root), [])
+
+    def test_duplicate_pending_intake_returns_structured_actionable_detail(self):
+        self.upload()
+        with self.assertRaises(FakeHTTPException) as ctx:
+            self.upload()
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        detail = ctx.exception.detail
+        expected_hash = hashlib.sha256(PDF_BYTES).hexdigest()
+        self.assertEqual(detail["detail"], "document_intake_duplicate")
+        self.assertEqual(detail["code"], "document_intake_duplicate")
+        self.assertEqual(detail["duplicate_reason"], "sha256")
+        self.assertIn("Pending Intake", detail["message"])
+        self.assertEqual(detail["existing_document"]["id"], expected_hash)
+        self.assertEqual(detail["existing_document"]["title"], "Administrative decision")
+        self.assertEqual(detail["existing_document"]["reference_identifier"], "INT-2026-001")
+        self.assertEqual(detail["existing_document"]["lifecycle_state"], "pending")
+        self.assertEqual(detail["existing_document"]["lifecycle_label"], "Pending Intake")
+        self.assertEqual(detail["recommended_action"], "Continue review of the existing pending document.")
+        self.assertEqual(detail["admin_url"], f"/admin/document-intake/{expected_hash}")
+        self.assertEqual(len(list_intake_documents(root=self.root)), 1)
+
+    def test_duplicate_pending_html_panel_has_safe_continue_review_action(self):
+        self.upload()
+        html_request = FakeRequest(
+            cookies={admin_session.SESSION_COOKIE_NAME: self.session},
+            query_params={"return_to": "https://evil.example/admin"},
+        )
+        html_request.headers = {"accept": "text/html"}
+
+        response = self.upload(request=html_request)
+        expected_hash = hashlib.sha256(PDF_BYTES).hexdigest()
+        content = self.response_text(response)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Duplicate document detected", content)
+        self.assertIn("This document already exists in Pending Intake and is awaiting review.", content)
+        self.assertIn("Administrative decision", content)
+        self.assertIn("INT-2026-001", content)
+        self.assertIn("Pending Intake", content)
+        self.assertIn("Matched by", content)
+        self.assertIn("SHA-256", content)
+        self.assertIn("Continue review", content)
+        self.assertIn(f'href="/admin/document-intake/{expected_hash}"', content)
+        self.assertNotIn("evil.example", content)
+        self.assertNotIn("Traceback", content)
+        self.assertEqual(len(list_intake_documents(root=self.root)), 1)
+
+    def test_duplicate_approved_and_published_states_have_lifecycle_guidance(self):
+        self.upload()
+        self.transition("under_review", "Review started.")
+        self.transition("approved", "Approved.")
+        with self.assertRaises(FakeHTTPException) as approved_ctx:
+            self.upload()
+
+        approved_detail = approved_ctx.exception.detail
+        self.assertEqual(approved_ctx.exception.status_code, 409)
+        self.assertEqual(approved_detail["detail"], "document_intake_duplicate")
+        self.assertEqual(approved_detail["existing_document"]["lifecycle_state"], "approved")
+        self.assertEqual(approved_detail["existing_document"]["lifecycle_label"], "Approved")
+        self.assertIn("approved but not yet declared published", approved_detail["message"])
+        self.assertEqual(
+            approved_detail["recommended_action"],
+            "Continue the publication workflow for the existing document.",
+        )
+
+        self.transition("published", "Published.")
+        with self.assertRaises(FakeHTTPException) as published_ctx:
+            self.upload()
+
+        published_detail = published_ctx.exception.detail
+        self.assertEqual(published_ctx.exception.status_code, 409)
+        self.assertEqual(published_detail["detail"], "document_intake_duplicate")
+        self.assertEqual(published_detail["existing_document"]["lifecycle_state"], "published")
+        self.assertEqual(published_detail["existing_document"]["lifecycle_label"], "Published")
+        self.assertIn("already been declared published", published_detail["message"])
+        self.assertEqual(
+            published_detail["recommended_action"],
+            "Open the existing published document instead of creating a duplicate intake.",
+        )
+        self.assertEqual(len(list_intake_documents(root=self.root)), 1)
+
+    def test_duplicate_detail_helper_identifies_existing_sha256_record(self):
+        self.upload()
+        detail = document_intake_duplicate_detail(PDF_BYTES, root=self.root)
+        self.assertEqual(detail["detail"], "document_intake_duplicate")
+        self.assertEqual(detail["duplicate_reason"], "sha256")
+        self.assertEqual(detail["existing_document"]["lifecycle_label"], "Pending Intake")
+        self.assertEqual(detail["existing_document"]["title"], "Administrative decision")
+
+    def test_public_routes_do_not_expose_admin_duplicate_metadata(self):
+        self.upload()
+        self.transition("under_review", "Review started.")
+        self.transition("approved", "Approved.")
+        self.transition("published", "Published.")
+        intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
+
+        content = documents.public_document_page(intake_id).content
+        self.assertNotIn("document_intake_duplicate", content)
+        self.assertNotIn("Duplicate document detected", content)
+        self.assertNotIn("Continue review of the existing pending document.", content)
 
     def test_preview_requires_authentication_and_has_no_file_serving_route(self):
         self.upload()
