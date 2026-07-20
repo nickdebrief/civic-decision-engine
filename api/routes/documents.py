@@ -17,6 +17,7 @@ from api.document_intake import (
     intake_root,
     is_audio_document,
     is_image_document,
+    is_rich_text_document,
     is_spreadsheet_document,
     list_published_documents,
     load_published_document,
@@ -147,6 +148,8 @@ def _presentation_mode(item: dict) -> str:
         return "Inline audio playback and original-file download"
     if is_spreadsheet_document(item):
         return "Downloadable spreadsheet workbook"
+    if is_rich_text_document(item):
+        return "Downloadable Rich Text Format file"
     return "Downloadable PDF"
 
 
@@ -157,7 +160,16 @@ def _original_download_availability(item: dict) -> str:
         return "Original audio download available"
     if is_spreadsheet_document(item):
         return "Original spreadsheet download available"
+    if is_rich_text_document(item):
+        return "Original RTF download available"
     return "Original PDF download available"
+
+
+def _media_family_label(item: dict) -> str:
+    family = document_media_family(item)
+    if family == "rich_text":
+        return "Rich Text"
+    return family.title()
 
 
 def _render_publication_pathway(item: dict) -> str:
@@ -274,7 +286,7 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
         ("Publication Date", _date(publication_timestamp or item.get("publication_date"))),
         ("Document Date", item["document_date"]),
         ("Document Format", document_type_label(item.get("document_type"))),
-        ("Media Type", document_media_family(item).title()),
+        ("Media Type", _media_family_label(item)),
         ("SHA-256", item["sha256_hash"]),
         ("Reference Identifier", item.get("reference_identifier") or "Not provided"),
     ))
@@ -288,6 +300,8 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
         content_block = f"""<section id="document-content"><h2>Audio Artefact</h2><div class="public-audio-wrap"><audio class="public-document-audio" controls preload="metadata"><source src="/documents/{escape(item['intake_id'])}/view" type="{escape(document_media_type(item))}">This browser may not support playback of this audio format. Download the original file to listen.</audio></div><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original audio</a></section>"""
     elif is_spreadsheet_document(item):
         content_block = f"""<section id="document-content">{_render_workbook_metadata(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original spreadsheet</a></section>"""
+    elif is_rich_text_document(item):
+        content_block = f"""<section id="document-content"><section class="public-rich-text-summary"><h2>Rich Text Format Artefact</h2><p class="provenance-boundary">This Rich Text Format file is preserved and published as the original uploaded artefact. CDE does not convert, execute, or render the RTF as HTML; download the original file to inspect it with appropriate local software.</p></section><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original RTF</a></section>"""
     else:
         content_block = f"""<section id="document-content"><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a></section>"""
     associated_records_section = _render_associated_records(item)
@@ -296,7 +310,7 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
     admin_actions = f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", archive_return), ("Published Documents", "/archive?type=published_document"), (str(item["title"]), None)])}{archive_back_link(archive_return)}<p>{object_type_badge("published_document")}</p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav>{admin_actions}<section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{content_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
 
@@ -371,7 +385,7 @@ def public_document_download(document_id: str):
     except ValueError as exc:
         _not_found(exc)
     headers = None
-    if is_image_document(item) or is_audio_document(item) or is_spreadsheet_document(item):
+    if is_image_document(item) or is_audio_document(item) or is_spreadsheet_document(item) or is_rich_text_document(item):
         headers = {
             "Content-Disposition": _content_disposition(
                 "attachment",
