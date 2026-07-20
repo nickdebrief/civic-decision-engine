@@ -61,6 +61,7 @@ from api.document_intake import (
     document_keywords_display,
     document_keywords_input_value,
     document_type_label,
+    document_intake_duplicate_detail,
     document_intake_upload_error_detail,
     intake_root,
     intake_document_file,
@@ -159,7 +160,7 @@ IMMUTABLE_ATTACHMENT_FIELDS = {
 }
 
 
-def _http_error(status_code: int, detail: str):
+def _http_error(status_code: int, detail: Any):
     try:
         return HTTPException(status_code=status_code, detail=detail)
     except TypeError:
@@ -47310,6 +47311,36 @@ def admin_document_intake_image_preview(intake_id: str, request: Request):
     )
 
 
+def _request_prefers_html(request: Request) -> bool:
+    headers = getattr(request, "headers", {}) or {}
+    try:
+        accept = str(headers.get("accept") or headers.get("Accept") or "")
+    except AttributeError:
+        accept = ""
+    return "text/html" in accept.casefold()
+
+
+def _render_duplicate_intake_panel(
+    detail: Mapping[str, Any],
+    *,
+    admin_session: Mapping[str, Any] | None = None,
+) -> str:
+    existing = detail.get("existing_document") if isinstance(detail.get("existing_document"), Mapping) else {}
+    title = str(existing.get("title") or "Untitled document")
+    reference = str(existing.get("reference_identifier") or "Not assigned")
+    lifecycle_label = str(existing.get("lifecycle_label") or "Unknown")
+    duplicate_reason = str(detail.get("duplicate_reason") or "document identity")
+    duplicate_reason_label = "SHA-256" if duplicate_reason == "sha256" else duplicate_reason
+    admin_url = str(detail.get("admin_url") or "")
+    action_label = str(detail.get("action_label") or "Open existing intake record")
+    action = (
+        f'<p><a class="duplicate-action" href="{escape(admin_url)}">{escape(action_label)}</a></p>'
+        if admin_url.startswith("/admin/document-intake/")
+        else ""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Duplicate Document Intake</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(920px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.duplicate-panel{{padding:18px;border:1px solid #d8d4ca;border-left:5px solid #8a6d1f;background:#fff}}dl{{display:grid;grid-template-columns:170px minmax(0,1fr);gap:8px 14px}}dt{{font-weight:700;color:#555}}dd{{margin:0;overflow-wrap:anywhere}}.duplicate-action{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.notice{{padding:12px 14px;border-left:4px solid #2e8b9a;background:#fff}}@media(max-width:640px){{dl{{grid-template-columns:1fr}}.duplicate-action{{width:100%;text-align:center}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Duplicate document detected</h1><section class="duplicate-panel" role="alert" aria-labelledby="duplicate-document-heading" tabindex="-1"><h2 id="duplicate-document-heading">Duplicate document detected</h2><p>{escape(str(detail.get("message") or "This document already exists."))}</p><dl><dt>Existing title</dt><dd>{escape(title)}</dd><dt>Reference</dt><dd>{escape(reference)}</dd><dt>State</dt><dd>{escape(lifecycle_label)}</dd><dt>Matched by</dt><dd>{escape(duplicate_reason_label)}</dd></dl><p><strong>Recommended action:</strong> {escape(str(detail.get("recommended_action") or "Review the existing intake record before continuing."))}</p>{action}</section><p class="notice">Duplicate intake remains blocked. No new document intake record was created, and the existing document lifecycle was not changed.</p><p><a href="/admin/document-intake#new-intake">Back to Admin Document Intake</a></p></main></body></html>"""
+
+
 @router.post("/api/admin/session/document-intake", response_class=HTMLResponse)
 def admin_document_intake_upload(
     request: Request,
@@ -47350,12 +47381,20 @@ def admin_document_intake_upload(
             "document_intake_file_too_large": 413,
             "document_intake_duplicate": 409,
         }.get(detail, 400)
-        response_detail = document_intake_upload_error_detail(
-            detail,
-            data=data,
-            original_filename=getattr(file, "filename", None) or "document.pdf",
-            content_type=getattr(file, "content_type", None),
-        )
+        if detail == "document_intake_duplicate":
+            response_detail = document_intake_duplicate_detail(data, root=intake_root())
+            if _request_prefers_html(request):
+                return HTMLResponse(
+                    content=_render_duplicate_intake_panel(response_detail, admin_session=session),
+                    status_code=409,
+                )
+        else:
+            response_detail = document_intake_upload_error_detail(
+                detail,
+                data=data,
+                original_filename=getattr(file, "filename", None) or "document.pdf",
+                content_type=getattr(file, "content_type", None),
+            )
         raise _http_error(status_code, response_detail) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),
