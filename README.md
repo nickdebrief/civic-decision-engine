@@ -707,6 +707,23 @@ attachment behaviour. CDE validates RTF structure server-side, recognises
 renamed or inconsistent files, and does not convert, render, execute, or extract
 full text from the RTF during intake or publication.
 
+### CDE v12.26 — Public Archive UX Refinements
+
+CDE v12.26 refines the Public Archive Explorer so public users can scan,
+filter, paginate, and orient themselves more easily across Canonical Records,
+Published Documents, Record-Document Associations, and Governed Public
+Collections.
+
+The Archive Explorer improves discovery without changing governance.
+
+The release improves archive visual hierarchy, public object total cards,
+human-readable active-filter summaries, filter helper text, object-specific
+result actions, bounded result-card metadata, query-preserving pagination,
+no-result states, responsive layouts, and accessibility markup. It does not
+change public eligibility, search semantics, object identity, provenance,
+lifecycle state, publication rules, associations, collection membership,
+verification hashes, or existing public routes.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

@@ -43,6 +43,12 @@ OBJECT_TYPE_COUNT_LABELS = {
     "record_document_association": "Record-Document Associations",
     "public_collection": "Governed Public Collections",
 }
+OBJECT_ACTION_LABELS = {
+    "canonical_record": "Open Canonical Record",
+    "published_document": "Open Published Document",
+    "record_document_association": "Open Association",
+    "public_collection": "Open Collection",
+}
 MEDIA_FILTERS = {
     "pdf": "PDF",
     "image": "Image",
@@ -74,6 +80,8 @@ class ArchiveResult:
     publication_date: str
     summary: str
     url: str
+    institution: str = ""
+    category: str = ""
     keywords: str = ""
     media_type: str = ""
     record_type: str = ""
@@ -90,6 +98,14 @@ def _display(value: object) -> str:
 def _date(value: object) -> str:
     text = _display(value)
     return text.split("T", 1)[0] if text != "-" else text
+
+
+def _short_text(value: object, *, limit: int = 260) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    truncated = text[: limit - 1].rsplit(" ", 1)[0].strip()
+    return f"{truncated}..."
 
 
 def _year(value: object) -> str:
@@ -189,6 +205,8 @@ def _record_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
                 publication_date=str(row["exported_at"] or row["generated_at"] or ""),
                 summary=summary,
                 url=f"/verify/{row['reference']}",
+                institution=str(row["institution"] or ""),
+                category=record_type_label,
                 keywords=record_type_label,
                 record_type=record_type,
                 search_text=searchable,
@@ -225,6 +243,8 @@ def _document_results() -> list[ArchiveResult]:
                 publication_date=str(item.get("publication_date") or item.get("document_date") or ""),
                 summary=str(item.get("description") or ""),
                 url=f"/documents/{item.get('intake_id')}",
+                institution=str(item.get("institution_source") or ""),
+                category=str(item.get("category") or ""),
                 keywords=document_keywords_display(item.get("keywords") or item.get("tags")),
                 media_type=media,
                 search_text=search_text,
@@ -265,6 +285,7 @@ def _association_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
             "WAV": "audio",
             "XLS": "spreadsheet",
             "XLSX": "spreadsheet",
+            "RTF": "rich_text",
         }.get(document_format, "")
         title = str(item.get("relationship_label") or item.get("public_label") or reference)
         summary = " · ".join(
@@ -302,6 +323,8 @@ def _association_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
                 publication_date=str(item.get("created_at") or ""),
                 summary=summary,
                 url=f"/associations/{reference}",
+                institution=str(item.get("document_institution_source") or ""),
+                category=str(item.get("relationship_label") or item.get("relationship_type") or ""),
                 media_type=media,
                 search_text=searchable,
             )
@@ -351,6 +374,8 @@ def _collection_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
                 publication_date=str(item.get("created_at") or ""),
                 summary=summary,
                 url=f"/collections/{reference}",
+                institution=str(item.get("institution_source") or ""),
+                category=str(item.get("category_label") or ""),
                 keywords=str(item.get("category_label") or ""),
                 collection_references=(reference,),
                 search_text=searchable,
@@ -506,50 +531,108 @@ def _page_size_options(selected: int) -> str:
     )
 
 
-def _active_filter_summary(filters: dict[str, str]) -> str:
-    labels = {
-        "search": "Search",
-        "type": "Object type",
-        "status": "Publication status",
-        "year": "Publication year",
-        "document_year": "Document year",
-        "record_type": "Record type",
-        "collection": "Collection",
-        "media": "Media type",
-        "sort": "Sort",
-    }
+def _filter_display_value(key: str, value: str, *, collection_options: dict[str, str]) -> str:
+    if key == "type":
+        return OBJECT_TYPES.get(value, value)
+    if key == "media":
+        return MEDIA_FILTERS.get(value, value)
+    if key == "sort":
+        return SORTS.get(value, value)
+    if key == "record_type":
+        return records.record_type_label(value)
+    if key == "collection":
+        return collection_options.get(value, value)
+    return value
+
+
+def _active_filter_summary(filters: dict[str, str], *, collection_options: dict[str, str] | None = None) -> str:
+    labels = (
+        ("search", "Search"),
+        ("type", "Object type"),
+        ("status", "Publication status"),
+        ("year", "Publication year"),
+        ("document_year", "Document year"),
+        ("record_type", "Record type"),
+        ("collection", "Collection"),
+        ("media", "Media type"),
+        ("sort", "Sort"),
+    )
+    collection_lookup = collection_options or {}
     active = []
-    for key, label in labels.items():
+    for key, label in labels:
         value = filters.get(key)
         if not value or (key == "sort" and value == "newest"):
             continue
-        active.append(f"{label}: {value}")
-    return "; ".join(active) if active else "None"
+        active.append(
+            f'<span class="archive-filter-token"><strong>{escape(label)}:</strong> '
+            f'{escape(_filter_display_value(key, value, collection_options=collection_lookup))}</span>'
+        )
+    return " ".join(active) if active else '<span class="archive-filter-token">None</span>'
 
 
 def _render_stats(counts: dict[str, int]) -> str:
     cards = "".join(
-        f"""<a class="archive-stat-card" href="/archive?type={escape(key)}">
+        f"""<a class="archive-stat-card" href="/archive?type={escape(key)}" aria-label="Show {escape(OBJECT_TYPE_COUNT_LABELS.get(key, label))}">
           <span>{escape(OBJECT_TYPE_COUNT_LABELS.get(key, label))}</span>
           <strong>{int(counts.get(key, 0))}</strong>
         </a>"""
         for key, label in OBJECT_TYPES.items()
     )
-    return f'<section class="archive-stats" aria-label="Archive counts">{cards}</section>'
+    return f'<section class="archive-stats-section" aria-labelledby="archive-counts-heading"><h2 id="archive-counts-heading">Public Object Totals</h2><div class="archive-stats" aria-label="Archive counts">{cards}</div></section>'
 
 
-def _render_result_cards(rows: list[ArchiveResult], archive_return: str) -> str:
+def _render_empty_state(*, has_public_objects: bool, has_active_filters: bool) -> str:
+    if not has_public_objects:
+        return (
+            '<div class="archive-empty" role="status"><h2>No eligible public objects are currently listed.</h2>'
+            "<p>The Archive Explorer displays only governed objects that are already publicly eligible.</p></div>"
+        )
+    if has_active_filters:
+        return (
+            '<div class="archive-empty" role="status"><h2>No public objects matched the current filters.</h2>'
+            '<p>Try a broader search or return to the unfiltered Archive Explorer.</p>'
+            '<p><a class="archive-clear-link" href="/archive">Clear filters</a></p></div>'
+        )
+    return (
+        '<div class="archive-empty" role="status"><h2>No eligible public objects are currently listed.</h2>'
+        "<p>The Archive Explorer displays only governed objects that are already publicly eligible.</p></div>"
+    )
+
+
+def _render_pagination(filters: dict[str, str], *, page: int, page_count: int, page_size: int, total: int, label: str) -> str:
+    if total == 0 or page_count <= 1:
+        return ""
+    previous_link = ""
+    next_link = ""
+    if page > 1:
+        previous_link = (
+            f'<a class="archive-page-link" aria-label="{escape(label)} previous page" href="/archive?{escape(_query_string(filters, page=page - 1, page_size=page_size))}">'
+            "Previous page</a>"
+        )
+    if page < page_count:
+        next_link = (
+            f'<a class="archive-page-link" aria-label="{escape(label)} next page" href="/archive?{escape(_query_string(filters, page=page + 1, page_size=page_size))}">'
+            "Next page</a>"
+        )
+    return (
+        f'<nav class="archive-pagination" aria-label="{escape(label)} pagination">'
+        f'<span aria-current="page">Page {page} of {page_count}</span>{previous_link}{next_link}</nav>'
+    )
+
+
+def _render_result_cards(rows: list[ArchiveResult], archive_return: str, *, has_public_objects: bool, has_active_filters: bool) -> str:
     if not rows:
-        return '<p class="archive-empty">No public archive objects match these criteria.</p>'
+        return _render_empty_state(has_public_objects=has_public_objects, has_active_filters=has_active_filters)
     cards = []
     for item in rows:
         object_label = OBJECT_TYPES.get(item.object_type, item.object_type)
         media = MEDIA_FILTERS.get(item.media_type, item.media_type.title()) if item.media_type else ""
         item_url = append_archive_return(item.url, archive_return)
         metadata = [
-            ("Reference", item.reference),
             ("Status", item.status),
-            ("Publication date", _date(item.publication_date)),
+            ("Relevant date", _date(item.publication_date)),
+            ("Institution / source", item.institution),
+            ("Category", item.category),
             ("Media type", media),
             ("Record type", records.record_type_label(item.record_type) if item.record_type else ""),
             ("Keywords", item.keywords),
@@ -565,9 +648,9 @@ def _render_result_cards(rows: list[ArchiveResult], archive_return: str) -> str:
               <p>{object_type_badge(item.object_type)}</p>
               <h2><a href="{escape(item_url)}">{escape(item.title)}</a></h2>
               <p class="archive-reference">{escape(item.reference)}</p>
-              <p>{escape(item.summary or 'Governed public object with an independent public page.')}</p>
+              <p class="archive-result-summary">{escape(_short_text(item.summary or 'Governed public object with an independent public page.'))}</p>
               <dl>{metadata_html}</dl>
-              <p class="archive-actions"><a href="{escape(item_url)}">Open governed object</a></p>
+              <p class="archive-actions"><a href="{escape(item_url)}" aria-label="{escape(OBJECT_ACTION_LABELS.get(item.object_type, 'Open governed object'))}: {escape(item.title)}">{escape(OBJECT_ACTION_LABELS.get(item.object_type, 'Open governed object'))}</a></p>
             </article>"""
         )
     return "".join(cards)
@@ -638,16 +721,32 @@ def public_archive_explorer(
         for item in all_rows
         if item.object_type == "public_collection"
     }
-    previous_link = ""
-    next_link = ""
-    if normalized_page > 1:
-        previous_link = f'<a href="/archive?{escape(_query_string(filters, page=normalized_page - 1, page_size=normalized_page_size))}">Previous page</a>'
-    if normalized_page < page_count:
-        next_link = f'<a href="/archive?{escape(_query_string(filters, page=normalized_page + 1, page_size=normalized_page_size))}">Next page</a>'
+    has_active_filters = any(
+        value and not (key == "sort" and value == "newest")
+        for key, value in filters.items()
+    )
+    active_filters_html = _active_filter_summary(filters, collection_options=collection_options)
+    page_summary = f"<p><strong>Page:</strong> {normalized_page} of {page_count}</p>" if total else ""
+    pagination_top = _render_pagination(
+        filters,
+        page=normalized_page,
+        page_count=page_count,
+        page_size=normalized_page_size,
+        total=total,
+        label="Top archive results",
+    )
+    pagination_bottom = _render_pagination(
+        filters,
+        page=normalized_page,
+        page_count=page_count,
+        page_size=normalized_page_size,
+        total=total,
+        label="Bottom archive results",
+    )
     current_archive_path = f"/archive?{_query_string(filters, page=normalized_page, page_size=normalized_page_size)}"
     if current_archive_path == "/archive?":
         current_archive_path = "/archive"
 
     return HTMLResponse(
-        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Archive Explorer | Civic Decision Engine</title><link rel="canonical" href="/archive"><meta name="description" content="Unified public discovery interface for Civic Decision Engine records, documents, associations, and collections."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.archive-explorer{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.archive-boundary,.archive-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.archive-summary{{margin:18px 0;border-left-color:#143a52}}.archive-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:22px 0}}.archive-stat-card{{display:block;background:#fff;border:1px solid #d8d4ca;padding:14px;text-decoration:none;color:#1f2933}}.archive-stat-card span{{display:block;color:#555}}.archive-stat-card strong{{display:block;font-size:1.7rem;color:#143a52}}.archive-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;margin:22px 0}}.archive-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.archive-filters input,.archive-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.archive-filters button,.archive-filters a{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.archive-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.archive-results{{display:grid;gap:14px}}.archive-result-card{{background:#fff;border:1px solid #d8d4ca;padding:16px;overflow-wrap:anywhere}}.archive-result-card h2{{margin:.25rem 0}}.archive-breadcrumb,.archive-reference{{color:#555;margin:.2rem 0}}.archive-reference{{font:700 .9rem ui-monospace,monospace}}.archive-result-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:12px 0}}.archive-result-card dt{{font-weight:700;color:#555}}.archive-result-card dd{{margin:0}}.archive-actions a{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.archive-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}@media(max-width:980px){{.archive-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.archive-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.archive-stats,.archive-filters{{grid-template-columns:1fr}}.archive-result-card dl{{grid-template-columns:1fr}}}}</style></head><body><main class="archive-explorer">{public_primary_navigation(active="archive")}{public_breadcrumbs([("Home", "/"), ("Archive", None)])}<h1>Public Archive Explorer</h1><p class="archive-boundary">{escape(BOUNDARY_TEXT)} Every result links to the governed object that owns its identity, provenance, lifecycle, verification, and public page.</p>{_render_stats(counts)}<section class="archive-summary" aria-live="polite"><p><strong>Total matching public objects:</strong> {total}</p><p><strong>Active filters:</strong> {escape(_active_filter_summary(filters))}</p><p><strong>Page:</strong> {normalized_page} of {page_count}</p></section><form class="archive-filters" method="get" action="/archive"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Title, reference, summary, keywords, filename, media, or worksheet" autocomplete="off"></label><label>Object type<select name="type">{_option_list(OBJECT_TYPES, filters['type'], 'Any object type')}</select></label><label>Publication status<input name="status" value="{escape(filters['status'])}" placeholder="Published or active public"></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Record type<select name="record_type">{_option_list(record_types, filters['record_type'], 'Any record type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Media type<select name="media">{_option_list(MEDIA_FILTERS, filters['media'], 'Any media type')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/archive">Clear filters</a></form><div class="archive-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><section class="archive-results" aria-label="Archive explorer results">{_render_result_cards(page_rows, current_archive_path)}</section><div class="archive-pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div><p><a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
+        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Archive Explorer | Civic Decision Engine</title><link rel="canonical" href="/archive"><meta name="description" content="Unified public discovery interface for Civic Decision Engine records, documents, associations, and collections."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.archive-explorer{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.archive-boundary,.archive-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.archive-boundary{{max-width:960px}}.archive-summary{{margin:24px 0;border-left-color:#143a52}}.archive-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.archive-stats-section,.archive-filter-section,.archive-results{{margin:30px 0}}.archive-stats-section h2,.archive-filter-section h2,.archive-results h2{{margin-bottom:12px}}.archive-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.archive-stat-card{{display:block;background:#fff;border:1px solid #d8d4ca;padding:14px;text-decoration:none;color:#1f2933}}.archive-stat-card:hover,.archive-stat-card:focus{{border-color:#245d61;box-shadow:0 0 0 2px rgba(36,93,97,.14)}}.archive-stat-card span{{display:block;color:#555}}.archive-stat-card strong{{display:block;font-size:1.7rem;color:#143a52}}.archive-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.archive-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.archive-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.archive-filters input,.archive-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.archive-filters a,.archive-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.archive-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.archive-page-link{{font-weight:650}}.archive-result-list{{display:grid;gap:14px}}.archive-result-card{{background:#fff;border:1px solid #d8d4ca;padding:16px;overflow-wrap:anywhere}}.archive-result-card h2{{margin:.25rem 0}}.archive-breadcrumb,.archive-reference{{color:#555;margin:.2rem 0}}.archive-reference{{font:700 .9rem ui-monospace,monospace}}.archive-result-summary{{max-width:880px;line-height:1.5}}.archive-result-card dl{{display:grid;grid-template-columns:160px minmax(0,1fr);gap:6px 12px;margin:12px 0}}.archive-result-card dt{{font-weight:700;color:#555}}.archive-result-card dd{{margin:0;min-width:0;overflow-wrap:anywhere}}.archive-actions a{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.archive-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}.archive-empty h2{{margin-top:0}}@media(max-width:980px){{.archive-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.archive-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{main.archive-explorer{{width:min(100% - 24px,1220px);margin-top:24px}}.archive-stats,.archive-filters{{grid-template-columns:1fr}}.archive-result-card dl{{grid-template-columns:1fr}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:100%;text-align:center}}}}</style></head><body><main class="archive-explorer">{public_primary_navigation(active="archive")}{public_breadcrumbs([("Home", "/"), ("Archive", None)])}<h1>Public Archive Explorer</h1><p class="archive-boundary">{escape(BOUNDARY_TEXT)} Every result links to the governed object that owns its identity, provenance, lifecycle, verification, and public page.</p>{_render_stats(counts)}<section class="archive-summary" aria-live="polite" aria-labelledby="archive-summary-heading"><h2 id="archive-summary-heading">Current Archive View</h2><p><strong>Total matching public objects:</strong> {total}</p><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="archive-clear-link" href="/archive">Clear filters</a></p></section><section class="archive-filter-section" aria-labelledby="archive-filters-heading"><h2 id="archive-filters-heading">Search and Filters</h2><form class="archive-filters" method="get" action="/archive"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search public title, reference, summary, keywords, filename, media, or worksheet" autocomplete="off"><span class="archive-filter-help">Search covers public-safe indexed metadata only.</span></label><label>Object type<select name="type">{_option_list(OBJECT_TYPES, filters['type'], 'Any object type')}</select></label><label>Publication status<input name="status" value="{escape(filters['status'])}" placeholder="Published or active public"></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Record type<select name="record_type">{_option_list(record_types, filters['record_type'], 'Any record type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Media type<select name="media">{_option_list(MEDIA_FILTERS, filters['media'], 'Any media type')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/archive">Clear filters</a></form></section><section class="archive-results" aria-labelledby="archive-results-heading"><h2 id="archive-results-heading">Archive Results</h2>{pagination_top}<div class="archive-result-list" aria-label="Archive explorer results">{_render_result_cards(page_rows, current_archive_path, has_public_objects=bool(all_rows), has_active_filters=has_active_filters)}</div>{pagination_bottom}</section><p><a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
     )
