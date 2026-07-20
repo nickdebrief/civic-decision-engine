@@ -760,6 +760,27 @@ change object identities, rewrite provenance, change lifecycle states, alter
 publication rules, expose private objects, or replace any governed object's own
 public page.
 
+### CDE v12.28 — Public Document Preview Enhancements
+
+CDE v12.28 adds compact previews to the Public Document Library so users can
+recognise published artefacts before opening each detail page.
+
+A preview helps users recognise a governed document without becoming a new
+governed object.
+
+The preview is a presentation of an existing governed document, not a new
+governed artefact.
+
+Published JPEG and PNG documents display constrained image thumbnails that link
+back to the existing Published Document page. PDF, Rich Text, Spreadsheet,
+Audio, and unknown media render compact fallback previews with visible media
+labels and descriptive links.
+
+The release does not generate derived thumbnails, create new artefact
+identities, change SHA-256 semantics, alter lifecycle or publication rules,
+change public eligibility, modify storage, change download behaviour, or replace
+existing public document routes.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
