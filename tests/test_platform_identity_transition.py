@@ -28,8 +28,8 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_canonical_identity_constants(self):
         self.assertEqual(PLATFORM_NAME, "Civic Decision Engine")
         self.assertEqual(PLATFORM_SHORT_NAME, "CDE")
-        self.assertEqual(PLATFORM_VERSION, "13.A")
-        self.assertEqual(PLATFORM_VERSION_LABEL, "v13.A")
+        self.assertEqual(PLATFORM_VERSION, "13.0")
+        self.assertEqual(PLATFORM_VERSION_LABEL, "v13.0")
         self.assertEqual(PLATFORM_TAGLINE, "Independent · Transparent · Traceable")
         self.assertEqual(
             platform_page_title("Public Archive Explorer"),
@@ -42,7 +42,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         self.assertIn(">CDE</span>", html)
         self.assertIn("Civic Decision Engine", html)
         self.assertIn("Independent · Transparent · Traceable", html)
-        self.assertIn("Platform version v13.A", html)
+        self.assertIn("Platform version v13.0", html)
         self.assertIn('href="/archive" aria-current="page"', html)
         self.assertNotIn("Civic Decisions Engine", html)
         self.assertNotIn("C.D.E.", html)
@@ -50,11 +50,11 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_homepage_footer_uses_v13_identity(self):
         content = PUBLIC_INDEX.read_text(encoding="utf-8")
         self.assertIn(
-            "Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.A",
+            "Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.0",
             content,
         )
-        self.assertIn("civic-decision-engine v13.A", content)
-        self.assertIn("Civic Decision Engine v13.A", content)
+        self.assertIn("civic-decision-engine v13.0", content)
+        self.assertIn("Civic Decision Engine v13.0", content)
         self.assertIn('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
         self.assertNotIn("Civic Decisions Engine", content)
 
@@ -74,7 +74,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
             )
         self.assertIn("Civic Decision Engine", response.content)
         self.assertIn("Independent · Transparent · Traceable", response.content)
-        self.assertIn("Platform version v13.A", response.content)
+        self.assertIn("Platform version v13.0", response.content)
         self.assertIn("CDE Administration Console", response.content)
         self.assertIn('href="/archive">Public Archive Explorer</a>', response.content)
         self.assertIn('href="/documents">Public Document Library</a>', response.content)
@@ -83,7 +83,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_release_documentation_records_identity_transition(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: v13.0", readme)
+        self.assertIn("Current release: v13.0.1", readme)
         self.assertIn("### CDE v13.0 — Governed Public Transmissions", readme)
         self.assertIn("### CDE v13.A — Platform Identity Transition", readme)
         self.assertIn(

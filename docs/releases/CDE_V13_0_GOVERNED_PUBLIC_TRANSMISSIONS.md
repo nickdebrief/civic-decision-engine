@@ -9,7 +9,7 @@ Documents preserve content. Transmissions preserve context.
 
 A Public Transmission preserves the public communication context in which one
 or more independently governed public objects were communicated. It is not an
-email system, messaging system, correspondence store, or attachment container.
+email system, messaging system, correspondence store, or object-storage surface.
 
 A Transmission governs communication. It does not govern the objects communicated.
 
@@ -111,7 +111,7 @@ The public detail page displays:
 - Transmission metadata;
 - communication context;
 - covering communication;
-- attached governed objects;
+- included governed objects;
 - links to each attached object's independent public page;
 - public-safe Transmission publication provenance.
 
@@ -166,8 +166,8 @@ Public Transmission
 Governed public object
 ```
 
-The Transmission is rendered as its own node. It is not a container, and the
-transmitted object remains independently navigable.
+The Transmission is rendered as its own node. It does not own or absorb the
+transmitted object, which remains independently navigable.
 
 ## Collections
 

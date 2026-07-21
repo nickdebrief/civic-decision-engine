@@ -178,7 +178,7 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         detail = transmissions.public_transmission_page(self.transmission["public_reference"]).content
         self.assertIn("Documents preserve content. Transmissions preserve context.", detail)
         self.assertIn("Covering Communication", detail)
-        self.assertIn("Attached Governed Objects", detail)
+        self.assertIn("Included Governed Objects", detail)
         self.assertIn(self.fixture.document["reference_identifier"], detail)
         self.assertIn("CMP-MC-20191202-001", detail)
         self.assertIn(self.fixture.association["public_reference"], detail)
@@ -250,10 +250,10 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             detail = admin_session.admin_transmission_detail_page(self.transmission["id"], request).content
         self.assertIn("Transmission Intake", dashboard)
         self.assertIn("Transmission Management", dashboard)
-        self.assertIn("Public Transmissions", dashboard)
+        self.assertIn("<h2>Transmissions</h2>", dashboard)
         self.assertIn("Create Public Transmission", management)
         self.assertIn(self.transmission["public_reference"], management)
-        self.assertIn("Attach governed public object", detail)
+        self.assertIn("Include governed public object", detail)
         self.assertIn("Transmission history", detail)
 
     def test_existing_document_identity_hash_and_public_object_references_are_unchanged(self):
