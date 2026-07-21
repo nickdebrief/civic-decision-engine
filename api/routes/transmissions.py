@@ -154,7 +154,7 @@ def _render_attachments(attachments: list[dict]) -> str:
           <td class="transmission-attachment-reference">{escape(_display(item.get('attachment_reference')))}</td>
           <td>{object_type_badge(str(item.get('object_type') or ''))}</td>
           <td><a href="{escape(str(item.get('object_url') or '#'))}">{escape(_display(item.get('object_title')))}</a>{f'<p>{escape(str(item.get("object_summary") or ""))}</p>' if item.get('object_summary') else ''}</td>
-          <td class="transmission-attachment-object-reference">{escape(_display(item.get('object_public_reference')))}</td>
+          <td class="transmission-attachment-object-reference">{escape(_display(item.get('object_public_reference')))}{f'<br><span>Optional Reference Identifier: {escape(str(item.get("object_secondary_reference") or ""))}</span>' if item.get('object_secondary_reference') else ''}</td>
           <td>{escape(_display(item.get('relationship_label')))}</td>
           <td>{escape(_display(item.get('public_note')))}</td>
         </tr>"""

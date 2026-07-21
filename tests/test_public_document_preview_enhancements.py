@@ -154,7 +154,7 @@ class PublicDocumentPreviewEnhancementTests(unittest.TestCase):
     def test_library_renders_preview_column_without_losing_reference_or_title_link(self):
         content = self.content(documents.public_document_library())
         self.assertIn("<th>Preview</th>", content)
-        self.assertIn("<th>Reference Identifier</th>", content)
+        self.assertIn("<th>Optional Reference Identifier</th>", content)
         self.assertIn(f'<a href="/documents/{self.pdf_id}">Preview PDF Document</a>', content)
         self.assertIn("6 published documents.", content)
         self.assertIn("PREVIEW-PDF-001", content)

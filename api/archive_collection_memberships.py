@@ -228,7 +228,7 @@ def resolve_public_member(
             "member_type": normalized_type,
             "member_type_label": MEMBER_TYPES[normalized_type],
             "member_reference": str(document.get("intake_id") or reference),
-            "member_public_reference": document.get("reference_identifier") or document.get("intake_id") or reference,
+            "member_public_reference": document.get("document_identifier") or document.get("reference_identifier") or document.get("intake_id") or reference,
             "member_title": document.get("title") or reference,
             "member_summary": document.get("description"),
             "member_status": document.get("status"),
@@ -543,6 +543,7 @@ def enrich_membership(
         except ValueError:
             document = None
     item["document_title"] = (document or {}).get("title")
+    item["document_identifier"] = (document or {}).get("document_identifier")
     item["document_reference"] = (document or {}).get("reference_identifier")
     item["document_filename"] = (document or {}).get("original_filename")
     item["document_status"] = (document or {}).get("status")

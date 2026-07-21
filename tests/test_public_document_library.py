@@ -566,7 +566,7 @@ class PublicDocumentLibraryTests(unittest.TestCase):
         self._write_metadata(self.ids["published"], metadata)
         content = self.content(documents.public_document_page(self.ids["published"]))
         self.assertIn("PDF", content)
-        self.assertIn("Public reference identifier", content)
+        self.assertIn("Optional Reference Identifier", content)
         self.assertIn("—", content)
         self.assertIn("Publication Pathway", content)
 

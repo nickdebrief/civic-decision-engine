@@ -900,6 +900,23 @@ inside the constrained homepage wrapper and no shared public pages,
 administrative pages, platform identity text, footer links, governance
 semantics, route behavior, or database state change.
 
+### CDE v13.0.5 — Document Identifier on Intake
+
+CDE v13.0.5 corrects Document identity timing so every governed Document receives
+a CDE-assigned immutable Document Identifier during New Document Intake. The
+identifier uses the `DOC-YYYY-NNNNNN` form and is assigned before the initial
+Pending Intake lifecycle event is recorded.
+
+The Document Identifier is mandatory, permanent, and distinct from the optional
+external Reference Identifier. Blank external references remain valid because
+the CDE Document Identifier is the governed Document's intrinsic identity.
+
+Existing document metadata that lacks a Document Identifier is backfilled safely
+without replacing any identifier already present. Record-Document Associations,
+Public Transmissions, Archive Collections, the Archive Explorer, and public
+document views now surface the same existing governed Document identity without
+duplicating, replacing, or re-identifying the Document.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

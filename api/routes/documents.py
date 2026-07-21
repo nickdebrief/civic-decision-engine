@@ -87,11 +87,12 @@ def _render_library(
           <td>{escape(item['category'])}</td>
           <td>{escape(_date(item.get('publication_date')))}</td>
           <td>{escape(item['description'])}</td>
+          <td>{escape(str(item.get('document_identifier') or '—'))}</td>
           <td>{escape(str(item.get('reference_identifier') or '—'))}</td>
           <td class="document-preview-cell">{render_public_document_preview(item, root=intake_root())}</td>
         </tr>"""
         for item in documents
-    ) or '<tr><td colspan="7">No published documents match these criteria.</td></tr>'
+    ) or '<tr><td colspan="8">No published documents match these criteria.</td></tr>'
     active_query = urlencode(
         {
             key: value
@@ -109,7 +110,7 @@ def _render_library(
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(1240px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}{PUBLIC_NAVIGATION_CSS}.governance{{max-width:900px;padding:16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;grid-template-columns:2fr repeat(3,1fr) auto;gap:10px;margin:24px 0}}input,select,button{{min-width:0;padding:9px;border:1px solid #c9c6bd;background:#fff;font:inherit}}button{{border-color:#245d61;background:#245d61;color:#fff;cursor:pointer}}.table-wrap{{overflow-x:auto}}table{{width:100%;border-collapse:collapse;background:#fff;font-size:.9rem}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;white-space:normal;overflow-wrap:break-word}}a{{color:#245d61}}.result-count{{color:#555}}.document-preview-cell{{width:150px;min-width:150px}}.public-document-preview{{display:grid;gap:6px;justify-items:start;max-width:132px}}.public-document-thumbnail{{display:block;width:112px;max-width:100%;height:84px;object-fit:contain;background:#faf9f5;border:1px solid #d8d4ca}}.preview-thumbnail-link,.preview-fallback-link{{display:inline-grid;gap:5px;text-decoration:none;color:#143a52}}.preview-thumbnail-link:focus,.preview-fallback-link:focus,.preview-action:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}.preview-fallback-link{{width:118px;min-height:84px;align-content:center;justify-items:center;padding:9px;border:1px solid #d8d4ca;background:#faf9f5;text-align:center}}.preview-file-glyph{{width:28px;height:34px;border:2px solid #245d61;border-radius:2px;background:#fff;box-shadow:8px -8px 0 -6px #245d61}}.preview-media-label{{font-weight:750;color:#143a52}}.preview-action,.preview-action-text{{font-size:.8rem;color:#245d61;text-decoration:underline}}.preview-unavailable{{font-weight:650;color:#6b4f00}}@media(max-width:800px){{form{{grid-template-columns:1fr}}table{{min-width:1040px}}.document-preview-cell{{min-width:128px}}.public-document-thumbnail{{width:96px;height:72px}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", "/archive"), ("Published Documents", None)])}<h1>Public Document Library</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p>
 <form method="get" action="/documents"><input name="q" value="{escape(str(query or ''))}" placeholder="Search title, institution, category, or reference" aria-label="Search documents"><select name="institution" aria-label="Filter by institution"><option value="">All institutions</option>{options(institutions, institution)}</select><select name="category" aria-label="Filter by category"><option value="">All categories</option>{options(categories, category)}</select><select name="publication_year" aria-label="Filter by publication year"><option value="">All publication years</option>{options(years, publication_year)}</select><button type="submit">Search</button></form>
-<p class="result-count">{len(documents)} published document{"s" if len(documents) != 1 else ""}.{f' Active query: {escape(active_query)}' if active_query else ''}</p><div class="table-wrap" role="region" aria-label="Published documents table"><table><thead><tr><th>Title</th><th>Institution / Source</th><th>Category</th><th>Publication Date</th><th>Description</th><th>Reference Identifier</th><th>Preview</th></tr></thead><tbody>{rows}</tbody></table></div></main></body></html>"""
+<p class="result-count">{len(documents)} published document{"s" if len(documents) != 1 else ""}.{f' Active query: {escape(active_query)}' if active_query else ''}</p><div class="table-wrap" role="region" aria-label="Published documents table"><table><thead><tr><th>Title</th><th>Institution / Source</th><th>Category</th><th>Publication Date</th><th>Description</th><th>Document Identifier</th><th>Optional Reference Identifier</th><th>Preview</th></tr></thead><tbody>{rows}</tbody></table></div></main></body></html>"""
 
 
 def _display_value(value: object) -> str:
@@ -200,6 +201,7 @@ def _render_publication_provenance(item: dict) -> str:
         ("Original filename", item.get("original_filename")),
         ("File size", f"{item.get('file_size_bytes')} bytes" if item.get("file_size_bytes") is not None else None),
         ("SHA-256 digest", item.get("sha256_hash")),
+        ("Document Identifier", item.get("document_identifier")),
         ("Initial intake actor", initial_event.get("actor") if initial_event else None),
         ("Review actor", review_event.get("actor") if review_event else None),
         ("Approval actor", approval_event.get("actor") if approval_event else None),
@@ -208,7 +210,7 @@ def _render_publication_provenance(item: dict) -> str:
         ("Approval timestamp", approval_event.get("timestamp") if approval_event else None),
         ("Publication timestamp", _publication_timestamp(item)),
         ("Current lifecycle state", STATUS_LABELS.get(str(item.get("status") or ""), item.get("status"))),
-        ("Public reference identifier", item.get("reference_identifier")),
+        ("Optional Reference Identifier", item.get("reference_identifier")),
         ("Public presentation mode", _presentation_mode(item)),
         ("Original-file download availability", _original_download_availability(item)),
     )
@@ -290,7 +292,8 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
         ("Document Format", document_type_label(item.get("document_type"))),
         ("Media Type", _media_family_label(item)),
         ("SHA-256", item["sha256_hash"]),
-        ("Reference Identifier", item.get("reference_identifier") or "Not provided"),
+        ("Document Identifier", item.get("document_identifier")),
+        ("Optional Reference Identifier", item.get("reference_identifier") or "Not provided"),
     ))
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
