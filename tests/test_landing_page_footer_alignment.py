@@ -20,6 +20,13 @@ class LandingPageFooterAlignmentTests(unittest.TestCase):
             raise AssertionError(f"Missing CSS selector: {selector}")
         return match.group("body")
 
+    @staticmethod
+    def footer_region(content: str, class_name: str) -> str:
+        start_marker = f'<div class="{class_name}">'
+        start = content.index(start_marker)
+        end = content.index("</div>", start)
+        return content[start:end]
+
     def test_landing_footer_shares_landing_application_wrapper(self):
         content = self.public_index_html()
         wrap_start = content.index('<div class="wrap">')
@@ -43,10 +50,33 @@ class LandingPageFooterAlignmentTests(unittest.TestCase):
         self.assertIn("max-width: 1400px;", wrap_rule)
         self.assertIn("padding: 40px 24px 64px;", wrap_rule)
         self.assertIn("width: 100%;", footer_rule)
+        self.assertIn("display: grid;", footer_rule)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(220px, auto);", footer_rule)
         self.assertNotIn("max-width: 1400px;", footer_rule)
         self.assertNotIn("margin-left: auto;", footer_rule)
         self.assertNotIn("margin-right: auto;", footer_rule)
         self.assertNotIn('class="public-footer-wrap"', content)
+
+    def test_landing_footer_has_two_semantic_regions(self):
+        content = self.public_index_html()
+        primary = self.footer_region(content, "public-footer__primary")
+        identity = self.footer_region(content, "public-footer__identity")
+        self.assertIn("Nick Moloney. All rights reserved.", primary)
+        self.assertIn("Public attachment metadata", primary)
+        self.assertIn('aria-label="Archive links"', primary)
+        self.assertIn('href="/documents"', primary)
+        self.assertIn("Civic Decision Engine", identity)
+        self.assertIn("Independent &middot; Transparent &middot; Traceable", identity)
+        self.assertIn("Platform version v13.0", identity)
+        self.assertIn('href="/admin"', identity)
+        self.assertNotIn('href="/admin"', primary)
+        self.assertNotIn('class="public-footer__standalone-admin"', content)
+
+    def test_landing_footer_responsive_single_column_rule_exists(self):
+        content = self.public_index_html()
+        self.assertIn("@media (max-width: 700px)", content)
+        self.assertIn(".public-footer {\n        grid-template-columns: 1fr;", content)
+        self.assertIn(".public-footer__identity {\n        align-items: flex-start;", content)
 
     def test_landing_application_markup_remains_intact(self):
         content = self.public_index_html()

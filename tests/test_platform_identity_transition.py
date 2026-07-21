@@ -49,13 +49,13 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
 
     def test_homepage_footer_uses_v13_identity(self):
         content = PUBLIC_INDEX.read_text(encoding="utf-8")
-        self.assertIn(
-            "Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.0",
-            content,
-        )
+        identity_block = content.split('<div class="public-footer__identity">', 1)[1].split("</div>", 1)[0]
+        self.assertIn("Civic Decision Engine", identity_block)
+        self.assertIn("Independent &middot; Transparent &middot; Traceable", identity_block)
+        self.assertIn("Platform version v13.0", identity_block)
         self.assertIn("civic-decision-engine v13.0", content)
         self.assertIn("Civic Decision Engine v13.0", content)
-        self.assertIn('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
+        self.assertIn('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', identity_block)
         self.assertNotIn("Civic Decisions Engine", content)
 
     def test_admin_console_renders_identity_without_removing_navigation(self):
@@ -83,7 +83,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_release_documentation_records_identity_transition(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: v13.0.3", readme)
+        self.assertIn("Current release: v13.0.4", readme)
         self.assertIn("### CDE v13.0 — Governed Public Transmissions", readme)
         self.assertIn("### CDE v13.A — Platform Identity Transition", readme)
         self.assertIn(

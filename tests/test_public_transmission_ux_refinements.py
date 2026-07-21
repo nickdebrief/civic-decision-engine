@@ -65,7 +65,7 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
     def test_release_documentation_records_refinement_without_governance_change(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: v13.0.3", readme)
+        self.assertIn("Current release: v13.0.4", readme)
         self.assertIn("### CDE v13.0.1 — Public Transmission UX Refinements", readme)
         self.assertIn("Refinement improves clarity without changing governance.", release_note)
         self.assertIn("No\nmigration is introduced.", release_note)
