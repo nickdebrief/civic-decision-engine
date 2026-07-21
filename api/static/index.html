@@ -326,22 +326,22 @@
       padding-top: 20px;
       border-top: 1px solid var(--line);
       width: 100%;
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
       align-items: flex-start;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
+      gap: 24px;
     }
 
-    .public-footer-left,
-    .public-footer-right {
+    .public-footer__primary,
+    .public-footer__identity {
       display: flex;
       flex-direction: column;
       gap: 8px;
       min-width: 0;
     }
 
-    .public-footer-right {
+    .public-footer__identity {
       align-items: flex-end;
       text-align: right;
     }
@@ -349,7 +349,9 @@
     .public-footer-copyright,
     .public-footer-metadata,
     .public-footer-link,
-    .public-footer-identity {
+    .public-footer-identity,
+    .public-footer-tagline,
+    .public-footer-version {
       color: var(--muted);
     }
 
@@ -359,6 +361,12 @@
     .public-footer-identity {
       font-size: 0.82rem;
       font-family: ui-monospace, monospace;
+    }
+
+    .public-footer-tagline,
+    .public-footer-version {
+      font-size: 0.82rem;
+      margin: 0;
     }
 
     .public-footer-nav {
@@ -386,8 +394,11 @@
     }
 
     @media (max-width: 700px) {
-      .public-footer,
-      .public-footer-right {
+      .public-footer {
+        grid-template-columns: 1fr;
+      }
+
+      .public-footer__identity {
         align-items: flex-start;
         text-align: left;
       }
@@ -1199,7 +1210,7 @@ button.record-btn.copy-ok {
     </main>
 
     <footer class="public-footer">
-      <div class="public-footer-left">
+      <div class="public-footer__primary">
         <span class="public-footer-copyright">
           &copy; <span id="copyrightYear"></span> Nick Moloney. All rights reserved.
         </span>
@@ -1218,10 +1229,10 @@ button.record-btn.copy-ok {
           <a class="public-footer-link" href="/transmissions" target="_blank" rel="noopener noreferrer">Public Transmission Library</a>
         </nav>
       </div>
-      <div class="public-footer-right">
-        <span class="public-footer-identity">
-          Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.0
-        </span>
+      <div class="public-footer__identity">
+        <span class="public-footer-identity">Civic Decision Engine</span>
+        <p class="public-footer-tagline">Independent &middot; Transparent &middot; Traceable</p>
+        <p class="public-footer-version">Platform version v13.0</p>
         <a class="public-footer-link" href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>
       </div>
     </footer>

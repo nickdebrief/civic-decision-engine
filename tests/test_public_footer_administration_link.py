@@ -20,12 +20,13 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
 
     def test_public_footer_contains_discreet_administration_link(self):
         content = self.public_index_html()
-        self.assertIn('<div class="public-footer-right">', content)
-        self.assertIn(
-            'Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.0',
-            content,
-        )
+        self.assertIn('<div class="public-footer__identity">', content)
+        identity_block = content.split('<div class="public-footer__identity">', 1)[1].split("</div>", 1)[0]
+        self.assertIn('<span class="public-footer-identity">Civic Decision Engine</span>', identity_block)
+        self.assertIn('<p class="public-footer-tagline">Independent &middot; Transparent &middot; Traceable</p>', identity_block)
+        self.assertIn('<p class="public-footer-version">Platform version v13.0</p>', identity_block)
         self.assertIn('<a class="public-footer-link" href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
+        self.assertIn('Administration', identity_block)
         self.assertIn('.public-footer-link {\n      font-size: 0.82rem;', content)
         self.assertLess(
             content.index('Platform version v13.0'),

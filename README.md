@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v13.0.3
+Current release: v13.0.4
 
 Release documentation:
+- [`docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md`](docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md)
 - [`docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md`](docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md)
 - [`docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md`](docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md)
 - [`docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md`](docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md)
@@ -885,6 +886,19 @@ navigation, platform identity line, and Administration link aligned to the same
 outer layout container as the landing-page application. It does not change
 shared public pages, administrative pages, footer content, footer links,
 platform identity, governance semantics, route behavior, or database state.
+
+### CDE v13.0.4 — Restore Two-Column Landing Page Footer Layout
+
+CDE v13.0.4 restores the landing-page footer's deliberate two-region
+composition. Copyright, metadata, and footer navigation remain grouped in the
+left information region, while the active v13 platform identity, tagline,
+version, and Administration link are grouped together in the right identity
+region.
+
+This is a static landing-page presentation refinement only. The footer remains
+inside the constrained homepage wrapper and no shared public pages,
+administrative pages, platform identity text, footer links, governance
+semantics, route behavior, or database state change.
 
 ### JPEG Variant Intake Validation
 
