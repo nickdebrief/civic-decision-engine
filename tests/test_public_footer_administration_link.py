@@ -21,12 +21,14 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
     def test_public_footer_contains_discreet_administration_link(self):
         content = self.public_index_html()
         self.assertIn('<div class="public-footer-right">', content)
-        self.assertIn('Civic Decision Engine v12 &mdash;', content)
-        self.assertIn('<span data-i18n="hero_record">The record does not argue.</span>', content)
+        self.assertIn(
+            'Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.A',
+            content,
+        )
         self.assertIn('<a class="public-footer-link" href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
         self.assertIn('.public-footer-link {\n      font-size: 0.82rem;', content)
         self.assertLess(
-            content.index('Civic Decision Engine v12 &mdash;'),
+            content.index('Platform version v13.A'),
             content.index('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>'),
         )
 

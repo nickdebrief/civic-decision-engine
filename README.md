@@ -3,7 +3,7 @@
 [![OSF](https://img.shields.io/badge/OSF-Project-blue)](https://osf.io/wz29x/)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-black)](https://github.com/nickdebrief/civic-decision-engine)
 
-<img width="512" alt="Civic Decision Engine v12" src="docs/releases/assets/v12-seal.png" />
+<img width="512" alt="Civic Decision Engine identity seal" src="docs/releases/assets/v12-seal.png" />
 
 An open, deterministic framework for evaluating visible civic records and record-derived administrative outputs through inspectable evidence relationships, dependency mappings, pathway stability analysis, and reproducible report generation.
 
@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v12
+Current release: v13.A
 
 Release documentation:
+- [`docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md`](docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md)
 - [`docs/releases/README_v12.md`](docs/releases/README_v12.md)
 
 ---
@@ -781,6 +782,36 @@ identities, change SHA-256 semantics, alter lifecycle or publication rules,
 change public eligibility, modify storage, change download behaviour, or replace
 existing public document routes.
 
+### CDE v13.A — Platform Identity Transition
+
+CDE v13.A completes the platform identity transition that prepares the Civic
+Decision Engine for the v13 era.
+
+#### Architectural Position
+
+CDE v13.A is not the implementation of Governed Public Transmissions. It is the
+release in which the platform's visible identity, documentation, branding,
+version references, page titles, navigation identity, watermarks, and public and
+administrative presentation are aligned with the governance architecture already
+established through the v12 series.
+
+Platform identity should reflect the governance architecture without changing it.
+
+The current platform identity is:
+
+- canonical name: Civic Decision Engine;
+- short name: CDE;
+- current platform version: v13.A;
+- tagline: Independent · Transparent · Traceable.
+
+The transition preserves all existing governed objects, identifiers,
+provenance, lifecycle states, publication rules, associations, collections,
+traceability views, SHA-256 semantics, public eligibility, authorization,
+storage, and public URLs.
+
+v13.A prepares the Civic Decision Engine for the v13 era. It does not introduce
+Governed Public Transmissions.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
@@ -1496,7 +1527,7 @@ Core components include:
 
 ## Status
 
-Active development (v12)
+Active development (v13.A)
 
 Current operational layers:
 

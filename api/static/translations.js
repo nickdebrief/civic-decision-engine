@@ -1,6 +1,6 @@
 /**
  * CDE i18n — Translation data
- * Civic Decision Engine v12 — Nick Moloney
+ * Civic Decision Engine v13.A — Nick Moloney
  *
  * All language data lives here.
  * index.html imports this file and reads window.CDE_I18N.
