@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v13.0.2
+Current release: v13.0.3
 
 Release documentation:
+- [`docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md`](docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md)
 - [`docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md`](docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md)
 - [`docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md`](docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md)
 - [`docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md`](docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md)
@@ -871,6 +872,19 @@ header, navigation, platform identity block, and page body. The correction is
 local to the landing page and does not alter shared public pages,
 administrative pages, footer content, footer links, platform identity,
 governance semantics, route behavior, or database state.
+
+### CDE v13.0.3 — Landing Page Footer Container Correction
+
+CDE v13.0.3 completes the landing-page footer alignment correction by making the
+landing application structure explicit. The hero and application panels now sit
+inside a dedicated landing application region, with the footer rendered as the
+next sibling inside the same constrained homepage wrapper.
+
+This structural correction keeps the footer top rule, text, metadata, footer
+navigation, platform identity line, and Administration link aligned to the same
+outer layout container as the landing-page application. It does not change
+shared public pages, administrative pages, footer content, footer links,
+platform identity, governance semantics, route behavior, or database state.
 
 ### JPEG Variant Intake Validation
 

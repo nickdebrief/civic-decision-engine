@@ -648,7 +648,7 @@
 
     @media print {
       .lang-bar,
-      .wrap > section.hero,
+      .landing-application > section.hero,
       .panel:first-child,
       .sidebar,
       .sidebar-overlay,
@@ -983,20 +983,21 @@ button.record-btn.copy-ok {
       <button class="lang-btn" data-lang="uk" type="button">Українська</button>
     </div>
 
-    <section class="hero">
-      <div class="hero-text">
-        <h1 data-i18n="hero_title">Civic Decision Engine</h1>
-        <p class="lead" data-i18n="hero_lead">A system that makes institutional behaviour visible.</p>
-        <p class="sub" data-i18n="hero_sub1">Observation sometimes becomes clearer when structure is applied.</p>
-        <p class="sub" data-i18n="hero_sub2">Not designed for attention. Designed for understanding.</p>
-        <p class="record" data-i18n="hero_record">The record does not argue.</p>
-      </div>
-      <div class="hero-image">
-        <img src="/static/lens.jpeg" alt="Lens image" />
-      </div>
-    </section>
+    <main class="landing-application">
+      <section class="hero">
+        <div class="hero-text">
+          <h1 data-i18n="hero_title">Civic Decision Engine</h1>
+          <p class="lead" data-i18n="hero_lead">A system that makes institutional behaviour visible.</p>
+          <p class="sub" data-i18n="hero_sub1">Observation sometimes becomes clearer when structure is applied.</p>
+          <p class="sub" data-i18n="hero_sub2">Not designed for attention. Designed for understanding.</p>
+          <p class="record" data-i18n="hero_record">The record does not argue.</p>
+        </div>
+        <div class="hero-image">
+          <img src="/static/lens.jpeg" alt="Lens image" />
+        </div>
+      </section>
 
-    <section class="grid">
+      <section class="grid">
       <div class="panel" id="inputPanel">
         <h2 data-i18n="input_title">Enter a case</h2>
         <p class="meta" data-i18n="input_meta">Describe the situation in plain language, or paste structured JSON.</p>
@@ -1194,7 +1195,8 @@ button.record-btn.copy-ok {
 
         <div class="footer-note" data-i18n="footer_note">It becomes clear enough to be returned to.</div>
       </div>
-    </section>
+      </section>
+    </main>
 
     <footer class="public-footer">
       <div class="public-footer-left">
