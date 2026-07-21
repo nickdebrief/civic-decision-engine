@@ -20,15 +20,23 @@ class LandingPageFooterAlignmentTests(unittest.TestCase):
             raise AssertionError(f"Missing CSS selector: {selector}")
         return match.group("body")
 
-    def test_landing_footer_is_inside_primary_wrap(self):
+    def test_landing_footer_shares_landing_application_wrapper(self):
         content = self.public_index_html()
         wrap_start = content.index('<div class="wrap">')
+        main_start = content.index('<main class="landing-application">')
+        main_end = content.index("</main>")
         footer_start = content.index('<footer class="public-footer">')
-        wrap_end = content.index("</body>")
+        footer_end = content.index("</footer>", footer_start)
+        wrap_end = content.index("</div>", footer_end)
         self.assertLess(wrap_start, footer_start)
+        self.assertLess(wrap_start, main_start)
+        self.assertLess(main_start, main_end)
+        self.assertLess(main_end, footer_start)
         self.assertLess(footer_start, wrap_end)
+        self.assertLess(footer_end, wrap_end)
+        self.assertLess(wrap_end, content.index("</body>"))
 
-    def test_landing_footer_uses_parent_content_grid(self):
+    def test_landing_footer_uses_parent_container_without_nested_grid(self):
         content = self.public_index_html()
         wrap_rule = self.css_rule(content, ".wrap")
         footer_rule = self.css_rule(content, ".public-footer")
@@ -38,6 +46,18 @@ class LandingPageFooterAlignmentTests(unittest.TestCase):
         self.assertNotIn("max-width: 1400px;", footer_rule)
         self.assertNotIn("margin-left: auto;", footer_rule)
         self.assertNotIn("margin-right: auto;", footer_rule)
+        self.assertNotIn('class="public-footer-wrap"', content)
+
+    def test_landing_application_markup_remains_intact(self):
+        content = self.public_index_html()
+        main_start = content.index('<main class="landing-application">')
+        main_end = content.index("</main>")
+        application_markup = content[main_start:main_end]
+        self.assertIn('<section class="hero">', application_markup)
+        self.assertIn('<section class="grid">', application_markup)
+        self.assertIn('<div class="panel" id="inputPanel">', application_markup)
+        self.assertIn('<div class="panel" id="outputPanel">', application_markup)
+        self.assertNotIn('<footer class="public-footer">', application_markup)
 
     def test_landing_footer_identity_and_links_remain_present(self):
         content = self.public_index_html()
