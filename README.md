@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v13.0.1
+Current release: v13.0.2
 
 Release documentation:
+- [`docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md`](docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md)
 - [`docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md`](docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md)
 - [`docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md`](docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md)
 - [`docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md`](docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md)
@@ -859,6 +860,17 @@ containment.
 No object identity, lifecycle, provenance, publication rule, traceability rule,
 collection membership, association, SHA-256 value, authorization boundary,
 storage behavior, or database semantics change.
+
+### CDE v13.0.2 — Landing Page Footer Alignment
+
+CDE v13.0.2 corrects an isolated footer alignment issue on the main public
+landing page.
+
+The landing-page footer now inherits the same primary content grid as the
+header, navigation, platform identity block, and page body. The correction is
+local to the landing page and does not alter shared public pages,
+administrative pages, footer content, footer links, platform identity,
+governance semantics, route behavior, or database state.
 
 ### JPEG Variant Intake Validation
 

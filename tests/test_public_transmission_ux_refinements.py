@@ -25,9 +25,6 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
     def test_homepage_footer_alignment_and_identity(self):
         content = PUBLIC_INDEX.read_text(encoding="utf-8")
         self.assertIn("Platform version v13.0", content)
-        self.assertIn("max-width: 1400px;", content)
-        self.assertIn("margin-left: auto;", content)
-        self.assertIn("margin-right: auto;", content)
         self.assertIn("min-width: 0;", content)
 
     def test_admin_dashboard_card_uses_refined_transmission_title(self):
@@ -68,7 +65,7 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
     def test_release_documentation_records_refinement_without_governance_change(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: v13.0.1", readme)
+        self.assertIn("Current release: v13.0.2", readme)
         self.assertIn("### CDE v13.0.1 — Public Transmission UX Refinements", readme)
         self.assertIn("Refinement improves clarity without changing governance.", release_note)
         self.assertIn("No\nmigration is introduced.", release_note)
