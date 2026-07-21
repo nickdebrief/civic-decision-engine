@@ -43,6 +43,7 @@ OBJECT_TYPE_LABELS = {
     "published_document": "Published Document",
     "record_document_association": "Association",
     "public_collection": "Collection",
+    "public_transmission": "Public Transmission",
 }
 
 PUBLIC_NAVIGATION_CSS = """
@@ -75,6 +76,7 @@ PUBLIC_NAVIGATION_CSS = """
 .object-type-badge-published-document{border-left-color:#2e8b9a}
 .object-type-badge-association{border-left-color:#8a6d1f}
 .object-type-badge-collection{border-left-color:#5b5f97}
+.object-type-badge-transmission{border-left-color:#9b4d2e}
 @media(max-width:640px){.public-site-identity{align-items:flex-start}.public-site-meta{display:grid;gap:3px}.public-primary-navigation{gap:8px 12px}.public-breadcrumbs{font-size:.82rem}.object-type-badge{white-space:normal}}
 """
 
@@ -151,6 +153,7 @@ def object_type_badge(object_type: str) -> str:
         "published_document": "published-document",
         "record_document_association": "association",
         "public_collection": "collection",
+        "public_transmission": "transmission",
     }.get(object_type, "governed-object")
     return (
         f'<span class="object-type-badge object-type-badge-{escape(css_type)}" '
@@ -165,6 +168,7 @@ def public_primary_navigation(active: str = "") -> str:
         ("Traceability", "/traceability"),
         ("Records", "/records"),
         ("Documents", "/documents"),
+        ("Transmissions", "/transmissions"),
         ("Associations", "/associations"),
         ("Collections", "/collections"),
     )
@@ -202,6 +206,7 @@ def public_footer() -> str:
         '<a href="/traceability">Traceability</a>'
         '<a href="/documents">Documents</a>'
         '<a href="/records">Records</a>'
+        '<a href="/transmissions">Transmissions</a>'
         '</nav>'
         '</div>'
         '</footer>'

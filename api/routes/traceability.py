@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from api import archive_collection_memberships as acm
 from api import archive_collections as ac
+from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.document_intake import (
     build_document_search_text,
@@ -62,6 +63,7 @@ OBJECT_ACTION_LABELS = {
     "published_document": "Open Published Document",
     "record_document_association": "Open Association",
     "public_collection": "Open Collection",
+    "public_transmission": "Open Transmission",
 }
 RELATIONSHIP_LABELS = rda.RELATIONSHIP_TYPES
 
@@ -104,6 +106,26 @@ class TraceabilityChain:
     document_url: str
     public_note: str
     collections: tuple[CollectionContext, ...]
+    search_text: str
+
+
+@dataclass(frozen=True)
+class TransmissionLink:
+    transmission_reference: str
+    transmission_title: str
+    transmission_status: str
+    transmission_method: str
+    transmission_date: str
+    transmission_url: str
+    object_type: str
+    object_type_label: str
+    object_reference: str
+    object_title: str
+    object_status: str
+    object_url: str
+    relationship_label: str
+    public_note: str
+    collection_contexts: tuple[CollectionContext, ...]
     search_text: str
 
 
@@ -324,6 +346,98 @@ def _build_traceability_chains() -> tuple[list[TraceabilityChain], dict[str, dic
     return chains, collections_by_reference
 
 
+def _all_public_transmissions(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        result = trm.list_public_transmission_index(conn, page=page, page_size=100, root=intake_root())
+        rows.extend(result["rows"])
+        if int(result["page"]) >= int(result["page_count"]):
+            break
+        page += 1
+    return rows
+
+
+def _build_transmission_links(collections_by_reference: dict[str, dict[str, Any]]) -> list[TransmissionLink]:
+    conn = records.get_db()
+    try:
+        _, memberships_by_member = _public_collection_contexts(conn)
+        links: list[TransmissionLink] = []
+        for item in _all_public_transmissions(conn):
+            reference = str(item.get("public_reference") or "")
+            if not reference:
+                continue
+            try:
+                transmission = trm.get_public_transmission(conn, reference)
+            except ValueError:
+                continue
+            attachments = trm.list_transmission_attachments(
+                conn,
+                transmission["id"],
+                public_only=True,
+                root=intake_root(),
+            )
+            transmission_contexts = _collection_context_for_chain(
+                (("public_transmission", reference),),
+                memberships_by_member,
+            )
+            for attachment in attachments:
+                object_type = str(attachment.get("object_type") or "")
+                object_reference = str(attachment.get("object_public_reference") or attachment.get("object_reference") or "")
+                object_contexts = _collection_context_for_chain(
+                    ((object_type, object_reference),),
+                    memberships_by_member,
+                )
+                contexts = tuple(
+                    sorted(
+                        {context.membership_reference: context for context in (*transmission_contexts, *object_contexts)}.values(),
+                        key=lambda context: (context.reference, context.membership_reference),
+                    )
+                )
+                search_text = " ".join(
+                    str(value or "")
+                    for value in (
+                        reference,
+                        transmission.get("title"),
+                        transmission.get("summary"),
+                        transmission.get("sender"),
+                        transmission.get("recipient"),
+                        transmission.get("subject"),
+                        transmission.get("covering_message"),
+                        trm.method_label(transmission.get("communication_method")),
+                        object_reference,
+                        attachment.get("object_title"),
+                        attachment.get("relationship_label"),
+                        attachment.get("public_note"),
+                        " ".join(context.title for context in contexts),
+                        " ".join(context.reference for context in contexts),
+                    )
+                ).casefold()
+                links.append(
+                    TransmissionLink(
+                        transmission_reference=reference,
+                        transmission_title=str(transmission.get("title") or reference),
+                        transmission_status=trm.status_label(transmission.get("publication_status")),
+                        transmission_method=trm.method_label(transmission.get("communication_method")),
+                        transmission_date=str(transmission.get("published_at") or transmission.get("transmission_date") or ""),
+                        transmission_url=f"/transmissions/{reference}",
+                        object_type=object_type,
+                        object_type_label=trm.object_type_label(object_type),
+                        object_reference=object_reference,
+                        object_title=str(attachment.get("object_title") or object_reference),
+                        object_status=str(attachment.get("object_status_label") or "Published"),
+                        object_url=str(attachment.get("object_url") or "#"),
+                        relationship_label=str(attachment.get("relationship_label") or "Transmitted object"),
+                        public_note=str(attachment.get("public_note") or ""),
+                        collection_contexts=contexts,
+                        search_text=search_text,
+                    )
+                )
+        return links
+    finally:
+        conn.close()
+
+
 def _matches_search(chain: TraceabilityChain, search: str) -> bool:
     tokens = _tokens(search)
     if not tokens:
@@ -499,6 +613,7 @@ def _render_summary(counts: dict[str, int]) -> str:
         ("Published Documents shown", "documents"),
         ("Governed Associations shown", "associations"),
         ("Governed Public Collections shown", "collections"),
+        ("Public Transmissions shown", "transmissions"),
         ("Traceability chains shown", "chains"),
     )
     cards = "".join(
@@ -514,6 +629,7 @@ def _render_legend() -> str:
         ("Published Document", "Owns its own content identity, file integrity, provenance, lifecycle and public page."),
         ("Governed Association", "Declares a public relationship between independently governed objects."),
         ("Governed Public Collection", "Declares governed membership without absorbing the identity of its members."),
+        ("Public Transmission", "Governs communication context without absorbing the identity of transmitted objects."),
         ("Declared Relationship", "A relationship explicitly governed by CDE. It is not inferred by the Traceability Map."),
     )
     items = "".join(f"<dt>{escape(term)}</dt><dd>{escape(definition)}</dd>" for term, definition in entries)
@@ -626,6 +742,74 @@ def _render_structured_view(chains: list[TraceabilityChain], return_to: str) -> 
     return f'<div class="traceability-table-wrap"><table class="traceability-structured-table"><thead><tr><th>Canonical Record</th><th>Governed Association</th><th>Published Document</th><th>Governed Public Collections</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
+def _matches_transmission_search(link: TransmissionLink, search: str) -> bool:
+    tokens = _tokens(search)
+    if not tokens:
+        return True
+    return all(token in link.search_text for token in tokens)
+
+
+def _filter_transmission_links(
+    links: list[TransmissionLink],
+    *,
+    search: str,
+    collection: str,
+    year: str,
+) -> list[TransmissionLink]:
+    normalized_year = year if len(str(year or "")) == 4 and str(year).isdigit() else ""
+    result = []
+    for link in links:
+        if collection and collection not in {context.reference for context in link.collection_contexts}:
+            continue
+        if normalized_year and _year(link.transmission_date) != normalized_year:
+            continue
+        if not _matches_transmission_search(link, search):
+            continue
+        result.append(link)
+    return result
+
+
+def _render_transmission_links(links: list[TransmissionLink], return_to: str) -> str:
+    if not links:
+        return '<div class="traceability-empty" role="status"><h2>No public Transmission relationships matched the current view.</h2><p>Transmission traceability displays only Published transmissions and public transmitted objects.</p></div>'
+    cards = []
+    for link in links:
+        transmission_node = _node(
+            "public_transmission",
+            link.transmission_reference,
+            link.transmission_title,
+            link.transmission_status,
+            link.transmission_url,
+            OBJECT_ACTION_LABELS["public_transmission"],
+            return_to,
+            f"<p>Method: {escape(link.transmission_method)}</p><p>Date: {escape(_date(link.transmission_date))}</p>",
+        )
+        object_node = _node(
+            link.object_type,
+            link.object_reference,
+            link.object_title,
+            link.object_status,
+            link.object_url,
+            OBJECT_ACTION_LABELS.get(link.object_type, "Open governed object"),
+            return_to,
+            f"<p>Declared relationship: {escape(link.relationship_label)}</p>{f'<p>{escape(link.public_note)}</p>' if link.public_note else ''}",
+        )
+        collection_context = ""
+        if link.collection_contexts:
+            collection_context = '<section class="traceability-collections" aria-label="Transmission collection context"><h3>Governed Collection Membership</h3>' + "".join(
+                f'<article class="traceability-collection-card">{object_type_badge("public_collection")}<h3>{escape(context.title)}</h3><p class="traceability-reference">{escape(context.reference)}</p><p>This collection references the Transmission or transmitted object without owning or containing it.</p><p class="traceability-actions">{_object_action(context.url, OBJECT_ACTION_LABELS["public_collection"], context.title, return_to)}</p></article>'
+                for context in link.collection_contexts
+            ) + "</section>"
+        cards.append(
+            f"""<article class="traceability-chain transmission-traceability-chain" aria-labelledby="transmission-link-{escape(link.transmission_reference)}-{escape(link.object_reference)}">
+              <h2 id="transmission-link-{escape(link.transmission_reference)}-{escape(link.object_reference)}">Transmission traceability {escape(link.transmission_reference)} to {escape(link.object_reference)}</h2>
+              <div class="traceability-chain-flow transmission-chain-flow">{transmission_node}<div class="traceability-link-label" aria-hidden="true">communicates</div>{object_node}</div>
+              {collection_context}
+            </article>"""
+        )
+    return "".join(cards)
+
+
 @router.get("/traceability", response_class=HTMLResponse)
 def public_traceability_map(
     search: str | None = Query(None),
@@ -642,6 +826,7 @@ def public_traceability_map(
     page_size: int | str | None = Query(25),
 ):
     all_chains, collections_by_reference = _build_traceability_chains()
+    all_transmission_links = _build_transmission_links(collections_by_reference)
     filters = {
         "search": str(search or "").strip(),
         "record": str(record or "").strip(),
@@ -667,6 +852,12 @@ def public_traceability_map(
         document_year=filters["document_year"],
     )
     sorted_chains = _sort_chains(filtered, filters["sort"])
+    filtered_transmission_links = _filter_transmission_links(
+        all_transmission_links,
+        search=filters["search"],
+        collection=filters["collection"],
+        year=filters["year"],
+    )
     normalized_page_size = _normalize_page_size(page_size)
     total = len(sorted_chains)
     page_count = max(1, (total + normalized_page_size - 1) // normalized_page_size)
@@ -691,6 +882,7 @@ def public_traceability_map(
     has_active_filters = any(value and not (key == "sort" and value == "newest") for key, value in filters.items())
     active_filters_html = _active_filter_summary(filters, collections=collections_by_reference)
     counts = _unique_counts(sorted_chains)
+    counts["transmissions"] = len({link.transmission_reference for link in filtered_transmission_links})
     pagination_top = _render_pagination(filters, page=normalized_page, page_count=page_count, page_size=normalized_page_size, total=total, label="Top traceability results")
     pagination_bottom = _render_pagination(filters, page=normalized_page, page_count=page_count, page_size=normalized_page_size, total=total, label="Bottom traceability results")
     page_summary = f"<p><strong>Page:</strong> {normalized_page} of {page_count}</p>" if total else ""
@@ -703,5 +895,5 @@ def public_traceability_map(
         )
 
     return HTMLResponse(
-        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Traceability Map | Civic Decision Engine</title><link rel="canonical" href="/traceability"><meta name="description" content="Public traceability interface showing declared CDE relationships between independently governed public objects."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.traceability-map{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.traceability-boundary,.traceability-current-view{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.traceability-boundary{{max-width:980px}}.traceability-current-view{{border-left-color:#143a52;margin:24px 0}}.traceability-counts{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}}.traceability-count-card,.traceability-node,.traceability-collection-card,.traceability-empty{{background:#fff;border:1px solid #d8d4ca;padding:14px;overflow-wrap:anywhere}}.traceability-count-card span{{display:block;color:#555}}.traceability-count-card strong{{display:block;font-size:1.55rem;color:#143a52}}.traceability-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.traceability-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.traceability-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.traceability-filters input,.traceability-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.traceability-filters button,.traceability-filters a,.traceability-clear-link,.traceability-actions a{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.traceability-filters a,.traceability-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.traceability-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.traceability-legend dl{{display:grid;grid-template-columns:220px minmax(0,1fr);gap:8px 14px;background:#fff;border:1px solid #d8d4ca;padding:14px}}.traceability-legend dt{{font-weight:700;color:#143a52}}.traceability-legend dd{{margin:0}}.traceability-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.traceability-chains{{display:grid;gap:18px}}.traceability-chain{{border-top:1px solid #d8d4ca;padding-top:18px}}.traceability-chain-flow{{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(0,1fr) 90px minmax(0,1fr);gap:12px;align-items:center}}.traceability-link-label{{text-align:center;color:#555;font-weight:700}}.traceability-reference{{font:700 .88rem ui-monospace,monospace;color:#555}}.traceability-collections{{margin-top:14px}}.traceability-collection-list{{display:grid;gap:10px}}.traceability-structured-table{{width:100%;border-collapse:collapse;background:#fff}}.traceability-structured-table th,.traceability-structured-table td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}.traceability-structured-table th{{background:#143a52;color:#fff}}.traceability-table-wrap{{overflow-x:auto}}section{{margin:28px 0}}@media(max-width:980px){{.traceability-counts{{grid-template-columns:repeat(2,minmax(0,1fr))}}.traceability-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}.traceability-chain-flow{{grid-template-columns:1fr}}.traceability-link-label::after{{content:" ↓"}}.traceability-link-label{{text-align:left}}}}@media(max-width:640px){{main.traceability-map{{width:min(100% - 24px,1220px);margin-top:24px}}.traceability-counts,.traceability-filters,.traceability-legend dl{{grid-template-columns:1fr}}.traceability-filters button,.traceability-filters a,.traceability-clear-link,.traceability-actions a{{width:100%;text-align:center}}}}</style></head><body><main class="traceability-map">{public_primary_navigation(active="traceability")}{public_breadcrumbs([("Home", "/"), ("Traceability", None)])}<h1>Public Traceability Map</h1><p class="traceability-boundary">{escape(BOUNDARY_TEXT)} {escape(DISCOVERY_BOUNDARY)} Traceability reveals declared relationships without erasing the identity of the governed objects involved.</p>{_render_summary(counts)}<section class="traceability-current-view" aria-live="polite" aria-labelledby="traceability-current-heading"><h2 id="traceability-current-heading">Current Traceability View</h2><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="traceability-clear-link" href="/traceability">Clear filters</a></p></section><section aria-labelledby="traceability-filters-heading"><h2 id="traceability-filters-heading">Search and Filters</h2><form class="traceability-filters" method="get" action="/traceability"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search references, titles, notes, institutions, formats, or collection context" autocomplete="off"><span class="traceability-filter-help">Search covers public-safe declared relationship metadata only.</span></label><label>Canonical Record<select name="record">{_option_list(record_options, filters['record'], 'Any canonical record')}</select></label><label>Published Document<select name="document">{_option_list(document_options, filters['document'], 'Any published document')}</select></label><label>Relationship type<select name="relationship_type">{_option_list(relationship_options, filters['relationship_type'], 'Any relationship type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Institution / source<select name="institution">{_option_list(institutions, filters['institution'], 'Any institution or source')}</select></label><label>Media type<select name="media">{_option_list(media_options, filters['media'], 'Any media type')}</select></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/traceability">Clear filters</a></form></section>{_render_legend()}<section aria-labelledby="traceability-visual-heading"><h2 id="traceability-visual-heading">Visual Traceability View</h2>{pagination_top}<div class="traceability-chains">{_render_visual_chains(page_chains, current_traceability_path, has_any_chain=bool(all_chains), has_filters=has_active_filters, disconnected_message=disconnected_message)}</div>{pagination_bottom}</section><section aria-labelledby="traceability-structured-heading"><h2 id="traceability-structured-heading">Structured Accessible View</h2>{_render_structured_view(page_chains, current_traceability_path)}</section><p><a href="/archive">Back to Public Archive Explorer</a> · <a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
+        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Traceability Map | Civic Decision Engine</title><link rel="canonical" href="/traceability"><meta name="description" content="Public traceability interface showing declared CDE relationships between independently governed public objects."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.traceability-map{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.traceability-boundary,.traceability-current-view{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.traceability-boundary{{max-width:980px}}.traceability-current-view{{border-left-color:#143a52;margin:24px 0}}.traceability-counts{{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}}.traceability-count-card,.traceability-node,.traceability-collection-card,.traceability-empty{{background:#fff;border:1px solid #d8d4ca;padding:14px;overflow-wrap:anywhere}}.traceability-count-card span{{display:block;color:#555}}.traceability-count-card strong{{display:block;font-size:1.55rem;color:#143a52}}.traceability-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.traceability-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.traceability-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.traceability-filters input,.traceability-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.traceability-filters button,.traceability-filters a,.traceability-clear-link,.traceability-actions a{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.traceability-filters a,.traceability-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.traceability-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.traceability-legend dl{{display:grid;grid-template-columns:220px minmax(0,1fr);gap:8px 14px;background:#fff;border:1px solid #d8d4ca;padding:14px}}.traceability-legend dt{{font-weight:700;color:#143a52}}.traceability-legend dd{{margin:0}}.traceability-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.traceability-chains{{display:grid;gap:18px}}.traceability-chain{{border-top:1px solid #d8d4ca;padding-top:18px}}.traceability-chain-flow{{display:grid;grid-template-columns:minmax(0,1fr) 110px minmax(0,1fr) 90px minmax(0,1fr);gap:12px;align-items:center}}.transmission-chain-flow{{grid-template-columns:minmax(0,1fr) 120px minmax(0,1fr)}}.traceability-link-label{{text-align:center;color:#555;font-weight:700}}.traceability-reference{{font:700 .88rem ui-monospace,monospace;color:#555}}.traceability-collections{{margin-top:14px}}.traceability-collection-list{{display:grid;gap:10px}}.traceability-structured-table{{width:100%;border-collapse:collapse;background:#fff}}.traceability-structured-table th,.traceability-structured-table td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}.traceability-structured-table th{{background:#143a52;color:#fff}}.traceability-table-wrap{{overflow-x:auto}}section{{margin:28px 0}}@media(max-width:980px){{.traceability-counts{{grid-template-columns:repeat(2,minmax(0,1fr))}}.traceability-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}.traceability-chain-flow,.transmission-chain-flow{{grid-template-columns:1fr}}.traceability-link-label::after{{content:" ↓"}}.traceability-link-label{{text-align:left}}}}@media(max-width:640px){{main.traceability-map{{width:min(100% - 24px,1220px);margin-top:24px}}.traceability-counts,.traceability-filters,.traceability-legend dl{{grid-template-columns:1fr}}.traceability-filters button,.traceability-filters a,.traceability-clear-link,.traceability-actions a{{width:100%;text-align:center}}}}</style></head><body><main class="traceability-map">{public_primary_navigation(active="traceability")}{public_breadcrumbs([("Home", "/"), ("Traceability", None)])}<h1>Public Traceability Map</h1><p class="traceability-boundary">{escape(BOUNDARY_TEXT)} {escape(DISCOVERY_BOUNDARY)} Traceability reveals declared relationships without erasing the identity of the governed objects involved.</p>{_render_summary(counts)}<section class="traceability-current-view" aria-live="polite" aria-labelledby="traceability-current-heading"><h2 id="traceability-current-heading">Current Traceability View</h2><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="traceability-clear-link" href="/traceability">Clear filters</a></p></section><section aria-labelledby="traceability-filters-heading"><h2 id="traceability-filters-heading">Search and Filters</h2><form class="traceability-filters" method="get" action="/traceability"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search references, titles, notes, institutions, formats, or collection context" autocomplete="off"><span class="traceability-filter-help">Search covers public-safe declared relationship metadata only.</span></label><label>Canonical Record<select name="record">{_option_list(record_options, filters['record'], 'Any canonical record')}</select></label><label>Published Document<select name="document">{_option_list(document_options, filters['document'], 'Any published document')}</select></label><label>Relationship type<select name="relationship_type">{_option_list(relationship_options, filters['relationship_type'], 'Any relationship type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Institution / source<select name="institution">{_option_list(institutions, filters['institution'], 'Any institution or source')}</select></label><label>Media type<select name="media">{_option_list(media_options, filters['media'], 'Any media type')}</select></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/traceability">Clear filters</a></form></section>{_render_legend()}<section aria-labelledby="traceability-visual-heading"><h2 id="traceability-visual-heading">Visual Traceability View</h2>{pagination_top}<div class="traceability-chains">{_render_visual_chains(page_chains, current_traceability_path, has_any_chain=bool(all_chains), has_filters=has_active_filters, disconnected_message=disconnected_message)}</div>{pagination_bottom}</section><section aria-labelledby="transmission-traceability-heading"><h2 id="transmission-traceability-heading">Transmission Traceability View</h2><p class="traceability-boundary">A Transmission governs communication context. It is rendered as its own governed node and does not contain the transmitted object.</p><div class="traceability-chains">{_render_transmission_links(filtered_transmission_links[:normalized_page_size], current_traceability_path)}</div></section><section aria-labelledby="traceability-structured-heading"><h2 id="traceability-structured-heading">Structured Accessible View</h2>{_render_structured_view(page_chains, current_traceability_path)}</section><p><a href="/archive">Back to Public Archive Explorer</a> · <a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/transmissions">Public Transmission Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
     )

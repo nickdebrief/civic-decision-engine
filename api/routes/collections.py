@@ -22,7 +22,7 @@ router = APIRouter()
 
 BOUNDARY_TEXT = (
     "This collection provides governed context for independently governed public objects. "
-    "Collection identity does not merge records, documents, or associations; copy their "
+    "Collection identity does not merge records, documents, associations, or transmissions; copy their "
     "contents; alter their provenance or lifecycle; establish evidential sufficiency; "
     "or make the collection proof of any shared claim."
 )
@@ -209,7 +209,7 @@ def _render_collection_members(memberships: list[dict]) -> str:
     )
     if not rows:
         rows = '<tr><td colspan="10" class="public-collection-empty">No active governed public members are currently visible for this collection.</td></tr>'
-    return f"""<section class="public-collection-members"><h2>Governed Collection Members</h2><p class="public-collection-boundary">This collection presents governed memberships in declared sequence order. Each item remains an independently governed public object with its own identity, provenance, lifecycle, relationships, and public page. Sequence records navigational continuity only.</p><div class="public-collection-members-wrapper"><table class="public-collection-members-table"><thead><tr><th class="public-collection-member-sequence">Public position</th><th class="public-collection-member-reference">Membership reference</th><th class="public-collection-member-type">Member type</th><th class="public-collection-member-document">Member object</th><th class="public-collection-member-document-reference">Public reference</th><th class="public-collection-member-format">Format or relationship</th><th class="public-collection-member-status">Public status</th><th class="public-collection-member-section">Section</th><th class="public-collection-member-previous">Previous</th><th class="public-collection-member-next">Next</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
+    return f"""<section class="public-collection-members"><h2>Governed Collection Members</h2><p class="public-collection-boundary">This collection presents governed memberships in declared sequence order. Each item remains an independently governed public object with its own identity, provenance, lifecycle, relationships, and public page. The collection does not own, contain, or absorb its members. Sequence records navigational continuity only.</p><div class="public-collection-members-wrapper"><table class="public-collection-members-table"><thead><tr><th class="public-collection-member-sequence">Public position</th><th class="public-collection-member-reference">Membership reference</th><th class="public-collection-member-type">Member type</th><th class="public-collection-member-document">Member object</th><th class="public-collection-member-document-reference">Public reference</th><th class="public-collection-member-format">Format or relationship</th><th class="public-collection-member-status">Public status</th><th class="public-collection-member-section">Section</th><th class="public-collection-member-previous">Previous</th><th class="public-collection-member-next">Next</th></tr></thead><tbody>{rows}</tbody></table></div></section>"""
 
 
 @router.get("/collections/{collection_reference}", response_class=HTMLResponse)
