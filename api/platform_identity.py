@@ -15,8 +15,8 @@ class PlatformIdentity:
 PLATFORM_IDENTITY = PlatformIdentity(
     name="Civic Decision Engine",
     short_name="CDE",
-    version="13.A",
-    version_label="v13.A",
+    version="13.0",
+    version_label="v13.0",
     tagline="Independent · Transparent · Traceable",
 )
 

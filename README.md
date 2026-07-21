@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v13.0
+Current release: v13.0.1
 
 Release documentation:
+- [`docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md`](docs/releases/CDE_V13_0_1_PUBLIC_TRANSMISSION_UX_REFINEMENTS.md)
 - [`docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md`](docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md)
 - [`docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md`](docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md)
 - [`docs/releases/README_v12.md`](docs/releases/README_v12.md)
@@ -842,6 +843,22 @@ support for Public Transmissions.
 The release does not add email sending, mailbox integration, messaging,
 notifications, reply threading, correspondence storage, duplicate document
 storage, derived documents, or workflow redesign.
+
+### CDE v13.0.1 — Public Transmission UX Refinements
+
+CDE v13.0.1 refines the visible presentation of Governed Public Transmissions
+without changing governance semantics.
+
+This refinement updates active platform identity references to `v13.0`, restores
+public footer alignment with the primary content container, shortens the
+Administration Console dashboard card from `Public Transmissions` to
+`Transmissions`, and audits Transmission wording so the interface consistently
+describes included or referenced governed objects rather than implying
+containment.
+
+No object identity, lifecycle, provenance, publication rule, traceability rule,
+collection membership, association, SHA-256 value, authorization boundary,
+storage behavior, or database semantics change.
 
 ### JPEG Variant Intake Validation
 

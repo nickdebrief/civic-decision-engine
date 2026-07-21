@@ -58,7 +58,7 @@ TRANSMISSION_ACTION_LABELS: dict[str, str] = {
     "created": "Created",
     "updated": "Updated",
     "status_changed": "Status changed",
-    "attachment_added": "Attached governed object",
+    "attachment_added": "Included governed object",
     "attachment_removed": "Removed governed object",
 }
 

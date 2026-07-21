@@ -22,13 +22,13 @@ class PublicFooterAdministrationLinkTests(unittest.TestCase):
         content = self.public_index_html()
         self.assertIn('<div class="public-footer-right">', content)
         self.assertIn(
-            'Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.A',
+            'Civic Decision Engine &mdash; Independent &middot; Transparent &middot; Traceable &mdash; Platform version v13.0',
             content,
         )
         self.assertIn('<a class="public-footer-link" href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>', content)
         self.assertIn('.public-footer-link {\n      font-size: 0.82rem;', content)
         self.assertLess(
-            content.index('Platform version v13.A'),
+            content.index('Platform version v13.0'),
             content.index('href="/admin" target="_blank" rel="noopener noreferrer">Administration</a>'),
         )
 
