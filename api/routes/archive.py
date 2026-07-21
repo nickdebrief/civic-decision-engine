@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from api import archive_collection_memberships as acm
 from api import archive_collections as ac
+from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.document_intake import (
     build_document_search_text,
@@ -36,18 +37,21 @@ OBJECT_TYPES = {
     "published_document": "Published Document",
     "record_document_association": "Record-Document Association",
     "public_collection": "Governed Public Collection",
+    "public_transmission": "Public Transmission",
 }
 OBJECT_TYPE_COUNT_LABELS = {
     "canonical_record": "Canonical Records",
     "published_document": "Published Documents",
     "record_document_association": "Record-Document Associations",
     "public_collection": "Governed Public Collections",
+    "public_transmission": "Public Transmissions",
 }
 OBJECT_ACTION_LABELS = {
     "canonical_record": "Open Canonical Record",
     "published_document": "Open Published Document",
     "record_document_association": "Open Association",
     "public_collection": "Open Collection",
+    "public_transmission": "Open Transmission",
 }
 MEDIA_FILTERS = {
     "pdf": "PDF",
@@ -384,6 +388,54 @@ def _collection_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
     return results
 
 
+def _transmission_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
+    results: list[ArchiveResult] = []
+    index = trm.list_public_transmission_index(conn, page=1, page_size=100, root=intake_root())
+    rows = list(index["rows"])
+    page = 1
+    while page < int(index["page_count"]):
+        page += 1
+        rows.extend(
+            trm.list_public_transmission_index(conn, page=page, page_size=100, root=intake_root())["rows"]
+        )
+    for item in rows:
+        reference = str(item.get("public_reference") or "")
+        searchable = " ".join(
+            str(item.get(key) or "")
+            for key in (
+                "public_reference",
+                "title",
+                "summary",
+                "sender",
+                "recipient",
+                "transmission_date",
+                "communication_method_label",
+                "subject",
+                "covering_message",
+                "external_reference",
+                "transmission_identifier",
+                "attached_references",
+                "search_text",
+            )
+        ).casefold()
+        results.append(
+            ArchiveResult(
+                object_type="public_transmission",
+                title=str(item.get("title") or reference),
+                reference=reference,
+                status=str(item.get("publication_status_label") or "Published"),
+                publication_date=str(item.get("published_at") or item.get("transmission_date") or ""),
+                summary=str(item.get("summary") or ""),
+                url=f"/transmissions/{reference}",
+                institution="; ".join(part for part in (str(item.get("sender") or ""), str(item.get("recipient") or "")) if part),
+                category=str(item.get("communication_method_label") or ""),
+                keywords=str(item.get("subject") or ""),
+                search_text=searchable,
+            )
+        )
+    return results
+
+
 def _collection_member_keys(conn: sqlite3.Connection, collection_reference: str) -> set[tuple[str, str]]:
     reference = str(collection_reference or "").strip()
     if not reference:
@@ -399,6 +451,7 @@ def _collection_member_keys(conn: sqlite3.Connection, collection_reference: str)
             "canonical_record": "canonical_record",
             "published_document": "published_document",
             "record_document_association": "record_document_association",
+            "public_transmission": "public_transmission",
         }.get(member_type)
         member_reference = str(member.get("member_public_reference") or member.get("member_reference") or "")
         if object_type and member_reference:
@@ -414,6 +467,7 @@ def _build_archive_results() -> tuple[list[ArchiveResult], dict[str, int]]:
             + _document_results()
             + _association_results(conn)
             + _collection_results(conn)
+            + _transmission_results(conn)
         )
     finally:
         conn.close()
@@ -748,5 +802,5 @@ def public_archive_explorer(
         current_archive_path = "/archive"
 
     return HTMLResponse(
-        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Archive Explorer | Civic Decision Engine</title><link rel="canonical" href="/archive"><meta name="description" content="Unified public discovery interface for Civic Decision Engine records, documents, associations, and collections."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.archive-explorer{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.archive-boundary,.archive-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.archive-boundary{{max-width:960px}}.archive-summary{{margin:24px 0;border-left-color:#143a52}}.archive-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.archive-stats-section,.archive-filter-section,.archive-results{{margin:30px 0}}.archive-stats-section h2,.archive-filter-section h2,.archive-results h2{{margin-bottom:12px}}.archive-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.archive-stat-card{{display:block;background:#fff;border:1px solid #d8d4ca;padding:14px;text-decoration:none;color:#1f2933}}.archive-stat-card:hover,.archive-stat-card:focus{{border-color:#245d61;box-shadow:0 0 0 2px rgba(36,93,97,.14)}}.archive-stat-card span{{display:block;color:#555}}.archive-stat-card strong{{display:block;font-size:1.7rem;color:#143a52}}.archive-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.archive-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.archive-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.archive-filters input,.archive-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.archive-filters a,.archive-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.archive-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.archive-page-link{{font-weight:650}}.archive-result-list{{display:grid;gap:14px}}.archive-result-card{{background:#fff;border:1px solid #d8d4ca;padding:16px;overflow-wrap:anywhere}}.archive-result-card h2{{margin:.25rem 0}}.archive-breadcrumb,.archive-reference{{color:#555;margin:.2rem 0}}.archive-reference{{font:700 .9rem ui-monospace,monospace}}.archive-result-summary{{max-width:880px;line-height:1.5}}.archive-result-card dl{{display:grid;grid-template-columns:160px minmax(0,1fr);gap:6px 12px;margin:12px 0}}.archive-result-card dt{{font-weight:700;color:#555}}.archive-result-card dd{{margin:0;min-width:0;overflow-wrap:anywhere}}.archive-actions a{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.archive-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}.archive-empty h2{{margin-top:0}}@media(max-width:980px){{.archive-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.archive-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{main.archive-explorer{{width:min(100% - 24px,1220px);margin-top:24px}}.archive-stats,.archive-filters{{grid-template-columns:1fr}}.archive-result-card dl{{grid-template-columns:1fr}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:100%;text-align:center}}}}</style></head><body><main class="archive-explorer">{public_primary_navigation(active="archive")}{public_breadcrumbs([("Home", "/"), ("Archive", None)])}<h1>Public Archive Explorer</h1><p class="archive-boundary">{escape(BOUNDARY_TEXT)} Every result links to the governed object that owns its identity, provenance, lifecycle, verification, and public page.</p>{_render_stats(counts)}<section class="archive-summary" aria-live="polite" aria-labelledby="archive-summary-heading"><h2 id="archive-summary-heading">Current Archive View</h2><p><strong>Total matching public objects:</strong> {total}</p><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="archive-clear-link" href="/archive">Clear filters</a></p></section><section class="archive-filter-section" aria-labelledby="archive-filters-heading"><h2 id="archive-filters-heading">Search and Filters</h2><form class="archive-filters" method="get" action="/archive"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search public title, reference, summary, keywords, filename, media, or worksheet" autocomplete="off"><span class="archive-filter-help">Search covers public-safe indexed metadata only.</span></label><label>Object type<select name="type">{_option_list(OBJECT_TYPES, filters['type'], 'Any object type')}</select></label><label>Publication status<input name="status" value="{escape(filters['status'])}" placeholder="Published or active public"></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Record type<select name="record_type">{_option_list(record_types, filters['record_type'], 'Any record type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Media type<select name="media">{_option_list(MEDIA_FILTERS, filters['media'], 'Any media type')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/archive">Clear filters</a></form></section><section class="archive-results" aria-labelledby="archive-results-heading"><h2 id="archive-results-heading">Archive Results</h2>{pagination_top}<div class="archive-result-list" aria-label="Archive explorer results">{_render_result_cards(page_rows, current_archive_path, has_public_objects=bool(all_rows), has_active_filters=has_active_filters)}</div>{pagination_bottom}</section><p><a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
+        content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Archive Explorer | Civic Decision Engine</title><link rel="canonical" href="/archive"><meta name="description" content="Unified public discovery interface for Civic Decision Engine records, documents, transmissions, associations, and collections."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.archive-explorer{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.archive-boundary,.archive-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.archive-boundary{{max-width:960px}}.archive-summary{{margin:24px 0;border-left-color:#143a52}}.archive-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.archive-stats-section,.archive-filter-section,.archive-results{{margin:30px 0}}.archive-stats-section h2,.archive-filter-section h2,.archive-results h2{{margin-bottom:12px}}.archive-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.archive-stat-card{{display:block;background:#fff;border:1px solid #d8d4ca;padding:14px;text-decoration:none;color:#1f2933}}.archive-stat-card:hover,.archive-stat-card:focus{{border-color:#245d61;box-shadow:0 0 0 2px rgba(36,93,97,.14)}}.archive-stat-card span{{display:block;color:#555}}.archive-stat-card strong{{display:block;font-size:1.7rem;color:#143a52}}.archive-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.archive-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.archive-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.archive-filters input,.archive-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.archive-filters a,.archive-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.archive-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.archive-page-link{{font-weight:650}}.archive-result-list{{display:grid;gap:14px}}.archive-result-card{{background:#fff;border:1px solid #d8d4ca;padding:16px;overflow-wrap:anywhere}}.archive-result-card h2{{margin:.25rem 0}}.archive-breadcrumb,.archive-reference{{color:#555;margin:.2rem 0}}.archive-reference{{font:700 .9rem ui-monospace,monospace}}.archive-result-summary{{max-width:880px;line-height:1.5}}.archive-result-card dl{{display:grid;grid-template-columns:160px minmax(0,1fr);gap:6px 12px;margin:12px 0}}.archive-result-card dt{{font-weight:700;color:#555}}.archive-result-card dd{{margin:0;min-width:0;overflow-wrap:anywhere}}.archive-actions a{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.archive-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}.archive-empty h2{{margin-top:0}}@media(max-width:980px){{.archive-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.archive-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{main.archive-explorer{{width:min(100% - 24px,1220px);margin-top:24px}}.archive-stats,.archive-filters{{grid-template-columns:1fr}}.archive-result-card dl{{grid-template-columns:1fr}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:100%;text-align:center}}}}</style></head><body><main class="archive-explorer">{public_primary_navigation(active="archive")}{public_breadcrumbs([("Home", "/"), ("Archive", None)])}<h1>Public Archive Explorer</h1><p class="archive-boundary">{escape(BOUNDARY_TEXT)} Every result links to the governed object that owns its identity, provenance, lifecycle, verification, and public page.</p>{_render_stats(counts)}<section class="archive-summary" aria-live="polite" aria-labelledby="archive-summary-heading"><h2 id="archive-summary-heading">Current Archive View</h2><p><strong>Total matching public objects:</strong> {total}</p><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="archive-clear-link" href="/archive">Clear filters</a></p></section><section class="archive-filter-section" aria-labelledby="archive-filters-heading"><h2 id="archive-filters-heading">Search and Filters</h2><form class="archive-filters" method="get" action="/archive"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search public title, reference, summary, keywords, filename, media, or worksheet" autocomplete="off"><span class="archive-filter-help">Search covers public-safe indexed metadata only.</span></label><label>Object type<select name="type">{_option_list(OBJECT_TYPES, filters['type'], 'Any object type')}</select></label><label>Publication status<input name="status" value="{escape(filters['status'])}" placeholder="Published or active public"></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Record type<select name="record_type">{_option_list(record_types, filters['record_type'], 'Any record type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Media type<select name="media">{_option_list(MEDIA_FILTERS, filters['media'], 'Any media type')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/archive">Clear filters</a></form></section><section class="archive-results" aria-labelledby="archive-results-heading"><h2 id="archive-results-heading">Archive Results</h2>{pagination_top}<div class="archive-result-list" aria-label="Archive explorer results">{_render_result_cards(page_rows, current_archive_path, has_public_objects=bool(all_rows), has_active_filters=has_active_filters)}</div>{pagination_bottom}</section><p><a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/transmissions">Public Transmission Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
     )

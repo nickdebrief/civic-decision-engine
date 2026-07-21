@@ -25,6 +25,7 @@ MEMBER_TYPES: dict[str, str] = {
     "canonical_record": "Canonical Record",
     "published_document": "Published Document",
     "record_document_association": "Record-Document Association",
+    "public_transmission": "Public Transmission",
 }
 
 MEMBER_TYPE_ALIASES: dict[str, str] = {
@@ -34,6 +35,8 @@ MEMBER_TYPE_ALIASES: dict[str, str] = {
     "published_document": "published_document",
     "association": "record_document_association",
     "record_document_association": "record_document_association",
+    "transmission": "public_transmission",
+    "public_transmission": "public_transmission",
 }
 
 RECORD_TYPE_LABELS: dict[str, str] = {
@@ -255,6 +258,32 @@ def resolve_public_member(
             "member_institution": record.get("institution") or record.get("institution_type") or record.get("institution_source"),
             "member_url": f"/verify/{record_reference}",
             "record": record,
+        }
+    if normalized_type == "public_transmission":
+        from api import public_transmissions as trm
+
+        transmission = trm.get_public_transmission(conn, reference)
+        attachments = trm.list_transmission_attachments(conn, transmission["id"], public_only=True, root=root)
+        transmission_reference = str(transmission.get("public_reference") or reference)
+        return {
+            "member_type": normalized_type,
+            "member_type_label": MEMBER_TYPES[normalized_type],
+            "member_reference": transmission_reference,
+            "member_public_reference": transmission_reference,
+            "member_title": transmission.get("title") or transmission_reference,
+            "member_summary": transmission.get("summary"),
+            "member_status": transmission.get("publication_status"),
+            "member_status_label": trm.status_label(transmission.get("publication_status")),
+            "member_format": trm.method_label(transmission.get("communication_method")),
+            "member_date": transmission.get("published_at") or transmission.get("transmission_date"),
+            "member_institution": " → ".join(
+                part
+                for part in (str(transmission.get("sender") or ""), str(transmission.get("recipient") or ""))
+                if part
+            ),
+            "member_url": f"/transmissions/{transmission_reference}",
+            "transmission": transmission,
+            "transmission_attachment_count": len(attachments),
         }
     association = rda.get_public_association(conn, reference, root=root)
     relationship_label = rda.RELATIONSHIP_TYPES.get(
@@ -504,7 +533,7 @@ def enrich_membership(
     item["member_publicly_eligible"] = False
     if public_member:
         for key, value in public_member.items():
-            if key not in {"document", "record", "association"}:
+            if key not in {"document", "record", "association", "transmission"}:
                 item[key] = value
         item["member_publicly_eligible"] = True
     document = public_member.get("document") if public_member else None

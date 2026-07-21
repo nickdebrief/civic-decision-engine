@@ -46,9 +46,10 @@ Designed for understanding.
 
 ---
 
-Current release: v13.A
+Current release: v13.0
 
 Release documentation:
+- [`docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md`](docs/releases/CDE_V13_0_GOVERNED_PUBLIC_TRANSMISSIONS.md)
 - [`docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md`](docs/releases/CDE_V13_A_PLATFORM_IDENTITY_TRANSITION.md)
 - [`docs/releases/README_v12.md`](docs/releases/README_v12.md)
 
@@ -812,6 +813,36 @@ storage, and public URLs.
 v13.A prepares the Civic Decision Engine for the v13 era. It does not introduce
 Governed Public Transmissions.
 
+### CDE v13.0 — Governed Public Transmissions
+
+CDE v13.0 introduces **Public Transmissions** as first-class governed public
+objects.
+
+Documents preserve content. Transmissions preserve context.
+
+A Public Transmission records the public communication context in which one or
+more governed public objects were communicated. It has its own reference,
+metadata, lifecycle, publication state, provenance, covering communication, and
+public page.
+
+A Transmission governs communication. It does not govern the objects
+communicated.
+
+Published Documents, Canonical Records, Record-Document Associations, and
+Governed Public Collections remain independently governed and independently
+addressable when referenced by a Transmission. No attached object is copied,
+stored inside the Transmission, converted into a Transmission, or assigned a new
+SHA-256 value.
+
+This release adds Public Transmission Library pages, administrative Transmission
+Intake and Management, typed transmitted-object relationships, Archive Explorer
+discovery, Traceability Map Transmission nodes, and Collection membership
+support for Public Transmissions.
+
+The release does not add email sending, mailbox integration, messaging,
+notifications, reply threading, correspondence storage, duplicate document
+storage, derived documents, or workflow redesign.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and
@@ -1527,7 +1558,7 @@ Core components include:
 
 ## Status
 
-Active development (v13.A)
+Active development (v13.0)
 
 Current operational layers:
 
