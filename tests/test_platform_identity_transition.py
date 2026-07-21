@@ -83,7 +83,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_release_documentation_records_identity_transition(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: v13.0.1", readme)
+        self.assertIn("Current release: v13.0.2", readme)
         self.assertIn("### CDE v13.0 — Governed Public Transmissions", readme)
         self.assertIn("### CDE v13.A — Platform Identity Transition", readme)
         self.assertIn(
