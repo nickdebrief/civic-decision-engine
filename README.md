@@ -900,6 +900,24 @@ inside the constrained homepage wrapper and no shared public pages,
 administrative pages, platform identity text, footer links, governance
 semantics, route behavior, or database state change.
 
+### CDE v13 Document Identifier Intake Correction
+
+This focused v13 correction makes the CDE-assigned **Document Identifier** part
+of every governed Document's intrinsic identity at New Document Intake. A
+successfully persisted intake record now receives an immutable identifier such
+as `DOC-2026-000001` before the initial Pending Intake lifecycle event is
+recorded.
+
+The correction keeps a strict distinction between the mandatory CDE-assigned
+Document Identifier and the optional external Reference Identifier. Blank
+external references remain valid; they no longer imply that a Document lacks its
+own CDE identity.
+
+Existing document metadata, lifecycle history, publication state, SHA-256
+digests, original bytes, associations, transmissions, collections, and public
+eligibility rules remain unchanged. Legacy document metadata without a Document
+Identifier is backfilled safely without replacing any identifier already present.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

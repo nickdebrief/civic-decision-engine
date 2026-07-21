@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -97,6 +98,8 @@ VALID_STATUS_TRANSITIONS = {
     "archived": set(),
 }
 _SAFE_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+_DOCUMENT_IDENTIFIER_RE = re.compile(r"^DOC-\d{4}-\d{6}$")
+_DOCUMENT_IDENTIFIER_REGISTRY_FILENAME = ".document_identifiers.sqlite3"
 _WHITESPACE_RE = re.compile(r"\s+")
 _SEARCH_SPLIT_RE = re.compile(r"\s+")
 _JPEG_FIRST_MARKERS = {
@@ -171,6 +174,234 @@ def intake_max_bytes() -> int:
     if value < 1:
         raise ValueError("document_intake_size_limit_invalid")
     return value
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _document_identifier_registry_path(root: Path | None = None) -> Path:
+    destination_root = (root or intake_root()).resolve(strict=False)
+    destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return destination_root / _DOCUMENT_IDENTIFIER_REGISTRY_FILENAME
+
+
+def _ensure_document_identifier_registry(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_identifier_sequences (
+            year TEXT PRIMARY KEY,
+            next_value INTEGER NOT NULL CHECK (next_value > 0)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_identifiers (
+            document_identifier TEXT PRIMARY KEY,
+            intake_id TEXT NOT NULL UNIQUE,
+            assigned_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_document_identifiers_intake_id
+        ON document_identifiers (intake_id)
+        """
+    )
+
+
+def _document_identifier_year(timestamp: str | None = None) -> str:
+    text = str(timestamp or "").strip()
+    if re.match(r"^\d{4}-", text):
+        return text[:4]
+    return datetime.now(timezone.utc).strftime("%Y")
+
+
+def _validate_document_identifier(value: str) -> str:
+    identifier = str(value or "").strip().upper()
+    if not _DOCUMENT_IDENTIFIER_RE.fullmatch(identifier):
+        raise ValueError("document_identifier_invalid")
+    return identifier
+
+
+def assign_document_identifier(
+    intake_id: str,
+    *,
+    assigned_at: str | None = None,
+    root: Path | None = None,
+    existing_identifier: str | None = None,
+) -> str:
+    """Assign or return the immutable CDE identifier for an intake document."""
+    normalized_intake_id = str(intake_id or "").strip()
+    if not _SAFE_ID_RE.fullmatch(normalized_intake_id):
+        raise ValueError("document_intake_not_found")
+    timestamp = assigned_at or _utc_timestamp()
+    registry_path = _document_identifier_registry_path(root)
+    conn = sqlite3.connect(registry_path, timeout=30)
+    try:
+        _ensure_document_identifier_registry(conn)
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT document_identifier FROM document_identifiers WHERE intake_id = ?",
+            (normalized_intake_id,),
+        ).fetchone()
+        if row:
+            conn.commit()
+            return str(row[0])
+        if existing_identifier:
+            identifier = _validate_document_identifier(existing_identifier)
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO document_identifiers (
+                        document_identifier, intake_id, assigned_at
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (identifier, normalized_intake_id, timestamp),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("document_identifier_duplicate") from exc
+            conn.commit()
+            return identifier
+        year = _document_identifier_year(timestamp)
+        row = conn.execute(
+            "SELECT next_value FROM document_identifier_sequences WHERE year = ?",
+            (year,),
+        ).fetchone()
+        next_value = int(row[0]) if row else 1
+        while True:
+            identifier = f"DOC-{year}-{next_value:06d}"
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO document_identifiers (
+                        document_identifier, intake_id, assigned_at
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (identifier, normalized_intake_id, timestamp),
+                )
+            except sqlite3.IntegrityError:
+                next_value += 1
+                continue
+            conn.execute(
+                """
+                INSERT INTO document_identifier_sequences (year, next_value)
+                VALUES (?, ?)
+                ON CONFLICT(year) DO UPDATE SET next_value = excluded.next_value
+                """,
+                (year, next_value + 1),
+            )
+            conn.commit()
+            return identifier
+    finally:
+        conn.close()
+
+
+def _ensure_document_identifier(
+    metadata: dict[str, Any],
+    *,
+    root: Path | None = None,
+    persist: bool = False,
+) -> dict[str, Any]:
+    intake_id = str(metadata.get("intake_id") or "").strip()
+    if not _SAFE_ID_RE.fullmatch(intake_id):
+        return metadata
+    current_identifier = str(metadata.get("document_identifier") or "").strip()
+    assigned_at = str(metadata.get("upload_date") or metadata.get("status_updated_at") or "").strip() or None
+    if current_identifier:
+        document_identifier = assign_document_identifier(
+            intake_id,
+            assigned_at=assigned_at,
+            root=root,
+            existing_identifier=current_identifier,
+        )
+    else:
+        document_identifier = assign_document_identifier(
+            intake_id,
+            assigned_at=assigned_at,
+            root=root,
+        )
+    changed = metadata.get("document_identifier") != document_identifier
+    metadata["document_identifier"] = document_identifier
+    history = metadata.get("status_history")
+    if isinstance(history, list):
+        for event in history:
+            if isinstance(event, dict) and event.get("new_status") == "pending" and not event.get("document_identifier"):
+                event["document_identifier"] = document_identifier
+                changed = True
+                break
+    if persist and changed:
+        _write_metadata(intake_id, metadata, root=root)
+    return metadata
+
+
+def backfill_document_identifiers(*, root: Path | None = None) -> dict[str, int]:
+    destination_root = (root or intake_root()).resolve(strict=False)
+    if not destination_root.is_dir():
+        return {"scanned": 0, "assigned": 0, "preserved": 0}
+    scanned = assigned = preserved = 0
+    for metadata_path in destination_root.glob("*/metadata.json"):
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if metadata.get("status") not in INTAKE_STATUSES:
+            continue
+        scanned += 1
+        before = str(metadata.get("document_identifier") or "").strip()
+        _ensure_document_identifier(metadata, root=destination_root, persist=True)
+        after = str(metadata.get("document_identifier") or "").strip()
+        if before:
+            preserved += 1
+        elif after:
+            assigned += 1
+    return {"scanned": scanned, "assigned": assigned, "preserved": preserved}
+
+
+def document_reference_matches(
+    document: dict[str, Any],
+    reference: str,
+    *,
+    include_external_reference: bool = True,
+) -> bool:
+    normalized = str(reference or "").strip()
+    if not normalized:
+        return False
+    values = [document.get("intake_id"), document.get("document_identifier")]
+    if include_external_reference:
+        values.append(document.get("reference_identifier"))
+    return any(str(value or "").strip() == normalized for value in values)
+
+
+def find_document_by_reference(
+    reference: str,
+    *,
+    root: Path | None = None,
+    published_only: bool = False,
+    include_external_reference: bool = True,
+) -> dict[str, Any] | None:
+    normalized = str(reference or "").strip()
+    if not normalized:
+        return None
+    if _SAFE_ID_RE.fullmatch(normalized):
+        try:
+            document = load_pending_document(normalized, root=root)
+        except ValueError:
+            document = None
+        if document and (not published_only or document.get("status") == "published"):
+            return document
+    for document in list_intake_documents(root=root):
+        if published_only and document.get("status") != "published":
+            continue
+        if document_reference_matches(
+            document,
+            normalized,
+            include_external_reference=include_external_reference,
+        ):
+            return document
+    return None
 
 
 def _leading_signature_hex(data: bytes, *, length: int = 16) -> str:
@@ -466,6 +697,7 @@ def document_intake_duplicate_detail(
         "existing_document": {
             "id": str(existing.get("intake_id") or digest),
             "title": str(existing.get("title") or ""),
+            "document_identifier": existing.get("document_identifier"),
             "reference_identifier": existing.get("reference_identifier"),
             "lifecycle_state": lifecycle_state,
             "lifecycle_label": lifecycle_label,
@@ -797,11 +1029,15 @@ def store_pending_document(
     stored_filename = f"pending-{digest}{DOCUMENT_TYPE_EXTENSIONS[document_type]}"
     file_path = item_dir / stored_filename
     metadata_path = item_dir / "metadata.json"
-    timestamp = uploaded_at or datetime.now(timezone.utc).isoformat().replace(
-        "+00:00", "Z"
+    timestamp = uploaded_at or _utc_timestamp()
+    document_identifier = assign_document_identifier(
+        digest,
+        assigned_at=timestamp,
+        root=destination_root,
     )
     metadata = {
         "intake_id": digest,
+        "document_identifier": document_identifier,
         "status": "pending",
         "original_filename": filename,
         "stored_filename": stored_filename,
@@ -831,6 +1067,7 @@ def store_pending_document(
                 "new_status": "pending",
                 "timestamp": timestamp,
                 "actor": str(actor or "admin"),
+                "document_identifier": document_identifier,
                 "note": "Document uploaded to pending intake.",
             }
         ],
@@ -866,6 +1103,7 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     metadata.setdefault("media_family", document_media_family(metadata))
     metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
     metadata.setdefault("tags", metadata["keywords"])
+    _ensure_document_identifier(metadata, root=destination_root, persist=True)
     return metadata
 
 
@@ -886,6 +1124,7 @@ def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
             metadata.setdefault("media_family", document_media_family(metadata))
             metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
             metadata.setdefault("tags", metadata["keywords"])
+            _ensure_document_identifier(metadata, root=destination_root, persist=True)
             items.append(metadata)
     return sorted(items, key=lambda item: (item.get("upload_date", ""), item["intake_id"]), reverse=True)
 
@@ -978,6 +1217,25 @@ def _write_metadata(
     metadata_path = item_dir / "metadata.json"
     if not metadata_path.is_file():
         raise ValueError("document_intake_not_found")
+    try:
+        current_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        current_metadata = {}
+    current_identifier = str(current_metadata.get("document_identifier") or "").strip()
+    if current_identifier:
+        metadata["document_identifier"] = assign_document_identifier(
+            intake_id,
+            assigned_at=str(current_metadata.get("upload_date") or metadata.get("upload_date") or "").strip() or None,
+            root=destination_root,
+            existing_identifier=current_identifier,
+        )
+    else:
+        metadata["document_identifier"] = assign_document_identifier(
+            intake_id,
+            assigned_at=str(metadata.get("upload_date") or metadata.get("status_updated_at") or "").strip() or None,
+            root=destination_root,
+            existing_identifier=str(metadata.get("document_identifier") or "").strip() or None,
+        )
     temporary_path = item_dir / "metadata.json.tmp"
     try:
         temporary_path.write_text(
@@ -1028,6 +1286,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
         document.get("description"),
         document.get("institution_source"),
         document.get("institution"),
+        document.get("document_identifier"),
         document.get("reference_identifier"),
         document.get("document_date"),
         document.get("publication_date"),
@@ -1171,7 +1430,16 @@ def list_published_documents(
 def load_published_document(
     document_id: str, *, root: Path | None = None
 ) -> dict[str, Any]:
-    metadata = load_pending_document(document_id, root=root)
+    try:
+        metadata = load_pending_document(document_id, root=root)
+    except ValueError as exc:
+        metadata = find_document_by_reference(
+            document_id,
+            root=root,
+            published_only=True,
+        )
+        if metadata is None:
+            raise ValueError("public_document_not_found") from exc
     if metadata.get("status") != "published":
         raise ValueError("public_document_not_found")
     metadata["publication_date"] = _publication_date(metadata)

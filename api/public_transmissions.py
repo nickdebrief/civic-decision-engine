@@ -575,12 +575,13 @@ def resolve_public_object(
         document = rda.published_document_context(reference, root=root)
         if not document:
             return None
-        public_reference = str(document.get("reference_identifier") or document.get("intake_id") or reference)
+        public_reference = str(document.get("document_identifier") or document.get("reference_identifier") or document.get("intake_id") or reference)
         return {
             "object_type": normalized_type,
             "object_type_label": TRANSMISSION_MEMBER_TYPES[normalized_type],
             "object_reference": str(document.get("intake_id") or reference),
             "object_public_reference": public_reference,
+            "object_secondary_reference": document.get("reference_identifier"),
             "object_title": str(document.get("title") or public_reference),
             "object_summary": document.get("description"),
             "object_status_label": "Published",
@@ -760,6 +761,7 @@ def enrich_attachment(
         public_object = None
     item["object_type_label"] = object_type_label(item.get("object_type"))
     item["object_public_reference"] = item.get("object_reference")
+    item["object_secondary_reference"] = None
     item["object_title"] = item.get("object_reference")
     item["object_summary"] = None
     item["object_status_label"] = "Not publicly available"

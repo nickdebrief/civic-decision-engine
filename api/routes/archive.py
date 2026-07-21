@@ -453,9 +453,15 @@ def _collection_member_keys(conn: sqlite3.Connection, collection_reference: str)
             "record_document_association": "record_document_association",
             "public_transmission": "public_transmission",
         }.get(member_type)
-        member_reference = str(member.get("member_public_reference") or member.get("member_reference") or "")
-        if object_type and member_reference:
-            keys.add((object_type, member_reference))
+        member_references = {
+            str(member.get("member_public_reference") or "").strip(),
+            str(member.get("member_reference") or "").strip(),
+            str(member.get("document_identifier") or "").strip(),
+            str(member.get("document_reference") or "").strip(),
+        }
+        for member_reference in member_references:
+            if object_type and member_reference:
+                keys.add((object_type, member_reference))
     return keys
 
 
