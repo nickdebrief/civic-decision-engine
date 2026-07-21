@@ -1,14 +1,15 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from api.platform_identity import PLATFORM_NAME, PLATFORM_VERSION_LABEL
 from api.routes import records
 
 from api.routes import health, civic, adaptation, timeline, pattern, admin_session, documents, associations, collections, archive, traceability
 
 app = FastAPI(
-    title="Civic Decision Engine API",
+    title=f"{PLATFORM_NAME} API",
     description="Structured API for civic case analysis, timeline detection, and pattern classification.",
-    version="v12",
+    version=PLATFORM_VERSION_LABEL,
 )
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")

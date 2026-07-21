@@ -3,6 +3,13 @@ from __future__ import annotations
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from api.platform_identity import (
+    PLATFORM_NAME,
+    PLATFORM_SHORT_NAME,
+    PLATFORM_TAGLINE,
+    PLATFORM_VERSION_LABEL,
+)
+
 ARCHIVE_QUERY_KEYS = {
     "search",
     "type",
@@ -39,10 +46,25 @@ OBJECT_TYPE_LABELS = {
 }
 
 PUBLIC_NAVIGATION_CSS = """
+.public-site-header{display:grid;gap:10px;margin:0 0 20px}
+.public-site-identity{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 18px;padding:14px 0 0}
+.public-site-wordmark{display:flex;align-items:center;gap:10px;color:#143a52;text-decoration:none;font-weight:800}
+.public-site-shortmark{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border:2px solid #2e8b9a;border-radius:50%;font:800 .82rem ui-monospace,monospace;color:#2e8b9a;background:#fff;flex:0 0 auto}
+.public-site-name{font-size:1.05rem;line-height:1.2}
+.public-site-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;color:#555;font-size:.86rem}
+.public-site-tagline{font-weight:650}
+.public-site-version{font-family:ui-monospace,monospace;color:#143a52}
 .public-primary-navigation{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:12px 0;border-bottom:1px solid #d8d4ca;margin:0 0 20px}
 .public-primary-navigation a{color:#245d61;font-weight:650;text-decoration:none;border-bottom:2px solid transparent;padding:2px 0}
 .public-primary-navigation a:hover,.public-primary-navigation a:focus{border-bottom-color:#245d61}
 .public-primary-navigation a[aria-current="page"]{color:#143a52;border-bottom-color:#143a52}
+.public-site-wordmark:focus-visible,.public-primary-navigation a:focus-visible,.public-footer a:focus-visible{outline:3px solid #8a6d1f;outline-offset:3px}
+.public-footer{margin:40px 0 0;padding:18px 0 0;border-top:1px solid #d8d4ca;color:#555;font-size:.88rem}
+.public-footer-inner{display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:space-between;align-items:flex-start}
+.public-footer-name{font-weight:800;color:#143a52}
+.public-footer-version{font-family:ui-monospace,monospace;color:#143a52}
+.public-footer-links{display:flex;flex-wrap:wrap;gap:8px 14px}
+.public-footer a{color:#245d61;font-weight:650}
 .public-breadcrumbs{font-size:.88rem;margin:0 0 14px;color:#555}
 .public-breadcrumbs ol{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:0}
 .public-breadcrumbs li:not(:last-child)::after{content:"/";margin-left:6px;color:#8a867c}
@@ -53,7 +75,7 @@ PUBLIC_NAVIGATION_CSS = """
 .object-type-badge-published-document{border-left-color:#2e8b9a}
 .object-type-badge-association{border-left-color:#8a6d1f}
 .object-type-badge-collection{border-left-color:#5b5f97}
-@media(max-width:640px){.public-primary-navigation{gap:8px 12px}.public-breadcrumbs{font-size:.82rem}.object-type-badge{white-space:normal}}
+@media(max-width:640px){.public-site-identity{align-items:flex-start}.public-site-meta{display:grid;gap:3px}.public-primary-navigation{gap:8px 12px}.public-breadcrumbs{font-size:.82rem}.object-type-badge{white-space:normal}}
 """
 
 
@@ -150,7 +172,40 @@ def public_primary_navigation(active: str = "") -> str:
     for label, href in links:
         current = ' aria-current="page"' if active == label.lower() else ""
         rendered += f'<a href="{href}"{current}>{escape(label)}</a>'
-    return f'<nav class="public-primary-navigation" aria-label="Primary public navigation">{rendered}</nav>'
+    identity = (
+        '<div class="public-site-identity">'
+        f'<a class="public-site-wordmark" href="/" aria-label="{escape(PLATFORM_NAME)} home">'
+        f'<span class="public-site-shortmark" aria-hidden="true">{escape(PLATFORM_SHORT_NAME)}</span>'
+        f'<span class="public-site-name">{escape(PLATFORM_NAME)}</span>'
+        '</a>'
+        '<div class="public-site-meta">'
+        f'<span class="public-site-tagline">{escape(PLATFORM_TAGLINE)}</span>'
+        f'<span class="public-site-version">Platform version {escape(PLATFORM_VERSION_LABEL)}</span>'
+        '</div>'
+        '</div>'
+    )
+    nav = f'<nav class="public-primary-navigation" aria-label="Primary public navigation">{rendered}</nav>'
+    return f'<header class="public-site-header">{identity}{nav}</header>'
+
+
+def public_footer() -> str:
+    return (
+        '<footer class="public-footer">'
+        '<div class="public-footer-inner">'
+        '<div>'
+        f'<div class="public-footer-name">{escape(PLATFORM_NAME)}</div>'
+        f'<div>{escape(PLATFORM_TAGLINE)}</div>'
+        f'<div class="public-footer-version">Platform version {escape(PLATFORM_VERSION_LABEL)}</div>'
+        '</div>'
+        '<nav class="public-footer-links" aria-label="Public footer navigation">'
+        '<a href="/archive">Archive</a>'
+        '<a href="/traceability">Traceability</a>'
+        '<a href="/documents">Documents</a>'
+        '<a href="/records">Records</a>'
+        '</nav>'
+        '</div>'
+        '</footer>'
+    )
 
 
 def public_breadcrumbs(items: list[tuple[str, str | None]]) -> str:

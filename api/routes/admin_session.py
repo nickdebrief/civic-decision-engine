@@ -35,6 +35,13 @@ except ImportError:
 
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
+from api.platform_identity import (
+    PLATFORM_NAME,
+    PLATFORM_SHORT_NAME,
+    PLATFORM_TAGLINE,
+    PLATFORM_VERSION_LABEL,
+    platform_page_title,
+)
 from api.attachments import (
     ATTACHMENT_ROOT,
     AttachmentRecordNotFound,
@@ -28696,7 +28703,7 @@ STAGE19B_RULE_REFERENCES = {
     "Timeline Analysis": {
         "citation_label": "Timeline Analysis Rule Family",
         "specification_reference": "Admin session deterministic analysis flow",
-        "version_reference": "CDE v12 admin analysis",
+        "version_reference": "CDE v13.A admin analysis",
         "source_type": "Visible analysis output",
         "deterministic_requirements": (
             "Use visible lifecycle, status, and timing fields only.",
@@ -28710,7 +28717,7 @@ STAGE19B_RULE_REFERENCES = {
     "Pattern Interpretation": {
         "citation_label": "Pattern Interpretation Rule Family",
         "specification_reference": "README.md pattern interpretation model",
-        "version_reference": "CDE v12",
+        "version_reference": "CDE v13.A",
         "source_type": "Visible analysis output",
         "deterministic_requirements": (
             "Use existing signals, moment-of-change, and pattern outputs only.",
@@ -28724,7 +28731,7 @@ STAGE19B_RULE_REFERENCES = {
     "Trajectory Classification": {
         "citation_label": "Trajectory Classification Rule Family",
         "specification_reference": "README.md trajectory model",
-        "version_reference": "CDE v12",
+        "version_reference": "CDE v13.A",
         "source_type": "Visible trajectory output",
         "deterministic_requirements": (
             "Use existing trajectory and system-state outputs only.",
@@ -43629,7 +43636,7 @@ def render_admin_record_evidence_page(
       <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
       <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
-      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v13.A</text>
     </svg>
     {_render_admin_console_navigation(reference, admin_session=admin_session)}
     <h1>Admin Record Evidence</h1>
@@ -44385,7 +44392,7 @@ def render_admin_attachments_page(
       <rect x="268" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
       <rect x="292" y="200" width="8" height="120" rx="4" fill="#2E8B9A"></rect>
       <rect x="166" y="320" width="180" height="14" rx="7" fill="#2E8B9A"></rect>
-      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v12</text>
+      <text x="256" y="388" text-anchor="middle" font-family="sans-serif" font-size="72" font-weight="600" fill="#2E8B9A">v13.A</text>
     </svg>
     {_render_admin_console_navigation(reference, admin_session=admin_session)}
     <h1>Admin Attachment Management</h1>
@@ -44571,7 +44578,15 @@ def _render_admin_console_navigation(
             f"Signed in as: <strong>{escape(username)}</strong>"
             "</span>"
         )
-    return f"""<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
+    platform_identity = (
+        '<div class="admin-platform-identity" '
+        'style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;width:100%;color:#555">'
+        f'<strong style="color:#143a52">{escape(PLATFORM_NAME)}</strong>'
+        f'<span>{escape(PLATFORM_TAGLINE)}</span>'
+        f'<span style="font-family:ui-monospace,monospace;color:#143a52">Platform version {escape(PLATFORM_VERSION_LABEL)}</span>'
+        '</div>'
+    )
+    return f"""{platform_identity}<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
       <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
@@ -44613,9 +44628,9 @@ def _render_admin_dashboard(
         for item in active_documents
     ) or '<tr><td colspan="4">No documents currently require active review.</td></tr>'
     return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>CDE Administration Console</title>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(platform_page_title('CDE Administration Console'))}</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:28px auto 64px}}h1,h2,h3{{color:#143a52}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{color:#245d61;font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.summary-grid,.admin-dashboard-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:16px;margin-top:26px}}.summary-card,.admin-dashboard-card,.evidence-card{{background:#fff;border:1px solid #dedbd3;padding:18px}}.summary-card h2,.admin-dashboard-card-title,.evidence-card h2{{margin:0 0 8px}}.summary-value,.admin-dashboard-card-count{{display:block;color:#143a52;font-size:1.8rem;font-weight:750;line-height:1}}.summary-detail,.admin-dashboard-card-description{{min-height:42px;color:#555}}.card-link,.admin-dashboard-card-action{{font-weight:700}}.dashboard-grid{{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,2fr);gap:24px}}section{{margin-top:26px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5}}.queue th{{background:#143a52;color:#fff}}a{{color:#245d61}}a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-size:.75rem;font-weight:700;text-transform:uppercase}}.record-form{{display:flex;gap:8px;flex-wrap:wrap}}input,button{{padding:9px 10px;border:1px solid #c9c6bd;font:inherit}}input{{flex:1;min-width:240px}}button{{background:#245d61;color:#fff;border-color:#245d61;cursor:pointer}}@media(max-width:760px){{.dashboard-grid,.summary-grid,.admin-dashboard-grid{{grid-template-columns:1fr}}.summary-detail,.admin-dashboard-card-description{{min-height:0}}}}</style></head>
-<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>CDE Administration Console</h1><p class="notice">A single authenticated workspace for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>CDE Administration Console</h1><p class="notice"><strong>{escape(PLATFORM_SHORT_NAME)} {escape(PLATFORM_VERSION_LABEL)}</strong> keeps the Administration Console aligned with the public platform identity while preserving existing governance workflows. A single authenticated workspace remains available for document intake, lifecycle review, record evidence inspection, and public-library verification.</p>
 <div class="summary-grid admin-dashboard-grid" aria-label="Administration summary">
   <article class="summary-card admin-dashboard-card"><h2>Document Intake</h2><span class="summary-value">Open</span><p class="summary-detail admin-dashboard-card-description">Create a new governed document intake and preserve the original uploaded file as a private Pending Intake record.</p><a class="card-link admin-dashboard-card-action" href="/admin/document-intake#new-intake">Open Document Intake</a></article>
   <article class="summary-card admin-dashboard-card"><h2>Pending Intake</h2><span class="summary-value">{pending_count}</span><p class="summary-detail admin-dashboard-card-description">Private uploads awaiting administrative review.</p><a class="card-link admin-dashboard-card-action" href="/admin/document-intake#intake-management">Open pending intake</a></article>
@@ -46367,12 +46382,12 @@ def _render_admin_login_page(error_message: str | None = None) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CDE Admin Login</title>
+  <title>{escape(platform_page_title('CDE Admin Login'))}</title>
 </head>
 <body>
   <main>
     <h1>Civic Decision Engine Admin</h1>
-    <p>Sign in to access the unified Administration Console.</p>
+    <p>{escape(PLATFORM_TAGLINE)}. Sign in to access the unified Administration Console.</p>
     {error_html}
     <form method="post" action="/admin/login">
       <label for="username">Username</label>
