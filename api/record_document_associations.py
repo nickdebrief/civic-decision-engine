@@ -10,6 +10,7 @@ from typing import Any
 
 from api.document_intake import (
     document_type_label,
+    find_document_by_reference,
     intake_root,
     list_published_documents,
     load_pending_document,
@@ -325,6 +326,8 @@ def _document_reference_matches_published_document(
     if not reference:
         return False
     for document in list_published_document_options(root=root):
+        if str(document.get("document_identifier") or "").strip() == reference:
+            return True
         if str(document.get("reference_identifier") or "").strip() == reference:
             return True
     return False
@@ -350,7 +353,11 @@ def published_document_context(document_id: str, *, root: Path | None = None) ->
     try:
         return load_published_document(document_id, root=root or intake_root())
     except ValueError:
-        return None
+        return find_document_by_reference(
+            document_id,
+            root=root or intake_root(),
+            published_only=True,
+        )
 
 
 def document_context(document_id: str, *, root: Path | None = None) -> dict[str, Any] | None:
@@ -670,6 +677,7 @@ def _association_matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
                 "public_reference",
                 "record_reference",
                 "document_id",
+                "document_identifier",
                 "document_reference_identifier",
                 "relationship_type",
                 "public_label",
@@ -685,12 +693,18 @@ def _association_matches(row: dict[str, Any], filters: dict[str, Any]) -> bool:
             return False
     for key, column in (
         ("record_reference", "record_reference"),
-        ("document_reference", "document_reference_identifier"),
         ("relationship_type", "relationship_type"),
         ("actor", "created_by"),
     ):
         value = str(filters.get(key) or "").strip().casefold()
         if value and value not in str(row.get(column) or "").casefold():
+            return False
+    document_reference = str(filters.get("document_reference") or "").strip().casefold()
+    if document_reference:
+        if not any(
+            document_reference in str(row.get(key) or "").casefold()
+            for key in ("document_identifier", "document_reference_identifier", "document_id")
+        ):
             return False
     active_status = str(filters.get("active_status") or "").strip().lower()
     if active_status in {"active", "inactive"}:
@@ -745,6 +759,7 @@ def enrich_association(
     row["record_version"] = (record or {}).get("version")
     row["record_publicly_eligible"] = record is not None
     row["document_title"] = (document or {}).get("title") or row.get("document_id")
+    row["document_identifier"] = (document or {}).get("document_identifier")
     row["document_reference_identifier"] = (
         (document or {}).get("reference_identifier") or row.get("document_reference_identifier")
     )
