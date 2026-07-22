@@ -34,13 +34,29 @@ Document. It does not duplicate, alter, publish, or create Document identities.
 
 The Create Public Transmission page now includes an Included Governed Documents
 section. Administrators can search existing Published Documents using the
-existing published-document search metadata and add Documents by their immutable
-CDE Document Identifier.
+existing published-document search metadata. Search results render as a
+multi-selection list, with each eligible Published Document showing:
+
+- checkbox;
+- immutable CDE Document Identifier;
+- title;
+- summary;
+- format;
+- optional reference identifier;
+- publication status.
+
+Administrators can select multiple matching Documents and use one Add Selected
+Documents action to move them into the selected list. This avoids repeating the
+search/add cycle for each Document.
 
 The selected list preserves selection order. Each selected Document may carry:
 
 - relationship label, defaulting to `Transmitted document`;
 - optional public note.
+
+A paste control also supports adding multiple existing Document Identifiers at
+once, one per line. Pasted identifiers are added to the same selected list and
+validated server-side when the Transmission is created.
 
 A non-JavaScript fallback allows one Document Identifier per line. Per-document
 labels and notes can still be adjusted after creation through the existing
@@ -54,6 +70,10 @@ submitted hidden identifier, relationship label, and public note fields for that
 same list item. Removing a Document removes those submitted fields as well, so
 stale identifiers cannot remain in the request after the visible item is
 removed.
+
+Documents already in the selected list cannot be added again. Search-result
+checkboxes for selected Documents are disabled during the enhanced session, and
+the server still rejects duplicate submitted identifiers.
 
 The selected-document count is announced through a live status region and uses
 singular or plural wording as the list changes.
@@ -115,3 +135,9 @@ stale fallback identifiers being ignored during JavaScript-enhanced submission,
 non-JavaScript multiline fallback creation, fallback validation failure,
 selected-document count wording, and the generated HTML structure for the
 `noscript` fallback.
+
+Bulk-selection tests cover multi-result search output, checkbox result
+selection, one-action bulk addition, selected-order preservation, duplicate
+prevention hooks, searching by Document Identifier, searching by title and
+summary metadata, pasted identifier submission, invalid pasted identifier
+handling, and continued compatibility with the post-creation inclusion workflow.
