@@ -46,11 +46,34 @@ A non-JavaScript fallback allows one Document Identifier per line. Per-document
 labels and notes can still be adjusted after creation through the existing
 post-creation inclusion workflow.
 
+## Selected-Document Synchronisation
+
+The JavaScript-enhanced intake interface uses the visible Selected Documents
+list as the administrator-facing source of truth. Adding a Document creates the
+submitted hidden identifier, relationship label, and public note fields for that
+same list item. Removing a Document removes those submitted fields as well, so
+stale identifiers cannot remain in the request after the visible item is
+removed.
+
+The selected-document count is announced through a live status region and uses
+singular or plural wording as the list changes.
+
+The multiline fallback textarea is rendered only inside `noscript`. It is
+therefore available when JavaScript is unavailable, but it no longer appears as
+a second independent document-entry mechanism during normal enhanced use.
+
 ## Persistence and Validation
 
 Submission validates all selected Documents before creating anything. If any
 selected Document is duplicated, unknown, unpublished, or otherwise ineligible,
 the submission is rejected and no partial Transmission inclusion set is created.
+
+The server parses one canonical ordered list. If enhanced selected-list fields
+are submitted, they are authoritative and fallback textarea values are ignored.
+If no enhanced selected-list fields are submitted, the server accepts the
+non-JavaScript fallback list, one existing Published Document Identifier per
+line. In both paths, duplicate, unknown, unpublished, or otherwise ineligible
+Documents are rejected server-side.
 
 When validation succeeds, CDE creates:
 
@@ -86,3 +109,9 @@ selected Documents, order preservation, generated inclusion references,
 inclusion history entries, duplicate rejection, unknown and unpublished document
 rejection, zero-document creation, and continued support for the existing
 post-creation inclusion workflow.
+
+Additional synchronisation tests cover the canonical selected-list parser,
+stale fallback identifiers being ignored during JavaScript-enhanced submission,
+non-JavaScript multiline fallback creation, fallback validation failure,
+selected-document count wording, and the generated HTML structure for the
+`noscript` fallback.

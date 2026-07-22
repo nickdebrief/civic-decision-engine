@@ -213,9 +213,60 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn(self.fixture.document["document_identifier"], content)
         self.assertIn("Add document", content)
         self.assertIn("Selected Documents", content)
+        self.assertIn("0 documents selected", content)
+        self.assertIn('id="selected-documents-count"', content)
+        self.assertIn('aria-live="polite"', content)
+        self.assertIn("1 document selected", content)
+        self.assertIn("documents selected", content)
+        self.assertIn("Document Identifiers — JavaScript unavailable", content)
+        self.assertIn("<noscript>", content)
         self.assertIn("included_document_identifiers_text", content)
         self.assertIn("Remove", content)
+        self.assertIn("Remove ${escapeHtml(reference)} from selected Documents", content)
+        self.assertNotIn("Document Identifiers for non-JavaScript entry", content)
         self.assertIn("A Transmission references these Documents through governed inclusion relationships", content)
+
+    def test_selected_document_input_parser_uses_one_canonical_source(self):
+        attachments = admin_session._transmission_document_attachment_inputs(
+            [self.fixture.document["document_identifier"]],
+            ["Selected list label"],
+            ["Selected list note."],
+            "DOC-2026-000064\nDOC-2026-000067",
+        )
+
+        self.assertEqual(
+            attachments,
+            [
+                {
+                    "document_reference": self.fixture.document["document_identifier"],
+                    "relationship_label": "Selected list label",
+                    "public_note": "Selected list note.",
+                }
+            ],
+        )
+
+        fallback = admin_session._transmission_document_attachment_inputs(
+            [],
+            [],
+            [],
+            "DOC-2026-000064\n\n DOC-2026-000067 ",
+        )
+
+        self.assertEqual(
+            fallback,
+            [
+                {
+                    "document_reference": "DOC-2026-000064",
+                    "relationship_label": "Transmitted document",
+                    "public_note": "",
+                },
+                {
+                    "document_reference": "DOC-2026-000067",
+                    "relationship_label": "Transmitted document",
+                    "public_note": "",
+                },
+            ],
+        )
 
     def test_create_transmission_with_one_selected_document_from_intake(self):
         response = admin_session.admin_create_transmission(
@@ -298,6 +349,79 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             [item["action_type"] for item in history],
             ["created", "attachment_added", "attachment_added"],
         )
+
+    def test_no_javascript_multiline_fallback_creates_documents_in_order(self):
+        second = self._published_pdf(
+            title="Fallback governed document for transmission",
+            reference_identifier="NM-TRM-DOC-FALLBACK",
+            suffix=b"fallback",
+            uploaded_at="2026-07-24T08:25:00Z",
+        )
+        response = admin_session.admin_create_transmission(
+            request=self._admin_request(),
+            title="No JavaScript fallback transmission",
+            summary="Transmission created from multiline fallback Document Identifiers.",
+            sender="Nick Moloney",
+            recipient="Medical Council of Ireland",
+            transmission_date="2026-07-24",
+            communication_method="email",
+            subject="Fallback governed documents",
+            covering_message="Please find the governed document references.",
+            publication_status="pending",
+            public_visibility="0",
+            included_document_reference=[],
+            included_document_relationship_label=[],
+            included_document_public_note=[],
+            included_document_identifiers_text=(
+                f"{self.fixture.document['document_identifier']}\n"
+                f"{second['document_identifier']}"
+            ),
+        )
+        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        conn = self._conn()
+        try:
+            attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
+        finally:
+            conn.close()
+
+        self.assertEqual([item["object_reference"] for item in attachments], [self.fixture.document["intake_id"], second["intake_id"]])
+        self.assertEqual([item["position"] for item in attachments], [1, 2])
+        self.assertEqual([item["relationship_label"] for item in attachments], ["Transmitted document", "Transmitted document"])
+
+    def test_no_javascript_fallback_rejects_unknown_identifier_atomically(self):
+        conn = self._conn()
+        try:
+            before = len(trm.list_transmissions(conn))
+        finally:
+            conn.close()
+
+        with self.assertRaises(Exception) as raised:
+            admin_session.admin_create_transmission(
+                request=self._admin_request(),
+                title="Rejected fallback transmission",
+                summary="Unknown fallback identifier must not partially persist.",
+                sender="Nick Moloney",
+                recipient="Medical Council of Ireland",
+                transmission_date="2026-07-24",
+                communication_method="email",
+                subject="Rejected governed documents",
+                covering_message="Please find the governed document references.",
+                publication_status="pending",
+                public_visibility="0",
+                included_document_reference=[],
+                included_document_relationship_label=[],
+                included_document_public_note=[],
+                included_document_identifiers_text="DOC-2099-999999",
+            )
+
+        conn = self._conn()
+        try:
+            after = len(trm.list_transmissions(conn))
+        finally:
+            conn.close()
+
+        self.assertIn("transmission_document_not_public", str(raised.exception))
+        self.assertEqual(after, before)
 
     def test_duplicate_unknown_and_unpublished_selected_documents_are_rejected_atomically(self):
         unpublished = store_pending_document(
