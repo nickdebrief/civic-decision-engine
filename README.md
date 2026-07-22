@@ -3,7 +3,13 @@
 [![OSF](https://img.shields.io/badge/OSF-Project-blue)](https://osf.io/wz29x/)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-black)](https://github.com/nickdebrief/civic-decision-engine)
 
-<img width="512" alt="Civic Decision Engine identity seal" src="docs/releases/assets/v12-seal.png" />
+<p align="center">
+  <img
+    src="docs/assets/cde-v13-seal.svg"
+    alt="Civic Decision Engine v13 Platform Release seal"
+    width="180"
+  >
+</p>
 
 An open, deterministic framework for evaluating visible civic records and record-derived administrative outputs through inspectable evidence relationships, dependency mappings, pathway stability analysis, and reproducible report generation.
 
