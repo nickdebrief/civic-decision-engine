@@ -46438,7 +46438,9 @@ def _transmission_document_attachment_inputs(
     return attachments
 
 
-def _render_transmission_document_search(document_search: str | None = None) -> str:
+def _transmission_document_search_results(
+    document_search: str | None = None,
+) -> tuple[str, str, int, str]:
     query = str(document_search or "").strip()
     documents = list_published_documents(query=query, root=intake_root())[:12] if query else []
     if query and documents:
@@ -46456,7 +46458,16 @@ def _render_transmission_document_search(document_search: str | None = None) -> 
     else:
         rows = '<p class="notice">Search by Document Identifier, title, filename, institution, keywords, or other published document metadata.</p>'
     bulk_action = '<button type="button" id="transmission-document-add-selected">Add Selected Documents</button>' if query and documents else ""
-    return f"""<section class="transmission-document-search" aria-labelledby="included-documents-heading"><h3 id="included-documents-heading">Included Governed Documents</h3><p class="notice">Select existing Published Documents by their immutable CDE Document Identifier. A Transmission references these Documents through governed inclusion relationships; it does not create, duplicate, publish, or alter them.</p><form id="transmission-document-search-form" method="get" action="/admin/transmissions"><label>Search published documents<input name="document_search" value="{escape(query)}" placeholder="DOC-2026-000064, title, source, keyword, or filename"></label><button type="submit">Search documents</button></form><div class="transmission-document-results" aria-label="Published document search results">{rows}</div>{bulk_action}</section>"""
+    return rows, bulk_action, len(documents), query
+
+
+def _render_transmission_document_search(document_search: str | None = None) -> str:
+    rows, bulk_action, count, query = _transmission_document_search_results(document_search)
+    if query:
+        status = f"{count} published Document{'s' if count != 1 else ''} matched this search."
+    else:
+        status = "Search has not been run yet."
+    return f"""<section class="transmission-document-search" aria-labelledby="included-documents-heading"><h3 id="included-documents-heading">Included Governed Documents</h3><p class="notice">Select existing Published Documents by their immutable CDE Document Identifier. A Transmission references these Documents through governed inclusion relationships; it does not create, duplicate, publish, or alter them.</p><form id="transmission-document-search-form" method="get" action="/admin/transmissions"><label>Search published documents<input id="transmission-document-search-input" name="document_search" value="{escape(query)}" placeholder="DOC-2026-000064, title, source, keyword, or filename"></label><button type="submit">Search documents</button><p id="transmission-document-search-status" class="field-help" role="status" aria-live="polite">{escape(status)}</p></form><div id="transmission-document-results" class="transmission-document-results" aria-label="Published document search results">{rows}</div><div id="transmission-document-bulk-actions">{bulk_action}</div></section>"""
 
 
 def _render_transmission_admin_index(
@@ -46486,19 +46497,54 @@ def _render_transmission_admin_index(
 function initializeTransmissionDocumentSelection() {{
   const list = document.getElementById('selected-documents');
   const count = document.getElementById('selected-documents-count');
-  const addSelected = document.getElementById('transmission-document-add-selected');
+  const searchForm = document.getElementById('transmission-document-search-form');
+  const searchInput = document.getElementById('transmission-document-search-input');
+  const searchResults = document.getElementById('transmission-document-results');
+  const searchBulkActions = document.getElementById('transmission-document-bulk-actions');
+  const searchStatus = document.getElementById('transmission-document-search-status');
   const pasteInput = document.getElementById('bulk-document-identifiers');
   const addPasted = document.getElementById('transmission-document-add-pasted');
   const pasteStatus = document.getElementById('bulk-document-paste-status');
+  const createForm = document.getElementById('create-transmission-form');
   if (!list || !count) {{
     return;
   }}
+  const storageKey = 'cde.transmissionIntake.selectedDocuments.v1';
   const selectedDocuments = [];
   function normalizedReference(value) {{
     return String(value || '').trim();
   }}
   function selectedIndex(reference) {{
     return selectedDocuments.findIndex((document) => document.reference === reference);
+  }}
+  function persistSelectedDocuments() {{
+    try {{
+      window.sessionStorage.setItem(storageKey, JSON.stringify(selectedDocuments));
+    }} catch (error) {{
+      return;
+    }}
+  }}
+  function restoreSelectedDocuments() {{
+    try {{
+      const restored = JSON.parse(window.sessionStorage.getItem(storageKey) || '[]');
+      if (!Array.isArray(restored)) return;
+      restored.forEach((document) => {{
+        const reference = normalizedReference(document.reference);
+        if (!reference || selectedIndex(reference) !== -1) return;
+        selectedDocuments.push({{
+          reference,
+          title: document.title || 'Published Document',
+          summary: document.summary || '',
+          format: document.format || 'Published Document',
+          externalReference: document.externalReference || '',
+          status: document.status || 'Published',
+          relationshipLabel: document.relationshipLabel || 'Transmitted document',
+          publicNote: document.publicNote || ''
+        }});
+      }});
+    }} catch (error) {{
+      return;
+    }}
   }}
   function captureSelectedFormState() {{
     list.querySelectorAll('.selected-document').forEach((item) => {{
@@ -46592,6 +46638,7 @@ function initializeTransmissionDocumentSelection() {{
     }});
     count.textContent = selectedDocuments.length === 1 ? '1 document selected' : `${{selectedDocuments.length}} documents selected`;
     syncSearchResults();
+    persistSelectedDocuments();
   }}
   function documentFromCheckbox(checkbox) {{
     return {{
@@ -46643,12 +46690,39 @@ function initializeTransmissionDocumentSelection() {{
     }});
     return {{ references, duplicates }};
   }}
-  if (addSelected) {{
-    addSelected.addEventListener('click', () => {{
+  document.addEventListener('click', (event) => {{
+    const button = event.target && event.target.closest ? event.target.closest('#transmission-document-add-selected') : null;
+    if (!button) return;
       const checked = Array.from(document.querySelectorAll('.transmission-document-select:checked:not(:disabled)'));
       const added = addDocuments(checked.map(documentFromCheckbox));
       if (pasteStatus) {{
         pasteStatus.textContent = added === 1 ? '1 selected Document added.' : `${{added}} selected Documents added.`;
+      }}
+  }});
+  if (searchForm && searchInput && searchResults && searchBulkActions) {{
+    searchForm.addEventListener('submit', async (event) => {{
+      event.preventDefault();
+      captureSelectedFormState();
+      persistSelectedDocuments();
+      const query = normalizedReference(searchInput.value);
+      if (searchStatus) searchStatus.textContent = 'Searching Published Documents...';
+      const params = new URLSearchParams();
+      params.set('document_search', query);
+      try {{
+        const response = await fetch(`/api/admin/session/transmissions/document-search?${{params.toString()}}`, {{
+          credentials: 'same-origin',
+          headers: {{ 'Accept': 'application/json' }}
+        }});
+        if (!response.ok) throw new Error('search_failed');
+        const payload = await response.json();
+        searchResults.innerHTML = payload.results_html || '';
+        searchBulkActions.innerHTML = payload.bulk_action_html || '';
+        searchStatus.textContent = payload.status || 'Search complete.';
+        syncSearchResults();
+        const url = query ? `/admin/transmissions?document_search=${{encodeURIComponent(query)}}` : '/admin/transmissions';
+        window.history.replaceState(null, '', url);
+      }} catch (error) {{
+        if (searchStatus) searchStatus.textContent = 'Could not search Published Documents without reloading. Selected Documents remain unchanged.';
       }}
     }});
   }}
@@ -46684,6 +46758,17 @@ function initializeTransmissionDocumentSelection() {{
       }}
     }});
   }}
+  if (createForm) {{
+    createForm.addEventListener('submit', () => {{
+      captureSelectedFormState();
+      try {{
+        window.sessionStorage.removeItem(storageKey);
+      }} catch (error) {{
+        return;
+      }}
+    }});
+  }}
+  restoreSelectedDocuments();
   renderSelectedDocuments();
 }}
 if (document.readyState === 'loading') {{
@@ -46708,6 +46793,25 @@ def admin_transmissions_page(request: Request, document_search: str | None = Non
             admin_session=session,
             document_search=document_search,
         )
+    )
+
+
+@router.get("/api/admin/session/transmissions/document-search")
+def admin_transmission_document_search(request: Request, document_search: str | None = None):
+    require_admin_session(request)
+    rows, bulk_action, count, query = _transmission_document_search_results(document_search)
+    if query:
+        status = f"{count} published Document{'s' if count != 1 else ''} matched this search."
+    else:
+        status = "Search has not been run yet."
+    return JSONResponse(
+        {
+            "query": query,
+            "result_count": count,
+            "results_html": rows,
+            "bulk_action_html": bulk_action,
+            "status": status,
+        }
     )
 
 
