@@ -49,6 +49,7 @@ Designed for understanding.
 Current release: v13.0.4
 
 Release documentation:
+- [`docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md`](docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md)
 - [`docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md`](docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md)
 - [`docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md`](docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md)
 - [`docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md`](docs/releases/CDE_V13_0_2_LANDING_PAGE_FOOTER_ALIGNMENT.md)
@@ -929,6 +930,25 @@ each included Document remains an independently governed object with its own CDE
 Document Identifier, lifecycle, provenance, verification hash, and public page.
 The existing post-creation inclusion workflow remains available for later
 corrections or additions.
+
+### CDE v13 — Governance Table Readability
+
+CDE v13 standardises the readability pattern for dense governance tables across
+public and administrative views. Structured references such as `DOC-...`,
+`TRM-...`, `TRM-ATT-...`, lifecycle states, timestamps, positions, and short
+relationship labels now use compact table cells that avoid character-by-character
+wrapping.
+
+Human-readable governed content such as titles, summaries, sender and recipient
+names, public notes, and history notes continues to wrap normally and is not
+truncated. Dense public and administrative tables now use shared responsive
+wrappers so narrow screens can reach every column without making the whole page
+overflow horizontally.
+
+This is a presentation and accessibility correction only. It does not alter
+governance semantics, identifiers, lifecycle state, publication state,
+provenance, relationships, storage, SHA-256 values, public eligibility, or route
+behaviour.
 
 ### JPEG Variant Intake Validation
 

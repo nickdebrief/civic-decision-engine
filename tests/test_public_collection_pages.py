@@ -253,6 +253,13 @@ class PublicCollectionPagesTests(unittest.TestCase):
 
         content = collection_routes.public_collection_page(collection["public_reference"]).content
         self.assertIn("Governed Collection Members", content)
+        self.assertIn('aria-label="Governed Collection Members table"', content)
+        self.assertIn("public-collection-members-table governance-table governance-table--dense", content)
+        self.assertIn("public-collection-member-reference table-cell--identifier", content)
+        self.assertIn("public-collection-member-document table-cell--content", content)
+        self.assertIn("public-collection-member-section table-cell--label", content)
+        self.assertIn('aria-label="Collection Pathway table"', content)
+        self.assertIn("public-collection-pathway-table governance-table governance-table--dense", content)
         self.assertIn("Canonical Record", content)
         self.assertIn("Published Document", content)
         self.assertIn("Record-Document Association", content)
@@ -268,6 +275,7 @@ class PublicCollectionPagesTests(unittest.TestCase):
         self.assertNotIn("Private association note", content)
         self.assertNotIn("Private document note", content)
         self.assertNotIn("Signed in as", content)
+        self.assertNotIn("word-break:break-all", content)
 
     def test_unavailable_members_are_omitted_without_deleting_membership(self):
         collection = self._collection()

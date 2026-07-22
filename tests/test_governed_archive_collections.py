@@ -330,6 +330,11 @@ class GovernedArchiveCollectionsTests(unittest.TestCase):
         admin_session.admin_collection_deactivate(inactive["id"], self.request, "Deactivate hidden.")
         content = collection_routes.public_collection_index().content
         self.assertIn("Public Archive Collections", content)
+        self.assertIn('aria-label="Public Archive Collections table"', content)
+        self.assertIn("public-collection-table governance-table governance-table--dense", content)
+        self.assertIn("public-collection-reference table-cell--identifier", content)
+        self.assertIn("public-collection-title table-cell--content", content)
+        self.assertIn("public-collection-member-count table-cell--compact", content)
         self.assertIn("Total matching public collections:</strong> 1", content)
         self.assertIn(visible["public_reference"], content)
         self.assertNotIn(private["public_reference"], content)
