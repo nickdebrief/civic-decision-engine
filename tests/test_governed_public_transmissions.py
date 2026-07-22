@@ -10,6 +10,7 @@ install_fastapi_stubs()
 
 from api import archive_collection_memberships as acm
 from api import public_transmissions as trm
+from api.document_intake import store_pending_document, update_intake_status
 from api.routes import admin_session, archive, collections, traceability, transmissions
 
 
@@ -33,6 +34,39 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         trm.ensure_transmission_tables(conn)
         acm.ensure_membership_tables(conn)
         return conn
+
+    def _admin_request(self):
+        token = admin_session.create_admin_session("admin-user")
+        return FakeRequest(cookies={admin_session.SESSION_COOKIE_NAME: token})
+
+    def _published_pdf(self, *, title: str, reference_identifier: str, suffix: bytes, uploaded_at: str):
+        item = store_pending_document(
+            data=b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n" + suffix,
+            original_filename=f"{reference_identifier}.pdf",
+            content_type="application/pdf",
+            title=title,
+            institution_source="Medical Council of Ireland",
+            document_date="2026-07-24",
+            category="Correspondence",
+            description=f"{title} fixture.",
+            visibility="private",
+            notes="Private note.",
+            reference_identifier=reference_identifier,
+            keywords=f"{title}, Transmission Intake",
+            actor="admin-user",
+            uploaded_at=uploaded_at,
+            root=self.fixture.root,
+        )
+        for index, status in enumerate(("under_review", "approved", "published"), start=1):
+            item = update_intake_status(
+                item["intake_id"],
+                status,
+                actor="admin-user",
+                note=f"{status} note",
+                changed_at=f"2026-07-24T08:0{index}:00Z",
+                root=self.fixture.root,
+            )
+        return item
 
     def _published_transmission_with_attachments(self):
         conn = self._conn()
@@ -167,6 +201,180 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
                 )
         finally:
             conn.close()
+
+    def test_transmission_intake_page_searches_and_selects_governed_documents(self):
+        content = admin_session.admin_transmissions_page(
+            self._admin_request(),
+            document_search="Woodstock",
+        ).content
+
+        self.assertIn("Included Governed Documents", content)
+        self.assertIn("Search published documents", content)
+        self.assertIn(self.fixture.document["document_identifier"], content)
+        self.assertIn("Add document", content)
+        self.assertIn("Selected Documents", content)
+        self.assertIn("included_document_identifiers_text", content)
+        self.assertIn("Remove", content)
+        self.assertIn("A Transmission references these Documents through governed inclusion relationships", content)
+
+    def test_create_transmission_with_one_selected_document_from_intake(self):
+        response = admin_session.admin_create_transmission(
+            request=self._admin_request(),
+            title="Cover email with one selected document",
+            summary="Transmission created with a selected governed Document.",
+            sender="Nick Moloney",
+            recipient="Medical Council of Ireland",
+            transmission_date="2026-07-24",
+            communication_method="email",
+            subject="One governed document",
+            covering_message="Please find the governed document reference.",
+            publication_status="pending",
+            public_visibility="0",
+            included_document_reference=[self.fixture.document["document_identifier"]],
+            included_document_relationship_label=["Cover attachment"],
+            included_document_public_note=["Selected during intake."],
+            included_document_identifiers_text=None,
+        )
+        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        conn = self._conn()
+        try:
+            attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
+            history = trm.transmission_history(conn, transmission_id)
+        finally:
+            conn.close()
+
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["object_reference"], self.fixture.document["intake_id"])
+        self.assertEqual(attachments[0]["object_public_reference"], self.fixture.document["document_identifier"])
+        self.assertEqual(attachments[0]["relationship_label"], "Cover attachment")
+        self.assertRegex(attachments[0]["attachment_reference"], r"^TRM-ATT-\d{8}-\d{3}$")
+        self.assertEqual([item["action_type"] for item in history], ["created", "attachment_added"])
+
+    def test_create_transmission_with_multiple_selected_documents_preserves_order(self):
+        second = self._published_pdf(
+            title="Second governed document for transmission",
+            reference_identifier="NM-TRM-DOC-002",
+            suffix=b"second",
+            uploaded_at="2026-07-24T08:20:00Z",
+        )
+        conn = self._conn()
+        try:
+            transmission = trm.create_transmission_with_document_attachments(
+                conn,
+                title="Cover email with multiple selected documents",
+                summary="Transmission created with multiple governed Documents.",
+                sender="Nick Moloney",
+                recipient="Medical Council of Ireland",
+                transmission_date="2026-07-24",
+                communication_method="email",
+                document_attachments=[
+                    {
+                        "document_reference": self.fixture.document["document_identifier"],
+                        "relationship_label": "First transmitted document",
+                        "public_note": "First note.",
+                    },
+                    {
+                        "document_reference": second["document_identifier"],
+                        "relationship_label": "Second transmitted document",
+                        "public_note": "Second note.",
+                    },
+                ],
+                actor="admin-user",
+                created_at="2026-07-24T08:30:00Z",
+                root=self.fixture.root,
+            )
+            attachments = trm.list_transmission_attachments(conn, transmission["id"], root=self.fixture.root)
+            history = trm.transmission_history(conn, transmission["id"])
+        finally:
+            conn.close()
+
+        self.assertEqual([item["position"] for item in attachments], [1, 2])
+        self.assertEqual(
+            [item["object_reference"] for item in attachments],
+            [self.fixture.document["intake_id"], second["intake_id"]],
+        )
+        self.assertEqual(len({item["attachment_reference"] for item in attachments}), 2)
+        self.assertEqual(
+            [item["action_type"] for item in history],
+            ["created", "attachment_added", "attachment_added"],
+        )
+
+    def test_duplicate_unknown_and_unpublished_selected_documents_are_rejected_atomically(self):
+        unpublished = store_pending_document(
+            data=b"%PDF-1.7\npending\n%%EOF\n",
+            original_filename="pending.pdf",
+            content_type="application/pdf",
+            title="Unpublished governed document",
+            institution_source="Medical Council of Ireland",
+            document_date="2026-07-24",
+            category="Correspondence",
+            description="Pending only.",
+            visibility="private",
+            notes="Private note.",
+            reference_identifier="NM-TRM-PENDING",
+            actor="admin-user",
+            uploaded_at="2026-07-24T08:40:00Z",
+            root=self.fixture.root,
+        )
+        conn = self._conn()
+        try:
+            before = len(trm.list_transmissions(conn))
+            cases = [
+                [
+                    {"document_reference": self.fixture.document["document_identifier"]},
+                    {"document_reference": self.fixture.document["document_identifier"]},
+                ],
+                [{"document_reference": "DOC-2099-999999"}],
+                [{"document_reference": unpublished["document_identifier"]}],
+            ]
+            for attachments in cases:
+                with self.assertRaises(ValueError):
+                    trm.create_transmission_with_document_attachments(
+                        conn,
+                        title="Rejected transmission",
+                        summary="This should not persist.",
+                        sender="Sender",
+                        recipient="Recipient",
+                        transmission_date="2026-07-24",
+                        communication_method="email",
+                        document_attachments=attachments,
+                        actor="admin-user",
+                        root=self.fixture.root,
+                    )
+            after = len(trm.list_transmissions(conn))
+        finally:
+            conn.close()
+
+        self.assertEqual(after, before)
+
+    def test_transmission_without_initial_documents_and_post_creation_addition_still_work(self):
+        conn = self._conn()
+        try:
+            transmission = trm.create_transmission_with_document_attachments(
+                conn,
+                title="Transmission without selected documents",
+                summary="No included Documents at creation remains valid.",
+                sender="Sender",
+                recipient="Recipient",
+                transmission_date="2026-07-24",
+                communication_method="email",
+                document_attachments=[],
+                actor="admin-user",
+                root=self.fixture.root,
+            )
+            self.assertEqual(trm.list_transmission_attachments(conn, transmission["id"], root=self.fixture.root), [])
+            attachment = trm.add_transmission_attachment(
+                conn,
+                transmission_id=transmission["id"],
+                object_type="published_document",
+                object_reference=self.fixture.document["document_identifier"],
+                actor="admin-user",
+                root=self.fixture.root,
+            )
+        finally:
+            conn.close()
+
+        self.assertEqual(attachment["object_reference"], self.fixture.document["intake_id"])
 
     def test_public_library_search_and_detail_render(self):
         index = transmissions.public_transmission_library(q="Nick Moloney Woodstock").content
