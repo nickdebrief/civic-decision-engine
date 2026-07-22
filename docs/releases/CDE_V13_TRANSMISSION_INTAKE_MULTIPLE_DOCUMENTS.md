@@ -56,7 +56,9 @@ The selected list preserves selection order. Each selected Document may carry:
 
 A paste control also supports adding multiple existing Document Identifiers at
 once, one per line. Pasted identifiers are added to the same selected list and
-validated server-side when the Transmission is created.
+validated against eligible Published Documents before they are added. The
+server still validates the same identifiers again when the Transmission is
+created.
 
 A non-JavaScript fallback allows one Document Identifier per line. Per-document
 labels and notes can still be adjusted after creation through the existing
@@ -81,6 +83,34 @@ singular or plural wording as the list changes.
 The multiline fallback textarea is rendered only inside `noscript`. It is
 therefore available when JavaScript is unavailable, but it no longer appears as
 a second independent document-entry mechanism during normal enhanced use.
+
+## Bulk-Control Functional Fix
+
+The deployed bulk controls rendered correctly but did not initialize. The
+rendered script contained a malformed JavaScript template literal in the
+selected-card renderer, so the browser stopped evaluating the script before
+attaching either the Add Selected Documents handler or the pasted-identifier
+handler.
+
+The intake page now uses one `initializeTransmissionDocumentSelection()`
+initializer, runs it after the DOM is available, and keeps one ordered
+`selectedDocuments` collection as the source of truth. The selected list,
+selected count, disabled search-result checkboxes, remove controls, and hidden
+canonical submission fields are all re-rendered from that collection.
+
+The repaired controls are:
+
+- `transmission-document-add-selected`, which bulk-adds checked search results
+  in visible result order;
+- `transmission-document-add-pasted`, which parses one pasted Document
+  Identifier per line, ignores blank lines, reports duplicates, resolves
+  identifiers through an authenticated Published Document lookup, and then adds
+  only eligible published Documents with their metadata.
+
+The pasted lookup does not create Documents, does not use optional external
+references as the primary identity, and does not weaken server-side validation.
+Manipulated requests are still checked authoritatively during Transmission
+creation.
 
 ## Persistence and Validation
 
@@ -140,4 +170,12 @@ Bulk-selection tests cover multi-result search output, checkbox result
 selection, one-action bulk addition, selected-order preservation, duplicate
 prevention hooks, searching by Document Identifier, searching by title and
 summary metadata, pasted identifier submission, invalid pasted identifier
-handling, and continued compatibility with the post-creation inclusion workflow.
+handling, exact JavaScript control IDs, non-submit button types, DOM-ready
+initialisation, hidden-field rendering, pasted identifier metadata lookup, and
+continued compatibility with the post-creation inclusion workflow.
+
+Manual smoke-test coverage verifies that checking multiple search results and
+using Add Selected Documents updates the selected count and hidden canonical
+fields, that pasted DOC identifiers resolve to selected Document cards, that
+Remove updates the same state, and that final submission creates the expected
+governed inclusion relationships.
