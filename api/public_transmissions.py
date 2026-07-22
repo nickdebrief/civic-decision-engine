@@ -495,6 +495,148 @@ def create_transmission(
     return row
 
 
+def create_transmission_with_document_attachments(
+    conn: sqlite3.Connection,
+    *,
+    title: Any,
+    summary: Any,
+    sender: Any,
+    recipient: Any,
+    transmission_date: Any,
+    communication_method: Any,
+    document_attachments: list[dict[str, Any]] | None = None,
+    subject: Any = None,
+    covering_message: Any = None,
+    public_visibility: Any = False,
+    publication_status: Any = "pending",
+    external_reference: Any = None,
+    transmission_identifier: Any = None,
+    admin_notes: Any = None,
+    actor: Any,
+    created_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    ensure_transmission_tables(conn)
+    actor_value = _clean_required(actor, "transmission_actor_required")
+    status = validate_status(publication_status)
+    method = validate_method(communication_method)
+    timestamp = created_at or utc_now()
+    normalized_attachments: list[dict[str, Any]] = []
+    seen_documents: set[str] = set()
+    for index, attachment in enumerate(document_attachments or [], start=1):
+        reference = _clean_required(
+            attachment.get("document_reference"),
+            "transmission_document_reference_required",
+        )
+        resolved = resolve_public_object(conn, "published_document", reference, root=root)
+        if not resolved:
+            raise ValueError("transmission_document_not_public")
+        normalized_reference = str(resolved["object_reference"])
+        if normalized_reference in seen_documents:
+            raise ValueError("transmission_attachment_duplicate_active")
+        seen_documents.add(normalized_reference)
+        normalized_attachments.append(
+            {
+                "resolved": resolved,
+                "relationship_label": _clean_optional(attachment.get("relationship_label"))
+                or "Transmitted document",
+                "public_note": _clean_optional(attachment.get("public_note")),
+                "position": index,
+            }
+        )
+    published_at = timestamp if status == "published" else None
+    try:
+        if not conn.in_transaction:
+            conn.execute("BEGIN")
+        public_reference = generate_public_reference(conn, timestamp)
+        cursor = conn.execute(
+            """
+            INSERT INTO public_transmissions (
+                public_reference, title, summary, sender, recipient, transmission_date,
+                communication_method, subject, covering_message, public_visibility,
+                publication_status, external_reference, transmission_identifier, admin_notes,
+                created_at, created_by, updated_at, updated_by, published_at, published_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                public_reference,
+                _clean_required(title, "transmission_title_required"),
+                _clean_required(summary, "transmission_summary_required"),
+                _clean_required(sender, "transmission_sender_required"),
+                _clean_required(recipient, "transmission_recipient_required"),
+                _validate_iso_date(transmission_date, "transmission_date_invalid"),
+                method,
+                _clean_optional(subject),
+                _clean_optional(covering_message),
+                1 if normalize_bool(public_visibility, default=False) else 0,
+                status,
+                _clean_optional(external_reference),
+                _clean_optional(transmission_identifier),
+                _clean_optional(admin_notes),
+                timestamp,
+                actor_value,
+                timestamp,
+                actor_value,
+                published_at,
+                actor_value if published_at else None,
+            ),
+        )
+        transmission_id = int(cursor.lastrowid)
+        row = get_transmission(conn, transmission_id)
+        _record_history(
+            conn,
+            transmission_id=transmission_id,
+            action_type="created",
+            actor=actor_value,
+            timestamp=timestamp,
+            previous_state=None,
+            new_state=_transmission_state(row),
+            note=admin_notes or "Transmission created.",
+        )
+        for attachment in normalized_attachments:
+            resolved = attachment["resolved"]
+            cursor = conn.execute(
+                """
+                INSERT INTO public_transmission_attachments (
+                    attachment_reference, transmission_id, object_type, object_reference,
+                    relationship_label, public_note, position, is_active,
+                    created_at, created_by, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                """,
+                (
+                    generate_attachment_reference(conn, timestamp),
+                    transmission_id,
+                    "published_document",
+                    str(resolved["object_reference"]),
+                    attachment["relationship_label"],
+                    attachment["public_note"],
+                    int(attachment["position"]),
+                    timestamp,
+                    actor_value,
+                    timestamp,
+                    actor_value,
+                ),
+            )
+            attachment_row = get_transmission_attachment(conn, int(cursor.lastrowid))
+            _record_history(
+                conn,
+                transmission_id=transmission_id,
+                action_type="attachment_added",
+                actor=actor_value,
+                timestamp=timestamp,
+                previous_state=None,
+                new_state=_attachment_state(attachment_row),
+                note=attachment["public_note"]
+                or attachment["relationship_label"]
+                or "Transmission attachment added.",
+            )
+        conn.commit()
+        return row
+    except Exception:
+        conn.rollback()
+        raise
+
+
 def update_transmission_status(
     conn: sqlite3.Connection,
     transmission_id: int | str,

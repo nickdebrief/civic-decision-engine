@@ -917,6 +917,19 @@ Public Transmissions, Archive Collections, the Archive Explorer, and public
 document views now surface the same existing governed Document identity without
 duplicating, replacing, or re-identifying the Document.
 
+### CDE v13 — Transmission Intake Multiple Governed Documents
+
+Transmission Intake now lets administrators search for and select multiple
+existing governed Documents while creating a Public Transmission. Selected
+Documents are reviewed before submission, keep their chosen order, and receive
+separate governed inclusion relationships when the Transmission is created.
+
+The governance model is unchanged. A Transmission governs communication context;
+each included Document remains an independently governed object with its own CDE
+Document Identifier, lifecycle, provenance, verification hash, and public page.
+The existing post-creation inclusion workflow remains available for later
+corrections or additions.
+
 ### JPEG Variant Intake Validation
 
 Admin Document Intake accepts valid JPEG files produced by different editors and

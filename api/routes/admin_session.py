@@ -76,6 +76,7 @@ from api.document_intake import (
     is_audio_document,
     is_image_document,
     list_intake_documents,
+    list_published_documents,
     load_pending_document,
     store_pending_document,
     update_intake_notes,
@@ -46400,11 +46401,67 @@ def _transmission_object_type_options(selected: str | None = None) -> str:
     )
 
 
+def _transmission_document_attachment_inputs(
+    references: list[str] | tuple[str, ...] | None,
+    relationship_labels: list[str] | tuple[str, ...] | None,
+    public_notes: list[str] | tuple[str, ...] | None,
+    fallback_text: str | None,
+) -> list[dict[str, str]]:
+    attachments: list[dict[str, str]] = []
+    refs = [str(value or "").strip() for value in (references or [])]
+    labels = [str(value or "").strip() for value in (relationship_labels or [])]
+    notes = [str(value or "").strip() for value in (public_notes or [])]
+    for index, reference in enumerate(refs):
+        if not reference:
+            continue
+        attachments.append(
+            {
+                "document_reference": reference,
+                "relationship_label": labels[index] if index < len(labels) and labels[index] else "Transmitted document",
+                "public_note": notes[index] if index < len(notes) else "",
+            }
+        )
+    for line in str(fallback_text or "").splitlines():
+        reference = line.strip()
+        if not reference:
+            continue
+        attachments.append(
+            {
+                "document_reference": reference,
+                "relationship_label": "Transmitted document",
+                "public_note": "",
+            }
+        )
+    return attachments
+
+
+def _render_transmission_document_search(document_search: str | None = None) -> str:
+    query = str(document_search or "").strip()
+    documents = list_published_documents(query=query, root=intake_root())[:12] if query else []
+    if query and documents:
+        rows = "".join(
+            f"""<article class="transmission-document-result">
+              <h4>{escape(str(item.get('document_identifier') or '—'))}</h4>
+              <p><strong>{escape(str(item.get('title') or 'Untitled document'))}</strong></p>
+              <p>{escape(str(item.get('description') or ''))}</p>
+              <dl><dt>Optional Reference Identifier</dt><dd>{escape(str(item.get('reference_identifier') or 'Not provided'))}</dd><dt>Format</dt><dd>{escape(document_type_label(item.get('document_type')))}</dd></dl>
+              <button type="button" class="transmission-document-add" data-document-reference="{escape(str(item.get('document_identifier') or ''))}" data-document-title="{escape(str(item.get('title') or 'Untitled document'))}" data-document-format="{escape(document_type_label(item.get('document_type')))}">Add document</button>
+            </article>"""
+            for item in documents
+        )
+    elif query:
+        rows = '<p class="notice">No published governed Documents matched this search.</p>'
+    else:
+        rows = '<p class="notice">Search by Document Identifier, title, filename, institution, keywords, or other published document metadata.</p>'
+    return f"""<section class="transmission-document-search" aria-labelledby="included-documents-heading"><h3 id="included-documents-heading">Included Governed Documents</h3><p class="notice">Select existing Published Documents by their immutable CDE Document Identifier. A Transmission references these Documents through governed inclusion relationships; it does not create, duplicate, publish, or alter them.</p><form id="transmission-document-search-form" method="get" action="/admin/transmissions"><label>Search published documents<input name="document_search" value="{escape(query)}" placeholder="DOC-2026-000064, title, source, keyword, or filename"></label><button type="submit">Search documents</button></form><div class="transmission-document-results" aria-label="Published document search results">{rows}</div></section>"""
+
+
 def _render_transmission_admin_index(
     transmissions: list[dict[str, Any]],
     *,
     admin_session: dict[str, Any],
     message: str | None = None,
+    document_search: str | None = None,
 ) -> str:
     rows = "".join(
         f"""<tr>
@@ -46421,18 +46478,58 @@ def _render_transmission_admin_index(
     ) or '<tr><td colspan="8">No Public Transmission intake records exist yet.</td></tr>'
     notice = f'<p class="notice" role="status">{escape(message)}</p>' if message else ""
     today = datetime.now(timezone.utc).date().isoformat()
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transmission Intake</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px;margin:18px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}.table-wrap{{overflow-x:auto}}table{{width:100%;min-width:980px;border-collapse:collapse;background:#fff}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.transmission-reference{{font-family:ui-monospace,monospace;min-width:150px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Transmission Intake</h1><p class="notice">Documents preserve content. Transmissions preserve context. Creating a Transmission does not create, duplicate, publish, or alter any included governed object.</p>{notice}<section id="new-transmission"><h2>Create Public Transmission</h2><form method="post" action="/api/admin/session/transmissions"><label>Title<input name="title" required></label><label>Summary<textarea name="summary" required></textarea></label><label>Sender<input name="sender" required></label><label>Recipient<input name="recipient" required></label><label>Transmission date<input name="transmission_date" type="date" required value="{today}"></label><label>Communication method<select name="communication_method" required>{_transmission_method_options("email")}</select></label><label>Subject<input name="subject"></label><label>Covering message<textarea name="covering_message"></textarea></label><label>External reference<input name="external_reference"></label><label>Transmission identifier<input name="transmission_identifier"></label><label>Administrative notes<textarea name="admin_notes"></textarea></label><label>Initial lifecycle state<select name="publication_status">{_transmission_status_options("pending")}</select></label><label>Public visibility<select name="public_visibility"><option value="0">Private</option><option value="1">Public</option></select></label><button type="submit">Create Transmission</button></form></section><section id="transmission-management"><h2>Transmission Management</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Title</th><th>Sender</th><th>Recipient</th><th>Method</th><th>Status</th><th>Visibility</th><th>Transmission date</th></tr></thead><tbody>{rows}</tbody></table></div></section></main></body></html>"""
+    document_search_section = _render_transmission_document_search(document_search)
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transmission Intake</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px;margin:18px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}button.secondary{{background:#fff;color:#245d61;border:1px solid #245d61}}.table-wrap{{overflow-x:auto}}table{{width:100%;min-width:980px;border-collapse:collapse;background:#fff}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.transmission-reference{{font-family:ui-monospace,monospace;min-width:150px}}.transmission-document-results{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}}.transmission-document-result,.selected-document{{background:#fff;border:1px solid #d8d4ca;padding:14px;overflow-wrap:anywhere}}.transmission-document-result h4,.selected-document h4{{margin:.1rem 0 .35rem;font-family:ui-monospace,monospace}}.transmission-document-result dl{{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 8px}}.transmission-document-result dt{{font-weight:700;color:#555}}.transmission-document-result dd{{margin:0}}.selected-documents{{display:grid;gap:12px;padding-left:1.4rem}}.selected-document label{{margin-top:10px}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}@media(max-width:760px){{.transmission-document-results{{grid-template-columns:1fr}}table{{min-width:860px}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Transmission Intake</h1><p class="notice">Documents preserve content. Transmissions preserve context. Creating a Transmission does not create, duplicate, publish, or alter any included governed object.</p>{notice}<section id="new-transmission"><h2>Create Public Transmission</h2>{document_search_section}<form method="post" action="/api/admin/session/transmissions" id="create-transmission-form"><label>Title<input name="title" required></label><label>Summary<textarea name="summary" required></textarea></label><label>Sender<input name="sender" required></label><label>Recipient<input name="recipient" required></label><label>Transmission date<input name="transmission_date" type="date" required value="{today}"></label><label>Communication method<select name="communication_method" required>{_transmission_method_options("email")}</select></label><label>Subject<input name="subject"></label><label>Covering message<textarea name="covering_message"></textarea></label><section aria-labelledby="selected-documents-heading"><h3 id="selected-documents-heading">Selected Documents</h3><p class="field-help">Selected Documents are included as separate governed relationships in the order shown. Relationship label defaults to Transmitted document.</p><ol id="selected-documents" class="selected-documents"><li class="notice" id="selected-documents-empty">No governed Documents selected yet.</li></ol><label>Document Identifiers for non-JavaScript entry<textarea name="included_document_identifiers_text" placeholder="DOC-2026-000064&#10;DOC-2026-000067"></textarea><span class="field-help">Fallback entry: one existing Published Document Identifier per line. Per-document relationship labels and public notes can be edited after creation if JavaScript is unavailable.</span></label></section><label>External reference<input name="external_reference"></label><label>Transmission identifier<input name="transmission_identifier"></label><label>Administrative notes<textarea name="admin_notes"></textarea></label><label>Initial lifecycle state<select name="publication_status">{_transmission_status_options("pending")}</select></label><label>Public visibility<select name="public_visibility"><option value="0">Private</option><option value="1">Public</option></select></label><button type="submit">Create Transmission</button></form></section><section id="transmission-management"><h2>Transmission Management</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Title</th><th>Sender</th><th>Recipient</th><th>Method</th><th>Status</th><th>Visibility</th><th>Transmission date</th></tr></thead><tbody>{rows}</tbody></table></div></section><script>
+(() => {{
+  const list = document.getElementById('selected-documents');
+  const empty = document.getElementById('selected-documents-empty');
+  const selected = new Set();
+  function escapeHtml(value) {{
+    return String(value).replace(/[&<>"']/g, (char) => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[char]));
+  }}
+  function refreshEmpty() {{
+    if (!empty) return;
+    empty.style.display = selected.size ? 'none' : '';
+  }}
+  function addDocument(button) {{
+    const reference = button.dataset.documentReference || '';
+    if (!reference || selected.has(reference)) return;
+    selected.add(reference);
+    const item = document.createElement('li');
+    item.className = 'selected-document';
+    item.dataset.documentReference = reference;
+    item.innerHTML = `<h4>${{escapeHtml(reference)}}</h4><p><strong>${{escapeHtml(button.dataset.documentTitle || 'Published Document')}}</strong></p><p>${{escapeHtml(button.dataset.documentFormat || '')}}</p><input type="hidden" name="included_document_reference" value="${{escapeHtml(reference)}}"><label>Relationship label<input name="included_document_relationship_label" value="Transmitted document"></label><label>Public note<textarea name="included_document_public_note"></textarea></label><button type="button" class="secondary selected-document-remove">Remove</button>`;
+    item.querySelector('.selected-document-remove').addEventListener('click', () => {{
+      selected.delete(reference);
+      item.remove();
+      refreshEmpty();
+    }});
+    list.appendChild(item);
+    refreshEmpty();
+  }}
+  document.querySelectorAll('.transmission-document-add').forEach((button) => {{
+    button.addEventListener('click', () => addDocument(button));
+  }});
+  refreshEmpty();
+}})();
+</script></main></body></html>"""
 
 
 @router.get("/admin/transmissions", response_class=HTMLResponse)
-def admin_transmissions_page(request: Request):
+def admin_transmissions_page(request: Request, document_search: str | None = None):
     session = require_admin_session(request)
     conn = trm.get_db()
     try:
         transmissions = trm.list_transmissions(conn)
     finally:
         conn.close()
-    return HTMLResponse(content=_render_transmission_admin_index(transmissions, admin_session=session))
+    return HTMLResponse(
+        content=_render_transmission_admin_index(
+            transmissions,
+            admin_session=session,
+            document_search=document_search,
+        )
+    )
 
 
 @router.post("/api/admin/session/transmissions")
@@ -46451,11 +46548,15 @@ def admin_create_transmission(
     admin_notes: str | None = Form(None),
     publication_status: str = Form("pending"),
     public_visibility: str = Form("0"),
+    included_document_reference: list[str] = Form([]),
+    included_document_relationship_label: list[str] = Form([]),
+    included_document_public_note: list[str] = Form([]),
+    included_document_identifiers_text: str | None = Form(None),
 ):
     session = require_admin_session(request)
     conn = trm.get_db()
     try:
-        transmission = trm.create_transmission(
+        transmission = trm.create_transmission_with_document_attachments(
             conn,
             title=title,
             summary=summary,
@@ -46470,7 +46571,14 @@ def admin_create_transmission(
             admin_notes=admin_notes,
             publication_status=publication_status,
             public_visibility=public_visibility,
+            document_attachments=_transmission_document_attachment_inputs(
+                included_document_reference,
+                included_document_relationship_label,
+                included_document_public_note,
+                included_document_identifiers_text,
+            ),
             actor=_admin_session_actor(session),
+            root=intake_root(),
         )
     except ValueError as exc:
         conn.close()
