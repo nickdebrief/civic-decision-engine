@@ -46640,6 +46640,13 @@ function initializeTransmissionDocumentSelection() {{
     syncSearchResults();
     persistSelectedDocuments();
   }}
+  function persistSelectedDocumentEdit(event) {{
+    const target = event.target;
+    if (!target || !target.matches) return;
+    if (!target.matches('[data-selected-document-relationship-label], [data-selected-document-public-note]')) return;
+    captureSelectedFormState();
+    persistSelectedDocuments();
+  }}
   function documentFromCheckbox(checkbox) {{
     return {{
       reference: normalizedReference(checkbox.dataset.documentReference),
@@ -46761,13 +46768,11 @@ function initializeTransmissionDocumentSelection() {{
   if (createForm) {{
     createForm.addEventListener('submit', () => {{
       captureSelectedFormState();
-      try {{
-        window.sessionStorage.removeItem(storageKey);
-      }} catch (error) {{
-        return;
-      }}
+      persistSelectedDocuments();
     }});
   }}
+  list.addEventListener('input', persistSelectedDocumentEdit);
+  list.addEventListener('change', persistSelectedDocumentEdit);
   restoreSelectedDocuments();
   renderSelectedDocuments();
 }}
@@ -46918,7 +46923,7 @@ def admin_create_transmission(
     finally:
         if conn:
             conn.close()
-    return RedirectResponse(url=f"/admin/transmissions/{int(transmission['id'])}", status_code=303)
+    return RedirectResponse(url=f"/admin/transmissions/{int(transmission['id'])}?created=1", status_code=303)
 
 
 def _render_transmission_admin_detail(
@@ -46927,6 +46932,7 @@ def _render_transmission_admin_detail(
     history: list[dict[str, Any]],
     *,
     admin_session: dict[str, Any],
+    clear_intake_draft: bool = False,
 ) -> str:
     fields = (
         ("Reference", transmission.get("public_reference")),
@@ -46953,11 +46959,21 @@ def _render_transmission_admin_detail(
         f"<tr><td>{escape(str(item.get('timestamp') or ''))}</td><td>{escape(str(item.get('action_label') or item.get('action_type') or ''))}</td><td>{escape(str(item.get('actor') or ''))}</td><td>{escape(str(item.get('note') or ''))}</td></tr>"
         for item in history
     ) or '<tr><td colspan="4">No Transmission history is available.</td></tr>'
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Transmission Admin</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:14px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}.table-wrap{{overflow-x:auto}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/transmissions">Back to Transmission Management</a>{f' · <a href="/transmissions/{escape(str(transmission.get("public_reference") or ""))}">Open public Transmission</a>' if trm.public_transmission_is_eligible(transmission) else ''}</p><h1>Public Transmission</h1><p class="notice">The Transmission governs communication context. Included governed objects remain independently governed and are not stored inside the Transmission.</p><h2>Metadata</h2><table class="metadata"><tbody>{metadata_rows}</tbody></table><h2>Lifecycle</h2><form method="post" action="/api/admin/session/transmissions/{int(transmission['id'])}/status"><label>New lifecycle state<select name="new_status">{_transmission_status_options(str(transmission.get('publication_status') or 'pending'))}</select></label><label>Public visibility<select name="public_visibility"><option value="0"{" selected" if int(transmission.get('public_visibility') or 0) == 0 else ""}>Private</option><option value="1"{" selected" if int(transmission.get('public_visibility') or 0) == 1 else ""}>Public</option></select></label><label>Transition note<input name="note"></label><button type="submit">Update Transmission lifecycle</button></form><h2>Include governed public object</h2><form method="post" action="/api/admin/session/transmissions/{int(transmission['id'])}/attachments"><label>Object type<select name="object_type">{_transmission_object_type_options()}</select></label><label>Object reference<input name="object_reference" required placeholder="Document Identifier, record reference, association reference, or collection reference"></label><label>Relationship label<input name="relationship_label" placeholder="Transmitted object"></label><label>Public note<textarea name="public_note"></textarea></label><label>Display position<input name="position" type="number" min="1"></label><button type="submit">Include governed object</button></form><h2>Included governed objects</h2><div class="table-wrap"><table><thead><tr><th>Inclusion reference</th><th>Object type</th><th>Object title</th><th>Governed object reference</th><th>Relationship</th><th>State</th></tr></thead><tbody>{attachment_rows}</tbody></table></div><h2>Transmission history</h2><div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Action</th><th>Actor</th><th>Note</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    cleanup_script = (
+        """<script>
+try {
+  window.sessionStorage.removeItem('cde.transmissionIntake.selectedDocuments.v1');
+} catch (error) {
+}
+</script>"""
+        if clear_intake_draft
+        else ""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Transmission Admin</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:14px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}.table-wrap{{overflow-x:auto}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/transmissions">Back to Transmission Management</a>{f' · <a href="/transmissions/{escape(str(transmission.get("public_reference") or ""))}">Open public Transmission</a>' if trm.public_transmission_is_eligible(transmission) else ''}</p><h1>Public Transmission</h1><p class="notice">The Transmission governs communication context. Included governed objects remain independently governed and are not stored inside the Transmission.</p><h2>Metadata</h2><table class="metadata"><tbody>{metadata_rows}</tbody></table><h2>Lifecycle</h2><form method="post" action="/api/admin/session/transmissions/{int(transmission['id'])}/status"><label>New lifecycle state<select name="new_status">{_transmission_status_options(str(transmission.get('publication_status') or 'pending'))}</select></label><label>Public visibility<select name="public_visibility"><option value="0"{" selected" if int(transmission.get('public_visibility') or 0) == 0 else ""}>Private</option><option value="1"{" selected" if int(transmission.get('public_visibility') or 0) == 1 else ""}>Public</option></select></label><label>Transition note<input name="note"></label><button type="submit">Update Transmission lifecycle</button></form><h2>Include governed public object</h2><form method="post" action="/api/admin/session/transmissions/{int(transmission['id'])}/attachments"><label>Object type<select name="object_type">{_transmission_object_type_options()}</select></label><label>Object reference<input name="object_reference" required placeholder="Document Identifier, record reference, association reference, or collection reference"></label><label>Relationship label<input name="relationship_label" placeholder="Transmitted object"></label><label>Public note<textarea name="public_note"></textarea></label><label>Display position<input name="position" type="number" min="1"></label><button type="submit">Include governed object</button></form><h2>Included governed objects</h2><div class="table-wrap"><table><thead><tr><th>Inclusion reference</th><th>Object type</th><th>Object title</th><th>Governed object reference</th><th>Relationship</th><th>State</th></tr></thead><tbody>{attachment_rows}</tbody></table></div><h2>Transmission history</h2><div class="table-wrap"><table><thead><tr><th>Timestamp</th><th>Action</th><th>Actor</th><th>Note</th></tr></thead><tbody>{history_rows}</tbody></table></div></main>{cleanup_script}</body></html>"""
 
 
 @router.get("/admin/transmissions/{transmission_id}", response_class=HTMLResponse)
-def admin_transmission_detail_page(transmission_id: int, request: Request):
+def admin_transmission_detail_page(transmission_id: int, request: Request, created: str | None = None):
     session = require_admin_session(request)
     conn = trm.get_db()
     try:
@@ -46972,6 +46988,7 @@ def admin_transmission_detail_page(transmission_id: int, request: Request):
             attachments,
             history,
             admin_session=session,
+            clear_intake_draft=created == "1",
         )
     )
 

@@ -331,11 +331,28 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn("restoreSelectedDocuments();\n  renderSelectedDocuments();", content)
         self.assertIn("relationshipLabel: document.relationshipLabel || 'Transmitted document'", content)
         self.assertIn("publicNote: document.publicNote || ''", content)
+        self.assertIn("function persistSelectedDocumentEdit(event)", content)
+        self.assertIn("list.addEventListener('input', persistSelectedDocumentEdit)", content)
+        self.assertIn("list.addEventListener('change', persistSelectedDocumentEdit)", content)
         self.assertIn("syncSearchResults();", content)
         self.assertIn("checkbox.disabled = isSelected", content)
         self.assertIn("addHiddenField(item, 'included_document_reference', selectedDocument.reference)", content)
         self.assertIn("count.textContent = selectedDocuments.length === 1", content)
         self.assertIn("createForm.addEventListener('submit'", content)
+        self.assertIn("persistSelectedDocuments();", content)
+        self.assertNotIn("window.sessionStorage.removeItem(storageKey)", content)
+
+    def test_transmission_intake_draft_is_cleared_only_after_success_page(self):
+        request = self._admin_request()
+        direct_detail = admin_session.admin_transmission_detail_page(self.transmission["id"], request).content
+        created_detail = admin_session.admin_transmission_detail_page(
+            self.transmission["id"],
+            request,
+            created="1",
+        ).content
+
+        self.assertNotIn("window.sessionStorage.removeItem('cde.transmissionIntake.selectedDocuments.v1')", direct_detail)
+        self.assertIn("window.sessionStorage.removeItem('cde.transmissionIntake.selectedDocuments.v1')", created_detail)
 
     def test_pasted_document_lookup_resolves_published_metadata_in_order(self):
         second = self._published_pdf(
@@ -443,7 +460,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             included_document_public_note=["Selected during intake."],
             included_document_identifiers_text=None,
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
@@ -540,7 +559,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             ],
             included_document_identifiers_text="DOC-2099-999999",
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
@@ -584,7 +605,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
                 f"{second['document_identifier']}"
             ),
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)

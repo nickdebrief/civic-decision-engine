@@ -118,6 +118,36 @@ The non-JavaScript fallback remains available through the `noscript` multiline
 identifier field. Server-side creation remains authoritative in both enhanced
 and fallback paths.
 
+## Draft Lifecycle Persistence
+
+The repeated-search correction introduced session-scoped draft storage, but the
+initial lifecycle cleared that storage when the administrator submitted the
+Create Transmission form. That was too early: if server-side validation rejected
+the request, the administrator's selected Documents, relationship labels, and
+public notes had already been discarded by the browser.
+
+The intake form now persists the current selected-Document draft while the
+request is submitted. Validation failures therefore leave the session-scoped
+draft available for restoration when the administrator returns to the intake
+form. Draft storage is cleared only after confirmed successful Transmission
+creation, on the redirected Transmission Management detail page.
+
+Relationship labels and public notes are also persisted continuously as the
+administrator edits selected cards. The selected Documents, display order,
+relationship labels, public notes, selected count, and hidden canonical
+submission fields are restored after a refresh from the same
+`selectedDocuments` collection.
+
+Manual verification covers:
+
+- adding two Documents and refreshing, with both selected Documents restored;
+- editing a relationship label and public note, then refreshing, with both
+  edits restored;
+- submitting an invalid Transmission, with the draft still available after
+  validation failure;
+- successfully creating a Transmission, then opening a new intake form with
+  zero selected Documents.
+
 ## Bulk-Control Functional Fix
 
 The deployed bulk controls rendered correctly but did not initialize. The
@@ -213,6 +243,10 @@ persistence in session-scoped browser storage, restoration before card
 rendering, preservation of relationship labels and public notes, hidden-field
 reconstruction, selected-count reconstruction, and duplicate-prevention
 resynchronisation after search results are replaced.
+
+Draft lifecycle tests cover continuous relationship-label and public-note
+persistence, submit-time draft retention for validation failure, and
+success-page cleanup after confirmed Transmission creation.
 
 Manual smoke-test coverage verifies that checking multiple search results and
 using Add Selected Documents updates the selected count and hidden canonical
