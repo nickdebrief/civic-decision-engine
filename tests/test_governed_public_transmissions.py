@@ -203,21 +203,44 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             conn.close()
 
     def test_transmission_intake_page_searches_and_selects_governed_documents(self):
+        second = self._published_pdf(
+            title="Brendan Conroy handwritten note",
+            reference_identifier="NM-TRM-BRENDAN-NOTE",
+            suffix=b"brendan-note",
+            uploaded_at="2026-07-24T08:21:00Z",
+        )
+        third = self._published_pdf(
+            title="Brendan Conroy medical report",
+            reference_identifier="NM-TRM-BRENDAN-REPORT",
+            suffix=b"brendan-report",
+            uploaded_at="2026-07-24T08:22:00Z",
+        )
         content = admin_session.admin_transmissions_page(
             self._admin_request(),
-            document_search="Woodstock",
+            document_search="Brendan Conroy",
         ).content
 
         self.assertIn("Included Governed Documents", content)
         self.assertIn("Search published documents", content)
-        self.assertIn(self.fixture.document["document_identifier"], content)
-        self.assertIn("Add document", content)
+        self.assertIn(second["document_identifier"], content)
+        self.assertIn(third["document_identifier"], content)
+        self.assertIn("Brendan Conroy medical report fixture.", content)
+        self.assertIn('type="checkbox"', content)
+        self.assertIn("transmission-document-select", content)
+        self.assertIn("Add Selected Documents", content)
+        self.assertIn("setSearchResultDisabled(reference, true)", content)
+        self.assertIn("selected.has(reference)", content)
+        self.assertIn("Publication status", content)
+        self.assertIn("Published", content)
         self.assertIn("Selected Documents", content)
         self.assertIn("0 documents selected", content)
         self.assertIn('id="selected-documents-count"', content)
         self.assertIn('aria-live="polite"', content)
         self.assertIn("1 document selected", content)
         self.assertIn("documents selected", content)
+        self.assertIn("Paste multiple Document Identifiers", content)
+        self.assertIn("Add pasted identifiers", content)
+        self.assertIn("pasted identifiers added", content)
         self.assertIn("Document Identifiers — JavaScript unavailable", content)
         self.assertIn("<noscript>", content)
         self.assertIn("included_document_identifiers_text", content)
@@ -225,6 +248,18 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn("Remove ${escapeHtml(reference)} from selected Documents", content)
         self.assertNotIn("Document Identifiers for non-JavaScript entry", content)
         self.assertIn("A Transmission references these Documents through governed inclusion relationships", content)
+
+        title_search = admin_session.admin_transmissions_page(
+            self._admin_request(),
+            document_search="handwritten note",
+        ).content
+        self.assertIn(second["document_identifier"], title_search)
+
+        identifier_search = admin_session.admin_transmissions_page(
+            self._admin_request(),
+            document_search=third["document_identifier"],
+        ).content
+        self.assertIn(third["document_identifier"], identifier_search)
 
     def test_selected_document_input_parser_uses_one_canonical_source(self):
         attachments = admin_session._transmission_document_attachment_inputs(
@@ -348,6 +383,56 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertEqual(
             [item["action_type"] for item in history],
             ["created", "attachment_added", "attachment_added"],
+        )
+
+    def test_bulk_selected_documents_submit_once_and_preserve_order(self):
+        second = self._published_pdf(
+            title="Bulk selected governed document",
+            reference_identifier="NM-TRM-DOC-BULK",
+            suffix=b"bulk",
+            uploaded_at="2026-07-24T08:24:00Z",
+        )
+        response = admin_session.admin_create_transmission(
+            request=self._admin_request(),
+            title="Bulk selected transmission",
+            summary="Transmission created from a bulk-selected checkbox result set.",
+            sender="Nick Moloney",
+            recipient="Medical Council of Ireland",
+            transmission_date="2026-07-24",
+            communication_method="email",
+            subject="Bulk governed documents",
+            covering_message="Please find the selected governed document references.",
+            publication_status="pending",
+            public_visibility="0",
+            included_document_reference=[
+                second["document_identifier"],
+                self.fixture.document["document_identifier"],
+            ],
+            included_document_relationship_label=[
+                "Second selected first",
+                "Fixture selected second",
+            ],
+            included_document_public_note=[
+                "Second note.",
+                "Fixture note.",
+            ],
+            included_document_identifiers_text="DOC-2099-999999",
+        )
+        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        conn = self._conn()
+        try:
+            attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
+        finally:
+            conn.close()
+
+        self.assertEqual(
+            [item["object_reference"] for item in attachments],
+            [second["intake_id"], self.fixture.document["intake_id"]],
+        )
+        self.assertEqual([item["position"] for item in attachments], [1, 2])
+        self.assertEqual(
+            [item["relationship_label"] for item in attachments],
+            ["Second selected first", "Fixture selected second"],
         )
 
     def test_no_javascript_multiline_fallback_creates_documents_in_order(self):

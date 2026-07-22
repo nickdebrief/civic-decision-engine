@@ -46443,11 +46443,10 @@ def _render_transmission_document_search(document_search: str | None = None) -> 
     if query and documents:
         rows = "".join(
             f"""<article class="transmission-document-result">
-              <h4>{escape(str(item.get('document_identifier') or '—'))}</h4>
+              <label class="transmission-document-choice"><input type="checkbox" class="transmission-document-select" value="{escape(str(item.get('document_identifier') or ''))}" data-document-reference="{escape(str(item.get('document_identifier') or ''))}" data-document-title="{escape(str(item.get('title') or 'Untitled document'))}" data-document-format="{escape(document_type_label(item.get('document_type')))}"> <span>{escape(str(item.get('document_identifier') or '—'))}</span></label>
               <p><strong>{escape(str(item.get('title') or 'Untitled document'))}</strong></p>
               <p>{escape(str(item.get('description') or ''))}</p>
-              <dl><dt>Optional Reference Identifier</dt><dd>{escape(str(item.get('reference_identifier') or 'Not provided'))}</dd><dt>Format</dt><dd>{escape(document_type_label(item.get('document_type')))}</dd></dl>
-              <button type="button" class="transmission-document-add" data-document-reference="{escape(str(item.get('document_identifier') or ''))}" data-document-title="{escape(str(item.get('title') or 'Untitled document'))}" data-document-format="{escape(document_type_label(item.get('document_type')))}">Add document</button>
+              <dl><dt>Optional Reference Identifier</dt><dd>{escape(str(item.get('reference_identifier') or 'Not provided'))}</dd><dt>Format</dt><dd>{escape(document_type_label(item.get('document_type')))}</dd><dt>Publication status</dt><dd>Published</dd></dl>
             </article>"""
             for item in documents
         )
@@ -46455,7 +46454,8 @@ def _render_transmission_document_search(document_search: str | None = None) -> 
         rows = '<p class="notice">No published governed Documents matched this search.</p>'
     else:
         rows = '<p class="notice">Search by Document Identifier, title, filename, institution, keywords, or other published document metadata.</p>'
-    return f"""<section class="transmission-document-search" aria-labelledby="included-documents-heading"><h3 id="included-documents-heading">Included Governed Documents</h3><p class="notice">Select existing Published Documents by their immutable CDE Document Identifier. A Transmission references these Documents through governed inclusion relationships; it does not create, duplicate, publish, or alter them.</p><form id="transmission-document-search-form" method="get" action="/admin/transmissions"><label>Search published documents<input name="document_search" value="{escape(query)}" placeholder="DOC-2026-000064, title, source, keyword, or filename"></label><button type="submit">Search documents</button></form><div class="transmission-document-results" aria-label="Published document search results">{rows}</div></section>"""
+    bulk_action = '<button type="button" id="transmission-document-add-selected">Add Selected Documents</button>' if query and documents else ""
+    return f"""<section class="transmission-document-search" aria-labelledby="included-documents-heading"><h3 id="included-documents-heading">Included Governed Documents</h3><p class="notice">Select existing Published Documents by their immutable CDE Document Identifier. A Transmission references these Documents through governed inclusion relationships; it does not create, duplicate, publish, or alter them.</p><form id="transmission-document-search-form" method="get" action="/admin/transmissions"><label>Search published documents<input name="document_search" value="{escape(query)}" placeholder="DOC-2026-000064, title, source, keyword, or filename"></label><button type="submit">Search documents</button></form><div class="transmission-document-results" aria-label="Published document search results">{rows}</div>{bulk_action}</section>"""
 
 
 def _render_transmission_admin_index(
@@ -46481,14 +46481,27 @@ def _render_transmission_admin_index(
     notice = f'<p class="notice" role="status">{escape(message)}</p>' if message else ""
     today = datetime.now(timezone.utc).date().isoformat()
     document_search_section = _render_transmission_document_search(document_search)
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transmission Intake</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px;margin:18px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}button.secondary{{background:#fff;color:#245d61;border:1px solid #245d61}}.table-wrap{{overflow-x:auto}}table{{width:100%;min-width:980px;border-collapse:collapse;background:#fff}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.transmission-reference{{font-family:ui-monospace,monospace;min-width:150px}}.transmission-document-results{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}}.transmission-document-result,.selected-document{{background:#fff;border:1px solid #d8d4ca;padding:14px;overflow-wrap:anywhere}}.transmission-document-result h4,.selected-document h4{{margin:.1rem 0 .35rem;font-family:ui-monospace,monospace}}.transmission-document-result dl{{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 8px}}.transmission-document-result dt{{font-weight:700;color:#555}}.transmission-document-result dd{{margin:0}}.selected-documents{{display:grid;gap:12px;padding-left:1.4rem}}.selected-document label{{margin-top:10px}}.selected-document-count{{font-weight:700;color:#143a52}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}@media(max-width:760px){{.transmission-document-results{{grid-template-columns:1fr}}table{{min-width:860px}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Transmission Intake</h1><p class="notice">Documents preserve content. Transmissions preserve context. Creating a Transmission does not create, duplicate, publish, or alter any included governed object.</p>{notice}<section id="new-transmission"><h2>Create Public Transmission</h2>{document_search_section}<form method="post" action="/api/admin/session/transmissions" id="create-transmission-form"><label>Title<input name="title" required></label><label>Summary<textarea name="summary" required></textarea></label><label>Sender<input name="sender" required></label><label>Recipient<input name="recipient" required></label><label>Transmission date<input name="transmission_date" type="date" required value="{today}"></label><label>Communication method<select name="communication_method" required>{_transmission_method_options("email")}</select></label><label>Subject<input name="subject"></label><label>Covering message<textarea name="covering_message"></textarea></label><section aria-labelledby="selected-documents-heading"><h3 id="selected-documents-heading">Selected Documents</h3><p class="field-help">Selected Documents are the source of truth when JavaScript is available. They are included as separate governed relationships in the order shown. Relationship label defaults to Transmitted document.</p><p id="selected-documents-count" class="selected-document-count" role="status" aria-live="polite">0 documents selected</p><ol id="selected-documents" class="selected-documents"><li class="notice" id="selected-documents-empty">No governed Documents selected yet.</li></ol><noscript><label>Document Identifiers — JavaScript unavailable<textarea name="included_document_identifiers_text" placeholder="DOC-2026-000064&#10;DOC-2026-000067"></textarea><span class="field-help">Enter one existing Published Document Identifier per line. Per-document relationship labels and public notes can be edited after creation.</span></label></noscript></section><label>External reference<input name="external_reference"></label><label>Transmission identifier<input name="transmission_identifier"></label><label>Administrative notes<textarea name="admin_notes"></textarea></label><label>Initial lifecycle state<select name="publication_status">{_transmission_status_options("pending")}</select></label><label>Public visibility<select name="public_visibility"><option value="0">Private</option><option value="1">Public</option></select></label><button type="submit">Create Transmission</button></form></section><section id="transmission-management"><h2>Transmission Management</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Title</th><th>Sender</th><th>Recipient</th><th>Method</th><th>Status</th><th>Visibility</th><th>Transmission date</th></tr></thead><tbody>{rows}</tbody></table></div></section><script>
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Transmission Intake</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px;margin:18px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}input[type="checkbox"]{{width:auto}}textarea{{min-height:100px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}button.secondary{{background:#fff;color:#245d61;border:1px solid #245d61}}.table-wrap{{overflow-x:auto}}table{{width:100%;min-width:980px;border-collapse:collapse;background:#fff}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:anywhere}}.transmission-reference{{font-family:ui-monospace,monospace;min-width:150px}}.transmission-document-results{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}}.transmission-document-result,.selected-document,.bulk-document-paste{{background:#fff;border:1px solid #d8d4ca;padding:14px;overflow-wrap:anywhere}}.transmission-document-choice{{display:flex;grid-template-columns:none;align-items:flex-start;gap:8px;color:#143a52;font:700 .95rem ui-monospace,monospace;text-transform:none}}.transmission-document-choice input:disabled + span{{text-decoration:line-through;color:#777}}.transmission-document-result h4,.selected-document h4{{margin:.1rem 0 .35rem;font-family:ui-monospace,monospace}}.transmission-document-result dl{{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 8px}}.transmission-document-result dt{{font-weight:700;color:#555}}.transmission-document-result dd{{margin:0}}.selected-documents{{display:grid;gap:12px;padding-left:1.4rem}}.selected-document label{{margin-top:10px}}.selected-document-count{{font-weight:700;color:#143a52}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}@media(max-width:760px){{.transmission-document-results{{grid-template-columns:1fr}}table{{min-width:860px}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Transmission Intake</h1><p class="notice">Documents preserve content. Transmissions preserve context. Creating a Transmission does not create, duplicate, publish, or alter any included governed object.</p>{notice}<section id="new-transmission"><h2>Create Public Transmission</h2>{document_search_section}<form method="post" action="/api/admin/session/transmissions" id="create-transmission-form"><label>Title<input name="title" required></label><label>Summary<textarea name="summary" required></textarea></label><label>Sender<input name="sender" required></label><label>Recipient<input name="recipient" required></label><label>Transmission date<input name="transmission_date" type="date" required value="{today}"></label><label>Communication method<select name="communication_method" required>{_transmission_method_options("email")}</select></label><label>Subject<input name="subject"></label><label>Covering message<textarea name="covering_message"></textarea></label><section aria-labelledby="selected-documents-heading"><h3 id="selected-documents-heading">Selected Documents</h3><p class="field-help">Selected Documents are the source of truth when JavaScript is available. They are included as separate governed relationships in the order shown. Relationship label defaults to Transmitted document.</p><p id="selected-documents-count" class="selected-document-count" role="status" aria-live="polite">0 documents selected</p><div class="bulk-document-paste"><label>Paste multiple Document Identifiers<textarea id="bulk-document-identifiers" placeholder="DOC-2026-000064&#10;DOC-2026-000067&#10;DOC-2026-000022"></textarea><span class="field-help">Optional enhancement: paste one existing Published Document Identifier per line, then add them to the selected list. Server-side validation still confirms every Document is eligible when the Transmission is created.</span></label><button type="button" class="secondary" id="add-pasted-documents">Add pasted identifiers</button><p id="bulk-document-paste-status" class="field-help" role="status" aria-live="polite"></p></div><ol id="selected-documents" class="selected-documents"><li class="notice" id="selected-documents-empty">No governed Documents selected yet.</li></ol><noscript><label>Document Identifiers — JavaScript unavailable<textarea name="included_document_identifiers_text" placeholder="DOC-2026-000064&#10;DOC-2026-000067"></textarea><span class="field-help">Enter one existing Published Document Identifier per line. Per-document relationship labels and public notes can be edited after creation.</span></label></noscript></section><label>External reference<input name="external_reference"></label><label>Transmission identifier<input name="transmission_identifier"></label><label>Administrative notes<textarea name="admin_notes"></textarea></label><label>Initial lifecycle state<select name="publication_status">{_transmission_status_options("pending")}</select></label><label>Public visibility<select name="public_visibility"><option value="0">Private</option><option value="1">Public</option></select></label><button type="submit">Create Transmission</button></form></section><section id="transmission-management"><h2>Transmission Management</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Title</th><th>Sender</th><th>Recipient</th><th>Method</th><th>Status</th><th>Visibility</th><th>Transmission date</th></tr></thead><tbody>{rows}</tbody></table></div></section><script>
 (() => {{
   const list = document.getElementById('selected-documents');
   const empty = document.getElementById('selected-documents-empty');
   const count = document.getElementById('selected-documents-count');
+  const addSelected = document.getElementById('transmission-document-add-selected');
+  const pasteInput = document.getElementById('bulk-document-identifiers');
+  const addPasted = document.getElementById('add-pasted-documents');
+  const pasteStatus = document.getElementById('bulk-document-paste-status');
   const selected = new Set();
   function escapeHtml(value) {{
     return String(value).replace(/[&<>"']/g, (char) => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[char]));
+  }}
+  function searchCheckboxes(reference) {{
+    return Array.from(document.querySelectorAll('.transmission-document-select')).filter((checkbox) => checkbox.dataset.documentReference === reference);
+  }}
+  function setSearchResultDisabled(reference, disabled) {{
+    searchCheckboxes(reference).forEach((checkbox) => {{
+      checkbox.disabled = disabled;
+      checkbox.checked = false;
+    }});
   }}
   function refreshEmpty() {{
     if (empty) {{
@@ -46498,25 +46511,45 @@ def _render_transmission_admin_index(
       count.textContent = selected.size === 1 ? '1 document selected' : `${{selected.size}} documents selected`;
     }}
   }}
-  function addDocument(button) {{
-    const reference = button.dataset.documentReference || '';
+  function addDocument(reference, title, format) {{
     if (!reference || selected.has(reference)) return;
     selected.add(reference);
+    setSearchResultDisabled(reference, true);
     const item = document.createElement('li');
     item.className = 'selected-document';
     item.dataset.documentReference = reference;
-    item.innerHTML = `<h4>${{escapeHtml(reference)}}</h4><p><strong>${{escapeHtml(button.dataset.documentTitle || 'Published Document')}}</strong></p><p>${{escapeHtml(button.dataset.documentFormat || '')}}</p><input type="hidden" name="included_document_reference" value="${{escapeHtml(reference)}}"><label>Relationship label<input name="included_document_relationship_label" value="Transmitted document"></label><label>Public note<textarea name="included_document_public_note"></textarea></label><button type="button" class="secondary selected-document-remove" aria-label="Remove ${{escapeHtml(reference)}} from selected Documents">Remove</button>`;
+    item.innerHTML = `<h4>${{escapeHtml(reference)}}</h4><p><strong>${{escapeHtml(title || 'Published Document')}}</strong></p><p>${{escapeHtml(format || 'Identifier pasted; details verified on submission')}}</p><input type="hidden" name="included_document_reference" value="${{escapeHtml(reference)}}"><label>Relationship label<input name="included_document_relationship_label" value="Transmitted document"></label><label>Public note<textarea name="included_document_public_note"></textarea></label><button type="button" class="secondary selected-document-remove" aria-label="Remove ${{escapeHtml(reference)}} from selected Documents">Remove</button>`;
     item.querySelector('.selected-document-remove').addEventListener('click', () => {{
       selected.delete(reference);
+      setSearchResultDisabled(reference, false);
       item.remove();
       refreshEmpty();
     }});
     list.appendChild(item);
     refreshEmpty();
   }}
-  document.querySelectorAll('.transmission-document-add').forEach((button) => {{
-    button.addEventListener('click', () => addDocument(button));
-  }});
+  if (addSelected) {{
+    addSelected.addEventListener('click', () => {{
+      document.querySelectorAll('.transmission-document-select:checked:not(:disabled)').forEach((checkbox) => {{
+        addDocument(checkbox.dataset.documentReference || '', checkbox.dataset.documentTitle || '', checkbox.dataset.documentFormat || '');
+      }});
+    }});
+  }}
+  if (addPasted && pasteInput) {{
+    addPasted.addEventListener('click', () => {{
+      const references = pasteInput.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+      let added = 0;
+      references.forEach((reference) => {{
+        if (!selected.has(reference)) {{
+          addDocument(reference, `Document ${{reference}}`, 'Identifier pasted; details verified on submission');
+          added += 1;
+        }}
+      }});
+      if (pasteStatus) {{
+        pasteStatus.textContent = added === 1 ? '1 pasted identifier added.' : `${{added}} pasted identifiers added.`;
+      }}
+    }});
+  }}
   refreshEmpty();
 }})();
 </script></main></body></html>"""
