@@ -227,9 +227,24 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn("Brendan Conroy medical report fixture.", content)
         self.assertIn('type="checkbox"', content)
         self.assertIn("transmission-document-select", content)
+        self.assertIn("transmission-document-search-result", content)
+        self.assertIn("data-document-summary", content)
         self.assertIn("Add Selected Documents", content)
-        self.assertIn("setSearchResultDisabled(reference, true)", content)
-        self.assertIn("selected.has(reference)", content)
+        self.assertIn('id="transmission-document-add-selected"', content)
+        self.assertIn('id="transmission-document-add-pasted"', content)
+        self.assertIn('button type="button"', content)
+        self.assertIn("selectedDocuments", content)
+        self.assertIn("renderSelectedDocuments", content)
+        self.assertIn("included_document_reference", content)
+        self.assertIn("DOMContentLoaded", content)
+        self.assertIn("initializeTransmissionDocumentSelection", content)
+        self.assertIn("transmission-document-select:checked:not(:disabled)", content)
+        self.assertIn("/api/admin/session/transmissions/document-lookup", content)
+        self.assertIn("String.fromCharCode(10)", content)
+        self.assertIn("payload.documents", content)
+        self.assertIn("Skipped duplicate identifiers", content)
+        self.assertNotIn("add-pasted-documents", content)
+        self.assertNotIn("Identifier pasted; details verified on submission')</p>", content)
         self.assertIn("Publication status", content)
         self.assertIn("Published", content)
         self.assertIn("Selected Documents", content)
@@ -240,12 +255,12 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn("documents selected", content)
         self.assertIn("Paste multiple Document Identifiers", content)
         self.assertIn("Add pasted identifiers", content)
-        self.assertIn("pasted identifiers added", content)
+        self.assertIn("pasted Documents added", content)
         self.assertIn("Document Identifiers — JavaScript unavailable", content)
         self.assertIn("<noscript>", content)
         self.assertIn("included_document_identifiers_text", content)
         self.assertIn("Remove", content)
-        self.assertIn("Remove ${escapeHtml(reference)} from selected Documents", content)
+        self.assertIn("Remove ${selectedDocument.reference} from selected Documents", content)
         self.assertNotIn("Document Identifiers for non-JavaScript entry", content)
         self.assertIn("A Transmission references these Documents through governed inclusion relationships", content)
 
@@ -260,6 +275,52 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             document_search=third["document_identifier"],
         ).content
         self.assertIn(third["document_identifier"], identifier_search)
+
+    def test_pasted_document_lookup_resolves_published_metadata_in_order(self):
+        second = self._published_pdf(
+            title="Lookup pasted governed document",
+            reference_identifier="NM-TRM-LOOKUP",
+            suffix=b"lookup",
+            uploaded_at="2026-07-24T08:23:00Z",
+        )
+        unpublished = store_pending_document(
+            data=b"%PDF-1.7\npending lookup\n%%EOF\n",
+            original_filename="pending-lookup.pdf",
+            content_type="application/pdf",
+            title="Pending lookup document",
+            institution_source="Medical Council of Ireland",
+            document_date="2026-07-24",
+            category="Correspondence",
+            description="Pending only.",
+            visibility="private",
+            notes="Private note.",
+            reference_identifier="NM-TRM-PENDING-LOOKUP",
+            actor="admin-user",
+            uploaded_at="2026-07-24T08:41:00Z",
+            root=self.fixture.root,
+        )
+
+        payload = admin_session._transmission_document_lookup_payload(
+            "\n".join(
+                [
+                    second["document_identifier"],
+                    self.fixture.document["document_identifier"],
+                    second["document_identifier"],
+                    "DOC-2099-999999",
+                    unpublished["document_identifier"],
+                ]
+            )
+        )
+
+        self.assertEqual(
+            [item["document_reference"] for item in payload["documents"]],
+            [second["document_identifier"], self.fixture.document["document_identifier"]],
+        )
+        self.assertEqual(payload["documents"][0]["title"], "Lookup pasted governed document")
+        self.assertEqual(payload["documents"][0]["format"], "PDF")
+        self.assertIn(second["document_identifier"], payload["duplicate_identifiers"])
+        self.assertIn("DOC-2099-999999", payload["invalid_identifiers"])
+        self.assertIn(unpublished["document_identifier"], payload["invalid_identifiers"])
 
     def test_selected_document_input_parser_uses_one_canonical_source(self):
         attachments = admin_session._transmission_document_attachment_inputs(
