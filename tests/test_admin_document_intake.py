@@ -548,7 +548,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertIn(long_actor, content)
         self.assertIn(long_note, content)
         self.assertIn(f'<td class="status-history-actor history-actor">{long_actor}</td>', content)
-        self.assertIn("overflow-wrap:anywhere", content)
+        self.assertIn("overflow-wrap:break-word", content)
+        self.assertIn("word-break:normal", content)
 
     def test_direct_helper_historical_default_actor_remains_unchanged(self):
         item = store_pending_document(

@@ -80,6 +80,19 @@ PUBLIC_NAVIGATION_CSS = """
 @media(max-width:640px){.public-site-identity{align-items:flex-start}.public-site-meta{display:grid;gap:3px}.public-primary-navigation{gap:8px 12px}.public-breadcrumbs{font-size:.82rem}.object-type-badge{white-space:normal}}
 """
 
+PUBLIC_GOVERNANCE_TABLE_CSS = """
+.governance-table-wrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.governance-table{width:100%;border-collapse:collapse;background:#fff;table-layout:auto}
+.governance-table--dense{min-width:max-content}
+.governance-table th{background:#143a52;color:#fff;text-align:left;white-space:nowrap}
+.governance-table th,.governance-table td{padding:10px;border:1px solid #e1dfd8;vertical-align:top;word-break:normal}
+.table-cell--compact,.table-cell--identifier,.table-cell--label,.table-cell--timestamp,.table-cell--action{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+.table-cell--identifier{font-family:ui-monospace,monospace}
+.table-cell--content,.table-cell--note{white-space:normal;overflow-wrap:break-word;word-break:normal}
+.table-cell--note{color:#555}
+.table-cell--empty{text-align:center;color:#555;padding:18px}
+"""
+
 
 def sanitize_archive_return(value: object | None) -> str:
     raw = str(value or "").strip()

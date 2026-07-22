@@ -12,6 +12,7 @@ install_fastapi_stubs()
 
 from api import archive_collections as ac
 from api import document_intake_corrections as dic
+from api import public_transmissions as trm
 from api.routes import admin_session
 
 
@@ -37,10 +38,11 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
             clear=False,
         )
         self.env.start()
-        self.originals = (admin_session.DB_PATH, dic.DB_PATH, ac.DB_PATH)
+        self.originals = (admin_session.DB_PATH, dic.DB_PATH, ac.DB_PATH, trm.DB_PATH)
         admin_session.DB_PATH = self.db_path
         dic.DB_PATH = self.db_path
         ac.DB_PATH = self.db_path
+        trm.DB_PATH = self.db_path
         self.request = FakeRequest(
             cookies={
                 admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session(
@@ -50,7 +52,7 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
         )
 
     def tearDown(self):
-        admin_session.DB_PATH, dic.DB_PATH, ac.DB_PATH = self.originals
+        admin_session.DB_PATH, dic.DB_PATH, ac.DB_PATH, trm.DB_PATH = self.originals
         self.env.stop()
         self.temp_dir.cleanup()
 
@@ -149,6 +151,27 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
                 date_to="2026-07-15",
                 is_public=False,
                 actor="admin-user",
+            )
+        finally:
+            conn.close()
+
+    def _create_transmission(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            trm.ensure_transmission_tables(conn)
+            return trm.create_transmission(
+                conn,
+                title="Medical Council exchange with a long table title",
+                summary="Administrative transmission row for readability testing.",
+                sender="Nick Moloney",
+                recipient="Medical Council of Ireland",
+                transmission_date="2026-07-24",
+                communication_method="secure_exchange",
+                public_visibility=False,
+                publication_status="pending",
+                actor="admin-user",
+                created_at="2026-07-24T10:00:00Z",
             )
         finally:
             conn.close()
@@ -258,6 +281,27 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
         self.assertIn("collection-history-note col-note", detail)
         self.assertIn('data-readability-class="history-state-details"', detail)
         self.assertIn("<summary>State details</summary>", detail)
+
+    def test_transmission_management_and_detail_use_readable_governance_tables(self):
+        transmission = self._create_transmission()
+        index = admin_session.admin_transmissions_page(self.request).content
+        self.assertIn('aria-label="Transmission Management table"', index)
+        self.assertIn("transmission-management-table admin-data-table", index)
+        self.assertIn("transmission-reference col-reference table-cell--identifier", index)
+        self.assertIn("transmission-title col-title table-cell--content", index)
+        self.assertIn("transmission-method col-category table-cell--label", index)
+        self.assertIn("transmission-date col-date table-cell--compact", index)
+        self.assertIn(transmission["public_reference"], index)
+
+        detail = admin_session.admin_transmission_detail_page(
+            transmission["id"], self.request
+        ).content
+        self.assertIn('aria-label="Included governed objects table"', detail)
+        self.assertIn("transmission-attachments-admin-table admin-data-table", detail)
+        self.assertIn('aria-label="Transmission history table"', detail)
+        self.assertIn("transmission-history-table admin-data-table", detail)
+        self.assertIn("transmission-history-note col-note table-cell--note", detail)
+        self.assertNotIn("word-break:break-all", detail)
 
     def test_administrative_audit_keeps_existing_events_with_shared_hooks(self):
         item = self._store_document()
