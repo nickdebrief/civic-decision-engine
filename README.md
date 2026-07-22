@@ -5,10 +5,9 @@
 
 <p align="center">
   <img
-    src="docs/assets/cde-v13-seal.svg"
+    src="docs/assets/cde-v13-seal.png"
     alt="Civic Decision Engine v13 Platform Release seal"
-    width="180"
-  >
+    width="180">
 </p>
 
 An open, deterministic framework for evaluating visible civic records and record-derived administrative outputs through inspectable evidence relationships, dependency mappings, pathway stability analysis, and reproducible report generation.
