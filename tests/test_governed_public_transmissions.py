@@ -231,14 +231,29 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
         self.assertIn("data-document-summary", content)
         self.assertIn("Add Selected Documents", content)
         self.assertIn('id="transmission-document-add-selected"', content)
+        self.assertIn('id="transmission-document-search-form"', content)
+        self.assertIn('id="transmission-document-search-input"', content)
+        self.assertIn('id="transmission-document-results"', content)
+        self.assertIn('id="transmission-document-bulk-actions"', content)
+        self.assertIn('id="transmission-document-search-status"', content)
+        self.assertIn('method="get" action="/admin/transmissions"', content)
         self.assertIn('id="transmission-document-add-pasted"', content)
         self.assertIn('button type="button"', content)
         self.assertIn("selectedDocuments", content)
+        self.assertIn("cde.transmissionIntake.selectedDocuments.v1", content)
+        self.assertIn("restoreSelectedDocuments", content)
+        self.assertIn("persistSelectedDocuments", content)
         self.assertIn("renderSelectedDocuments", content)
         self.assertIn("included_document_reference", content)
         self.assertIn("DOMContentLoaded", content)
         self.assertIn("initializeTransmissionDocumentSelection", content)
         self.assertIn("transmission-document-select:checked:not(:disabled)", content)
+        self.assertIn("/api/admin/session/transmissions/document-search", content)
+        self.assertIn("event.preventDefault()", content)
+        self.assertIn("history.replaceState", content)
+        self.assertIn("searchResults.innerHTML", content)
+        self.assertIn("searchBulkActions.innerHTML", content)
+        self.assertIn("Could not search Published Documents without reloading", content)
         self.assertIn("/api/admin/session/transmissions/document-lookup", content)
         self.assertIn("String.fromCharCode(10)", content)
         self.assertIn("payload.documents", content)
@@ -275,6 +290,69 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             document_search=third["document_identifier"],
         ).content
         self.assertIn(third["document_identifier"], identifier_search)
+
+    def test_transmission_document_search_endpoint_returns_results_without_page_reload(self):
+        second = self._published_pdf(
+            title="Async search retained first selection",
+            reference_identifier="NM-TRM-ASYNC-ONE",
+            suffix=b"async-one",
+            uploaded_at="2026-07-24T08:23:00Z",
+        )
+        third = self._published_pdf(
+            title="Async search retained second selection",
+            reference_identifier="NM-TRM-ASYNC-TWO",
+            suffix=b"async-two",
+            uploaded_at="2026-07-24T08:24:00Z",
+        )
+
+        response = admin_session.admin_transmission_document_search(
+            self._admin_request(),
+            document_search="Async search retained",
+        )
+        payload = response.content
+
+        self.assertEqual(payload["result_count"], 2)
+        self.assertIn(second["document_identifier"], payload["results_html"])
+        self.assertIn(third["document_identifier"], payload["results_html"])
+        self.assertIn("transmission-document-search-result", payload["results_html"])
+        self.assertIn("Add Selected Documents", payload["bulk_action_html"])
+        self.assertIn("2 published Documents matched this search.", payload["status"])
+
+    def test_selected_documents_are_restored_after_repeated_search_navigation(self):
+        content = admin_session.admin_transmissions_page(
+            self._admin_request(),
+            document_search=self.fixture.document["document_identifier"],
+        ).content
+
+        self.assertIn("window.sessionStorage.setItem(storageKey", content)
+        self.assertIn("window.sessionStorage.getItem(storageKey)", content)
+        self.assertIn("restoreSelectedDocuments();", content)
+        self.assertIn("renderSelectedDocuments();", content)
+        self.assertIn("restoreSelectedDocuments();\n  renderSelectedDocuments();", content)
+        self.assertIn("relationshipLabel: document.relationshipLabel || 'Transmitted document'", content)
+        self.assertIn("publicNote: document.publicNote || ''", content)
+        self.assertIn("function persistSelectedDocumentEdit(event)", content)
+        self.assertIn("list.addEventListener('input', persistSelectedDocumentEdit)", content)
+        self.assertIn("list.addEventListener('change', persistSelectedDocumentEdit)", content)
+        self.assertIn("syncSearchResults();", content)
+        self.assertIn("checkbox.disabled = isSelected", content)
+        self.assertIn("addHiddenField(item, 'included_document_reference', selectedDocument.reference)", content)
+        self.assertIn("count.textContent = selectedDocuments.length === 1", content)
+        self.assertIn("createForm.addEventListener('submit'", content)
+        self.assertIn("persistSelectedDocuments();", content)
+        self.assertNotIn("window.sessionStorage.removeItem(storageKey)", content)
+
+    def test_transmission_intake_draft_is_cleared_only_after_success_page(self):
+        request = self._admin_request()
+        direct_detail = admin_session.admin_transmission_detail_page(self.transmission["id"], request).content
+        created_detail = admin_session.admin_transmission_detail_page(
+            self.transmission["id"],
+            request,
+            created="1",
+        ).content
+
+        self.assertNotIn("window.sessionStorage.removeItem('cde.transmissionIntake.selectedDocuments.v1')", direct_detail)
+        self.assertIn("window.sessionStorage.removeItem('cde.transmissionIntake.selectedDocuments.v1')", created_detail)
 
     def test_pasted_document_lookup_resolves_published_metadata_in_order(self):
         second = self._published_pdf(
@@ -382,7 +460,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             included_document_public_note=["Selected during intake."],
             included_document_identifiers_text=None,
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
@@ -479,7 +559,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
             ],
             included_document_identifiers_text="DOC-2099-999999",
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
@@ -523,7 +605,9 @@ class GovernedPublicTransmissionTests(unittest.TestCase):
                 f"{second['document_identifier']}"
             ),
         )
-        transmission_id = int(str(response.headers["Location"]).rsplit("/", 1)[1])
+        location = str(response.headers["Location"])
+        self.assertTrue(location.endswith("?created=1"))
+        transmission_id = int(location.rsplit("/", 1)[1].split("?", 1)[0])
         conn = self._conn()
         try:
             attachments = trm.list_transmission_attachments(conn, transmission_id, root=self.fixture.root)
