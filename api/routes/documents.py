@@ -25,6 +25,7 @@ from api.document_intake import (
     published_document_file,
 )
 from api.email_documents import EMAIL_GOVERNANCE_BOUNDARY
+from api.email_documents import OUTLOOK_GOVERNANCE_BOUNDARY
 from api.public_navigation import (
     PUBLIC_NAVIGATION_CSS,
     archive_back_link,
@@ -155,6 +156,8 @@ def _presentation_mode(item: dict) -> str:
         return "Downloadable spreadsheet workbook"
     if is_rich_text_document(item):
         return "Downloadable Rich Text Format file"
+    if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
+        return "Microsoft Outlook Message metadata, safe body preview, and original-file download"
     if is_email_document(item):
         return "RFC 5322 Email metadata, safe body preview, and original-file download"
     return "Downloadable PDF"
@@ -169,6 +172,8 @@ def _original_download_availability(item: dict) -> str:
         return "Original spreadsheet download available"
     if is_rich_text_document(item):
         return "Original RTF download available"
+    if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
+        return "Original .msg download available"
     if is_email_document(item):
         return "Original .eml download available"
     return "Original PDF download available"
@@ -289,27 +294,44 @@ def _email_metadata(item: dict) -> dict:
 
 def _email_join(value: object) -> str:
     if isinstance(value, list):
-        return " · ".join(str(item) for item in value if str(item).strip())
+        return " · ".join(str(item) for item in value if item is not None and str(item).strip())
     return str(value or "")
 
 
 def _render_email_document(item: dict) -> str:
     metadata = _email_metadata(item)
+    is_outlook = metadata.get("source_format") == "outlook_msg"
+    boundary = OUTLOOK_GOVERNANCE_BOUNDARY if is_outlook else EMAIL_GOVERNANCE_BOUNDARY
     message_date = metadata.get("date_header_parsed") or metadata.get("date_header_raw")
-    overview_fields = (
+    overview_fields = [
         ("Subject", metadata.get("subject_decoded") or metadata.get("subject_raw")),
-        ("From", metadata.get("from_raw")),
         ("Sender", metadata.get("sender_raw")),
+    ]
+    if is_outlook:
+        overview_fields.extend(
+            (
+                ("Sent on behalf of", _email_join([metadata.get("sent_representing_name"), metadata.get("sent_representing_email")])),
+                ("From / SMTP address", metadata.get("sender_smtp_address") or metadata.get("from_raw")),
+            )
+        )
+    else:
+        overview_fields.append(("From", metadata.get("from_raw")))
+    overview_fields.extend((
         ("Reply-To", metadata.get("reply_to_raw")),
         ("To", metadata.get("to_raw")),
         ("CC", metadata.get("cc_raw")),
-        ("Message date recorded in source", message_date),
+        ("Message sent time recorded in source" if is_outlook else "Message date recorded in source", metadata.get("client_submit_time") or message_date),
+        ("Delivery time recorded in source", metadata.get("delivery_time")),
+        ("Message creation time recorded in source", metadata.get("creation_time")),
+        ("Last modification time recorded in source", metadata.get("last_modification_time")),
         ("Message-ID", metadata.get("message_id")),
         ("In-Reply-To", metadata.get("in_reply_to")),
         ("References", _email_join(metadata.get("references"))),
-        ("MIME type", metadata.get("content_type")),
+        ("Conversation topic", metadata.get("conversation_topic")),
+        ("Outlook message class" if is_outlook else "MIME type", metadata.get("message_class") or metadata.get("content_type")),
         ("Attachment count", metadata.get("attachment_count")),
-    )
+        ("Embedded message count", metadata.get("embedded_message_count")),
+    ))
     overview_rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(_display_value(value))}</td></tr>"
         for label, value in overview_fields
@@ -326,15 +348,24 @@ def _render_email_document(item: dict) -> str:
         if sanitized_html
         else ""
     )
+    rtf_notice = (
+        '<p class="provenance-boundary">An Outlook RTF body is present in the source message. Stage 35B records RTF presence but does not render Outlook RTF publicly.</p>'
+        if metadata.get("rtf_body_present")
+        else ""
+    )
     attachments = metadata.get("attachments_metadata") or []
     if attachments:
         attachment_rows = "".join(
             f"""<tr>
+              <td>{escape(_display_value(attachment.get('attachment_index')))}</td>
               <td>{escape(_display_value(attachment.get('filename')))}</td>
+              <td>{escape(_display_value(attachment.get('long_filename')))}</td>
               <td>{escape(_display_value(attachment.get('media_type')))}</td>
               <td>{escape(_display_value(attachment.get('byte_size')))}</td>
               <td>{escape(_display_value(attachment.get('content_disposition')))}</td>
               <td>{escape(_display_value(attachment.get('content_id')))}</td>
+              <td>{escape(_display_value(attachment.get('attachment_method')))}</td>
+              <td>{escape(_display_value(attachment.get('mime_tag')))}</td>
               <td>{'Yes' if attachment.get('is_attached_message') else 'No'}</td>
               <td>{'Yes' if attachment.get('filename_generated') else 'No'}</td>
             </tr>"""
@@ -342,13 +373,14 @@ def _render_email_document(item: dict) -> str:
             if isinstance(attachment, dict)
         )
     else:
-        attachment_rows = '<tr><td colspan="7">No attachment metadata was detected.</td></tr>'
+        attachment_rows = '<tr><td colspan="11">No attachment metadata was detected.</td></tr>'
     warnings = metadata.get("parser_warnings") or []
     warning_text = _email_join(warnings) if warnings else "No parser warnings were recorded."
-    return f"""<section class="public-email-summary"><h2>Email Overview</h2><p class="provenance-boundary">{escape(EMAIL_GOVERNANCE_BOUNDARY)}</p><table>{overview_rows}</table></section>
-<section class="public-email-body"><h2>Message Body</h2>{plain_block}{html_block}</section>
-<section class="public-email-attachments"><h2>Attachments</h2><p class="provenance-boundary">Stage 35A lists attachment metadata only. Attachments remain components of the preserved source email unless separately admitted through Document Intake.</p><div class="email-attachments-wrapper"><table><thead><tr><th>Filename</th><th>Media type</th><th>Byte size</th><th>Disposition</th><th>Content ID</th><th>Attached message</th><th>Generated filename</th></tr></thead><tbody>{attachment_rows}</tbody></table></div><p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
-<section class="public-email-boundary"><h2>Email Governance Boundary</h2><p class="provenance-boundary">{escape(EMAIL_GOVERNANCE_BOUNDARY)}</p></section>"""
+    stage_label = "Stage 35B" if is_outlook else "Stage 35A"
+    return f"""<section class="public-email-summary"><h2>Email Overview</h2><p class="provenance-boundary">{escape(boundary)}</p><table>{overview_rows}</table></section>
+<section class="public-email-body"><h2>Message Body</h2>{plain_block}{html_block}{rtf_notice}</section>
+<section class="public-email-attachments"><h2>Attachments</h2><p class="provenance-boundary">{stage_label} lists attachment metadata only. Attachments remain components of the preserved source email unless separately admitted through Document Intake.</p><div class="email-attachments-wrapper"><table><thead><tr><th>Index</th><th>Filename</th><th>Long filename</th><th>Media type</th><th>Byte size</th><th>Disposition</th><th>Content ID</th><th>Attachment method</th><th>MIME tag</th><th>Attached message</th><th>Generated filename</th></tr></thead><tbody>{attachment_rows}</tbody></table></div><p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
+<section class="public-email-boundary"><h2>Email Governance Boundary</h2><p class="provenance-boundary">{escape(boundary)}</p></section>"""
 
 
 def _render_document(item: dict, return_to: object | None = None) -> str:
@@ -385,7 +417,8 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
     elif is_rich_text_document(item):
         content_block = f"""<section id="document-content"><section class="public-rich-text-summary"><h2>Rich Text Format Artefact</h2><p class="provenance-boundary">This Rich Text Format file is preserved and published as the original uploaded artefact. CDE does not convert, execute, or render the RTF as HTML; download the original file to inspect it with appropriate local software.</p></section><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original RTF</a></section>"""
     elif is_email_document(item):
-        content_block = f"""<section id="document-content">{_render_email_document(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original .eml</a></section>"""
+        download_label = "Download original .msg" if document_type_label(item.get("document_type")) == "Microsoft Outlook Message" else "Download original .eml"
+        content_block = f"""<section id="document-content">{_render_email_document(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">{download_label}</a></section>"""
     else:
         content_block = f"""<section id="document-content"><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download PDF</a></section>"""
     associated_records_section = _render_associated_records(item)

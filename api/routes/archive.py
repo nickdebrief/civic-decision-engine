@@ -292,6 +292,7 @@ def _association_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
             "XLSX": "spreadsheet",
             "RTF": "rich_text",
             "RFC 5322 Email": "email",
+            "Microsoft Outlook Message": "email",
         }.get(document_format, "")
         title = str(item.get("relationship_label") or item.get("public_label") or reference)
         summary = " · ".join(
