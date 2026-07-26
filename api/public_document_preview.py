@@ -7,6 +7,7 @@ from api.document_intake import (
     document_media_family,
     document_type_label,
     is_audio_document,
+    is_email_document,
     is_image_document,
     is_rich_text_document,
     is_spreadsheet_document,
@@ -20,7 +21,7 @@ def _document_url(item: dict[str, Any]) -> str:
 
 def _media_label(item: dict[str, Any]) -> str:
     raw_type = str(item.get("document_type") or "").strip().lower()
-    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", ""}
+    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", ""}
     if raw_type not in known_types:
         return "File"
     if is_image_document(item):
@@ -31,6 +32,8 @@ def _media_label(item: dict[str, Any]) -> str:
         return "Spreadsheet"
     if is_rich_text_document(item):
         return "Rich Text"
+    if is_email_document(item):
+        return "RFC 5322 Email"
     try:
         label = document_type_label(item.get("document_type"))
     except Exception:
@@ -40,7 +43,7 @@ def _media_label(item: dict[str, Any]) -> str:
 
 def _action_label(item: dict[str, Any]) -> str:
     raw_type = str(item.get("document_type") or "").strip().lower()
-    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", ""}
+    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", ""}
     if raw_type not in known_types:
         return "Open Published Document"
     if is_image_document(item):
@@ -51,6 +54,8 @@ def _action_label(item: dict[str, Any]) -> str:
         return "Open Spreadsheet document"
     if is_rich_text_document(item):
         return "Open Rich Text document"
+    if is_email_document(item):
+        return "Open Email document"
     try:
         if document_type_label(item.get("document_type")) == "PDF":
             return "Open PDF document"

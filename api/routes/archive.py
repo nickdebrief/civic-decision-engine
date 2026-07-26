@@ -59,6 +59,7 @@ MEDIA_FILTERS = {
     "audio": "Audio",
     "spreadsheet": "Spreadsheet",
     "rich_text": "Rich Text",
+    "email": "Email",
 }
 SORTS = {
     "newest": "Newest first",
@@ -141,7 +142,7 @@ def _media_filter_value(document: dict[str, Any]) -> str:
     family = document_media_family(document)
     if family == "document" and document_type_label(document.get("document_type")) == "PDF":
         return "pdf"
-    if family in {"image", "audio", "spreadsheet", "rich_text"}:
+    if family in {"image", "audio", "spreadsheet", "rich_text", "email"}:
         return family
     return ""
 
@@ -290,6 +291,7 @@ def _association_results(conn: sqlite3.Connection) -> list[ArchiveResult]:
             "XLS": "spreadsheet",
             "XLSX": "spreadsheet",
             "RTF": "rich_text",
+            "RFC 5322 Email": "email",
         }.get(document_format, "")
         title = str(item.get("relationship_label") or item.get("public_label") or reference)
         summary = " · ".join(
