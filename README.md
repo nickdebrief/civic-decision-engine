@@ -58,6 +58,14 @@ Designed for understanding.
 
 Current release: v13.0.4
 
+Research artefacts:
+- **Civic Decision Engine User Handbook v2.0**
+  DOI: https://doi.org/10.5281/zenodo.21548879
+- **Civic Record Evaluation Framework (CREF)**
+  DOI: https://doi.org/10.5281/zenodo.21033426
+- **Open Science Framework (OSF) Project**
+- **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
+
 Release documentation:
 - [`docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md`](docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md)
 - [`docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md`](docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md)
