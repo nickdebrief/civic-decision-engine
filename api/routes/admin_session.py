@@ -74,6 +74,7 @@ from api.document_intake import (
     intake_root,
     intake_document_file,
     is_audio_document,
+    is_email_document,
     is_image_document,
     list_intake_documents,
     list_published_documents,
@@ -46092,6 +46093,7 @@ def _render_admin_audit_page(
                 ("xls", "XLS"),
                 ("xlsx", "XLSX"),
                 ("rtf", "RTF"),
+                ("eml", "RFC 5322 Email"),
             )
         )
     return f"""<!DOCTYPE html>
@@ -46198,8 +46200,8 @@ def _render_document_intake_page(
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), and Rich Text Format (.rtf).</p>
+        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml" required></label>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), and RFC 5322 Email (.eml).</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>
@@ -46357,11 +46359,16 @@ def _render_document_intake_preview(
         if is_audio_document(item)
         else ""
     )
+    email_notice = (
+        '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
+        if is_email_document(item)
+        else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
-{image_preview}{audio_notice}
+{image_preview}{audio_notice}{email_notice}
 {canonical_record_section}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>

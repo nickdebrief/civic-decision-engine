@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: v13.0.4
+Current release: Stage 35A / v13.0.5 — RFC 5322 .eml Ingestion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md`](docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md)
 - [`docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md`](docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md)
 - [`docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md`](docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md)
 - [`docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md`](docs/releases/CDE_V13_0_3_LANDING_PAGE_FOOTER_CONTAINER_CORRECTION.md)
@@ -731,6 +732,28 @@ attachment behaviour. CDE validates RTF structure server-side, recognises
 `application/rtf`, `text/rtf`, and `application/x-rtf` MIME variants, rejects
 renamed or inconsistent files, and does not convert, render, execute, or extract
 full text from the RTF during intake or publication.
+
+### Stage 35A / CDE v13.0.5 — RFC 5322 .eml Ingestion
+
+The Civic Decision Engine can now preserve native RFC 5322 email files
+(`.eml`) as independently governed Published Documents. The original message
+bytes remain authoritative. Parsed headers, body content, MIME structure, and
+attachment metadata support inspection and discovery without replacing or
+rewriting the source.
+
+Admin Document Intake recognises `.eml` files using server-side RFC 5322 and
+MIME inspection rather than trusting filename or client MIME type alone.
+Published email documents display a dedicated Email Overview, safe message-body
+projection, attachment metadata, publication provenance, SHA-256 digest,
+Document Identifier, and original `.eml` download with attachment and `nosniff`
+headers.
+
+Email attachments are not automatically created as governed Documents,
+Associations, Collections, or Transmissions. Attachments remain components of
+the preserved source email unless separately admitted through Document Intake.
+Parsed email metadata improves public discovery without verifying sender
+identity, delivery, receipt, authorship, authenticity, factual accuracy, legal
+status, evidential sufficiency, or external validation.
 
 ### CDE v12.26 — Public Archive UX Refinements
 

@@ -13,6 +13,8 @@ from pathlib import Path, PurePath
 from typing import Any
 from xml.etree import ElementTree
 
+from api.email_documents import email_projection_search_values, validate_email_document
+
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
@@ -27,6 +29,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "xls": ".xls",
     "xlsx": ".xlsx",
     "rtf": ".rtf",
+    "eml": ".eml",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -38,6 +41,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "xls": "application/vnd.ms-excel",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "rtf": "application/rtf",
+    "eml": "message/rfc822",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -49,6 +53,7 @@ DOCUMENT_TYPE_LABELS = {
     "xls": "XLS",
     "xlsx": "XLSX",
     "rtf": "RTF",
+    "eml": "RFC 5322 Email",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -60,6 +65,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "xls": "spreadsheet",
     "xlsx": "spreadsheet",
     "rtf": "rich_text",
+    "eml": "email",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -72,6 +78,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".xls": "xls",
     ".xlsx": "xlsx",
     ".rtf": "rtf",
+    ".eml": "eml",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -652,6 +659,13 @@ def document_intake_upload_error_detail(
             "The uploaded file has a JPEG extension but could not be verified as "
             "a valid supported JPEG."
         )
+    elif expected_type == "eml":
+        detected_format = "unknown"
+        detected_mime_type = "unknown"
+        message = (
+            "The uploaded file has an EML extension but could not be verified as "
+            "a structurally recognisable RFC 5322 email message."
+        )
     elif unsupported:
         detected_format, detected_mime_type, detected_label = unsupported
         message = (
@@ -815,6 +829,17 @@ def _detected_document_type(data: bytes) -> str:
         return "xlsx"
     if _is_supported_rtf(data):
         return "rtf"
+    try:
+        validate_email_document(data)
+    except ValueError as exc:
+        code = str(exc)
+        if code in {
+            "document_intake_file_required",
+            "document_intake_file_too_large",
+        } or code.startswith("document_intake_email_"):
+            raise
+    else:
+        return "eml"
     raise ValueError("document_intake_file_type_not_allowed")
 
 
@@ -890,6 +915,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "xlsx"
     if content_type in {"application/rtf", "text/rtf", "application/x-rtf"}:
         return "rtf"
+    if content_type in {"message/rfc822", "text/rfc822", "application/eml"}:
+        return "eml"
     return "pdf"
 
 
@@ -915,6 +942,10 @@ def is_spreadsheet_document(metadata: dict[str, Any]) -> bool:
 
 def is_rich_text_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) == "rtf"
+
+
+def is_email_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) == "eml"
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1027,6 +1058,7 @@ def store_pending_document(
         if document_type in {"xls", "xlsx"}
         else None
     )
+    email_metadata = validate_email_document(data) if document_type == "eml" else None
     destination_root = (root or intake_root()).resolve(strict=False)
     destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     item_dir = destination_root / digest
@@ -1082,6 +1114,8 @@ def store_pending_document(
     }
     if workbook_metadata:
         metadata["workbook_metadata"] = workbook_metadata
+    if email_metadata:
+        metadata["email_metadata"] = email_metadata
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)
@@ -1320,6 +1354,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
         document.get("keywords"),
         document.get("tags"),
     ]
+    field_values.extend(email_projection_search_values(document))
     flattened: list[str] = []
     seen: set[str] = set()
     for value in field_values:
