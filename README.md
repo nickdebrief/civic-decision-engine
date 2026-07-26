@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 35B / v13.0.6 — Microsoft Outlook .msg Ingestion
+Current release: Stage 35C / v13.0.7 — Apple Mail .emlx Ingestion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md`](docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md)
 - [`docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md`](docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md)
 - [`docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md`](docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md)
 - [`docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md`](docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md)
@@ -779,6 +780,36 @@ conversation metadata, body projections, and attachment metadata remain
 presentation and discovery projections; they do not verify delivery, receipt,
 authorship, authenticity, factual accuracy, legal status, evidential sufficiency,
 or external validation.
+
+
+### Stage 35C / CDE v13.0.7 — Apple Mail .emlx Ingestion
+
+The Civic Decision Engine can now preserve native Apple Mail message files
+(`.emlx`) as independently governed Published Documents. The full original
+`.emlx` upload remains authoritative, including the byte-count line, embedded
+RFC 5322 message bytes, and trailing Apple metadata where present. SHA-256 is
+calculated from the untouched `.emlx` bytes, not from the embedded message
+projection.
+
+Admin Document Intake recognises `.emlx` files using server-side Apple Mail
+wrapper validation. The parser reads the bounded decimal byte-count line,
+extracts exactly the declared RFC 5322 message bytes, reuses the Stage 35A
+RFC 5322/MIME parser for email fields and body presentation, and parses bounded
+Apple plist metadata only where safe. Published Apple Mail documents reuse the
+shared email presentation model: Email Overview, Apple Mail Metadata, Message
+Body, Attachments, Email Governance Boundary, Publication Provenance,
+Publication Pathway, Document Identifier, SHA-256 digest, and exact original
+`.emlx` download.
+
+Apple Mail attachments remain metadata-only components of the preserved source
+message unless separately admitted through Document Intake. Apple-specific
+metadata is classified conservatively: safe flags and state fields may be shown
+publicly, while local mailbox paths, account identifiers, hidden plist values,
+BCC, parser diagnostics containing content, and attachment contents are excluded
+from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
+supports inspection and discovery without verifying sender identity, delivery,
+receipt, authorship, authenticity, factual accuracy, legal status, evidential
+sufficiency, or external validation.
 
 ### CDE v12.26 — Public Archive UX Refinements
 

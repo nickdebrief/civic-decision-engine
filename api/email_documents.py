@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import plistlib
 import re
 import struct
 from dataclasses import dataclass
@@ -39,6 +40,13 @@ MAX_MSG_RTF_DECODED_BYTES = 8 * 1024 * 1024
 MAX_MSG_DECODED_ATTACHMENT_BYTES = 25 * 1024 * 1024
 MAX_MSG_TOTAL_DECODED_BYTES = 50 * 1024 * 1024
 MAX_MSG_RENDERED_OUTPUT_CHARS = 100_000
+MAX_EMLX_BYTES = 25 * 1024 * 1024
+MAX_EMLX_FIRST_LINE_BYTES = 32
+MAX_EMLX_MESSAGE_BYTES = 25 * 1024 * 1024
+MAX_EMLX_TRAILING_METADATA_BYTES = 512 * 1024
+MAX_EMLX_PLIST_DEPTH = 12
+MAX_EMLX_PLIST_ITEMS = 512
+MAX_EMLX_PLIST_STRING_LENGTH = 4096
 
 CFB_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 FREESECT = 0xFFFFFFFF
@@ -56,6 +64,12 @@ OUTLOOK_GOVERNANCE_BOUNDARY = (
     "Parsed Outlook metadata reflects fields contained in the preserved source "
     "message. It does not independently verify sender identity, delivery, "
     "receipt, authorship, authenticity, factual accuracy, legal status, "
+    "evidential sufficiency, or external validation."
+)
+APPLE_MAIL_GOVERNANCE_BOUNDARY = (
+    "Parsed Apple Mail and RFC 5322 metadata reflects fields contained in the "
+    "preserved source message. It does not independently verify sender identity, "
+    "delivery, receipt, authorship, authenticity, factual accuracy, legal status, "
     "evidential sufficiency, or external validation."
 )
 
@@ -849,6 +863,143 @@ def parse_email_metadata(data: bytes) -> dict[str, Any]:
     }
 
 
+
+def _bounded_plist_value(value: Any, *, depth: int = 0, state: dict[str, int] | None = None) -> Any:
+    state = state or {"items": 0}
+    if depth > MAX_EMLX_PLIST_DEPTH:
+        raise ValueError("document_intake_emlx_plist_too_deep")
+    state["items"] += 1
+    if state["items"] > MAX_EMLX_PLIST_ITEMS:
+        raise ValueError("document_intake_emlx_plist_too_many_items")
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)[:MAX_EMLX_PLIST_STRING_LENGTH]
+            if len(str(key)) > MAX_EMLX_PLIST_STRING_LENGTH:
+                raise ValueError("document_intake_emlx_plist_string_too_large")
+            result[key_text] = _bounded_plist_value(child, depth=depth + 1, state=state)
+        return result
+    if isinstance(value, (list, tuple, set)):
+        return [_bounded_plist_value(child, depth=depth + 1, state=state) for child in value]
+    if isinstance(value, bytes):
+        if len(value) > MAX_EMLX_PLIST_STRING_LENGTH:
+            raise ValueError("document_intake_emlx_plist_string_too_large")
+        return value.hex()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        if len(value) > MAX_EMLX_PLIST_STRING_LENGTH:
+            raise ValueError("document_intake_emlx_plist_string_too_large")
+        return value
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value)[:MAX_EMLX_PLIST_STRING_LENGTH]
+
+
+def _plist_lookup(metadata: Any, names: set[str]) -> Any:
+    if isinstance(metadata, dict):
+        for key, value in metadata.items():
+            normalized = str(key).strip().casefold().replace(" ", "_").replace("-", "_")
+            if normalized in names:
+                return value
+            found = _plist_lookup(value, names)
+            if found not in (None, "", [], {}):
+                return found
+    elif isinstance(metadata, list):
+        for value in metadata:
+            found = _plist_lookup(value, names)
+            if found not in (None, "", [], {}):
+                return found
+    return None
+
+
+def _public_apple_metadata(plist_metadata: Any) -> dict[str, Any]:
+    if not isinstance(plist_metadata, dict):
+        return {}
+    fields = {
+        "Apple Mail flags recorded in source": _plist_lookup(plist_metadata, {"flags", "apple_mail_flags"}),
+        "Read state recorded in source": _plist_lookup(plist_metadata, {"read", "is_read", "read_state"}),
+        "Replied state recorded in source": _plist_lookup(plist_metadata, {"replied", "is_replied", "replied_state"}),
+        "Forwarded state recorded in source": _plist_lookup(plist_metadata, {"forwarded", "is_forwarded", "forwarded_state"}),
+        "Flagged state recorded in source": _plist_lookup(plist_metadata, {"flagged", "is_flagged", "flagged_state"}),
+        "Apple Mail received date recorded in source": _plist_lookup(plist_metadata, {"date_received", "received_date", "datelastviewed", "datereceived"}),
+    }
+    return {key: value for key, value in fields.items() if value not in (None, "", [], {})}
+
+
+def parse_apple_emlx_metadata(data: bytes) -> dict[str, Any]:
+    if not data:
+        raise ValueError("document_intake_file_required")
+    if len(data) > MAX_EMLX_BYTES:
+        raise ValueError("document_intake_file_too_large")
+    if not data[:1].isdigit():
+        raise ValueError("document_intake_invalid_emlx")
+    line_end = data.find(b"\n", 0, min(len(data), MAX_EMLX_FIRST_LINE_BYTES + 1))
+    if line_end < 0:
+        if b"\n" in data[: min(len(data), 1024)]:
+            raise ValueError("document_intake_emlx_first_line_too_large")
+        raise ValueError("document_intake_invalid_emlx")
+    if line_end > MAX_EMLX_FIRST_LINE_BYTES:
+        raise ValueError("document_intake_emlx_first_line_too_large")
+    length_line = data[:line_end].strip().rstrip(b"\r")
+    if not length_line or not length_line.isdigit():
+        raise ValueError("document_intake_invalid_emlx")
+    declared_length = int(length_line.decode("ascii"))
+    if declared_length <= 0:
+        raise ValueError("document_intake_invalid_emlx")
+    if declared_length > MAX_EMLX_MESSAGE_BYTES:
+        raise ValueError("document_intake_emlx_message_too_large")
+    message_start = line_end + 1
+    message_end = message_start + declared_length
+    if message_end > len(data):
+        raise ValueError("document_intake_emlx_truncated_message")
+    message_bytes = data[message_start:message_end]
+    trailing = data[message_end:]
+    if len(trailing) > MAX_EMLX_TRAILING_METADATA_BYTES:
+        raise ValueError("document_intake_emlx_trailing_metadata_too_large")
+
+    metadata = parse_email_metadata(message_bytes)
+    warnings = list(metadata.get("parser_warnings") or [])
+    plist_metadata: Any = None
+    plist_public: dict[str, Any] = {}
+    stripped_trailing = trailing.strip()
+    if stripped_trailing:
+        try:
+            plist_metadata = _bounded_plist_value(plistlib.loads(stripped_trailing))
+            plist_public = _public_apple_metadata(plist_metadata)
+        except ValueError:
+            raise
+        except Exception as exc:
+            if stripped_trailing.startswith((b"<?xml", b"<plist", b"bplist")):
+                raise ValueError("document_intake_emlx_malformed_plist") from exc
+            warnings.append("AppleMailTrailingMetadataNotPlist")
+
+    metadata.update(
+        {
+            "source_format": "apple_emlx",
+            "source_format_label": "Apple Mail Message",
+            "emlx_declared_message_bytes": declared_length,
+            "emlx_trailing_metadata_present": bool(stripped_trailing),
+            "emlx_trailing_metadata_bytes": len(trailing),
+            "apple_mail_metadata_public": plist_public,
+            "apple_mail_metadata_internal": {},
+            "apple_mail_parser_warnings": [warning for warning in warnings if str(warning).startswith("Apple")],
+            "parser_warnings": sorted(set(str(warning) for warning in warnings)),
+        }
+    )
+    metadata["apple_mail_flags"] = plist_public.get("Apple Mail flags recorded in source")
+    metadata["apple_mail_read_state"] = plist_public.get("Read state recorded in source")
+    metadata["apple_mail_replied_state"] = plist_public.get("Replied state recorded in source")
+    metadata["apple_mail_forwarded_state"] = plist_public.get("Forwarded state recorded in source")
+    metadata["apple_mail_flagged_state"] = plist_public.get("Flagged state recorded in source")
+    metadata["apple_mail_received_date"] = plist_public.get("Apple Mail received date recorded in source")
+    return metadata
+
+
+def validate_apple_emlx_document(data: bytes) -> dict[str, Any]:
+    return parse_apple_emlx_metadata(data)
+
+
 def validate_email_document(data: bytes) -> dict[str, Any]:
     return parse_email_metadata(data)
 
@@ -886,6 +1037,13 @@ def email_projection_search_values(metadata: dict[str, Any]) -> list[Any]:
         email_metadata.get("content_type"),
         email_metadata.get("source_format_label"),
         email_metadata.get("body_search_text"),
+        email_metadata.get("apple_mail_flags"),
+        email_metadata.get("apple_mail_read_state"),
+        email_metadata.get("apple_mail_replied_state"),
+        email_metadata.get("apple_mail_forwarded_state"),
+        email_metadata.get("apple_mail_flagged_state"),
+        email_metadata.get("apple_mail_received_date"),
+        email_metadata.get("apple_mail_metadata_public"),
     ]
     for attachment in email_metadata.get("attachments_metadata") or []:
         if isinstance(attachment, dict):

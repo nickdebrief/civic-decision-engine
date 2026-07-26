@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 
 from api.email_documents import (
     email_projection_search_values,
+    validate_apple_emlx_document,
     validate_email_document,
     validate_outlook_msg_document,
 )
@@ -35,6 +36,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "rtf": ".rtf",
     "eml": ".eml",
     "msg": ".msg",
+    "emlx": ".emlx",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -48,6 +50,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "rtf": "application/rtf",
     "eml": "message/rfc822",
     "msg": "application/vnd.ms-outlook",
+    "emlx": "application/octet-stream",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -61,6 +64,7 @@ DOCUMENT_TYPE_LABELS = {
     "rtf": "RTF",
     "eml": "RFC 5322 Email",
     "msg": "Microsoft Outlook Message",
+    "emlx": "Apple Mail Message",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -74,6 +78,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "rtf": "rich_text",
     "eml": "email",
     "msg": "email",
+    "emlx": "email",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -88,6 +93,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".rtf": "rtf",
     ".eml": "eml",
     ".msg": "msg",
+    ".emlx": "emlx",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -682,6 +688,13 @@ def document_intake_upload_error_detail(
             "The uploaded file has a MSG extension but could not be verified as "
             "a structurally recognisable Microsoft Outlook message."
         )
+    elif expected_type == "emlx":
+        detected_format = "unknown"
+        detected_mime_type = "unknown"
+        message = (
+            "The uploaded file has an EMLX extension but could not be verified as "
+            "a structurally recognisable Apple Mail message."
+        )
     elif unsupported:
         detected_format, detected_mime_type, detected_label = unsupported
         message = (
@@ -859,6 +872,17 @@ def _detected_document_type(data: bytes) -> str:
     if _is_supported_rtf(data):
         return "rtf"
     try:
+        validate_apple_emlx_document(data)
+    except ValueError as exc:
+        code = str(exc)
+        if code in {
+            "document_intake_file_required",
+            "document_intake_file_too_large",
+        } or code.startswith("document_intake_emlx_"):
+            raise
+    else:
+        return "emlx"
+    try:
         validate_email_document(data)
     except ValueError as exc:
         code = str(exc)
@@ -956,6 +980,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "rtf"
     if content_type in {"message/rfc822", "text/rfc822", "application/eml"}:
         return "eml"
+    if content_type in {"application/x-apple-mail", "message/x-emlx"}:
+        return "emlx"
     if content_type in {
         "application/vnd.ms-outlook",
         "application/x-msg",
@@ -990,7 +1016,7 @@ def is_rich_text_document(metadata: dict[str, Any]) -> bool:
 
 
 def is_email_document(metadata: dict[str, Any]) -> bool:
-    return normalized_document_type(metadata) in {"eml", "msg"}
+    return normalized_document_type(metadata) in {"eml", "msg", "emlx"}
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1107,6 +1133,8 @@ def store_pending_document(
         email_metadata = validate_email_document(data)
     elif document_type == "msg":
         email_metadata = validate_outlook_msg_document(data)
+    elif document_type == "emlx":
+        email_metadata = validate_apple_emlx_document(data)
     else:
         email_metadata = None
     destination_root = (root or intake_root()).resolve(strict=False)
