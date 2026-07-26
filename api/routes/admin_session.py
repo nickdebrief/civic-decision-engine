@@ -46095,6 +46095,7 @@ def _render_admin_audit_page(
                 ("rtf", "RTF"),
                 ("eml", "RFC 5322 Email"),
                 ("msg", "Microsoft Outlook Message"),
+                ("emlx", "Apple Mail Message"),
             )
         )
     return f"""<!DOCTYPE html>
@@ -46201,8 +46202,8 @@ def _render_document_intake_page(
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml,application/vnd.ms-outlook,application/x-msg,application/msoutlook,.msg" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), and Microsoft Outlook Message (.msg).</p>
+        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml,application/vnd.ms-outlook,application/x-msg,application/msoutlook,.msg,application/x-apple-mail,message/x-emlx,.emlx" required></label>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), and Apple Mail Message (.emlx).</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>
@@ -46362,8 +46363,11 @@ def _render_document_intake_preview(
     )
     email_notice = ""
     if is_email_document(item):
-        if str(item.get("document_type") or "").lower() == "msg":
+        document_type = str(item.get("document_type") or "").lower()
+        if document_type == "msg":
             email_notice = '<p class="notice">Microsoft Outlook message artefacts are preserved as original bytes. Extracted MAPI properties, message body text, message structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
+        elif document_type == "emlx":
+            email_notice = '<p class="notice">Apple Mail .emlx artefacts are preserved as original bytes. The embedded RFC 5322 message and bounded Apple Mail metadata support inspection without replacing or rewriting the source message.</p>'
         else:
             email_notice = '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
     return f"""<!DOCTYPE html>
