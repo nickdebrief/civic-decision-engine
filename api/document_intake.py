@@ -13,7 +13,11 @@ from pathlib import Path, PurePath
 from typing import Any
 from xml.etree import ElementTree
 
-from api.email_documents import email_projection_search_values, validate_email_document
+from api.email_documents import (
+    email_projection_search_values,
+    validate_email_document,
+    validate_outlook_msg_document,
+)
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -30,6 +34,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "xlsx": ".xlsx",
     "rtf": ".rtf",
     "eml": ".eml",
+    "msg": ".msg",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -42,6 +47,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "rtf": "application/rtf",
     "eml": "message/rfc822",
+    "msg": "application/vnd.ms-outlook",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -54,6 +60,7 @@ DOCUMENT_TYPE_LABELS = {
     "xlsx": "XLSX",
     "rtf": "RTF",
     "eml": "RFC 5322 Email",
+    "msg": "Microsoft Outlook Message",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -66,6 +73,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "xlsx": "spreadsheet",
     "rtf": "rich_text",
     "eml": "email",
+    "msg": "email",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -79,6 +87,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".xlsx": "xlsx",
     ".rtf": "rtf",
     ".eml": "eml",
+    ".msg": "msg",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -666,6 +675,13 @@ def document_intake_upload_error_detail(
             "The uploaded file has an EML extension but could not be verified as "
             "a structurally recognisable RFC 5322 email message."
         )
+    elif expected_type == "msg":
+        detected_format = "unknown"
+        detected_mime_type = "unknown"
+        message = (
+            "The uploaded file has a MSG extension but could not be verified as "
+            "a structurally recognisable Microsoft Outlook message."
+        )
     elif unsupported:
         detected_format, detected_mime_type, detected_label = unsupported
         message = (
@@ -822,7 +838,20 @@ def _detected_document_type(data: bytes) -> str:
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return "wav"
     if data.startswith(_OLE_SIGNATURE):
-        _xls_workbook_metadata(data)
+        try:
+            _xls_workbook_metadata(data)
+        except ValueError:
+            try:
+                validate_outlook_msg_document(data)
+            except ValueError as exc:
+                code = str(exc)
+                if code in {
+                    "document_intake_file_required",
+                    "document_intake_file_too_large",
+                } or code.startswith("document_intake_msg_"):
+                    raise
+                raise ValueError("document_intake_file_type_not_allowed") from exc
+            return "msg"
         return "xls"
     if data.startswith(b"PK\x03\x04"):
         _xlsx_workbook_metadata(data)
@@ -850,6 +879,17 @@ def validate_document_file(
     extension = Path(filename).suffix.lower()
     if not filename or extension not in EXTENSION_DOCUMENT_TYPES:
         raise ValueError("document_intake_file_type_not_allowed")
+    expected_type = EXTENSION_DOCUMENT_TYPES[extension]
+    if expected_type == "xls" and data.startswith(_OLE_SIGNATURE):
+        try:
+            _xls_workbook_metadata(data)
+        except ValueError as workbook_exc:
+            try:
+                validate_outlook_msg_document(data)
+            except ValueError:
+                raise workbook_exc
+            raise ValueError("document_intake_file_type_mismatch") from workbook_exc
+        return expected_type, DOCUMENT_TYPE_MEDIA_TYPES[expected_type], filename
     try:
         detected_type = _detected_document_type(data)
     except ValueError:
@@ -866,7 +906,6 @@ def validate_document_file(
             _leading_signature_hex(data),
         )
         raise
-    expected_type = EXTENSION_DOCUMENT_TYPES[extension]
     if detected_type != expected_type:
         LOGGER.warning(
             "Document intake file type mismatch: filename=%s extension=%s declared_content_type=%s expected_format=%s detected_format=%s detected_mime_type=%s leading_signature_hex=%s",
@@ -917,6 +956,12 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "rtf"
     if content_type in {"message/rfc822", "text/rfc822", "application/eml"}:
         return "eml"
+    if content_type in {
+        "application/vnd.ms-outlook",
+        "application/x-msg",
+        "application/msoutlook",
+    }:
+        return "msg"
     return "pdf"
 
 
@@ -945,7 +990,7 @@ def is_rich_text_document(metadata: dict[str, Any]) -> bool:
 
 
 def is_email_document(metadata: dict[str, Any]) -> bool:
-    return normalized_document_type(metadata) == "eml"
+    return normalized_document_type(metadata) in {"eml", "msg"}
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1058,7 +1103,12 @@ def store_pending_document(
         if document_type in {"xls", "xlsx"}
         else None
     )
-    email_metadata = validate_email_document(data) if document_type == "eml" else None
+    if document_type == "eml":
+        email_metadata = validate_email_document(data)
+    elif document_type == "msg":
+        email_metadata = validate_outlook_msg_document(data)
+    else:
+        email_metadata = None
     destination_root = (root or intake_root()).resolve(strict=False)
     destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     item_dir = destination_root / digest

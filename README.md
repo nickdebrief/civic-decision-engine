@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 35A / v13.0.5 — RFC 5322 .eml Ingestion
+Current release: Stage 35B / v13.0.6 — Microsoft Outlook .msg Ingestion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md`](docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md)
 - [`docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md`](docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md)
 - [`docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md`](docs/releases/CDE_V13_GOVERNANCE_TABLE_READABILITY.md)
 - [`docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md`](docs/releases/CDE_V13_0_4_RESTORE_TWO_COLUMN_LANDING_PAGE_FOOTER_LAYOUT.md)
@@ -754,6 +755,30 @@ the preserved source email unless separately admitted through Document Intake.
 Parsed email metadata improves public discovery without verifying sender
 identity, delivery, receipt, authorship, authenticity, factual accuracy, legal
 status, evidential sufficiency, or external validation.
+
+### Stage 35B / CDE v13.0.6 — Microsoft Outlook .msg Ingestion
+
+The Civic Decision Engine can now preserve native Microsoft Outlook message
+files (`.msg`) as independently governed Published Documents. The original
+`.msg` bytes remain authoritative. Extracted MAPI properties, safe message-body
+presentation, conversation metadata, and attachment metadata support inspection
+and discovery without replacing or rewriting the source.
+
+Admin Document Intake recognises `.msg` files using server-side Microsoft
+Compound File Binary and Outlook MSG structure inspection rather than trusting
+filename or browser MIME type alone. Published Outlook message documents reuse
+the email presentation model introduced for RFC 5322 `.eml` files: Email
+Overview, Message Body, Attachments, Email Governance Boundary, Publication
+Provenance, Publication Pathway, Document Identifier, SHA-256 digest, and exact
+original-file download.
+
+Outlook attachments and embedded messages are listed as metadata only. They are
+not automatically created as governed Documents, Associations, Collections, or
+Transmissions. Sender fields, sent-on-behalf properties, Outlook timestamps,
+conversation metadata, body projections, and attachment metadata remain
+presentation and discovery projections; they do not verify delivery, receipt,
+authorship, authenticity, factual accuracy, legal status, evidential sufficiency,
+or external validation.
 
 ### CDE v12.26 — Public Archive UX Refinements
 

@@ -46094,6 +46094,7 @@ def _render_admin_audit_page(
                 ("xlsx", "XLSX"),
                 ("rtf", "RTF"),
                 ("eml", "RFC 5322 Email"),
+                ("msg", "Microsoft Outlook Message"),
             )
         )
     return f"""<!DOCTYPE html>
@@ -46200,8 +46201,8 @@ def _render_document_intake_page(
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), and RFC 5322 Email (.eml).</p>
+        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml,application/vnd.ms-outlook,application/x-msg,application/msoutlook,.msg" required></label>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), and Microsoft Outlook Message (.msg).</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>
@@ -46359,11 +46360,12 @@ def _render_document_intake_preview(
         if is_audio_document(item)
         else ""
     )
-    email_notice = (
-        '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
-        if is_email_document(item)
-        else ""
-    )
+    email_notice = ""
+    if is_email_document(item):
+        if str(item.get("document_type") or "").lower() == "msg":
+            email_notice = '<p class="notice">Microsoft Outlook message artefacts are preserved as original bytes. Extracted MAPI properties, message body text, message structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
+        else:
+            email_notice = '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
