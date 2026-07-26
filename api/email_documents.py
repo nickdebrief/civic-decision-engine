@@ -388,9 +388,13 @@ class _CompoundFile:
     def _read_regular_stream(self, start_sector: int, size: int) -> bytes:
         if size > MAX_MSG_TOTAL_DECODED_BYTES:
             raise ValueError("document_intake_msg_decoded_content_too_large")
+        # Stream count and stream length are separate boundaries. Native Outlook
+        # messages can store a single body, HTML, RTF, or attachment stream across
+        # more sectors than the total-stream-count limit, while the declared byte
+        # size remains bounded by the caller-specific parser limits.
         chain = self._sector_chain(
             start_sector,
-            max_entries=max(1, min(MAX_MSG_STREAM_COUNT, size // self.sector_size + 2)),
+            max_entries=max(1, size // self.sector_size + 2),
         )
         return b"".join(self._sector(sector) for sector in chain)[:size]
 

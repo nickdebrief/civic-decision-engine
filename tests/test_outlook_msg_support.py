@@ -214,11 +214,20 @@ def build_cfb(root_streams: dict[str, bytes], storages: dict[str, dict[str, byte
     for current, next_sector in zip(directory_sector_ids, directory_sector_ids[1:]):
         fat[current] = next_sector
 
-    fat_sector = len(sectors)
-    fat.append(FATSECT)
-    fat_bytes = b"".join(struct.pack("<I", value) for value in fat)
-    fat_bytes = fat_bytes.ljust(SECTOR_SIZE, b"\xff")
-    sectors.append(fat_bytes[:SECTOR_SIZE])
+    fat_sector_count = 1
+    while True:
+        required = (len(fat) + fat_sector_count + (SECTOR_SIZE // 4) - 1) // (SECTOR_SIZE // 4)
+        if required == fat_sector_count:
+            break
+        fat_sector_count = required
+    fat_sector_ids = [len(sectors) + index for index in range(fat_sector_count)]
+    fat.extend([FATSECT] * fat_sector_count)
+    fat_entries = fat + [FREESECT] * (fat_sector_count * (SECTOR_SIZE // 4) - len(fat))
+    for index in range(fat_sector_count):
+        start = index * (SECTOR_SIZE // 4)
+        end = start + (SECTOR_SIZE // 4)
+        fat_bytes = b"".join(struct.pack("<I", value) for value in fat_entries[start:end])
+        sectors.append(fat_bytes)
 
     header = bytearray(512)
     header[:8] = CFB_SIGNATURE
@@ -227,14 +236,15 @@ def build_cfb(root_streams: dict[str, bytes], storages: dict[str, dict[str, byte
     header[28:30] = b"\xfe\xff"
     struct.pack_into("<H", header, 30, 9)
     struct.pack_into("<H", header, 32, 6)
-    struct.pack_into("<I", header, 44, 1)
+    struct.pack_into("<I", header, 44, fat_sector_count)
     struct.pack_into("<I", header, 48, directory_start)
     struct.pack_into("<I", header, 56, 4096)
     struct.pack_into("<I", header, 60, ENDOFCHAIN)
     struct.pack_into("<I", header, 68, ENDOFCHAIN)
     for offset in range(76, 512, 4):
         struct.pack_into("<I", header, offset, FREESECT)
-    struct.pack_into("<I", header, 76, fat_sector)
+    for index, sector_id in enumerate(fat_sector_ids[:109]):
+        struct.pack_into("<I", header, 76 + index * 4, sector_id)
     return bytes(header) + b"".join(sectors)
 
 
@@ -338,6 +348,24 @@ class OutlookMessageSupportTests(unittest.TestCase):
         self.assertEqual(attachment["content_id"], "<attachment-1>")
         self.assertFalse(attachment["is_embedded_message"])
         self.assertTrue(metadata["attachments_metadata"][1]["is_embedded_message"])
+
+    def test_native_outlook_large_body_streams_do_not_use_total_stream_count_limit(self):
+        plain_body = "Native Outlook plain body line for bounded stream traversal.\n" * 10_000
+        html_body = "<html><body>" + ("<p>Native Outlook HTML body line for bounded stream traversal.</p>" * 8_000) + "</body></html>"
+        data = build_msg_file(
+            subject="Large native Outlook body streams",
+            plain_body=plain_body,
+            html_body=html_body,
+        )
+
+        metadata = parse_outlook_msg_metadata(data)
+
+        self.assertEqual(metadata["source_format"], "outlook_msg")
+        self.assertEqual(metadata["subject_decoded"], "Large native Outlook body streams")
+        self.assertIn("Native Outlook plain body line", metadata["plain_text_body"])
+        self.assertIn("Native Outlook HTML body line", metadata["sanitized_html_body"])
+        self.assertLess(len(metadata["plain_text_body"].encode("utf-8")), 2 * 1024 * 1024)
+        self.assertLess(len(html_body.encode("utf-8")), 1 * 1024 * 1024)
 
     def test_msg_validation_rejects_masquerades_and_bounded_limit_excesses(self):
         data = build_msg_file()
