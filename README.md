@@ -7,10 +7,15 @@
   <img
     src="docs/assets/cde-v13-seal.png"
     alt="Civic Decision Engine v13 Platform Release seal"
-    width="300">
+    width="500"
+    />
 </p>
-
-An open, deterministic framework for evaluating visible civic records and record-derived administrative outputs through inspectable evidence relationships, dependency mappings, pathway stability analysis, and reproducible report generation.
+<p align="center">
+An open, deterministic framework for evaluating visible civic records and
+record-derived administrative outputs through inspectable evidence
+relationships, dependency mappings, pathway stability analysis, and
+reproducible report generation.
+</p>
 
 ---
 
@@ -52,6 +57,14 @@ Designed for understanding.
 ---
 
 Current release: Stage 35B / v13.0.6 — Microsoft Outlook .msg Ingestion
+
+Research artefacts:
+- **Civic Decision Engine User Handbook v2.0**
+  DOI: https://doi.org/10.5281/zenodo.21548879
+- **Civic Record Evaluation Framework (CREF)**
+  DOI: https://doi.org/10.5281/zenodo.21033426
+- **Open Science Framework (OSF) Project**
+- **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
 - [`docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md`](docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md)
