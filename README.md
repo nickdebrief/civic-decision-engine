@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 36 / v13.0.8 — Governed MBOX Archive Ingestion
+Current release: Stage 37 / v13.0.9 — Governed Streaming MBOX Ingestion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md`](docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md)
 - [`docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md`](docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md)
 - [`docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md`](docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md)
 - [`docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md`](docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md)
@@ -812,6 +813,30 @@ supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
 
+### Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
+
+The Civic Decision Engine can now admit large MBOX mailbox archives through a
+dedicated governed streaming pathway. Mailbox bytes are written incrementally to
+protected temporary storage while SHA-256 and size are calculated continuously.
+The archive is validated and indexed before atomic finalisation into ordinary
+Pending Intake. The existing 25 MB synchronous Document Intake limit remains
+unchanged.
+
+Governed Streaming Mailbox Intake is an authenticated administrative path for
+large `.mbox` archives, including real Apple Mail exports that exceed the
+synchronous boundary. The default streaming maximum is 1 GB, with 1 MiB upload
+chunks, a protected temporary directory under the Document Intake root, stale
+temporary-file cleanup, disk-space reserve checks, and a one-job concurrency
+guard for the local process. These are operational processing controls only;
+the resulting object follows the ordinary Pending Intake, Under Review,
+Approved, Published lifecycle.
+
+After finalisation, a streamed archive behaves like every other Stage 36 MBOX
+document: the complete original MBOX remains authoritative, the SHA-256 digest
+is calculated from the untouched full archive, contained messages remain bounded
+projections, archive filtering and public mailbox presentation are reused, and
+original `.mbox` download returns the exact stored bytes.
+
 ### Stage 36 / CDE v13.0.8 — Governed MBOX Archive Ingestion
 
 The Civic Decision Engine can now preserve MBOX mailbox archives as governed
@@ -835,7 +860,7 @@ upload that copy through Document Intake. The picker accepts `.mbox`,
 workflow, while server-side mailbox validation remains authoritative. The
 current synchronous intake path remains bounded at the configured Document
 Intake upload limit, 25 MB by default; larger Apple Mail exports require a
-future streaming ingestion path.
+dedicated streaming ingestion path.
 
 Published MBOX pages display a Mailbox Overview, bounded Mailbox Message Index,
 message detail projections, attachment metadata, duplicate indicators, mailbox
