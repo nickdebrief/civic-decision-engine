@@ -60,13 +60,21 @@ Stage 36 applies bounded limits for maximum MBOX upload bytes, message count, in
 
 The parser avoids unbounded recursion, network access, remote resource retrieval, active HTML rendering, attachment execution, archive unpacking, and filesystem writes based on message or attachment filenames.
 
+## Apple Mail Export Upload Compatibility
+
+Apple Mail exports a Finder package ending in `.mbox` that contains the actual mailbox data file named `mbox` and a separate `table_of_contents` file. Stage 36A keeps direct directory/package upload out of scope. Administrators should open the exported package, copy the internal `mbox` data file, rename the copy with a descriptive `.mbox` filename, and upload that copy through Document Intake. The `table_of_contents` file is not the mailbox archive and remains rejected by server-side mailbox validation.
+
+The intake file picker now explicitly permits `.mbox`, `application/mbox`, `text/mbox`, and `application/octet-stream` so browser and Finder classifications for copied Apple Mail mailbox data do not hide an otherwise uploadable file. This picker compatibility does not weaken server-side validation: the upload must still have a supported `.mbox` filename, satisfy mailbox boundary checks, respect configured upload and parser limits, and preserve the original bytes for SHA-256 calculation.
+
+The current governed Document Intake path is synchronous and bounded at the configured Document Intake upload limit, 25 MB by default. A 412 MB Apple Mail export exceeds that default boundary and the Stage 36 parser's conservative MBOX size limit; supporting archives of that size requires a future streaming ingestion path rather than a silent limit increase in Stage 36A.
+
 ## Future Message Promotion
 
 The metadata model records parent archive identity, message index, byte range, and contained-message digest so a later explicit governed workflow could promote a contained message into Document Intake. Stage 36 does not implement that action.
 
 ## Tests
 
-Focused tests cover valid one-message and multi-message MBOX intake, mboxrd-style escaped `>From ` lines, body lines beginning with `From `, HTML sanitisation, attachment metadata, duplicate preservation, recoverable malformed messages, exact original-byte download, stable indexing, archive filtering, public message detail, search integration, private/public visibility, validation failures, and resource-limit failures. Stage 35A `.eml`, Stage 35B `.msg`, Stage 35C `.emlx`, and full regression suites are run for compatibility.
+Focused tests cover valid one-message and multi-message MBOX intake, mboxrd-style escaped `>From ` lines, body lines beginning with `From `, HTML sanitisation, attachment metadata, duplicate preservation, recoverable malformed messages, exact original-byte download, stable indexing, archive filtering, public message detail, search integration, private/public visibility, Apple Mail export picker compatibility, octet-stream classified `.mbox` uploads, `table_of_contents` rejection, validation failures, and resource-limit failures. Stage 35A `.eml`, Stage 35B `.msg`, Stage 35C `.emlx`, and full regression suites are run for compatibility.
 
 ## Intentional Exclusions
 

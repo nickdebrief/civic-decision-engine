@@ -217,6 +217,49 @@ class MBOXArchiveSupportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "document_intake_mbox_line_too_large"):
                 validate_document_file(valid, "line-too-large.mbox", "application/mbox")
 
+    def test_document_intake_accept_configuration_supports_apple_mail_mbox_exports(self):
+        request = FakeRequest(
+            cookies={
+                admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session("mbox-admin")
+            }
+        )
+        page = admin_session.admin_document_intake_page(request).content
+        accept_values = admin_session.DOCUMENT_INTAKE_FILE_ACCEPT.split(",")
+
+        self.assertIn(".mbox", accept_values)
+        self.assertIn("application/mbox", accept_values)
+        self.assertIn("text/mbox", accept_values)
+        self.assertIn("application/octet-stream", accept_values)
+        for existing_email_value in (
+            ".eml",
+            "message/rfc822",
+            ".msg",
+            "application/vnd.ms-outlook",
+            ".emlx",
+            "application/x-apple-mail",
+        ):
+            self.assertIn(existing_email_value, accept_values)
+        self.assertIn(f'accept="{admin_session.DOCUMENT_INTAKE_FILE_ACCEPT}"', page)
+        self.assertIn("Apple Mail exports an .mbox package", page)
+        self.assertIn("table_of_contents file is not the mailbox archive", page)
+        self.assertIn("Current governed Document Intake maximum upload size: 25 MB", page)
+
+    def test_apple_mail_internal_mbox_copy_requires_extension_and_server_validation(self):
+        valid = mbox(message())
+        self.assertEqual(validate_document_file(valid, "mailbox.mbox", "application/octet-stream")[0], "mbox")
+        with self.assertRaisesRegex(ValueError, "document_intake_file_type_not_allowed"):
+            validate_document_file(valid, "mbox", "application/octet-stream")
+        with self.assertRaisesRegex(ValueError, "document_intake_file_type_not_allowed"):
+            validate_document_file(b"Apple Mail table of contents", "table_of_contents.mbox", "application/octet-stream")
+        with self.assertRaisesRegex(ValueError, "document_intake_file_type_mismatch"):
+            validate_document_file(b"%PDF-1.7\nrenamed\n%%EOF\n", "renamed.mbox", "application/octet-stream")
+
+    def test_large_mbox_upload_boundary_reports_governed_error(self):
+        valid = mbox(message())
+        with patch.dict(os.environ, {"CDE_DOCUMENT_INTAKE_MAX_BYTES": "32"}):
+            with self.assertRaisesRegex(ValueError, "document_intake_file_too_large"):
+                validate_document_file(valid, "large-mailbox.mbox", "application/octet-stream")
+
     def test_published_mbox_public_page_search_archive_preview_and_download(self):
         data = mbox(message(subject="Searchable first message"), html_message(), attachment_message())
         item = self._publish(self._store(data))
