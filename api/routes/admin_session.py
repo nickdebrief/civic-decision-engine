@@ -89,6 +89,11 @@ from api.document_intake import (
     update_intake_notes,
     update_intake_status,
 )
+from api.email_documents import (
+    MAX_MBOX_MESSAGE_BYTES,
+    MAX_MBOX_MESSAGE_IN_MEMORY_BYTES,
+    MAX_MBOX_MESSAGE_INDEX_BYTES,
+)
 
 
 ADMIN_TABLE_READABILITY_CSS = """
@@ -46293,6 +46298,7 @@ def _render_document_intake_page(
       <form class="intake-form" method="post" action="/api/admin/session/streaming-mbox-intake" enctype="multipart/form-data">
         <label>MBOX archive file<input name="file" type="file" accept="{escape(STREAMING_MBOX_FILE_ACCEPT)}" required></label>
         <p class="full-width notice">Maximum governed streaming MBOX upload size: {escape(_format_intake_size_limit(streaming_mbox_max_bytes()))}. Uploads are written in {escape(_format_intake_size_limit(streaming_mbox_chunk_bytes()))} chunks, hashed incrementally, validated, indexed, and finalised into ordinary Pending Intake only after validation succeeds.</p>
+        <p class="full-width notice">Contained messages are separately bounded. Ordinary contained-message projection uses an in-memory threshold of {escape(_format_intake_size_limit(MAX_MBOX_MESSAGE_IN_MEMORY_BYTES))}; larger contained messages may use bounded file-backed previews up to {escape(_format_intake_size_limit(MAX_MBOX_MESSAGE_BYTES))}, with preview/index reads capped at {escape(_format_intake_size_limit(MAX_MBOX_MESSAGE_INDEX_BYTES))}.</p>
         <p class="full-width notice">This pathway does not support direct Apple Mail package-directory upload. Copy the internal mailbox data file named mbox, rename the copy with a .mbox extension, and upload the copy. A 412 MB archive requires this streaming pathway and is not accepted by ordinary synchronous Document Intake.</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
@@ -48211,7 +48217,13 @@ def admin_document_intake_upload(
     )
 
 
-def _streaming_mbox_upload_error_detail(code: str, *, filename: str, received_bytes: int | None = None) -> dict[str, Any]:
+def _streaming_mbox_upload_error_detail(
+    code: str,
+    *,
+    filename: str,
+    received_bytes: int | None = None,
+    error: Exception | None = None,
+) -> dict[str, Any]:
     messages = {
         "streaming_mbox_empty": "The mailbox archive was empty. No document was created and temporary data was removed.",
         "streaming_mbox_file_too_large": "The mailbox archive exceeded the configured governed streaming limit. No document was created and temporary data was removed.",
@@ -48223,7 +48235,7 @@ def _streaming_mbox_upload_error_detail(code: str, *, filename: str, received_by
         "document_intake_duplicate": "This mailbox archive already exists in Document Intake. Duplicate intake remains blocked.",
         "document_intake_invalid_mbox": "The uploaded file is not a structurally recognisable MBOX mailbox archive.",
         "document_intake_mbox_too_many_messages": "The mailbox archive exceeds the configured message-count limit.",
-        "document_intake_mbox_message_too_large": "A contained mailbox message exceeds the configured per-message limit.",
+        "document_intake_mbox_message_too_large": "A contained mailbox message exceeded the configured per-message limit. The archive itself was within the governed streaming limit. No document was created.",
         "document_intake_mbox_line_too_large": "The mailbox archive contains a line that exceeds the configured line-length limit.",
         "document_intake_mbox_decoded_content_too_large": "The mailbox archive exceeds the configured decoded-content limit.",
         "document_intake_mbox_too_many_attachments": "The mailbox archive exceeds the configured attachment-metadata limit.",
@@ -48232,10 +48244,22 @@ def _streaming_mbox_upload_error_detail(code: str, *, filename: str, received_by
         "detail": code,
         "message": messages.get(code, "Governed Streaming Mailbox Intake failed. No document was created."),
         "filename": filename,
-        "configured_maximum_bytes": streaming_mbox_max_bytes(),
+        "configured_archive_maximum_bytes": streaming_mbox_max_bytes(),
         "synchronous_intake_limit_bytes": intake_max_bytes(),
         "document_created": False,
     }
+    if code == "document_intake_mbox_message_too_large":
+        for key in (
+            "message_index",
+            "message_start_byte",
+            "message_size_bytes",
+            "configured_message_maximum_bytes",
+        ):
+            value = getattr(error, key, None)
+            if value is not None:
+                detail[key] = value
+    else:
+        detail["configured_maximum_bytes"] = streaming_mbox_max_bytes()
     if received_bytes is not None:
         detail["received_bytes"] = received_bytes
     return detail
@@ -48288,7 +48312,7 @@ def admin_streaming_mbox_intake_upload(
         }.get(detail, 400)
         raise _http_error(
             status_code,
-            _streaming_mbox_upload_error_detail(detail, filename=filename),
+            _streaming_mbox_upload_error_detail(detail, filename=filename, error=exc),
         ) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),

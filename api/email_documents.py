@@ -51,7 +51,10 @@ MAX_EMLX_PLIST_ITEMS = 512
 MAX_EMLX_PLIST_STRING_LENGTH = 4096
 MAX_MBOX_BYTES = 25 * 1024 * 1024
 MAX_MBOX_MESSAGES = 500
-MAX_MBOX_MESSAGE_BYTES = 5 * 1024 * 1024
+MAX_MBOX_MESSAGE_IN_MEMORY_BYTES = 5 * 1024 * 1024
+MAX_MBOX_MESSAGE_BYTES = 128 * 1024 * 1024
+MAX_MBOX_MESSAGE_PREVIEW_BYTES = 512 * 1024
+MAX_MBOX_MESSAGE_INDEX_BYTES = 512 * 1024
 MAX_MBOX_SEPARATOR_LINE_BYTES = 512
 MAX_MBOX_LINE_BYTES = 64 * 1024
 MAX_MBOX_ATTACHMENT_METADATA = 1000
@@ -203,6 +206,36 @@ class _EmailSanitizer(HTMLParser):
 
     def sanitized(self) -> str:
         return "".join(self.parts)[:MAX_HTML_RENDER_CHARS]
+
+
+class MboxMessageTooLargeError(ValueError):
+    def __init__(
+        self,
+        *,
+        message_index: int,
+        message_start_byte: int,
+        message_size_bytes: int,
+        configured_message_maximum_bytes: int,
+    ) -> None:
+        super().__init__("document_intake_mbox_message_too_large")
+        self.message_index = message_index
+        self.message_start_byte = message_start_byte
+        self.message_size_bytes = message_size_bytes
+        self.configured_message_maximum_bytes = configured_message_maximum_bytes
+
+
+@dataclass(frozen=True)
+class _MboxMessageEntry:
+    message_start: int
+    message_end: int
+    separator_start: int
+    separator_line: bytes
+    message_bytes: bytes | None = None
+    source_path: Path | None = None
+
+    @property
+    def message_size(self) -> int:
+        return self.message_end - self.message_start
 
 
 def _header_separator_present(data: bytes) -> bool:
@@ -818,11 +851,86 @@ def _bounded_warning_list(values: list[str]) -> list[str]:
     return bounded
 
 
+def _raise_mbox_message_too_large(
+    *,
+    message_index: int,
+    message_start_byte: int,
+    message_size_bytes: int,
+    configured_message_maximum_bytes: int,
+) -> None:
+    raise MboxMessageTooLargeError(
+        message_index=message_index,
+        message_start_byte=message_start_byte,
+        message_size_bytes=message_size_bytes,
+        configured_message_maximum_bytes=configured_message_maximum_bytes,
+    )
+
+
+def _read_file_range(path: Path, start: int, end: int, *, limit: int | None = None) -> bytes:
+    size = max(0, end - start)
+    if limit is not None:
+        size = min(size, limit)
+    with path.open("rb") as handle:
+        handle.seek(start)
+        return handle.read(size)
+
+
+def _sha256_file_range(path: Path, start: int, end: int) -> str:
+    digest = hashlib.sha256()
+    remaining = max(0, end - start)
+    with path.open("rb") as handle:
+        handle.seek(start)
+        while remaining:
+            chunk = handle.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            digest.update(chunk)
+            remaining -= len(chunk)
+    return digest.hexdigest()
+
+
+def _parse_large_mbox_message_projection(entry: _MboxMessageEntry) -> dict[str, Any]:
+    if entry.source_path is None:
+        raise ValueError("document_intake_invalid_mbox")
+    read_limit = min(MAX_MBOX_MESSAGE_INDEX_BYTES, MAX_MBOX_MESSAGE_PREVIEW_BYTES)
+    preview_bytes = _read_file_range(
+        entry.source_path,
+        entry.message_start,
+        entry.message_end,
+        limit=read_limit,
+    )
+    warnings = [
+        "MBOXLargeMessageFileBackedProjection",
+        "MBOXLargeMessagePreviewTruncated",
+    ]
+    if not _header_separator_present(preview_bytes):
+        raise ValueError("document_intake_invalid_email")
+    metadata = parse_email_metadata(preview_bytes)
+    metadata["plain_text_body"] = _message_preview(metadata.get("plain_text_body"))
+    metadata["sanitized_html_body"] = str(metadata.get("sanitized_html_body") or "")[:MAX_MBOX_PREVIEW_CHARS]
+    metadata["body_search_text"] = _message_preview(
+        metadata.get("body_search_text"),
+        limit=MAX_MBOX_MESSAGE_SEARCH_TEXT_CHARS,
+    )
+    metadata["parser_warnings"] = _bounded_warning_list(list(metadata.get("parser_warnings") or []) + warnings)
+    return metadata
+
+
+def _mbox_message_bytes(entry: _MboxMessageEntry) -> bytes:
+    if entry.message_bytes is not None:
+        return entry.message_bytes
+    if entry.source_path is None:
+        raise ValueError("document_intake_invalid_mbox")
+    return _read_file_range(entry.source_path, entry.message_start, entry.message_end)
+
+
 def _parse_mbox_message_entries(
-    entries: list[tuple[int, int, int, bytes, bytes]],
+    entries: list[_MboxMessageEntry],
     *,
     archive_byte_size: int,
     detected_variant: str,
+    max_message_bytes: int = MAX_MBOX_MESSAGE_BYTES,
+    allow_file_backed_large_messages: bool = False,
 ) -> dict[str, Any]:
     if not entries:
         raise ValueError("document_intake_invalid_mbox")
@@ -841,25 +949,46 @@ def _parse_mbox_message_entries(
     digest_counts: dict[str, int] = {}
     search_parts: list[str] = []
 
-    for index, (message_start, message_end, separator_start, separator_line, message_bytes) in enumerate(entries, start=1):
-        if len(message_bytes) > MAX_MBOX_MESSAGE_BYTES:
-            raise ValueError("document_intake_mbox_message_too_large")
-        total_contained_bytes += len(message_bytes)
-        digest = hashlib.sha256(message_bytes).hexdigest()
+    for index, entry_data in enumerate(entries, start=1):
+        message_size = entry_data.message_size
+        if message_size > max_message_bytes:
+            _raise_mbox_message_too_large(
+                message_index=index,
+                message_start_byte=entry_data.message_start,
+                message_size_bytes=message_size,
+                configured_message_maximum_bytes=max_message_bytes,
+            )
+        total_contained_bytes += message_size
+        use_file_backed = (
+            allow_file_backed_large_messages
+            and entry_data.source_path is not None
+            and message_size > MAX_MBOX_MESSAGE_IN_MEMORY_BYTES
+        )
+        digest = (
+            _sha256_file_range(entry_data.source_path, entry_data.message_start, entry_data.message_end)
+            if use_file_backed and entry_data.source_path is not None
+            else hashlib.sha256(_mbox_message_bytes(entry_data)).hexdigest()
+        )
         digest_counts[digest] = digest_counts.get(digest, 0) + 1
         entry: dict[str, Any] = {
             "message_index": index,
-            "byte_start": message_start,
-            "byte_end": message_end,
-            "separator_start": separator_start,
-            "separator_text": separator_line.decode("utf-8", errors="replace").strip()[:MAX_MBOX_SEPARATOR_LINE_BYTES],
-            "message_byte_size": len(message_bytes),
+            "byte_start": entry_data.message_start,
+            "byte_end": entry_data.message_end,
+            "separator_start": entry_data.separator_start,
+            "separator_text": entry_data.separator_line.decode("utf-8", errors="replace").strip()[:MAX_MBOX_SEPARATOR_LINE_BYTES],
+            "message_byte_size": message_size,
             "message_digest": digest,
             "parsed": False,
+            "preview_mode": "file_backed_bounded" if use_file_backed else "in_memory",
+            "preview_truncated": bool(use_file_backed),
             "parser_warnings": [],
         }
         try:
-            email_metadata = parse_email_metadata(message_bytes)
+            email_metadata = (
+                _parse_large_mbox_message_projection(entry_data)
+                if use_file_backed
+                else parse_email_metadata(_mbox_message_bytes(entry_data))
+            )
         except ValueError as exc:
             warning = str(exc) or "document_intake_invalid_email"
             entry["parse_status"] = "warning"
@@ -986,13 +1115,26 @@ def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
                 raise ValueError("document_intake_invalid_mbox")
     if not boundaries:
         raise ValueError("document_intake_invalid_mbox")
-    entries: list[tuple[int, int, int, bytes, bytes]] = []
+    entries: list[_MboxMessageEntry] = []
     for index, (line_index, boundary_offset, separator_line) in enumerate(boundaries, start=1):
         next_boundary_offset = boundaries[index][1] if index < len(boundaries) else len(data)
         message_start = boundary_offset + len(separator_line)
         message_end = next_boundary_offset
-        entries.append((message_start, message_end, boundary_offset, separator_line, data[message_start:message_end]))
-    return _parse_mbox_message_entries(entries, archive_byte_size=len(data), detected_variant=_detect_mbox_variant(lines))
+        entries.append(
+            _MboxMessageEntry(
+                message_start=message_start,
+                message_end=message_end,
+                separator_start=boundary_offset,
+                separator_line=separator_line,
+                message_bytes=data[message_start:message_end],
+            )
+        )
+    return _parse_mbox_message_entries(
+        entries,
+        archive_byte_size=len(data),
+        detected_variant=_detect_mbox_variant(lines),
+        max_message_bytes=min(MAX_MBOX_MESSAGE_IN_MEMORY_BYTES, MAX_MBOX_MESSAGE_BYTES),
+    )
 
 
 def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes: int | None = None) -> dict[str, Any]:
@@ -1003,10 +1145,9 @@ def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes
     if max_archive_bytes is not None and archive_size > max_archive_bytes:
         raise ValueError("streaming_mbox_file_too_large")
 
-    entries: list[tuple[int, int, int, bytes, bytes]] = []
+    entries: list[_MboxMessageEntry] = []
     current_separator: tuple[int, bytes] | None = None
     current_message_start = 0
-    current_message = bytearray()
     offset = 0
     line_index = 0
     saw_escaped_from = False
@@ -1016,7 +1157,15 @@ def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes
         if current_separator is None:
             return
         separator_start, separator_line = current_separator
-        entries.append((current_message_start, message_end, separator_start, separator_line, bytes(current_message)))
+        entries.append(
+            _MboxMessageEntry(
+                message_start=current_message_start,
+                message_end=message_end,
+                separator_start=separator_start,
+                separator_line=separator_line,
+                source_path=source,
+            )
+        )
 
     with source.open("rb") as handle:
         while True:
@@ -1041,11 +1190,15 @@ def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes
                     raise ValueError("document_intake_mbox_too_many_messages")
                 current_separator = (offset, line)
                 current_message_start = offset + len(line)
-                current_message = bytearray()
             elif current_separator is not None:
-                current_message.extend(line)
-                if len(current_message) > MAX_MBOX_MESSAGE_BYTES:
-                    raise ValueError("document_intake_mbox_message_too_large")
+                current_size = offset + len(line) - current_message_start
+                if current_size > MAX_MBOX_MESSAGE_BYTES:
+                    _raise_mbox_message_too_large(
+                        message_index=len(entries) + 1,
+                        message_start_byte=current_message_start,
+                        message_size_bytes=current_size,
+                        configured_message_maximum_bytes=MAX_MBOX_MESSAGE_BYTES,
+                    )
             offset += len(line)
             line_index += 1
     finish_message(archive_size)
@@ -1055,7 +1208,13 @@ def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes
         variant = "mboxcl"
     if saw_escaped_from:
         variant = "mboxrd"
-    return _parse_mbox_message_entries(entries, archive_byte_size=archive_size, detected_variant=variant)
+    return _parse_mbox_message_entries(
+        entries,
+        archive_byte_size=archive_size,
+        detected_variant=variant,
+        max_message_bytes=MAX_MBOX_MESSAGE_BYTES,
+        allow_file_backed_large_messages=True,
+    )
 
 
 def validate_mbox_archive_document(data: bytes) -> dict[str, Any]:
