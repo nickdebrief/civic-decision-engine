@@ -827,6 +827,16 @@ Pathway, public detail page, archive filtering, and exact original-file
 download. Contained messages remain components of the preserved archive unless
 separately admitted through Document Intake.
 
+Apple Mail exports a Finder package ending in `.mbox` that contains a mailbox
+data file named `mbox` and a separate `table_of_contents` file. Copy the
+internal `mbox` file, rename the copy with a descriptive `.mbox` filename, and
+upload that copy through Document Intake. The picker accepts `.mbox`,
+`application/mbox`, `text/mbox`, and octet-stream classifications for this
+workflow, while server-side mailbox validation remains authoritative. The
+current synchronous intake path remains bounded at the configured Document
+Intake upload limit, 25 MB by default; larger Apple Mail exports require a
+future streaming ingestion path.
+
 Published MBOX pages display a Mailbox Overview, bounded Mailbox Message Index,
 message detail projections, attachment metadata, duplicate indicators, mailbox
 statistics, and the Mailbox Governance Boundary. The Archive Explorer includes a

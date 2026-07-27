@@ -72,6 +72,7 @@ from api.document_intake import (
     document_intake_duplicate_detail,
     document_intake_upload_error_detail,
     intake_root,
+    intake_max_bytes,
     intake_document_file,
     is_audio_document,
     is_email_document,
@@ -125,6 +126,54 @@ ADMIN_USERNAME_ENV = "ADMIN_USERNAME"
 ADMIN_PASSWORD_ENV = "ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
 ADMIN_TEMP_UPLOAD_ENABLED_ENV = "ADMIN_TEMP_UPLOAD_ENABLED"
+
+DOCUMENT_INTAKE_FILE_ACCEPT = ",".join(
+    (
+        "application/pdf",
+        ".pdf",
+        "image/jpeg",
+        ".jpg",
+        ".jpeg",
+        "image/png",
+        ".png",
+        "audio/mp4",
+        "audio/x-m4a",
+        ".m4a",
+        "audio/mpeg",
+        ".mp3",
+        "audio/wav",
+        "audio/x-wav",
+        ".wav",
+        "application/vnd.ms-excel",
+        ".xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xlsx",
+        "application/rtf",
+        "text/rtf",
+        "application/x-rtf",
+        ".rtf",
+        "message/rfc822",
+        "text/rfc822",
+        "application/eml",
+        ".eml",
+        "application/vnd.ms-outlook",
+        "application/x-msg",
+        "application/msoutlook",
+        ".msg",
+        "application/x-apple-mail",
+        "message/x-emlx",
+        ".emlx",
+        "application/mbox",
+        "text/mbox",
+        "application/octet-stream",
+        ".mbox",
+    )
+)
+APPLE_MAIL_MBOX_UPLOAD_NOTE = (
+    "Apple Mail exports an .mbox package containing a mailbox data file named "
+    "mbox. Copy that internal file, rename the copy with a .mbox extension, "
+    "and upload the copy. The table_of_contents file is not the mailbox archive."
+)
 SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
@@ -276,6 +325,21 @@ def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]
         raise _http_error(401, "admin_session_unauthorized")
 
     return payload
+
+
+def _format_intake_size_limit(value: int) -> str:
+    units = ("bytes", "KB", "MB", "GB")
+    amount = float(value)
+    unit = units[0]
+    for unit in units:
+        if amount < 1024 or unit == units[-1]:
+            break
+        amount /= 1024
+    if unit == "bytes":
+        return f"{value} bytes"
+    if amount.is_integer():
+        return f"{int(amount)} {unit}"
+    return f"{amount:.1f} {unit}"
 
 
 def require_admin_session(request) -> dict[str, Any]:
@@ -46204,8 +46268,9 @@ def _render_document_intake_page(
     <section id="new-intake">
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
-        <label>Document file<input name="file" type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,audio/mp4,audio/x-m4a,.m4a,audio/mpeg,.mp3,audio/wav,audio/x-wav,.wav,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,application/rtf,text/rtf,application/x-rtf,.rtf,message/rfc822,text/rfc822,application/eml,.eml,application/vnd.ms-outlook,application/x-msg,application/msoutlook,.msg,application/x-apple-mail,message/x-emlx,.emlx,application/mbox,text/mbox,.mbox" required></label>
+        <label>Document file<input name="file" type="file" accept="{escape(DOCUMENT_INTAKE_FILE_ACCEPT)}" required></label>
         <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), Apple Mail Message (.emlx), and MBOX Mailbox Archive (.mbox).</p>
+        <p class="full-width notice">{escape(APPLE_MAIL_MBOX_UPLOAD_NOTE)} Current governed Document Intake maximum upload size: {escape(_format_intake_size_limit(intake_max_bytes()))}. Larger Apple Mail archives require a future streaming ingestion path and are not accepted by this synchronous intake form.</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
         <label>Document date<input name="document_date" type="date" required></label>
