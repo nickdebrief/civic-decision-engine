@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 35C / v13.0.7 — Apple Mail .emlx Ingestion
+Current release: Stage 36 / v13.0.8 — Governed MBOX Archive Ingestion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md`](docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md)
 - [`docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md`](docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md)
 - [`docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md`](docs/releases/STAGE35B_OUTLOOK_MSG_SUPPORT.md)
 - [`docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md`](docs/releases/STAGE35A_RFC5322_EML_SUPPORT.md)
@@ -810,6 +811,27 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### Stage 36 / CDE v13.0.8 — Governed MBOX Archive Ingestion
+
+The Civic Decision Engine can now preserve MBOX mailbox archives as governed
+container documents. The full original MBOX remains authoritative. Contained
+RFC 5322 messages are parsed as bounded projections for inspection, search, and
+safe presentation without rewriting the mailbox, removing duplicates, changing
+message order, or automatically creating independent governed documents.
+
+Admin Document Intake recognises `.mbox` files using server-side mailbox
+boundary validation. MBOX archives receive their own immutable Document
+Identifier, SHA-256 digest, lifecycle, Publication Provenance, Publication
+Pathway, public detail page, archive filtering, and exact original-file
+download. Contained messages remain components of the preserved archive unless
+separately admitted through Document Intake.
+
+Published MBOX pages display a Mailbox Overview, bounded Mailbox Message Index,
+message detail projections, attachment metadata, duplicate indicators, mailbox
+statistics, and the Mailbox Governance Boundary. The Archive Explorer includes a
+Mailbox Archive media filter distinct from the Email filter used for `.eml`,
+`.msg`, and `.emlx` individual message formats.
 
 ### CDE v12.26 — Public Archive UX Refinements
 

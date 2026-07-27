@@ -18,6 +18,7 @@ from api.document_intake import (
     is_audio_document,
     is_email_document,
     is_image_document,
+    is_mailbox_document,
     is_rich_text_document,
     is_spreadsheet_document,
     list_published_documents,
@@ -26,6 +27,7 @@ from api.document_intake import (
 )
 from api.email_documents import APPLE_MAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import EMAIL_GOVERNANCE_BOUNDARY
+from api.email_documents import MBOX_GOVERNANCE_BOUNDARY
 from api.email_documents import OUTLOOK_GOVERNANCE_BOUNDARY
 from api.public_navigation import (
     PUBLIC_NAVIGATION_CSS,
@@ -157,6 +159,8 @@ def _presentation_mode(item: dict) -> str:
         return "Downloadable spreadsheet workbook"
     if is_rich_text_document(item):
         return "Downloadable Rich Text Format file"
+    if is_mailbox_document(item):
+        return "Mailbox archive metadata, paginated message inspection, safe body previews, and original-file download"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
         return "Microsoft Outlook Message metadata, safe body preview, and original-file download"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Apple Mail Message":
@@ -175,6 +179,8 @@ def _original_download_availability(item: dict) -> str:
         return "Original spreadsheet download available"
     if is_rich_text_document(item):
         return "Original RTF download available"
+    if is_mailbox_document(item):
+        return "Original .mbox download available"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
         return "Original .msg download available"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Apple Mail Message":
@@ -190,6 +196,8 @@ def _media_family_label(item: dict) -> str:
         return "Rich Text"
     if family == "email":
         return "Email"
+    if family == "mailbox":
+        return "Mailbox"
     return family.title()
 
 
@@ -216,6 +224,8 @@ def _render_publication_provenance(item: dict) -> str:
         ("Intake date and time", item.get("upload_date")),
         ("Document date", item.get("document_date")),
         ("Server-detected document format", document_type_label(item.get("document_type"))),
+        ("Detected MBOX variant", _email_metadata(item).get("detected_mbox_variant") if is_mailbox_document(item) else None),
+        ("MBOX message count", _email_metadata(item).get("message_count") if is_mailbox_document(item) else None),
         ("Original filename", item.get("original_filename")),
         ("File size", f"{item.get('file_size_bytes')} bytes" if item.get("file_size_bytes") is not None else None),
         ("SHA-256 digest", item.get("sha256_hash")),
@@ -301,6 +311,105 @@ def _email_join(value: object) -> str:
     if isinstance(value, list):
         return " · ".join(str(item) for item in value if item is not None and str(item).strip())
     return str(value or "")
+
+
+
+def _message_by_index(metadata: dict, message_index: object | None) -> dict | None:
+    try:
+        wanted = int(message_index) if message_index is not None else 1
+    except (TypeError, ValueError):
+        wanted = 1
+    for message in metadata.get("messages") or []:
+        if isinstance(message, dict) and int(message.get("message_index") or 0) == wanted:
+            return message
+    messages = metadata.get("messages") or []
+    return messages[0] if messages and isinstance(messages[0], dict) else None
+
+
+def _render_mbox_document(item: dict, *, message_index: object | None = None, page: object | None = None) -> str:
+    metadata = _email_metadata(item)
+    messages = [message for message in (metadata.get("messages") or []) if isinstance(message, dict)]
+    try:
+        current_page = int(page or 1)
+    except (TypeError, ValueError):
+        current_page = 1
+    current_page = current_page if current_page > 0 else 1
+    page_size = 25
+    start = (current_page - 1) * page_size
+    visible_messages = messages[start : start + page_size]
+    total_pages = max(1, (len(messages) + page_size - 1) // page_size)
+    overview_fields = (
+        ("Detected format", metadata.get("source_format_label") or document_type_label(item.get("document_type"))),
+        ("Detected MBOX variant", metadata.get("detected_mbox_variant")),
+        ("Message count", metadata.get("message_count")),
+        ("Parsed message count", metadata.get("parsed_message_count")),
+        ("Warning message count", metadata.get("warning_message_count")),
+        ("Unparsed message count", metadata.get("unparsed_message_count")),
+        ("Attachment total", metadata.get("attachment_total")),
+        ("Earliest message date recorded in archive", metadata.get("earliest_message_date")),
+        ("Latest message date recorded in archive", metadata.get("latest_message_date")),
+        ("Message IDs present", metadata.get("message_ids_present")),
+        ("Message IDs missing", metadata.get("message_ids_missing")),
+        ("Exact duplicate count", metadata.get("exact_duplicate_count")),
+        ("Original-file download availability", _original_download_availability(item)),
+    )
+    overview_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(_display_value(value))}</td></tr>"
+        for label, value in overview_fields
+    )
+    index_rows = "".join(
+        f"""<tr>
+          <td class="mbox-index-cell"><a href="/documents/{escape(str(item.get('intake_id') or ''))}?message={escape(str(message.get('message_index') or ''))}">{escape(_display_value(message.get('message_index')))}</a></td>
+          <td class="mbox-date-cell">{escape(_display_value(message.get('date_header_parsed') or message.get('date_header_raw')))}</td>
+          <td class="mbox-from-cell">{escape(_display_value(message.get('from_raw') or message.get('sender_raw')))}</td>
+          <td class="mbox-subject-cell">{escape(_display_value(message.get('subject_decoded')))}</td>
+          <td class="mbox-to-cell">{escape(_display_value(message.get('to_raw')))}</td>
+          <td class="mbox-attachment-cell">{escape(_display_value(message.get('attachment_count') or 0))}</td>
+          <td class="mbox-status-cell">{escape(_display_value(message.get('parse_status')))}</td>
+          <td class="mbox-warning-cell">{'Yes' if message.get('parser_warnings') else 'No'}</td>
+        </tr>"""
+        for message in visible_messages
+    ) or '<tr><td colspan="8">No contained message projections are available.</td></tr>'
+    pagination = f'<p class="provenance-boundary">Showing messages {start + 1 if messages else 0}-{min(start + page_size, len(messages))} of {len(messages)}. Page {current_page} of {total_pages}. Public rendering is bounded to {page_size} message projections per page.</p>'
+    selected = _message_by_index(metadata, message_index)
+    detail = ""
+    if selected:
+        attachments = selected.get("attachments_metadata") or []
+        attachment_rows = "".join(
+            f"""<tr><td>{escape(_display_value(attachment.get('filename')))}</td><td>{escape(_display_value(attachment.get('media_type')))}</td><td>{escape(_display_value(attachment.get('byte_size')))}</td><td>{escape(_display_value(attachment.get('content_disposition')))}</td><td>{escape(_display_value(attachment.get('content_id')))}</td><td>{'Yes' if attachment.get('is_attached_message') else 'No'}</td></tr>"""
+            for attachment in attachments
+            if isinstance(attachment, dict)
+        ) or '<tr><td colspan="6">No attachment metadata was detected for this contained message.</td></tr>'
+        plain_text = str(selected.get("plain_text_preview") or "").strip()
+        html_preview = str(selected.get("sanitized_html_preview") or "").strip()
+        plain_block = f'<pre class="email-plain-text">{escape(plain_text)}</pre>' if plain_text else '<p class="provenance-boundary">No plain-text body was available in this contained-message projection.</p>'
+        html_block = f'<details class="email-html-details"><summary>Sanitised HTML preview</summary><div class="email-html-view">{html_preview}</div></details>' if html_preview else ""
+        detail_fields = (
+            ("Mailbox message index", selected.get("message_index")),
+            ("Contained-message digest", selected.get("message_digest")),
+            ("Source byte range", f"{selected.get('byte_start')}–{selected.get('byte_end')}"),
+            ("Subject", selected.get("subject_decoded")),
+            ("From", selected.get("from_raw")),
+            ("Sender", selected.get("sender_raw")),
+            ("Reply-To", selected.get("reply_to_raw")),
+            ("To", selected.get("to_raw")),
+            ("CC", selected.get("cc_raw")),
+            ("Individual message date recorded in source", selected.get("date_header_parsed") or selected.get("date_header_raw")),
+            ("Message-ID", selected.get("message_id")),
+            ("In-Reply-To", selected.get("in_reply_to")),
+            ("References", _email_join(selected.get("references"))),
+            ("MIME type", selected.get("content_type")),
+            ("Attachment count", selected.get("attachment_count")),
+            ("Parser warnings", _email_join(selected.get("parser_warnings")) or "No parser warnings were recorded."),
+        )
+        detail_rows = "".join(f"<tr><th>{escape(label)}</th><td>{escape(_display_value(value))}</td></tr>" for label, value in detail_fields)
+        detail = f"""<section class="public-mbox-message-detail"><h2>Message Detail</h2><table>{detail_rows}</table><h3>Message Body</h3>{plain_block}{html_block}<h3>Attachments</h3><p class="provenance-boundary">Attachments remain components of the preserved MBOX archive unless separately admitted through Document Intake.</p><div class="email-attachments-wrapper"><table><thead><tr><th>Filename</th><th>Media type</th><th>Byte size</th><th>Disposition</th><th>Content ID</th><th>Attached message</th></tr></thead><tbody>{attachment_rows}</tbody></table></div></section>"""
+    warnings = metadata.get("parser_warnings") or []
+    warning_text = _email_join(warnings) if warnings else "No mailbox-level parser warnings were recorded."
+    return f"""<section class="public-mbox-summary"><h2>Mailbox Overview</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p><table>{overview_rows}</table></section>
+<section class="public-mbox-index"><h2>Mailbox Message Index</h2>{pagination}<div class="email-attachments-wrapper"><table class="public-mbox-message-index"><thead><tr><th>Index</th><th>Date</th><th>From</th><th>Subject</th><th>To</th><th>Attachment count</th><th>Parse status</th><th>Warning indicator</th></tr></thead><tbody>{index_rows}</tbody></table></div><p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
+{detail}
+<section class="public-email-boundary"><h2>Mailbox Governance Boundary</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p></section>"""
 
 
 def _render_email_document(item: dict) -> str:
@@ -403,7 +512,7 @@ def _render_email_document(item: dict) -> str:
 <section class="public-email-boundary"><h2>Email Governance Boundary</h2><p class="provenance-boundary">{escape(boundary)}</p></section>"""
 
 
-def _render_document(item: dict, return_to: object | None = None) -> str:
+def _render_document(item: dict, return_to: object | None = None, message: object | None = None, page: object | None = None) -> str:
     publication_timestamp = _publication_timestamp(item)
     archive_return = sanitize_archive_return(return_to)
     fields = [
@@ -436,6 +545,8 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
         content_block = f"""<section id="document-content">{_render_workbook_metadata(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original spreadsheet</a></section>"""
     elif is_rich_text_document(item):
         content_block = f"""<section id="document-content"><section class="public-rich-text-summary"><h2>Rich Text Format Artefact</h2><p class="provenance-boundary">This Rich Text Format file is preserved and published as the original uploaded artefact. CDE does not convert, execute, or render the RTF as HTML; download the original file to inspect it with appropriate local software.</p></section><a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original RTF</a></section>"""
+    elif is_mailbox_document(item):
+        content_block = f"""<section id="document-content">{_render_mbox_document(item, message_index=message, page=page)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">Download original .mbox</a></section>"""
     elif is_email_document(item):
         download_label = "Download original .msg" if document_type_label(item.get("document_type")) == "Microsoft Outlook Message" else "Download original .emlx" if document_type_label(item.get("document_type")) == "Apple Mail Message" else "Download original .eml"
         content_block = f"""<section id="document-content">{_render_email_document(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">{download_label}</a></section>"""
@@ -447,7 +558,7 @@ def _render_document(item: dict, return_to: object | None = None) -> str:
     admin_actions = f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", archive_return), ("Published Documents", "/archive?type=published_document"), (str(item["title"]), None)])}{archive_back_link(archive_return)}<p>{object_type_badge("published_document")}</p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav>{admin_actions}<section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{content_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
 
@@ -480,12 +591,12 @@ def public_document_library(
 
 
 @router.get("/documents/{document_id}", response_class=HTMLResponse)
-def public_document_page(document_id: str, return_to: str | None = None):
+def public_document_page(document_id: str, return_to: str | None = None, message: str | None = Query(None), page: str | None = Query(None)):
     try:
         item = load_published_document(document_id, root=intake_root())
     except ValueError as exc:
         _not_found(exc)
-    return HTMLResponse(content=_render_document(item, return_to=return_to))
+    return HTMLResponse(content=_render_document(item, return_to=return_to, message=message, page=page))
 
 
 def _content_disposition(disposition: str, filename: str) -> str:
@@ -522,7 +633,7 @@ def public_document_download(document_id: str):
     except ValueError as exc:
         _not_found(exc)
     headers = None
-    if is_image_document(item) or is_audio_document(item) or is_spreadsheet_document(item) or is_rich_text_document(item) or is_email_document(item):
+    if is_image_document(item) or is_audio_document(item) or is_spreadsheet_document(item) or is_rich_text_document(item) or is_email_document(item) or is_mailbox_document(item):
         headers = {
             "Content-Disposition": _content_disposition(
                 "attachment",
