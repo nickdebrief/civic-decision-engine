@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import html
 import plistlib
 import re
@@ -47,6 +48,18 @@ MAX_EMLX_TRAILING_METADATA_BYTES = 512 * 1024
 MAX_EMLX_PLIST_DEPTH = 12
 MAX_EMLX_PLIST_ITEMS = 512
 MAX_EMLX_PLIST_STRING_LENGTH = 4096
+MAX_MBOX_BYTES = 25 * 1024 * 1024
+MAX_MBOX_MESSAGES = 500
+MAX_MBOX_MESSAGE_BYTES = 5 * 1024 * 1024
+MAX_MBOX_SEPARATOR_LINE_BYTES = 512
+MAX_MBOX_LINE_BYTES = 64 * 1024
+MAX_MBOX_ATTACHMENT_METADATA = 1000
+MAX_MBOX_TOTAL_DECODED_BYTES = 50 * 1024 * 1024
+MAX_MBOX_SEARCH_TEXT_CHARS = 250_000
+MAX_MBOX_MESSAGE_SEARCH_TEXT_CHARS = 20_000
+MAX_MBOX_PREVIEW_CHARS = 4000
+MAX_MBOX_PUBLIC_PAGE_SIZE = 25
+MAX_MBOX_PARSER_WARNINGS = 200
 
 CFB_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 FREESECT = 0xFFFFFFFF
@@ -72,6 +85,14 @@ APPLE_MAIL_GOVERNANCE_BOUNDARY = (
     "delivery, receipt, authorship, authenticity, factual accuracy, legal status, "
     "evidential sufficiency, or external validation."
 )
+MBOX_GOVERNANCE_BOUNDARY = (
+    "Parsed mailbox and message metadata reflects fields contained in the "
+    "preserved MBOX archive. It does not independently establish mailbox "
+    "completeness, sender identity, delivery, receipt, authorship, authenticity, "
+    "factual accuracy, legal status, evidential sufficiency, or external "
+    "validation. Contained messages remain projections of the preserved archive "
+    "unless separately admitted through Document Intake."
+)
 
 _HEADER_SEPARATOR_RE = re.compile(br"\r\n\r\n|\n\n|\r\r")
 _SCRIPT_STYLE_RE = re.compile(
@@ -85,6 +106,11 @@ _VOID_ACTIVE_RE = re.compile(
 _REMOTE_IMAGE_RE = re.compile(r"<\s*img\b[^>]*>", re.IGNORECASE | re.DOTALL)
 _TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
+_MBOX_SEPARATOR_RE = re.compile(
+    br"^From [^\r\n]{1,200} (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) "
+    br"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +\d{1,2} "
+    br"\d{2}:\d{2}:\d{2}(?: [+-]\d{4})? \d{4}\r?\n?$"
+)
 
 
 class _EmailSanitizer(HTMLParser):
@@ -738,6 +764,226 @@ def parse_outlook_msg_metadata(data: bytes) -> dict[str, Any]:
     }
 
 
+
+def _message_preview(value: Any, *, limit: int = MAX_MBOX_PREVIEW_CHARS) -> str:
+    text = _WHITESPACE_RE.sub(" ", str(value or "")).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].strip()
+
+
+def _mbox_line_offsets(data: bytes) -> list[tuple[int, bytes]]:
+    offsets: list[tuple[int, bytes]] = []
+    offset = 0
+    for line in data.splitlines(keepends=True):
+        if len(line) > MAX_MBOX_LINE_BYTES:
+            raise ValueError("document_intake_mbox_line_too_large")
+        offsets.append((offset, line))
+        offset += len(line)
+    if offset < len(data):
+        line = data[offset:]
+        if len(line) > MAX_MBOX_LINE_BYTES:
+            raise ValueError("document_intake_mbox_line_too_large")
+        offsets.append((offset, line))
+    return offsets
+
+
+def _is_mbox_separator(line: bytes) -> bool:
+    if len(line) > MAX_MBOX_SEPARATOR_LINE_BYTES:
+        raise ValueError("document_intake_mbox_separator_too_large")
+    return bool(_MBOX_SEPARATOR_RE.match(line))
+
+
+def _detect_mbox_variant(lines: list[tuple[int, bytes]]) -> str:
+    has_escaped_from = any(line.startswith(b">From ") for _offset, line in lines)
+    has_content_length = any(line.lower().startswith(b"content-length:") for _offset, line in lines)
+    if has_content_length:
+        return "mboxcl2" if has_escaped_from else "mboxcl"
+    return "mboxrd" if has_escaped_from else "mboxo"
+
+
+def _bounded_warning_list(values: list[str]) -> list[str]:
+    bounded: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = str(value or "").strip()[:160]
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        bounded.append(text)
+        if len(bounded) >= MAX_MBOX_PARSER_WARNINGS:
+            bounded.append("ParserWarningLimitReached")
+            break
+    return bounded
+
+
+def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
+    if not data:
+        raise ValueError("document_intake_file_required")
+    if len(data) > MAX_MBOX_BYTES:
+        raise ValueError("document_intake_file_too_large")
+    lines = _mbox_line_offsets(data)
+    if not lines:
+        raise ValueError("document_intake_invalid_mbox")
+
+    boundaries: list[tuple[int, int, bytes]] = []
+    for line_index, (offset, line) in enumerate(lines):
+        if line.startswith(b">From "):
+            continue
+        if line.startswith(b"From "):
+            if _is_mbox_separator(line):
+                boundaries.append((line_index, offset, line))
+            elif line_index == 0:
+                raise ValueError("document_intake_invalid_mbox")
+    if not boundaries:
+        raise ValueError("document_intake_invalid_mbox")
+    if len(boundaries) > MAX_MBOX_MESSAGES:
+        raise ValueError("document_intake_mbox_too_many_messages")
+
+    messages: list[dict[str, Any]] = []
+    parser_warnings: list[str] = []
+    total_contained_bytes = 0
+    total_decoded_bytes = 0
+    attachment_total = 0
+    parsed_count = 0
+    warning_message_count = 0
+    dates: list[str] = []
+    message_ids_present = 0
+    digest_counts: dict[str, int] = {}
+    search_parts: list[str] = []
+
+    for index, (line_index, boundary_offset, separator_line) in enumerate(boundaries, start=1):
+        next_boundary_offset = boundaries[index][1] if index < len(boundaries) else len(data)
+        message_start = boundary_offset + len(separator_line)
+        message_end = next_boundary_offset
+        message_bytes = data[message_start:message_end]
+        if len(message_bytes) > MAX_MBOX_MESSAGE_BYTES:
+            raise ValueError("document_intake_mbox_message_too_large")
+        total_contained_bytes += len(message_bytes)
+        digest = hashlib.sha256(message_bytes).hexdigest()
+        digest_counts[digest] = digest_counts.get(digest, 0) + 1
+        entry: dict[str, Any] = {
+            "message_index": index,
+            "byte_start": message_start,
+            "byte_end": message_end,
+            "separator_start": boundary_offset,
+            "separator_text": separator_line.decode("utf-8", errors="replace").strip()[:MAX_MBOX_SEPARATOR_LINE_BYTES],
+            "message_byte_size": len(message_bytes),
+            "message_digest": digest,
+            "parsed": False,
+            "parser_warnings": [],
+        }
+        try:
+            email_metadata = parse_email_metadata(message_bytes)
+        except ValueError as exc:
+            warning = str(exc) or "document_intake_invalid_email"
+            entry["parse_status"] = "warning"
+            entry["parser_warnings"] = [warning]
+            parser_warnings.append(f"Message {index}: {warning}")
+        else:
+            parsed_count += 1
+            warnings = list(email_metadata.get("parser_warnings") or [])
+            if warnings:
+                warning_message_count += 1
+            if email_metadata.get("message_id"):
+                message_ids_present += 1
+            date_value = email_metadata.get("date_header_parsed") or email_metadata.get("date_header_raw")
+            if date_value:
+                dates.append(str(date_value))
+            attachment_count = int(email_metadata.get("attachment_count") or 0)
+            attachment_total += attachment_count
+            if attachment_total > MAX_MBOX_ATTACHMENT_METADATA:
+                raise ValueError("document_intake_mbox_too_many_attachments")
+            total_decoded_bytes += len(str(email_metadata.get("plain_text_body") or "").encode("utf-8"))
+            total_decoded_bytes += len(str(email_metadata.get("sanitized_html_body") or "").encode("utf-8"))
+            if total_decoded_bytes > MAX_MBOX_TOTAL_DECODED_BYTES:
+                raise ValueError("document_intake_mbox_decoded_content_too_large")
+            search_text = _message_preview(email_metadata.get("body_search_text"), limit=MAX_MBOX_MESSAGE_SEARCH_TEXT_CHARS)
+            search_projection = {
+                "source_format": "mbox_message_projection",
+                "source_format_label": "MBOX Contained Message",
+                "message_id": email_metadata.get("message_id"),
+                "date_header_raw": email_metadata.get("date_header_raw"),
+                "date_header_parsed": email_metadata.get("date_header_parsed"),
+                "from_raw": email_metadata.get("from_raw"),
+                "sender_raw": email_metadata.get("sender_raw"),
+                "reply_to_raw": email_metadata.get("reply_to_raw"),
+                "to_raw": email_metadata.get("to_raw"),
+                "cc_raw": email_metadata.get("cc_raw"),
+                "subject_decoded": email_metadata.get("subject_decoded"),
+                "in_reply_to": email_metadata.get("in_reply_to"),
+                "references": email_metadata.get("references"),
+                "content_type": email_metadata.get("content_type"),
+                "body_search_text": search_text,
+                "attachments_metadata": email_metadata.get("attachments_metadata") or [],
+            }
+            search_parts.extend(email_projection_search_values({"email_metadata": search_projection}))
+            entry.update(
+                {
+                    "parsed": True,
+                    "parse_status": "parsed_with_warnings" if warnings else "parsed",
+                    "parser_warnings": warnings,
+                    "subject_decoded": email_metadata.get("subject_decoded"),
+                    "from_raw": email_metadata.get("from_raw"),
+                    "sender_raw": email_metadata.get("sender_raw"),
+                    "reply_to_raw": email_metadata.get("reply_to_raw"),
+                    "to_raw": email_metadata.get("to_raw"),
+                    "cc_raw": email_metadata.get("cc_raw"),
+                    "date_header_raw": email_metadata.get("date_header_raw"),
+                    "date_header_parsed": email_metadata.get("date_header_parsed"),
+                    "message_id": email_metadata.get("message_id"),
+                    "in_reply_to": email_metadata.get("in_reply_to"),
+                    "references": email_metadata.get("references"),
+                    "content_type": email_metadata.get("content_type"),
+                    "attachment_count": attachment_count,
+                    "plain_text_preview": _message_preview(email_metadata.get("plain_text_body")),
+                    "sanitized_html_preview": str(email_metadata.get("sanitized_html_body") or "")[:MAX_MBOX_PREVIEW_CHARS],
+                    "body_preview_available": bool(email_metadata.get("plain_text_body")),
+                    "html_preview_available": bool(email_metadata.get("sanitized_html_body")),
+                    "attachments_metadata": email_metadata.get("attachments_metadata") or [],
+                }
+            )
+        messages.append(entry)
+
+    if parsed_count == 0:
+        raise ValueError("document_intake_invalid_mbox")
+    for entry in messages:
+        digest = str(entry.get("message_digest") or "")
+        entry["duplicate_candidate"] = digest_counts.get(digest, 0) > 1
+    exact_duplicate_count = sum(count for count in digest_counts.values() if count > 1)
+    duplicate_candidate_count = sum(1 for entry in messages if entry.get("duplicate_candidate"))
+    unparsed_count = len(messages) - parsed_count
+    if unparsed_count:
+        warning_message_count += unparsed_count
+    search_text = _WHITESPACE_RE.sub(" ", " ".join(str(value or "") for value in search_parts)).strip()[:MAX_MBOX_SEARCH_TEXT_CHARS]
+    return {
+        "source_format": "mbox",
+        "source_format_label": "MBOX Mailbox Archive",
+        "detected_mbox_variant": _detect_mbox_variant(lines),
+        "message_count": len(messages),
+        "parsed_message_count": parsed_count,
+        "warning_message_count": warning_message_count,
+        "unparsed_message_count": unparsed_count,
+        "attachment_total": attachment_total,
+        "earliest_message_date": min(dates) if dates else "",
+        "latest_message_date": max(dates) if dates else "",
+        "message_ids_present": message_ids_present,
+        "message_ids_missing": parsed_count - message_ids_present,
+        "duplicate_candidate_count": duplicate_candidate_count,
+        "exact_duplicate_count": exact_duplicate_count,
+        "total_contained_message_bytes": total_contained_bytes,
+        "parser_version": "stage36-mbox-v1",
+        "parser_warnings": _bounded_warning_list(parser_warnings),
+        "body_search_text": search_text,
+        "attachment_count": attachment_total,
+        "messages": messages,
+    }
+
+
+def validate_mbox_archive_document(data: bytes) -> dict[str, Any]:
+    return parse_mbox_archive_metadata(data)
+
+
 def validate_outlook_msg_document(data: bytes) -> dict[str, Any]:
     return parse_outlook_msg_metadata(data)
 
@@ -1055,4 +1301,38 @@ def email_projection_search_values(metadata: dict[str, Any]) -> list[Any]:
                     attachment.get("content_id"),
                 ]
             )
+    if email_metadata.get("source_format") == "mbox":
+        values.extend(
+            [
+                email_metadata.get("source_format_label"),
+                email_metadata.get("detected_mbox_variant"),
+                email_metadata.get("message_count"),
+                email_metadata.get("parser_warnings"),
+                email_metadata.get("body_search_text"),
+            ]
+        )
+        for message in email_metadata.get("messages") or []:
+            if isinstance(message, dict):
+                values.extend(
+                    [
+                        message.get("message_index"),
+                        message.get("message_digest"),
+                        message.get("subject_decoded"),
+                        message.get("from_raw"),
+                        message.get("sender_raw"),
+                        message.get("reply_to_raw"),
+                        message.get("to_raw"),
+                        message.get("cc_raw"),
+                        message.get("date_header_raw"),
+                        message.get("date_header_parsed"),
+                        message.get("message_id"),
+                        message.get("in_reply_to"),
+                        message.get("references"),
+                        message.get("content_type"),
+                        message.get("plain_text_preview"),
+                    ]
+                )
+                for attachment in message.get("attachments_metadata") or []:
+                    if isinstance(attachment, dict):
+                        values.extend([attachment.get("filename"), attachment.get("media_type")])
     return values

@@ -9,6 +9,7 @@ from api.document_intake import (
     is_audio_document,
     is_email_document,
     is_image_document,
+    is_mailbox_document,
     is_rich_text_document,
     is_spreadsheet_document,
     published_document_file,
@@ -21,7 +22,7 @@ def _document_url(item: dict[str, Any]) -> str:
 
 def _media_label(item: dict[str, Any]) -> str:
     raw_type = str(item.get("document_type") or "").strip().lower()
-    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", "msg", "emlx", ""}
+    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", "msg", "emlx", "mbox", ""}
     if raw_type not in known_types:
         return "File"
     if is_image_document(item):
@@ -32,6 +33,8 @@ def _media_label(item: dict[str, Any]) -> str:
         return "Spreadsheet"
     if is_rich_text_document(item):
         return "Rich Text"
+    if is_mailbox_document(item):
+        return "MBOX Archive"
     if is_email_document(item):
         return "Outlook Message" if raw_type == "msg" else "Apple Mail Message" if raw_type == "emlx" else "RFC 5322 Email"
     try:
@@ -43,7 +46,7 @@ def _media_label(item: dict[str, Any]) -> str:
 
 def _action_label(item: dict[str, Any]) -> str:
     raw_type = str(item.get("document_type") or "").strip().lower()
-    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", "msg", "emlx", ""}
+    known_types = {"pdf", "jpeg", "png", "m4a", "mp3", "wav", "xls", "xlsx", "rtf", "eml", "msg", "emlx", "mbox", ""}
     if raw_type not in known_types:
         return "Open Published Document"
     if is_image_document(item):
@@ -54,6 +57,8 @@ def _action_label(item: dict[str, Any]) -> str:
         return "Open Spreadsheet document"
     if is_rich_text_document(item):
         return "Open Rich Text document"
+    if is_mailbox_document(item):
+        return "Open MBOX Archive"
     if is_email_document(item):
         return "Open Outlook Message" if raw_type == "msg" else "Open Apple Mail Message" if raw_type == "emlx" else "Open Email document"
     try:
