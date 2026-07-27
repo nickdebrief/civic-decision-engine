@@ -1,4 +1,4 @@
-# Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
+# CDE Platform Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
 
 The Civic Decision Engine can now process large individual messages within streamed MBOX archives using bounded file-backed parsing.
 
@@ -6,19 +6,19 @@ The original mailbox remains authoritative. Large contained messages are indexed
 
 ## Purpose
 
-Stage 37 proved the large-MBOX streaming route: a real Apple Mail archive could be uploaded to protected temporary storage, hashed incrementally, and brought to validation. Validation then exposed a narrower boundary: one contained message exceeded the parser's ordinary in-memory message threshold.
+CDE Platform Stage 37 proved the large-MBOX streaming route: a real Apple Mail archive could be uploaded to protected temporary storage, hashed incrementally, and brought to validation. Validation then exposed a narrower boundary: one contained message exceeded the parser's ordinary in-memory message threshold.
 
-Stage 37A addresses that contained-message boundary without raising the ordinary synchronous Document Intake limit, without changing the 1 GB streaming archive limit, and without turning contained messages or attachments into independent governed objects.
+CDE Platform Stage 37A addresses that contained-message boundary without raising the ordinary synchronous Document Intake limit, without changing the 1 GB streaming archive limit, and without turning contained messages or attachments into independent governed objects.
 
 ## Root Cause
 
-The Stage 37 file-backed mailbox parser still accumulated the current contained message into a `bytearray` before RFC 5322 parsing. The existing per-message limit was 5 MiB and applied to raw contained-message bytes. When a genuine mailbox contained an attachment-heavy or otherwise unusually large message, the parser correctly failed closed with `document_intake_mbox_message_too_large`.
+The CDE Platform Stage 37 file-backed mailbox parser still accumulated the current contained message into a `bytearray` before RFC 5322 parsing. The existing per-message limit was 5 MiB and applied to raw contained-message bytes. When a genuine mailbox contained an attachment-heavy or otherwise unusually large message, the parser correctly failed closed with `document_intake_mbox_message_too_large`.
 
 The administrative error response was also ambiguous because it reported the configured archive maximum while the failure was actually a contained-message limit.
 
 ## Limit Model
 
-Stage 37A separates the relevant limits:
+CDE Platform Stage 37A separates the relevant limits:
 
 - synchronous Document Intake upload limit: 25 MB by default;
 - streaming MBOX archive limit: 1 GB by default;
@@ -45,7 +45,7 @@ The complete message remains part of the authoritative MBOX archive.
 
 ## Attachment Treatment
 
-Attachments remain metadata-only. Stage 37A does not decode or publish large attachment payloads independently, does not create governed documents for attachments, and does not add attachment download routes. Where attachment metadata can be identified from the bounded projection, it is retained for inspection and discovery.
+Attachments remain metadata-only. CDE Platform Stage 37A does not decode or publish large attachment payloads independently, does not create governed documents for attachments, and does not add attachment download routes. Where attachment metadata can be identified from the bounded projection, it is retained for inspection and discovery.
 
 If complete payload sizing would require unbounded decoding, the source archive remains authoritative and the bounded projection remains intentionally limited.
 
@@ -80,7 +80,7 @@ This distinguishes a contained-message failure from a full archive size failure.
 
 ## Governance Invariants
 
-Stage 37A does not change the governed object model. The full `.mbox` remains the Document. The Document Identifier and SHA-256 belong to the full original archive. Contained-message digests are projection metadata only and do not create independent governed identities.
+CDE Platform Stage 37A does not change the governed object model. The full `.mbox` remains the Document. The Document Identifier and SHA-256 belong to the full original archive. Contained-message digests are projection metadata only and do not create independent governed identities.
 
 The release does not change lifecycle states, publication rules, associations, collections, transmissions, public eligibility, authorization, storage semantics, or existing public URLs.
 
@@ -88,8 +88,8 @@ The release does not change lifecycle states, publication rules, associations, c
 
 Focused tests cover large plain-text messages, large HTML messages, large attachment-heavy messages, file-backed preview mode, preview truncation, incremental contained-message digest calculation, byte-range preservation, message order, metadata-only attachments, hard per-message limit errors, corrected administrative error payloads, exact hard-limit acceptance, public message detail fields, and no document creation after failure.
 
-Regression tests cover Stage 37 streaming ingestion, Stage 36 MBOX archive support, Stage 35A RFC 5322 `.eml`, Stage 35B Outlook `.msg`, Stage 35C Apple Mail `.emlx`, and the full test suite.
+Regression tests cover CDE Platform Stage 37 streaming ingestion, CDE Platform Stage 36 MBOX archive support, CDE Platform Stage 35A RFC 5322 `.eml`, CDE Platform Stage 35B Outlook `.msg`, CDE Platform Stage 35C Apple Mail `.emlx`, and the full test suite.
 
 ## Intentional Exclusions
 
-Stage 37A does not implement automatic contained-message promotion, independent attachment downloads, attachment extraction, complete mboxcl `Content-Length` semantics, direct Apple Mail package upload, PST or OST support, mailbox repair, background queues, resumable uploads, or unbounded message parsing.
+CDE Platform Stage 37A does not implement automatic contained-message promotion, independent attachment downloads, attachment extraction, complete mboxcl `Content-Length` semantics, direct Apple Mail package upload, PST or OST support, mailbox repair, background queues, resumable uploads, or unbounded message parsing.

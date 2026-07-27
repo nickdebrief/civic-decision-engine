@@ -1,4 +1,4 @@
-# Stage 35A / CDE v13.0.5 — RFC 5322 .eml Ingestion
+# CDE Platform Stage 35A / CDE v13.0.5 — RFC 5322 .eml Ingestion
 
 The Civic Decision Engine can now preserve native RFC 5322 email files as
 independently governed documents.
@@ -9,7 +9,7 @@ replacing or rewriting the source.
 
 ## Scope
 
-Stage 35A extends the existing governed Document Intake workflow to accept
+CDE Platform Stage 35A extends the existing governed Document Intake workflow to accept
 `.eml` files. An admitted email follows the existing lifecycle:
 
 Pending Intake -> Under Review -> Approved -> Published
@@ -77,7 +77,7 @@ replace the stored file.
 
 ## HTML Sanitisation
 
-Original email HTML is never rendered directly. Stage 35A uses a restrained
+Original email HTML is never rendered directly. CDE Platform Stage 35A uses a restrained
 allowlist sanitizer for the public HTML projection.
 
 The sanitizer removes or neutralises active and remote content, including:
@@ -94,7 +94,7 @@ shown as an optional presentation projection.
 
 ## Attachment Treatment
 
-Stage 35A extracts attachment metadata only. Public pages list, where available:
+CDE Platform Stage 35A extracts attachment metadata only. Public pages list, where available:
 
 - filename;
 - media type;
@@ -109,7 +109,7 @@ not receive Document Identifiers, associations, collection memberships, or
 transmission relationships unless separately admitted through existing governed
 workflows.
 
-Stage 35A does not add independent public attachment download routes.
+CDE Platform Stage 35A does not add independent public attachment download routes.
 
 ## Search Behaviour
 
@@ -155,7 +155,7 @@ CDE does not reconstruct the message from parsed fields.
 
 ## Security Limits
 
-Stage 35A applies bounded parser limits for:
+CDE Platform Stage 35A applies bounded parser limits for:
 
 - maximum `.eml` upload size;
 - maximum header count;
@@ -192,7 +192,7 @@ authenticity, delivery, receipt, authorship, truth, or legal status.
 
 ## Known Exclusions
 
-Stage 35A does not implement:
+CDE Platform Stage 35A does not implement:
 
 - Outlook `.msg` support;
 - PST, MBOX, Gmail Takeout, Apple Mail package, Exchange archive, or mailbox

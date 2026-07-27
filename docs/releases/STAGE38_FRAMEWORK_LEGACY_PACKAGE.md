@@ -9,7 +9,7 @@ performing evaluation or changing existing outputs.
 
 ## Why Stage 38 Matters
 
-Stage 36 established visible methodological self-containment and Stage 37
+CREF Stage 36 established visible methodological self-containment and CREF Stage 37
 declared stewardship responsibilities. Stage 38 packages those foundations with
 the implemented evaluation, inspection, and governance outputs so the
 methodology can be preserved independently of a particular software runtime.
@@ -24,7 +24,7 @@ The complete package contains 36 deterministic items:
 - 0 legacy gaps.
 
 The items cover core methodology statements, phase declarations, report modes,
-Stages 22–37 inspection and governance outputs, methodology/implementation
+CREF Stages 22–37 inspection and governance outputs, methodology/implementation
 separation, preservation requirements, adoption and future-stage boundaries,
 non-mutation, non-authority, and limitation visibility.
 
@@ -57,7 +57,7 @@ Stage 22–34 preservation count.
   and full limitations.
 
 Full Inspection remains the default mode, and Stage 38 appears immediately
-after Stage 37.
+after CREF Stage 37.
 
 ## Limitations
 

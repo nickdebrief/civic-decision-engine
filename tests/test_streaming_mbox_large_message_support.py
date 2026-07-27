@@ -115,7 +115,7 @@ class StreamingMBOXLargeMessageSupportTests(unittest.TestCase):
             "category": "Mailbox Archive",
             "description": "Mailbox with a large contained message.",
             "visibility": "private",
-            "notes": "Stage 37A large message test.",
+            "notes": "CDE Platform Stage 37A large message test.",
             "reference_identifier": "STAGE37A-MBOX",
             "keywords": "large message, mbox",
             "actor": "large-message-admin",

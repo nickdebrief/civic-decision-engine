@@ -1,4 +1,4 @@
-# Stage 35B / CDE v13.0.6 — Microsoft Outlook .msg Ingestion
+# CDE Platform Stage 35B / CDE v13.0.6 — Microsoft Outlook .msg Ingestion
 
 The Civic Decision Engine can now preserve native Microsoft Outlook message
 files as independently governed documents.
@@ -9,7 +9,7 @@ support inspection and discovery without replacing or rewriting the source.
 
 ## Scope
 
-Stage 35B extends the existing governed Document Intake workflow to admit
+CDE Platform Stage 35B extends the existing governed Document Intake workflow to admit
 Microsoft Outlook `.msg` files. A `.msg` file follows the existing lifecycle:
 
 ```text
@@ -22,7 +22,7 @@ introduced.
 
 ## Dependency Choice
 
-No new runtime dependency is introduced for Stage 35B. The implementation uses a
+No new runtime dependency is introduced for CDE Platform Stage 35B. The implementation uses a
 narrow, bounded, in-memory Compound File Binary reader and MAPI property
 projection tailored to the fields needed by CDE public inspection. This avoids
 parser behaviours that may write attachments to disk by default, and keeps the
@@ -50,7 +50,7 @@ paths, stack traces, or raw message content.
 
 ## CFB and MAPI Parsing Model
 
-Stage 35B parses the original upload bytes and stores a structured email
+CDE Platform Stage 35B parses the original upload bytes and stores a structured email
 projection alongside the document metadata. The projection is derived metadata;
 it is not a replacement source file.
 
@@ -94,7 +94,7 @@ recorded in the preserved source message.
 Plain-text body content is the primary public reading projection where present.
 HTML body content is never rendered directly; it is sanitised before display and
 converted to text for public-safe search. RTF body presence is recorded, but raw
-Outlook RTF is not rendered publicly in Stage 35B.
+Outlook RTF is not rendered publicly in CDE Platform Stage 35B.
 
 RTF handling is deliberately bounded. CDE records presence and compressed stream
 size limits, but does not execute embedded RTF objects, convert Outlook RTF to
@@ -102,7 +102,7 @@ HTML, or let RTF parsing alter source bytes or SHA-256 values.
 
 ## HTML Sanitisation
 
-Stage 35B reuses the Stage 35A email HTML boundary. Sanitisation removes or
+CDE Platform Stage 35B reuses the CDE Platform Stage 35A email HTML boundary. Sanitisation removes or
 neutralises scripts, event handlers, iframes, forms, active objects, external
 stylesheets, JavaScript URLs, unsafe data URLs, remote images, and tracking
 pixels. No remote image, stylesheet, font, attachment, or linked resource is
@@ -111,7 +111,7 @@ fetched during parsing or rendering.
 ## Attachment and Embedded Message Treatment
 
 Attachments remain components of the source `.msg` file unless separately
-admitted through Document Intake. Stage 35B lists attachment metadata only:
+admitted through Document Intake. CDE Platform Stage 35B lists attachment metadata only:
 
 - attachment index;
 - filename and long filename where supplied;
@@ -169,7 +169,7 @@ type. CDE never reconstructs a `.msg` file from parsed fields.
 
 ## Security Limits
 
-Stage 35B applies bounded limits for:
+CDE Platform Stage 35B applies bounded limits for:
 
 - maximum `.msg` upload size;
 - CFB directory entries;
@@ -211,7 +211,7 @@ or external validation.
 
 ## Compatibility
 
-Stage 35B preserves existing behaviour for RFC 5322 `.eml`, PDF, JPEG, PNG,
+CDE Platform Stage 35B preserves existing behaviour for RFC 5322 `.eml`, PDF, JPEG, PNG,
 M4A, MP3, WAV, XLS, XLSX, RTF, canonical records, record-document associations,
 archive collections, transmissions, corrections, audit history, verification
 hashes, identifiers, and public URLs.
@@ -226,13 +226,13 @@ preservation, exact original `.msg` download, validation failures, public/privat
 access boundaries, public search, preview, archive filtering, and admin review
 guidance.
 
-Stage 35A RFC 5322 regression tests and the full regression suite were run to
+CDE Platform Stage 35A RFC 5322 regression tests and the full regression suite were run to
 confirm that existing email ingestion and other governed document behaviours were
 not changed.
 
 ## Known Exclusions
 
-Stage 35B does not implement `.emlx`, PST, OST, MBOX, Gmail Takeout,
+CDE Platform Stage 35B does not implement `.emlx`, PST, OST, MBOX, Gmail Takeout,
 mailbox-level ingestion, email sending, SMTP, IMAP, attachment extraction into
 separate governed documents, independent attachment downloads, Outlook RTF
 rendering, automatic transmissions, automatic collection membership, automatic

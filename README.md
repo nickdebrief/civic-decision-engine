@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 37A / v13.0.10 — Large Contained MBOX Message Handling
+Current release: CDE Platform Stage 37A / v13.0.10 — Large Contained MBOX Message Handling
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -87,6 +87,16 @@ Release documentation:
 ## Live System
 
 https://civic-decision-engine-production.up.railway.app/
+
+---
+
+## Stage Numbering
+
+CREF stage numbers describe the evolution of the governance methodology.
+
+CDE Platform stage numbers describe implementation milestones within the Civic Decision Engine software.
+
+These are independent sequences and should not be interpreted as a single continuous roadmap.
 
 ---
 
@@ -738,7 +748,7 @@ attachment behaviour. CDE validates RTF structure server-side, recognises
 renamed or inconsistent files, and does not convert, render, execute, or extract
 full text from the RTF during intake or publication.
 
-### Stage 35A / CDE v13.0.5 — RFC 5322 .eml Ingestion
+### CDE Platform Stage 35A / CDE v13.0.5 — RFC 5322 .eml Ingestion
 
 The Civic Decision Engine can now preserve native RFC 5322 email files
 (`.eml`) as independently governed Published Documents. The original message
@@ -760,7 +770,7 @@ Parsed email metadata improves public discovery without verifying sender
 identity, delivery, receipt, authorship, authenticity, factual accuracy, legal
 status, evidential sufficiency, or external validation.
 
-### Stage 35B / CDE v13.0.6 — Microsoft Outlook .msg Ingestion
+### CDE Platform Stage 35B / CDE v13.0.6 — Microsoft Outlook .msg Ingestion
 
 The Civic Decision Engine can now preserve native Microsoft Outlook message
 files (`.msg`) as independently governed Published Documents. The original
@@ -785,7 +795,7 @@ authorship, authenticity, factual accuracy, legal status, evidential sufficiency
 or external validation.
 
 
-### Stage 35C / CDE v13.0.7 — Apple Mail .emlx Ingestion
+### CDE Platform Stage 35C / CDE v13.0.7 — Apple Mail .emlx Ingestion
 
 The Civic Decision Engine can now preserve native Apple Mail message files
 (`.emlx`) as independently governed Published Documents. The full original
@@ -796,7 +806,7 @@ projection.
 
 Admin Document Intake recognises `.emlx` files using server-side Apple Mail
 wrapper validation. The parser reads the bounded decimal byte-count line,
-extracts exactly the declared RFC 5322 message bytes, reuses the Stage 35A
+extracts exactly the declared RFC 5322 message bytes, reuses the CDE Platform Stage 35A
 RFC 5322/MIME parser for email fields and body presentation, and parses bounded
 Apple plist metadata only where safe. Published Apple Mail documents reuse the
 shared email presentation model: Email Overview, Apple Mail Metadata, Message
@@ -814,7 +824,7 @@ supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
 
-### Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
+### CDE Platform Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
 
 The Civic Decision Engine can now process large individual messages within
 streamed MBOX archives using bounded file-backed parsing. The original mailbox
@@ -822,7 +832,7 @@ remains authoritative. Large contained messages are indexed by byte range,
 hashed incrementally, and presented through bounded safe previews without
 decoding or publishing attachment payloads independently.
 
-Stage 37A keeps the ordinary 25 MB synchronous Document Intake boundary and the
+CDE Platform Stage 37A keeps the ordinary 25 MB synchronous Document Intake boundary and the
 1 GB streaming archive boundary separate from contained-message limits. The
 synchronous parser retains the conservative in-memory message threshold, while
 the streaming parser uses a larger hard contained-message maximum and bounded
@@ -830,7 +840,7 @@ file-range reads for oversized messages. Error responses now report archive
 limits and contained-message limits separately when a mailbox message is too
 large.
 
-### Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
+### CDE Platform Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
 
 The Civic Decision Engine can now admit large MBOX mailbox archives through a
 dedicated governed streaming pathway. Mailbox bytes are written incrementally to
@@ -848,13 +858,13 @@ guard for the local process. These are operational processing controls only;
 the resulting object follows the ordinary Pending Intake, Under Review,
 Approved, Published lifecycle.
 
-After finalisation, a streamed archive behaves like every other Stage 36 MBOX
+After finalisation, a streamed archive behaves like every other CDE Platform Stage 36 MBOX
 document: the complete original MBOX remains authoritative, the SHA-256 digest
 is calculated from the untouched full archive, contained messages remain bounded
 projections, archive filtering and public mailbox presentation are reused, and
 original `.mbox` download returns the exact stored bytes.
 
-### Stage 36 / CDE v13.0.8 — Governed MBOX Archive Ingestion
+### CDE Platform Stage 36 / CDE v13.0.8 — Governed MBOX Archive Ingestion
 
 The Civic Decision Engine can now preserve MBOX mailbox archives as governed
 container documents. The full original MBOX remains authoritative. Contained
@@ -1444,26 +1454,26 @@ performs no evaluation, creates no authority, and modifies no records.
 
 ---
 
-## Stage 35 — Framework Lifecycle Review
+## CREF Stage 35 — Framework Lifecycle Review
 
 Introduces a visible and inspectable lifecycle review model for the methodology
 itself. Twenty-eight deterministic items review declared phases, implemented
 stage progression, continuity, governance, lineage, preservation counts, and
 framework lifecycle boundaries.
 
-The review records Phase I (Stages 1–19), Phase II (Stages 20–30), and the
-declared Phase III governance scope (Stages 31–40), while identifying Stage 35
-as the current implemented endpoint. Stages 36–40 are not inferred or treated
+The review records Phase I (CREF Stages 1–19), Phase II (CREF Stages 20–30), and the
+declared Phase III governance scope (CREF Stages 31–40), while identifying CREF Stage 35
+as the current implemented endpoint. CREF Stages 36–40 are not inferred or treated
 as implemented.
 
 Executive mode presents the lifecycle overview and relationships; Review mode
 adds the lifecycle summary table; Full Inspection mode exposes every declared
 and observed lifecycle state, result, basis, affected output, and limitation.
-Stage 35 performs no evaluation, creates no authority, and modifies no records.
+CREF Stage 35 performs no evaluation, creates no authority, and modifies no records.
 
 ---
 
-## Stage 36 — Framework Self-Containment Certification
+## CREF Stage 36 — Framework Self-Containment Certification
 
 Certifies visible methodological self-containment by documenting whether CREF
 can be understood and independently adopted as a methodology separate from the
@@ -1484,7 +1494,7 @@ checks, relationships, bases, observed states, results, and limitations.
 
 ---
 
-## Stage 37 — Framework Stewardship Declaration
+## CREF Stage 37 — Framework Stewardship Declaration
 
 Introduces a visible and inspectable declaration of stewardship responsibilities
 for the CREF methodology. Twenty-five deterministic declarations cover

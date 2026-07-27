@@ -53,12 +53,12 @@ principles.
 - **Phase I — Evaluation Methodology:** Stages 1–19.
 - **Phase II — Reflexive Inspection Infrastructure:** Stages 20–30.
 - **Phase III — Methodology Governance:** declared as Stages 31–40, with
-  implemented visibility currently extending through Stage 34 only.
+  implemented visibility currently extending through CREF Stage 34 only.
 - Implemented stage succession remains sequential and inspectable.
 - Implemented stages remain visible and reproducible.
 - Lineage is derived exclusively from declared framework metadata.
 
-The Phase III declaration does not imply that Stages 35–40 are implemented.
+The Phase III declaration does not imply that CREF Stages 35–40 are implemented.
 
 ## Report Modes
 
@@ -85,7 +85,7 @@ It documents visible and declared framework versions only.
 
 ## Preservation And Non-Mutation Guarantees
 
-Stage 34 consumes existing outputs without changing them. Stage 21 report modes
+Stage 34 consumes existing outputs without changing them. CREF Stage 21 report modes
 and all Stage 22–33 preservation counts remain unchanged. The builder copies
 visible inputs, returns deterministic lineage data, and does not persist data.
 

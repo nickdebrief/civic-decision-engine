@@ -1,14 +1,14 @@
-# Stage 36 — Framework Self-Containment Certification
+# CREF Stage 36 — Framework Self-Containment Certification
 
 ## Purpose
 
-Stage 36 certifies visible methodological self-containment for the Civic Record
+CREF Stage 36 certifies visible methodological self-containment for the Civic Record
 Evaluation Framework. It determines whether CREF is sufficiently described by
 its visible methodology, stages, phases, deterministic outputs, governance
 structures, boundaries, and documentation to be understood separately from the
 Civic Decision Engine implementation.
 
-## Why Stage 36 Matters
+## Why CREF Stage 36 Matters
 
 CREF is the methodology. Civic Decision Engine is one implementation of that
 methodology. Making this distinction inspectable allows CREF to be studied,
@@ -58,7 +58,7 @@ The visible relationship model states:
 
 ## Relationship To Civic Decision Engine
 
-Stage 36 does not reject or diminish Civic Decision Engine. It records the
+CREF Stage 36 does not reject or diminish Civic Decision Engine. It records the
 implementation relationship accurately: the engine operationalises CREF, while
 CREF remains describable as a methodology through its own declared structure.
 The methodology still depends on its documentation; self-containment does not
@@ -113,7 +113,7 @@ It certifies visible methodological self-containment only.
 
 ## Preservation And Non-Mutation Guarantees
 
-Stage 36 consumes existing outputs without changing them. Stage 21 report modes
+CREF Stage 36 consumes existing outputs without changing them. CREF Stage 21 report modes
 and all Stage 22–35 preservation counts remain unchanged. The builder copies
 visible inputs, returns deterministic certification data, and persists nothing.
 
@@ -132,7 +132,7 @@ required before completion.
 
 ## Implementation Summary
 
-Stage 36 adds one deterministic self-containment builder and scoped
+CREF Stage 36 adds one deterministic self-containment builder and scoped
 administrative renderers to the existing admin record evidence flow. No route,
 persistence mechanism, external integration, schema field, software portability
 mechanism, or evaluative classification is added.

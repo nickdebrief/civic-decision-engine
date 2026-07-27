@@ -9,7 +9,7 @@ how it intersects with adjacent methodological domains.
 
 ## Why Stage 39 Matters
 
-Stage 36 established methodological self-containment, Stage 37 declared
+CREF Stage 36 established methodological self-containment, CREF Stage 37 declared
 stewardship responsibilities, and Stage 38 assembled the preservable legacy
 package. Stage 39 uses those visible outputs to describe CREF's broader
 methodological character without introducing new evaluation or external claims.
