@@ -220,12 +220,25 @@ def _render_publication_provenance(item: dict) -> str:
     approval_event = _first_event(item, "approved")
     publication_event = _first_event(item, "published")
     initial_event = _first_event(item, "pending")
+    email_metadata = _email_metadata(item)
+    intake_mode = item.get("intake_mode") or email_metadata.get("intake_mode")
+    intake_mode_label = (
+        "Governed Streaming Mailbox Intake"
+        if intake_mode == "governed_streaming_mbox"
+        else None
+    )
     provenance_fields = (
         ("Intake date and time", item.get("upload_date")),
+        ("Intake mode", intake_mode_label),
+        ("Streaming upload started", email_metadata.get("streaming_upload_started_at") if intake_mode_label else None),
+        ("Streaming upload completed", email_metadata.get("streaming_upload_completed_at") if intake_mode_label else None),
+        ("Streaming validation completed", email_metadata.get("streaming_validation_completed_at") if intake_mode_label else None),
+        ("Streaming finalisation timestamp", email_metadata.get("streaming_finalised_at") if intake_mode_label else None),
+        ("Configured streaming limit", f"{email_metadata.get('streaming_max_upload_bytes')} bytes" if intake_mode_label and email_metadata.get("streaming_max_upload_bytes") is not None else None),
         ("Document date", item.get("document_date")),
         ("Server-detected document format", document_type_label(item.get("document_type"))),
-        ("Detected MBOX variant", _email_metadata(item).get("detected_mbox_variant") if is_mailbox_document(item) else None),
-        ("MBOX message count", _email_metadata(item).get("message_count") if is_mailbox_document(item) else None),
+        ("Detected MBOX variant", email_metadata.get("detected_mbox_variant") if is_mailbox_document(item) else None),
+        ("MBOX message count", email_metadata.get("message_count") if is_mailbox_document(item) else None),
         ("Original filename", item.get("original_filename")),
         ("File size", f"{item.get('file_size_bytes')} bytes" if item.get("file_size_bytes") is not None else None),
         ("SHA-256 digest", item.get("sha256_hash")),

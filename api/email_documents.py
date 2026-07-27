@@ -12,6 +12,7 @@ from email.header import decode_header
 from email.parser import BytesParser
 from email.utils import getaddresses, parsedate_to_datetime
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Any
 
 
@@ -817,27 +818,15 @@ def _bounded_warning_list(values: list[str]) -> list[str]:
     return bounded
 
 
-def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
-    if not data:
-        raise ValueError("document_intake_file_required")
-    if len(data) > MAX_MBOX_BYTES:
-        raise ValueError("document_intake_file_too_large")
-    lines = _mbox_line_offsets(data)
-    if not lines:
+def _parse_mbox_message_entries(
+    entries: list[tuple[int, int, int, bytes, bytes]],
+    *,
+    archive_byte_size: int,
+    detected_variant: str,
+) -> dict[str, Any]:
+    if not entries:
         raise ValueError("document_intake_invalid_mbox")
-
-    boundaries: list[tuple[int, int, bytes]] = []
-    for line_index, (offset, line) in enumerate(lines):
-        if line.startswith(b">From "):
-            continue
-        if line.startswith(b"From "):
-            if _is_mbox_separator(line):
-                boundaries.append((line_index, offset, line))
-            elif line_index == 0:
-                raise ValueError("document_intake_invalid_mbox")
-    if not boundaries:
-        raise ValueError("document_intake_invalid_mbox")
-    if len(boundaries) > MAX_MBOX_MESSAGES:
+    if len(entries) > MAX_MBOX_MESSAGES:
         raise ValueError("document_intake_mbox_too_many_messages")
 
     messages: list[dict[str, Any]] = []
@@ -852,11 +841,7 @@ def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
     digest_counts: dict[str, int] = {}
     search_parts: list[str] = []
 
-    for index, (line_index, boundary_offset, separator_line) in enumerate(boundaries, start=1):
-        next_boundary_offset = boundaries[index][1] if index < len(boundaries) else len(data)
-        message_start = boundary_offset + len(separator_line)
-        message_end = next_boundary_offset
-        message_bytes = data[message_start:message_end]
+    for index, (message_start, message_end, separator_start, separator_line, message_bytes) in enumerate(entries, start=1):
         if len(message_bytes) > MAX_MBOX_MESSAGE_BYTES:
             raise ValueError("document_intake_mbox_message_too_large")
         total_contained_bytes += len(message_bytes)
@@ -866,7 +851,7 @@ def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
             "message_index": index,
             "byte_start": message_start,
             "byte_end": message_end,
-            "separator_start": boundary_offset,
+            "separator_start": separator_start,
             "separator_text": separator_line.decode("utf-8", errors="replace").strip()[:MAX_MBOX_SEPARATOR_LINE_BYTES],
             "message_byte_size": len(message_bytes),
             "message_digest": digest,
@@ -959,7 +944,7 @@ def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
     return {
         "source_format": "mbox",
         "source_format_label": "MBOX Mailbox Archive",
-        "detected_mbox_variant": _detect_mbox_variant(lines),
+        "detected_mbox_variant": detected_variant,
         "message_count": len(messages),
         "parsed_message_count": parsed_count,
         "warning_message_count": warning_message_count,
@@ -972,12 +957,105 @@ def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
         "duplicate_candidate_count": duplicate_candidate_count,
         "exact_duplicate_count": exact_duplicate_count,
         "total_contained_message_bytes": total_contained_bytes,
+        "archive_byte_size": archive_byte_size,
         "parser_version": "stage36-mbox-v1",
         "parser_warnings": _bounded_warning_list(parser_warnings),
         "body_search_text": search_text,
         "attachment_count": attachment_total,
         "messages": messages,
     }
+
+
+def parse_mbox_archive_metadata(data: bytes) -> dict[str, Any]:
+    if not data:
+        raise ValueError("document_intake_file_required")
+    if len(data) > MAX_MBOX_BYTES:
+        raise ValueError("document_intake_file_too_large")
+    lines = _mbox_line_offsets(data)
+    if not lines:
+        raise ValueError("document_intake_invalid_mbox")
+
+    boundaries: list[tuple[int, int, bytes]] = []
+    for line_index, (offset, line) in enumerate(lines):
+        if line.startswith(b">From "):
+            continue
+        if line.startswith(b"From "):
+            if _is_mbox_separator(line):
+                boundaries.append((line_index, offset, line))
+            elif line_index == 0:
+                raise ValueError("document_intake_invalid_mbox")
+    if not boundaries:
+        raise ValueError("document_intake_invalid_mbox")
+    entries: list[tuple[int, int, int, bytes, bytes]] = []
+    for index, (line_index, boundary_offset, separator_line) in enumerate(boundaries, start=1):
+        next_boundary_offset = boundaries[index][1] if index < len(boundaries) else len(data)
+        message_start = boundary_offset + len(separator_line)
+        message_end = next_boundary_offset
+        entries.append((message_start, message_end, boundary_offset, separator_line, data[message_start:message_end]))
+    return _parse_mbox_message_entries(entries, archive_byte_size=len(data), detected_variant=_detect_mbox_variant(lines))
+
+
+def parse_mbox_archive_metadata_from_file(path: Path | str, *, max_archive_bytes: int | None = None) -> dict[str, Any]:
+    source = Path(path)
+    archive_size = source.stat().st_size
+    if archive_size <= 0:
+        raise ValueError("document_intake_file_required")
+    if max_archive_bytes is not None and archive_size > max_archive_bytes:
+        raise ValueError("streaming_mbox_file_too_large")
+
+    entries: list[tuple[int, int, int, bytes, bytes]] = []
+    current_separator: tuple[int, bytes] | None = None
+    current_message_start = 0
+    current_message = bytearray()
+    offset = 0
+    line_index = 0
+    saw_escaped_from = False
+    saw_content_length = False
+
+    def finish_message(message_end: int) -> None:
+        if current_separator is None:
+            return
+        separator_start, separator_line = current_separator
+        entries.append((current_message_start, message_end, separator_start, separator_line, bytes(current_message)))
+
+    with source.open("rb") as handle:
+        while True:
+            line = handle.readline()
+            if not line:
+                break
+            if len(line) > MAX_MBOX_LINE_BYTES:
+                raise ValueError("document_intake_mbox_line_too_large")
+            is_boundary = False
+            if line.startswith(b">From "):
+                saw_escaped_from = True
+            elif line.startswith(b"Content-Length:"):
+                saw_content_length = True
+            elif line.startswith(b"From "):
+                if _is_mbox_separator(line):
+                    is_boundary = True
+                elif line_index == 0:
+                    raise ValueError("document_intake_invalid_mbox")
+            if is_boundary:
+                finish_message(offset)
+                if len(entries) >= MAX_MBOX_MESSAGES:
+                    raise ValueError("document_intake_mbox_too_many_messages")
+                current_separator = (offset, line)
+                current_message_start = offset + len(line)
+                current_message = bytearray()
+            elif current_separator is not None:
+                current_message.extend(line)
+                if len(current_message) > MAX_MBOX_MESSAGE_BYTES:
+                    raise ValueError("document_intake_mbox_message_too_large")
+            offset += len(line)
+            line_index += 1
+    finish_message(archive_size)
+
+    variant = "mboxo"
+    if saw_content_length:
+        variant = "mboxcl"
+    if saw_escaped_from:
+        variant = "mboxrd"
+    return _parse_mbox_message_entries(entries, archive_byte_size=archive_size, detected_variant=variant)
 
 
 def validate_mbox_archive_document(data: bytes) -> dict[str, Any]:

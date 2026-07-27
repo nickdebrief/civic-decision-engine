@@ -66,7 +66,7 @@ Apple Mail exports a Finder package ending in `.mbox` that contains the actual m
 
 The intake file picker now explicitly permits `.mbox`, `application/mbox`, `text/mbox`, and `application/octet-stream` so browser and Finder classifications for copied Apple Mail mailbox data do not hide an otherwise uploadable file. This picker compatibility does not weaken server-side validation: the upload must still have a supported `.mbox` filename, satisfy mailbox boundary checks, respect configured upload and parser limits, and preserve the original bytes for SHA-256 calculation.
 
-The current governed Document Intake path is synchronous and bounded at the configured Document Intake upload limit, 25 MB by default. A 412 MB Apple Mail export exceeds that default boundary and the Stage 36 parser's conservative MBOX size limit; supporting archives of that size requires a future streaming ingestion path rather than a silent limit increase in Stage 36A.
+The current governed Document Intake path is synchronous and bounded at the configured Document Intake upload limit, 25 MB by default. A 412 MB Apple Mail export exceeds that default boundary and the Stage 36 parser's conservative MBOX size limit; supporting archives of that size requires a separate governed streaming ingestion path rather than a silent limit increase in Stage 36A. Stage 37 adds that separate path while leaving this synchronous limit unchanged.
 
 ## Future Message Promotion
 

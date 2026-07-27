@@ -82,7 +82,10 @@ from api.document_intake import (
     list_published_documents,
     load_published_document,
     load_pending_document,
+    store_streaming_mbox_pending_document,
     store_pending_document,
+    streaming_mbox_chunk_bytes,
+    streaming_mbox_max_bytes,
     update_intake_notes,
     update_intake_status,
 )
@@ -174,6 +177,7 @@ APPLE_MAIL_MBOX_UPLOAD_NOTE = (
     "mbox. Copy that internal file, rename the copy with a .mbox extension, "
     "and upload the copy. The table_of_contents file is not the mailbox archive."
 )
+STREAMING_MBOX_FILE_ACCEPT = ".mbox,application/mbox,text/mbox,application/octet-stream"
 SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
@@ -46283,6 +46287,25 @@ def _render_document_intake_page(
         <button type="submit">Store as pending</button>
       </form>
     </section>
+    <section class="pending" id="streaming-mbox-intake">
+      <h2>Governed Streaming Mailbox Intake</h2>
+      <p class="notice">Use this protected pathway only for large MBOX mailbox archives that exceed the {escape(_format_intake_size_limit(intake_max_bytes()))} synchronous Document Intake limit. The existing synchronous intake limit remains unchanged.</p>
+      <form class="intake-form" method="post" action="/api/admin/session/streaming-mbox-intake" enctype="multipart/form-data">
+        <label>MBOX archive file<input name="file" type="file" accept="{escape(STREAMING_MBOX_FILE_ACCEPT)}" required></label>
+        <p class="full-width notice">Maximum governed streaming MBOX upload size: {escape(_format_intake_size_limit(streaming_mbox_max_bytes()))}. Uploads are written in {escape(_format_intake_size_limit(streaming_mbox_chunk_bytes()))} chunks, hashed incrementally, validated, indexed, and finalised into ordinary Pending Intake only after validation succeeds.</p>
+        <p class="full-width notice">This pathway does not support direct Apple Mail package-directory upload. Copy the internal mailbox data file named mbox, rename the copy with a .mbox extension, and upload the copy. A 412 MB archive requires this streaming pathway and is not accepted by ordinary synchronous Document Intake.</p>
+        <label>Title<input name="title" maxlength="240" required></label>
+        <label>Institution / source<input name="institution_source" maxlength="240" required></label>
+        <label>Document date<input name="document_date" type="date" required></label>
+        <label>Category<input name="category" maxlength="120" required></label>
+        <label>KEYWORDS<input name="keywords" maxlength="500"><span class="field-help">Comma-separated descriptive terms used for search and discovery. Keywords do not establish evidential meaning or factual verification.</span></label>
+        <label>Visibility<select name="visibility" required><option value="private">Private</option><option value="restricted">Restricted</option></select></label>
+        <label>Optional Reference Identifier<input name="reference_identifier" maxlength="160"><span class="field-help">External identifier, when available. CDE assigns the permanent Document Identifier automatically after streaming intake.</span></label>
+        <label class="full-width">Description<textarea name="description" required></textarea></label>
+        <label class="full-width">Notes<textarea name="notes" required></textarea></label>
+        <button type="submit">Upload large MBOX archive</button>
+      </form>
+    </section>
     <section class="pending" id="intake-management">
       <h2>Intake management</h2>
       <div class="admin-table-scroll intake-management-table-wrapper" role="region" aria-label="Intake management table"><table class="admin-data-table intake-management-table"><thead><tr><th scope="col" class="intake-title col-title">Title</th><th scope="col" class="intake-document-identifier col-reference">Document Identifier</th><th scope="col" class="intake-filename col-filename">Filename</th><th scope="col" class="intake-source col-source">Institution / source</th><th scope="col" class="intake-category col-category">Category</th><th scope="col" class="intake-status col-status">Current status</th><th scope="col" class="intake-upload-date col-timestamp">Upload date</th><th scope="col" class="intake-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div>
@@ -48182,6 +48205,91 @@ def admin_document_intake_upload(
                 content_type=getattr(file, "content_type", None),
             )
         raise _http_error(status_code, response_detail) from exc
+    return HTMLResponse(
+        content=_render_document_intake_preview(item, admin_session=session),
+        status_code=201,
+    )
+
+
+def _streaming_mbox_upload_error_detail(code: str, *, filename: str, received_bytes: int | None = None) -> dict[str, Any]:
+    messages = {
+        "streaming_mbox_empty": "The mailbox archive was empty. No document was created and temporary data was removed.",
+        "streaming_mbox_file_too_large": "The mailbox archive exceeded the configured governed streaming limit. No document was created and temporary data was removed.",
+        "streaming_mbox_invalid_extension": "Governed Streaming Mailbox Intake accepts copied Apple Mail mailbox data only after it has been renamed with a .mbox extension.",
+        "streaming_mbox_invalid_content": "The uploaded file could not be verified as a structurally recognisable MBOX mailbox archive. No document was created.",
+        "streaming_mbox_insufficient_storage": "The application does not currently have enough safe temporary storage for a governed streaming mailbox intake.",
+        "streaming_mbox_concurrent_job_limit": "Another governed streaming mailbox intake is already in progress. Try again after it completes.",
+        "streaming_mbox_finalisation_failed": "The mailbox archive could not be finalised into governed storage. No public document was created.",
+        "document_intake_duplicate": "This mailbox archive already exists in Document Intake. Duplicate intake remains blocked.",
+        "document_intake_invalid_mbox": "The uploaded file is not a structurally recognisable MBOX mailbox archive.",
+        "document_intake_mbox_too_many_messages": "The mailbox archive exceeds the configured message-count limit.",
+        "document_intake_mbox_message_too_large": "A contained mailbox message exceeds the configured per-message limit.",
+        "document_intake_mbox_line_too_large": "The mailbox archive contains a line that exceeds the configured line-length limit.",
+        "document_intake_mbox_decoded_content_too_large": "The mailbox archive exceeds the configured decoded-content limit.",
+        "document_intake_mbox_too_many_attachments": "The mailbox archive exceeds the configured attachment-metadata limit.",
+    }
+    detail: dict[str, Any] = {
+        "detail": code,
+        "message": messages.get(code, "Governed Streaming Mailbox Intake failed. No document was created."),
+        "filename": filename,
+        "configured_maximum_bytes": streaming_mbox_max_bytes(),
+        "synchronous_intake_limit_bytes": intake_max_bytes(),
+        "document_created": False,
+    }
+    if received_bytes is not None:
+        detail["received_bytes"] = received_bytes
+    return detail
+
+
+@router.post("/api/admin/session/streaming-mbox-intake", response_class=HTMLResponse)
+def admin_streaming_mbox_intake_upload(
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    document_date: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    visibility: str = Form(...),
+    notes: str = Form(...),
+    reference_identifier: str | None = Form(None),
+    keywords: str | None = Form(None),
+    file: UploadFile = File(...),
+):
+    session = require_admin_session(request)
+    file_handle = getattr(file, "file", None)
+    filename = getattr(file, "filename", None) or "mailbox.mbox"
+    if file_handle is None or not hasattr(file_handle, "read"):
+        raise _http_error(400, _streaming_mbox_upload_error_detail("streaming_mbox_empty", filename=filename))
+    try:
+        item = store_streaming_mbox_pending_document(
+            file_handle=file_handle,
+            original_filename=filename,
+            content_type=getattr(file, "content_type", None),
+            title=title,
+            institution_source=institution_source,
+            document_date=document_date,
+            category=category,
+            description=description,
+            visibility=visibility,
+            notes=notes,
+            reference_identifier=reference_identifier,
+            keywords=keywords,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = {
+            "streaming_mbox_file_too_large": 413,
+            "streaming_mbox_invalid_extension": 415,
+            "streaming_mbox_concurrent_job_limit": 429,
+            "streaming_mbox_insufficient_storage": 507,
+            "document_intake_duplicate": 409,
+        }.get(detail, 400)
+        raise _http_error(
+            status_code,
+            _streaming_mbox_upload_error_detail(detail, filename=filename),
+        ) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),
         status_code=201,

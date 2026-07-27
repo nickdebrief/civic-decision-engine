@@ -5,7 +5,10 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
+import tempfile
+import uuid
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -15,6 +18,7 @@ from xml.etree import ElementTree
 
 from api.email_documents import (
     email_projection_search_values,
+    parse_mbox_archive_metadata_from_file,
     validate_apple_emlx_document,
     validate_email_document,
     validate_mbox_archive_document,
@@ -24,6 +28,10 @@ from api.email_documents import (
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
+DEFAULT_STREAMING_MBOX_MAX_BYTES = 1024 * 1024 * 1024
+DEFAULT_STREAMING_MBOX_CHUNK_BYTES = 1024 * 1024
+DEFAULT_STREAMING_MBOX_MIN_FREE_BYTES = 128 * 1024 * 1024
+DEFAULT_STREAMING_MBOX_MAX_CONCURRENT_JOBS = 1
 VALID_VISIBILITY = {"private", "restricted"}
 DOCUMENT_TYPE_EXTENSIONS = {
     "pdf": ".pdf",
@@ -201,6 +209,58 @@ def intake_max_bytes() -> int:
         raise ValueError("document_intake_size_limit_invalid") from exc
     if value < 1:
         raise ValueError("document_intake_size_limit_invalid")
+    return value
+
+
+def streaming_mbox_max_bytes() -> int:
+    raw = os.getenv("MAX_STREAMING_MBOX_UPLOAD_BYTES") or os.getenv("CDE_STREAMING_MBOX_UPLOAD_MAX_BYTES")
+    if raw is None:
+        return DEFAULT_STREAMING_MBOX_MAX_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("streaming_mbox_size_limit_invalid") from exc
+    if value < 1:
+        raise ValueError("streaming_mbox_size_limit_invalid")
+    return value
+
+
+def streaming_mbox_chunk_bytes() -> int:
+    raw = os.getenv("STREAMING_MBOX_CHUNK_BYTES") or os.getenv("CDE_STREAMING_MBOX_CHUNK_BYTES")
+    if raw is None:
+        return DEFAULT_STREAMING_MBOX_CHUNK_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("streaming_mbox_chunk_size_invalid") from exc
+    if value < 1024:
+        raise ValueError("streaming_mbox_chunk_size_invalid")
+    return value
+
+
+def streaming_mbox_min_free_bytes() -> int:
+    raw = os.getenv("STREAMING_MBOX_MIN_FREE_BYTES") or os.getenv("CDE_STREAMING_MBOX_MIN_FREE_BYTES")
+    if raw is None:
+        return DEFAULT_STREAMING_MBOX_MIN_FREE_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("streaming_mbox_min_free_invalid") from exc
+    if value < 0:
+        raise ValueError("streaming_mbox_min_free_invalid")
+    return value
+
+
+def streaming_mbox_max_concurrent_jobs() -> int:
+    raw = os.getenv("STREAMING_MBOX_MAX_CONCURRENT_JOBS") or os.getenv("CDE_STREAMING_MBOX_MAX_CONCURRENT_JOBS")
+    if raw is None:
+        return DEFAULT_STREAMING_MBOX_MAX_CONCURRENT_JOBS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("streaming_mbox_concurrency_invalid") from exc
+    if value < 1:
+        raise ValueError("streaming_mbox_concurrency_invalid")
     return value
 
 
@@ -1109,6 +1169,285 @@ def document_keywords_display(value: Any, *, separator: str = " · ") -> str:
 
 def document_keywords_input_value(value: Any) -> str:
     return ", ".join(normalize_document_keywords(value))
+
+
+def _normalize_intake_metadata(
+    *,
+    title: str,
+    institution_source: str,
+    document_date: str,
+    category: str,
+    description: str,
+    visibility: str,
+    notes: str,
+) -> dict[str, str]:
+    required = {
+        "title": title,
+        "institution_source": institution_source,
+        "document_date": document_date,
+        "category": category,
+        "description": description,
+        "visibility": visibility,
+        "notes": notes,
+    }
+    normalized = {key: str(value or "").strip() for key, value in required.items()}
+    if any(not value for value in normalized.values()):
+        raise ValueError("document_intake_metadata_required")
+    if normalized["visibility"] not in VALID_VISIBILITY:
+        raise ValueError("document_intake_visibility_invalid")
+    try:
+        datetime.strptime(normalized["document_date"], "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("document_intake_document_date_invalid") from exc
+    return normalized
+
+
+def _streaming_mbox_temp_root(root: Path | None = None) -> Path:
+    destination_root = (root or intake_root()).resolve(strict=False)
+    temp_root = destination_root / "_streaming_mbox_tmp"
+    temp_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return temp_root
+
+
+def cleanup_stale_streaming_mbox_temporary_files(*, root: Path | None = None, max_age_seconds: int = 24 * 60 * 60) -> int:
+    temp_root = _streaming_mbox_temp_root(root)
+    now = datetime.now(timezone.utc).timestamp()
+    removed = 0
+    for candidate in temp_root.iterdir():
+        if not candidate.name.startswith("streaming-mbox-"):
+            continue
+        try:
+            age = now - candidate.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if age < max_age_seconds:
+            continue
+        if candidate.is_file() or candidate.is_symlink():
+            candidate.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
+def _streaming_mbox_lock_path(root: Path | None = None) -> Path:
+    return _streaming_mbox_temp_root(root) / ".streaming-mbox.lock"
+
+
+def _acquire_streaming_mbox_lock(root: Path | None = None) -> int:
+    if streaming_mbox_max_concurrent_jobs() != 1:
+        return -1
+    lock_path = _streaming_mbox_lock_path(root)
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise ValueError("streaming_mbox_concurrent_job_limit") from exc
+    os.write(fd, _utc_timestamp().encode("utf-8"))
+    return fd
+
+
+def _release_streaming_mbox_lock(fd: int, root: Path | None = None) -> None:
+    if fd >= 0:
+        os.close(fd)
+        _streaming_mbox_lock_path(root).unlink(missing_ok=True)
+
+
+def _ensure_streaming_mbox_disk_capacity(root: Path | None = None) -> None:
+    temp_root = _streaming_mbox_temp_root(root)
+    free_bytes = shutil.disk_usage(temp_root).free
+    required = streaming_mbox_max_bytes() + streaming_mbox_min_free_bytes()
+    if free_bytes < required:
+        raise ValueError("streaming_mbox_insufficient_storage")
+
+
+def _sha256_file(path: Path, *, chunk_bytes: int | None = None) -> str:
+    digest = hashlib.sha256()
+    chunk_size = chunk_bytes or streaming_mbox_chunk_bytes()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _safe_mbox_filename(original_filename: str) -> str:
+    filename = PurePath(str(original_filename or "").replace("\\", "/")).name
+    if not filename or Path(filename).suffix.lower() != ".mbox":
+        raise ValueError("streaming_mbox_invalid_extension")
+    return filename
+
+
+def _stream_to_governed_temp_file(
+    file_handle: Any,
+    *,
+    root: Path | None = None,
+) -> tuple[Path, str, int, str, str]:
+    temp_root = _streaming_mbox_temp_root(root)
+    cleanup_stale_streaming_mbox_temporary_files(root=root)
+    max_bytes = streaming_mbox_max_bytes()
+    chunk_size = streaming_mbox_chunk_bytes()
+    digest = hashlib.sha256()
+    received = 0
+    started_at = _utc_timestamp()
+    fd, temp_name = tempfile.mkstemp(prefix=f"streaming-mbox-{uuid.uuid4().hex}-", suffix=".upload", dir=temp_root)
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "wb") as output:
+            while True:
+                chunk = file_handle.read(chunk_size)
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8")
+                if not chunk:
+                    break
+                if not isinstance(chunk, bytes):
+                    raise ValueError("streaming_mbox_invalid_content")
+                received += len(chunk)
+                if received > max_bytes:
+                    raise ValueError("streaming_mbox_file_too_large")
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp_path, 0o600)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    if received <= 0:
+        temp_path.unlink(missing_ok=True)
+        raise ValueError("streaming_mbox_empty")
+    completed_at = _utc_timestamp()
+    return temp_path, digest.hexdigest(), received, started_at, completed_at
+
+
+def store_streaming_mbox_pending_document(
+    *,
+    file_handle: Any,
+    original_filename: str,
+    content_type: str | None,
+    title: str,
+    institution_source: str,
+    document_date: str,
+    category: str,
+    description: str,
+    visibility: str,
+    notes: str,
+    reference_identifier: str | None = None,
+    keywords: Any = None,
+    actor: str = "admin",
+    uploaded_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    filename = _safe_mbox_filename(original_filename)
+    normalized = _normalize_intake_metadata(
+        title=title,
+        institution_source=institution_source,
+        document_date=document_date,
+        category=category,
+        description=description,
+        visibility=visibility,
+        notes=notes,
+    )
+    destination_root = (root or intake_root()).resolve(strict=False)
+    destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _ensure_streaming_mbox_disk_capacity(destination_root)
+    lock_fd = _acquire_streaming_mbox_lock(destination_root)
+    temp_path: Path | None = None
+    try:
+        if hasattr(file_handle, "seek"):
+            file_handle.seek(0)
+        temp_path, digest, received, started_at, completed_at = _stream_to_governed_temp_file(
+            file_handle,
+            root=destination_root,
+        )
+        email_metadata = parse_mbox_archive_metadata_from_file(
+            temp_path,
+            max_archive_bytes=streaming_mbox_max_bytes(),
+        )
+        validation_completed_at = _utc_timestamp()
+        stored_digest = _sha256_file(temp_path)
+        if stored_digest != digest:
+            raise ValueError("streaming_mbox_finalisation_failed")
+        item_dir = destination_root / digest
+        if item_dir.exists():
+            raise ValueError("document_intake_duplicate")
+        item_dir.mkdir(mode=0o700)
+        stored_filename = f"pending-{digest}{DOCUMENT_TYPE_EXTENSIONS['mbox']}"
+        file_path = item_dir / stored_filename
+        metadata_path = item_dir / "metadata.json"
+        timestamp = uploaded_at or _utc_timestamp()
+        document_identifier = assign_document_identifier(
+            digest,
+            assigned_at=timestamp,
+            root=destination_root,
+        )
+        email_metadata["intake_mode"] = "governed_streaming_mbox"
+        email_metadata["streaming_upload_started_at"] = started_at
+        email_metadata["streaming_upload_completed_at"] = completed_at
+        email_metadata["streaming_validation_completed_at"] = validation_completed_at
+        email_metadata["streaming_finalised_at"] = timestamp
+        email_metadata["streaming_chunk_bytes"] = streaming_mbox_chunk_bytes()
+        email_metadata["streaming_max_upload_bytes"] = streaming_mbox_max_bytes()
+        metadata = {
+            "intake_id": digest,
+            "document_identifier": document_identifier,
+            "status": "pending",
+            "original_filename": filename,
+            "stored_filename": stored_filename,
+            "content_type": DOCUMENT_TYPE_MEDIA_TYPES["mbox"],
+            "document_type": "mbox",
+            "document_format": document_type_label("mbox"),
+            "media_family": DOCUMENT_TYPE_MEDIA_FAMILIES["mbox"],
+            "file_size_bytes": received,
+            "sha256_hash": digest,
+            "title": normalized["title"],
+            "institution_source": normalized["institution_source"],
+            "document_date": normalized["document_date"],
+            "upload_date": timestamp,
+            "category": normalized["category"],
+            "description": normalized["description"],
+            "visibility": normalized["visibility"],
+            "notes": normalized["notes"],
+            "reference_identifier": str(reference_identifier or "").strip() or None,
+            "keywords": normalize_document_keywords(keywords),
+            "tags": normalize_document_keywords(keywords),
+            "proposed_storage_location": str(file_path),
+            "public_record_mutation": False,
+            "intake_mode": "governed_streaming_mbox",
+            "status_updated_at": timestamp,
+            "status_history": [
+                {
+                    "previous_status": None,
+                    "new_status": "pending",
+                    "timestamp": timestamp,
+                    "actor": str(actor or "admin"),
+                    "note": "Document uploaded to pending intake through Governed Streaming Mailbox Intake.",
+                    "document_identifier": document_identifier,
+                }
+            ],
+            "email_metadata": email_metadata,
+        }
+        try:
+            temp_path.replace(file_path)
+            temp_path = None
+            os.chmod(file_path, 0o600)
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            os.chmod(metadata_path, 0o600)
+        except Exception as exc:
+            file_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+            try:
+                item_dir.rmdir()
+            except OSError:
+                pass
+            raise ValueError("streaming_mbox_finalisation_failed") from exc
+        return metadata
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+        _release_streaming_mbox_lock(lock_fd, destination_root)
 
 
 def store_pending_document(
