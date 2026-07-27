@@ -58,6 +58,8 @@ Recoverable historical message issues are recorded as bounded parser warnings. S
 
 Stage 36 applies bounded limits for maximum MBOX upload bytes, message count, individual message bytes, separator length, line length, MIME header count and length, MIME depth and part count, attachment metadata count, decoded body bytes, decoded attachment bytes, total decoded bytes, search text, preview bytes, parser warnings, pagination size, duplicate processing, and messages processed synchronously.
 
+Stage 37A keeps the synchronous Stage 36 path conservative: contained messages admitted through ordinary Document Intake remain bounded by the in-memory message threshold. The separate governed streaming path can handle larger contained messages through file-backed byte-range parsing and a separate hard per-message maximum.
+
 The parser avoids unbounded recursion, network access, remote resource retrieval, active HTML rendering, attachment execution, archive unpacking, and filesystem writes based on message or attachment filenames.
 
 ## Apple Mail Export Upload Compatibility

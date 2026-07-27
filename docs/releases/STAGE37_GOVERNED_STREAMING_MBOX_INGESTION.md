@@ -32,7 +32,7 @@ The streaming route still requires:
 - plausible MBOX content;
 - at least one valid message boundary;
 - at least one parseable RFC 5322 message;
-- no parser, message, decoded-content, attachment, disk-space, concurrency, or configured-size limit breach.
+- no parser, contained-message, decoded-content, attachment, disk-space, concurrency, or configured-size limit breach.
 
 The server remains authoritative. A browser classification such as `application/octet-stream` only affects file-picker compatibility and does not make arbitrary files acceptable.
 
@@ -48,6 +48,8 @@ Streaming MBOX ingestion uses separate configuration:
 - `STREAMING_MBOX_MAX_CONCURRENT_JOBS` or `CDE_STREAMING_MBOX_MAX_CONCURRENT_JOBS`: local process concurrency guard. Default: 1.
 
 The default supports a 412 MB Apple Mail archive while still failing closed for unbounded or unexpectedly large uploads.
+
+Stage 37A adds a distinct contained-message limit model for streamed MBOX archives: ordinary message projection remains bounded by an in-memory threshold, while unusually large contained messages can be handled through file-backed byte-range parsing up to a separate hard per-message maximum.
 
 ## Streaming And Hashing
 
@@ -84,7 +86,7 @@ The local process uses a lock file to prevent unlimited simultaneous streaming M
 
 ## Validation And Sequential Parsing
 
-After upload, CDE validates the temporary file using a file-backed MBOX parser. The parser processes the archive sequentially, detects conservative `From ` separators, keeps message order stable, preserves duplicates, records byte ranges and contained-message digests, and only holds the current bounded message bytes while parsing.
+After upload, CDE validates the temporary file using a file-backed MBOX parser. The parser processes the archive sequentially, detects conservative `From ` separators, keeps message order stable, preserves duplicates, and records byte ranges and contained-message digests. Stage 37A extends this model so oversized contained messages are represented by source byte range and bounded projection reads rather than requiring the full message to remain in memory.
 
 Stage 36 projection behaviour is reused:
 
@@ -126,6 +128,8 @@ Stage 37 may return bounded errors such as:
 - `streaming_mbox_concurrent_job_limit`;
 - `streaming_mbox_finalisation_failed`;
 - existing MBOX validation errors such as `document_intake_invalid_mbox`, `document_intake_mbox_too_many_messages`, `document_intake_mbox_message_too_large`, `document_intake_mbox_line_too_large`, `document_intake_mbox_decoded_content_too_large`, and `document_intake_mbox_too_many_attachments`.
+
+For `document_intake_mbox_message_too_large`, Stage 37A reports archive and contained-message limits separately, including message index, message start byte, actual contained-message size, configured message maximum, configured archive maximum, and confirmation that no document was created.
 
 Every failure keeps temporary data out of governed storage and creates no public document.
 

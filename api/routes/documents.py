@@ -399,8 +399,11 @@ def _render_mbox_document(item: dict, *, message_index: object | None = None, pa
         html_block = f'<details class="email-html-details"><summary>Sanitised HTML preview</summary><div class="email-html-view">{html_preview}</div></details>' if html_preview else ""
         detail_fields = (
             ("Mailbox message index", selected.get("message_index")),
+            ("Message size", selected.get("message_byte_size")),
             ("Contained-message digest", selected.get("message_digest")),
             ("Source byte range", f"{selected.get('byte_start')}–{selected.get('byte_end')}"),
+            ("Preview mode", selected.get("preview_mode")),
+            ("Preview truncated", "Yes" if selected.get("preview_truncated") else "No"),
             ("Subject", selected.get("subject_decoded")),
             ("From", selected.get("from_raw")),
             ("Sender", selected.get("sender_raw")),

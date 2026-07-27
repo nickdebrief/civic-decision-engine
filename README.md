@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: Stage 37 / v13.0.9 — Governed Streaming MBOX Ingestion
+Current release: Stage 37A / v13.0.10 — Large Contained MBOX Message Handling
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md`](docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md)
 - [`docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md`](docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md)
 - [`docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md`](docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md)
 - [`docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md`](docs/releases/STAGE35C_APPLE_MAIL_EMLX_SUPPORT.md)
@@ -812,6 +813,22 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
+
+The Civic Decision Engine can now process large individual messages within
+streamed MBOX archives using bounded file-backed parsing. The original mailbox
+remains authoritative. Large contained messages are indexed by byte range,
+hashed incrementally, and presented through bounded safe previews without
+decoding or publishing attachment payloads independently.
+
+Stage 37A keeps the ordinary 25 MB synchronous Document Intake boundary and the
+1 GB streaming archive boundary separate from contained-message limits. The
+synchronous parser retains the conservative in-memory message threshold, while
+the streaming parser uses a larger hard contained-message maximum and bounded
+file-range reads for oversized messages. Error responses now report archive
+limits and contained-message limits separately when a mailbox message is too
+large.
 
 ### Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
 
