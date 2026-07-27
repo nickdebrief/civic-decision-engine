@@ -1,8 +1,8 @@
-# Stage 35 — Framework Lifecycle Review
+# CREF Stage 35 — Framework Lifecycle Review
 
 ## Purpose
 
-Stage 35 introduces a visible and deterministic lifecycle review model for the
+CREF Stage 35 introduces a visible and deterministic lifecycle review model for the
 Civic Record Evaluation Framework. It documents declared phases, implemented
 stage progression, lifecycle continuity, governance, lineage relationships,
 preservation state, and framework boundaries without adding evaluation or
@@ -57,11 +57,11 @@ principles, and 25 version-lineage entries.
 - **Phase I — Evaluation Methodology:** Stages 1–19.
 - **Phase II — Reflexive Inspection Infrastructure:** Stages 20–30.
 - **Phase III — Methodology Governance:** declared as Stages 31–40, with
-  implemented visibility currently extending through Stage 35 only.
+  implemented visibility currently extending through CREF Stage 35 only.
 - Stages 1–30 represent the implemented methodology and reflexive inspection
   stack.
-- Stages 31–35 represent the current visible governance lifecycle.
-- Stages 36–40 are not inferred or treated as implemented.
+- CREF Stages 31–35 represent the current visible governance lifecycle.
+- CREF Stages 36–40 are not inferred or treated as implemented.
 - Lifecycle review uses declared metadata and visible framework outputs only.
 - Implemented progression remains sequential and inspectable.
 
@@ -90,7 +90,7 @@ It documents visible and declared framework lifecycle state only.
 
 ## Preservation And Non-Mutation Guarantees
 
-Stage 35 consumes existing outputs without changing them. Stage 21 report modes
+CREF Stage 35 consumes existing outputs without changing them. CREF Stage 21 report modes
 and all Stage 22–34 preservation counts remain unchanged. The builder copies
 visible inputs, returns deterministic lifecycle review data, and persists
 nothing.
@@ -110,7 +110,7 @@ required before completion.
 
 ## Implementation Summary
 
-Stage 35 adds one deterministic lifecycle builder and scoped administrative
+CREF Stage 35 adds one deterministic lifecycle builder and scoped administrative
 renderers to the existing admin record evidence flow. No route, persistence
 mechanism, external integration, schema field, or evaluative classification is
 added.

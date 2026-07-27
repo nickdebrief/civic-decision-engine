@@ -493,7 +493,7 @@ def _render_email_document(item: dict) -> str:
         else ""
     )
     rtf_notice = (
-        '<p class="provenance-boundary">An Outlook RTF body is present in the source message. Stage 35B records RTF presence but does not render Outlook RTF publicly.</p>'
+        '<p class="provenance-boundary">An Outlook RTF body is present in the source message. CDE Platform Stage 35B records RTF presence but does not render Outlook RTF publicly.</p>'
         if metadata.get("rtf_body_present")
         else ""
     )
@@ -520,7 +520,7 @@ def _render_email_document(item: dict) -> str:
         attachment_rows = '<tr><td colspan="11">No attachment metadata was detected.</td></tr>'
     warnings = metadata.get("parser_warnings") or []
     warning_text = _email_join(warnings) if warnings else "No parser warnings were recorded."
-    stage_label = "Stage 35B" if is_outlook else "Stage 35C" if is_apple else "Stage 35A"
+    stage_label = "CDE Platform Stage 35B" if is_outlook else "CDE Platform Stage 35C" if is_apple else "CDE Platform Stage 35A"
     return f"""<section class="public-email-summary"><h2>Email Overview</h2><p class="provenance-boundary">{escape(boundary)}</p><table>{overview_rows}</table></section>
 {apple_section}
 <section class="public-email-body"><h2>Message Body</h2>{plain_block}{html_block}{rtf_notice}</section>

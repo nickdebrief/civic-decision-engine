@@ -1,4 +1,4 @@
-# Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
+# CDE Platform Stage 37 / CDE v13.0.9 — Governed Streaming MBOX Ingestion
 
 The Civic Decision Engine can now admit large MBOX mailbox archives through a dedicated governed streaming pathway.
 
@@ -6,9 +6,9 @@ Mailbox bytes are written incrementally to protected temporary storage while SHA
 
 ## Purpose
 
-Stage 36 introduced governed MBOX archive ingestion through the ordinary synchronous Document Intake route. That route remains intentionally bounded at the configured Document Intake upload limit, 25 MB by default. Real-world Apple Mail exports may be substantially larger, including the validated 412 MB export that motivated this stage.
+CDE Platform Stage 36 introduced governed MBOX archive ingestion through the ordinary synchronous Document Intake route. That route remains intentionally bounded at the configured Document Intake upload limit, 25 MB by default. Real-world Apple Mail exports may be substantially larger, including the validated 412 MB export that motivated this stage.
 
-Stage 37 adds a separate authenticated administrative path: Governed Streaming Mailbox Intake. It is not a general upload-limit increase and does not route ordinary small files through the streaming path.
+CDE Platform Stage 37 adds a separate authenticated administrative path: Governed Streaming Mailbox Intake. It is not a general upload-limit increase and does not route ordinary small files through the streaming path.
 
 ## Governance Boundary
 
@@ -49,7 +49,7 @@ Streaming MBOX ingestion uses separate configuration:
 
 The default supports a 412 MB Apple Mail archive while still failing closed for unbounded or unexpectedly large uploads.
 
-Stage 37A adds a distinct contained-message limit model for streamed MBOX archives: ordinary message projection remains bounded by an in-memory threshold, while unusually large contained messages can be handled through file-backed byte-range parsing up to a separate hard per-message maximum.
+CDE Platform Stage 37A adds a distinct contained-message limit model for streamed MBOX archives: ordinary message projection remains bounded by an in-memory threshold, while unusually large contained messages can be handled through file-backed byte-range parsing up to a separate hard per-message maximum.
 
 ## Streaming And Hashing
 
@@ -76,7 +76,7 @@ Cleanup occurs on:
 - successful atomic promotion;
 - stale temporary-file sweep at the start of each streaming intake.
 
-Stale cleanup is limited to files with the Stage 37 streaming prefix inside the protected temporary directory.
+Stale cleanup is limited to files with the CDE Platform Stage 37 streaming prefix inside the protected temporary directory.
 
 ## Disk Space And Concurrency
 
@@ -86,9 +86,9 @@ The local process uses a lock file to prevent unlimited simultaneous streaming M
 
 ## Validation And Sequential Parsing
 
-After upload, CDE validates the temporary file using a file-backed MBOX parser. The parser processes the archive sequentially, detects conservative `From ` separators, keeps message order stable, preserves duplicates, and records byte ranges and contained-message digests. Stage 37A extends this model so oversized contained messages are represented by source byte range and bounded projection reads rather than requiring the full message to remain in memory.
+After upload, CDE validates the temporary file using a file-backed MBOX parser. The parser processes the archive sequentially, detects conservative `From ` separators, keeps message order stable, preserves duplicates, and records byte ranges and contained-message digests. CDE Platform Stage 37A extends this model so oversized contained messages are represented by source byte range and bounded projection reads rather than requiring the full message to remain in memory.
 
-Stage 36 projection behaviour is reused:
+CDE Platform Stage 36 projection behaviour is reused:
 
 - mailbox statistics;
 - stable message index;
@@ -118,7 +118,7 @@ The successful result is the ordinary Document Intake Review page for the new Pe
 
 ## Error Codes
 
-Stage 37 may return bounded errors such as:
+CDE Platform Stage 37 may return bounded errors such as:
 
 - `streaming_mbox_empty`;
 - `streaming_mbox_file_too_large`;
@@ -129,7 +129,7 @@ Stage 37 may return bounded errors such as:
 - `streaming_mbox_finalisation_failed`;
 - existing MBOX validation errors such as `document_intake_invalid_mbox`, `document_intake_mbox_too_many_messages`, `document_intake_mbox_message_too_large`, `document_intake_mbox_line_too_large`, `document_intake_mbox_decoded_content_too_large`, and `document_intake_mbox_too_many_attachments`.
 
-For `document_intake_mbox_message_too_large`, Stage 37A reports archive and contained-message limits separately, including message index, message start byte, actual contained-message size, configured message maximum, configured archive maximum, and confirmation that no document was created.
+For `document_intake_mbox_message_too_large`, CDE Platform Stage 37A reports archive and contained-message limits separately, including message index, message start byte, actual contained-message size, configured message maximum, configured archive maximum, and confirmation that no document was created.
 
 Every failure keeps temporary data out of governed storage and creates no public document.
 
@@ -150,7 +150,7 @@ The temporary archive is atomically moved into the existing Document Intake stor
 
 ## Public Presentation And Search
 
-After publication, streaming-ingested MBOX archives reuse Stage 36 public behaviour:
+After publication, streaming-ingested MBOX archives reuse CDE Platform Stage 36 public behaviour:
 
 - Mailbox Overview;
 - mailbox statistics;
@@ -171,12 +171,12 @@ Search and public presentation are indistinguishable from an MBOX admitted throu
 
 The default streaming maximum is 1 GB and the default chunk size is 1 MiB. Railway or other deployment environments must provide persistent storage with enough free space for the temporary file, final governed object, metadata projection, and configured reserve. Operators should tune `MAX_STREAMING_MBOX_UPLOAD_BYTES`, `STREAMING_MBOX_MIN_FREE_BYTES`, and `STREAMING_MBOX_MAX_CONCURRENT_JOBS` to match the available volume and request-time budget.
 
-Stage 37 does not add a background distributed queue. If deployment request timeouts make very large archives impractical, a future stage should add a resumable or queued upload model rather than weakening validation or raising the synchronous intake limit.
+CDE Platform Stage 37 does not add a background distributed queue. If deployment request timeouts make very large archives impractical, a future stage should add a resumable or queued upload model rather than weakening validation or raising the synchronous intake limit.
 
 ## Tests
 
-Focused tests cover chunked upload, incremental SHA-256 equality, exact original-byte preservation, message order, pending lifecycle creation, streaming provenance, synchronous-limit preservation, empty uploads, exact-limit acceptance, size-limit rejection, parser failure cleanup, invalid extension rejection, fake-content rejection, duplicate rejection, disk-space rejection, concurrency rejection, authenticated route access, UI rendering, no public access before publication, and Stage 35/36 regressions.
+Focused tests cover chunked upload, incremental SHA-256 equality, exact original-byte preservation, message order, pending lifecycle creation, streaming provenance, synchronous-limit preservation, empty uploads, exact-limit acceptance, size-limit rejection, parser failure cleanup, invalid extension rejection, fake-content rejection, duplicate rejection, disk-space rejection, concurrency rejection, authenticated route access, UI rendering, no public access before publication, and CDE Platform Stage 35A, CDE Platform Stage 35B, CDE Platform Stage 35C, and CDE Platform Stage 36 regressions.
 
 ## Intentional Exclusions
 
-Stage 37 does not implement PST, OST, Gmail Takeout, IMAP acquisition, mailbox-level acquisition, resumable browser-restart uploads, automatic contained-message promotion, automatic attachment extraction, independent attachment downloads, direct Apple Mail package-directory upload, background distributed queues, or a generic unlimited upload endpoint.
+CDE Platform Stage 37 does not implement PST, OST, Gmail Takeout, IMAP acquisition, mailbox-level acquisition, resumable browser-restart uploads, automatic contained-message promotion, automatic attachment extraction, independent attachment downloads, direct Apple Mail package-directory upload, background distributed queues, or a generic unlimited upload endpoint.

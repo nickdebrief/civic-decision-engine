@@ -37,10 +37,10 @@ implementation and governance boundaries, the Stage 38 legacy package, Stage
 39 reflection, adoption and evidence boundaries, the final no-Stage-41
 boundary, and the visible source of completion.
 
-## Relationship To Stages 36–39
+## Relationship To CREF Stages 36–39
 
-- Stage 36 certifies visible methodological self-containment.
-- Stage 37 declares stewardship responsibilities.
+- CREF Stage 36 certifies visible methodological self-containment.
+- CREF Stage 37 declares stewardship responsibilities.
 - Stage 38 assembles the preservable legacy artefact set.
 - Stage 39 reflects on CREF as a methodology category.
 - Stage 40 verifies preservation of those outputs and declares bounded
