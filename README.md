@@ -98,6 +98,9 @@ CDE Platform stage numbers describe implementation milestones within the Civic D
 
 These are independent sequences and should not be interpreted as a single continuous roadmap.
 
+For the complete stage numbering policy, see [`docs/releases/STAGE_NUMBERING.md`](docs/releases/STAGE_NUMBERING.md).
+
+
 ---
 
 ## What this is

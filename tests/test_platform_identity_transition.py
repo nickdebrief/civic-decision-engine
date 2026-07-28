@@ -87,6 +87,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         self.assertIn("## Stage Numbering", readme)
         self.assertIn("CREF stage numbers describe the evolution of the governance methodology.", readme)
         self.assertIn("CDE Platform stage numbers describe implementation milestones within the Civic Decision Engine software.", readme)
+        self.assertIn("docs/releases/STAGE_NUMBERING.md", readme)
         self.assertIn("docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md", readme)
         self.assertIn("docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md", readme)
         self.assertIn("### CDE v13.0 — Governed Public Transmissions", readme)
