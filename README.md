@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 38 — Mailbox Relationship Graph
+Current release: CDE Platform Stage 38A — Mailbox Relationship Graph Refinements
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md`](docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md`](docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md)
 - [`docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md`](docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md)
 - [`docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md`](docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md)
@@ -827,6 +828,25 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 38A — Mailbox Relationship Graph Refinements
+
+CDE Platform Stage 38A refines the Mailbox Relationship Graph workspace for
+readability, interaction quality, accessibility, visual presentation, and
+dense-archive performance without changing relationship extraction or the
+`/api/mailbox/graph` API.
+
+Labels are hidden by default and appear through progressive detail: hover,
+selection, keyboard focus, connected-node context, high-importance nodes, and
+close zoom. Semantic colours, icon-assisted legend entries, thinner default
+edges, stronger selected-edge highlighting, node dragging, graph dragging,
+double-click centring, fit-to-screen, reset layout, graph search, Cluster Mode,
+and a side information panel make dense mailbox structures easier to inspect.
+
+The optional **Relationship Graph Theme** applies only to the graph workspace.
+Standard remains the default, while High Contrast increases network readability
+with a dark analysis surface. The rest of the Civic Decision Engine retains the
+standard application appearance.
 
 ### CDE Platform Stage 38 — Mailbox Relationship Graph
 

@@ -143,7 +143,7 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
             "category": "Mailbox Archive",
             "description": "Mailbox archive for CASE-2026-MCI-001 and REF-MCI-64.",
             "visibility": "private",
-            "notes": "CDE Platform Stage 38 relationship graph fixture.",
+            "notes": "CDE Platform Stage 38A relationship graph refinement fixture.",
             "reference_identifier": "CASE-2026-MCI-001",
             "keywords": "relationship graph, CASE-2026-MCI-001, REF-MCI-64",
             "actor": "graph-admin",
@@ -262,13 +262,62 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
-        self.assertIn("CDE Platform Stage 38 — Mailbox Relationship Graph", page)
+        self.assertIn("CDE Platform Stage 38A — Mailbox Relationship Graph Refinements", page)
         self.assertIn('href="#mailbox-relationship-graph">Relationship Graph</a>', page)
         self.assertIn(f'data-mailbox-graph-endpoint="/api/mailbox/graph?document={item["intake_id"]}"', page)
         self.assertIn('id="mailbox-relationship-graph-canvas"', page)
         self.assertIn('id="mailbox-graph-fit"', page)
         self.assertIn("DOMContentLoaded", page)
-        self.assertIn("window.location.href = node.metadata.url", page)
+        self.assertIn("Node Information", page)
+
+    def test_stage38a_label_visibility_zoom_theme_and_legend_controls_render(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn("Relationship Graph Theme", page)
+        self.assertIn('value="standard" checked', page)
+        self.assertIn('value="high-contrast"', page)
+        self.assertIn('localStorage.setItem(THEME_STORAGE_KEY, theme)', page)
+        self.assertIn("LABEL_ZOOM_THRESHOLD = 1.35", page)
+        self.assertIn('text.setAttribute("class", "mailbox-graph-label")', page)
+        self.assertIn('text.setAttribute("opacity", labelVisible', page)
+        self.assertIn("degreeLeaders.has(node.id)", page)
+        self.assertIn("mailbox-graph-hover-glow", page)
+        for label in ("Person", "Institution", "Email", "Case", "Reference", "Attachment", "Intake Record"):
+            self.assertIn(f"> {label}</span>", page)
+
+    def test_stage38a_search_cluster_selection_and_keyboard_controls_render(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn('id="mailbox-graph-search"', page)
+        self.assertIn('id="mailbox-graph-search-button"', page)
+        self.assertIn("function runSearch()", page)
+        self.assertIn("searchMatches.add(node.id)", page)
+        self.assertIn('id="mailbox-graph-cluster-mode"', page)
+        self.assertIn("function expandCluster(node)", page)
+        self.assertIn("node.type === \"Cluster\"", page)
+        self.assertIn("function updateInfoPanel(node)", page)
+        self.assertIn("Open message", page)
+        self.assertIn("Filter by institution", page)
+        self.assertIn("Filter by person", page)
+        self.assertIn("Filter by case", page)
+        self.assertIn("Filter by reference", page)
+        self.assertIn("event.key === \"ArrowRight\"", page)
+        self.assertIn('group.addEventListener("dblclick"', page)
+        self.assertIn("nodeDragState", page)
+        self.assertIn('id="mailbox-graph-reset-layout"', page)
+
+    def test_stage38a_performance_and_theme_scope_contracts_render(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn("layoutCache = new Map()", page)
+        self.assertIn("cachedLayoutKey", page)
+        self.assertIn("currentNodeSet()", page)
+        self.assertIn("visibleGraph.nodes", page)
+        self.assertIn('.public-mbox-relationship-graph[data-graph-theme="high-contrast"]', page)
+        self.assertNotIn("body[data-graph-theme", page)
 
 
 if __name__ == "__main__":

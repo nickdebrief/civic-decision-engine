@@ -347,8 +347,13 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     document_id = escape(str(item.get("intake_id") or ""))
     endpoint = f"/api/mailbox/graph?document={document_id}"
     return f"""<section class="public-mbox-relationship-graph" id="mailbox-relationship-graph" data-mailbox-graph-endpoint="{endpoint}">
-<h2>CDE Platform Stage 38 — Mailbox Relationship Graph</h2>
-<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. It does not create a duplicate relationship database or infer probabilistic relationships.</p>
+<h2>CDE Platform Stage 38A — Mailbox Relationship Graph Refinements</h2>
+<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. CDE Platform Stage 38A refines only presentation, interaction, accessibility, and performance; it does not change relationship extraction or the graph API.</p>
+<fieldset class="mailbox-graph-theme-toggle" aria-label="Relationship Graph Theme">
+  <legend>Relationship Graph Theme</legend>
+  <label><input id="mailbox-graph-theme-standard" name="mailbox-graph-theme" type="radio" value="standard" checked> Standard</label>
+  <label><input id="mailbox-graph-theme-high-contrast" name="mailbox-graph-theme" type="radio" value="high-contrast"> High Contrast</label>
+</fieldset>
 <form class="mailbox-graph-filters" aria-label="Mailbox relationship graph filters">
   <label>Institution <input id="mailbox-graph-filter-institution" name="institution" type="search" autocomplete="off"></label>
   <label>Person <input id="mailbox-graph-filter-person" name="person" type="search" autocomplete="off"></label>
@@ -357,12 +362,31 @@ def _render_mbox_relationship_graph(item: dict) -> str:
   <label>Date from <input id="mailbox-graph-filter-from" name="from" type="date"></label>
   <label>Date to <input id="mailbox-graph-filter-to" name="to" type="date"></label>
   <label>Mailbox Status <input id="mailbox-graph-filter-status" name="status" type="search" autocomplete="off"></label>
+  <label>Graph search <input id="mailbox-graph-search" name="graph_search" type="search" autocomplete="off" placeholder="Person, institution, reference, subject, case"></label>
+  <label class="mailbox-graph-cluster-toggle"><input id="mailbox-graph-cluster-mode" name="cluster_mode" type="checkbox"> Cluster Mode</label>
   <button id="mailbox-graph-apply-filters" type="button">Apply filters</button>
+  <button id="mailbox-graph-search-button" type="button">Search graph</button>
   <button id="mailbox-graph-fit" type="button">Fit to screen</button>
+  <button id="mailbox-graph-reset-layout" type="button">Reset layout</button>
 </form>
 <p id="mailbox-graph-status" class="provenance-boundary" role="status" aria-live="polite">Relationship Graph loading.</p>
-<div class="mailbox-graph-shell">
-  <svg id="mailbox-relationship-graph-canvas" class="mailbox-relationship-graph-canvas" role="img" aria-label="Mailbox Relationship Graph" tabindex="0"></svg>
+<div class="mailbox-graph-workspace">
+  <div class="mailbox-graph-shell">
+    <svg id="mailbox-relationship-graph-canvas" class="mailbox-relationship-graph-canvas" role="img" aria-label="Mailbox Relationship Graph" tabindex="0"></svg>
+  </div>
+  <aside id="mailbox-graph-info-panel" class="mailbox-graph-info-panel" aria-live="polite">
+    <h3>Node Information</h3>
+    <p class="provenance-boundary">Select a node to inspect relationship counts, connected entities, verification metadata, and quick actions.</p>
+  </aside>
+</div>
+<div class="mailbox-graph-legend" aria-label="Mailbox Relationship Graph legend">
+  <span><i class="legend-icon legend-person" aria-hidden="true">●</i> Person</span>
+  <span><i class="legend-icon legend-institution" aria-hidden="true">◆</i> Institution</span>
+  <span><i class="legend-icon legend-email" aria-hidden="true">✉</i> Email</span>
+  <span><i class="legend-icon legend-case" aria-hidden="true">■</i> Case</span>
+  <span><i class="legend-icon legend-reference" aria-hidden="true">#</i> Reference</span>
+  <span><i class="legend-icon legend-attachment" aria-hidden="true">▣</i> Attachment</span>
+  <span><i class="legend-icon legend-intake" aria-hidden="true">▰</i> Intake Record</span>
 </div>
 <script>
 (function() {{
@@ -373,29 +397,58 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     const svg = document.getElementById("mailbox-relationship-graph-canvas");
     const status = document.getElementById("mailbox-graph-status");
     const fitButton = document.getElementById("mailbox-graph-fit");
+    const resetButton = document.getElementById("mailbox-graph-reset-layout");
     const applyButton = document.getElementById("mailbox-graph-apply-filters");
-    if (!svg || !status || !fitButton || !applyButton) return;
+    const searchInput = document.getElementById("mailbox-graph-search");
+    const searchButton = document.getElementById("mailbox-graph-search-button");
+    const clusterToggle = document.getElementById("mailbox-graph-cluster-mode");
+    const infoPanel = document.getElementById("mailbox-graph-info-panel");
+    const themeInputs = Array.from(section.querySelectorAll('input[name="mailbox-graph-theme"]'));
+    if (!svg || !status || !fitButton || !resetButton || !applyButton || !searchInput || !searchButton || !clusterToggle || !infoPanel) return;
     const namespace = "http://www.w3.org/2000/svg";
+    const LABEL_ZOOM_THRESHOLD = 1.35;
+    const HIGH_IMPORTANCE_COUNT = 6;
+    const THEME_STORAGE_KEY = "cde-mailbox-relationship-graph-theme";
     let graph = {{nodes: [], edges: []}};
+    let visibleGraph = {{nodes: [], edges: []}};
+    let cachedLayoutKey = "";
+    let layoutCache = new Map();
     let selectedNode = null;
+    let hoveredNode = null;
+    let focusedNode = null;
+    let searchMatches = new Set();
     let scale = 1;
     let panX = 0;
     let panY = 0;
     let dragState = null;
+    let nodeDragState = null;
     const width = 900;
     const height = 520;
     svg.setAttribute("viewBox", "0 0 " + width + " " + height);
 
     function colour(type) {{
       return {{
-        Email: "#2E8B9A",
-        Person: "#6F5BA7",
-        Institution: "#1F5A65",
-        Case: "#8A6E2F",
-        "Reference Number": "#4B5B6A",
-        Attachment: "#A4563B",
-        "Intake Record": "#143A52"
+        Person: "#0F766E",
+        Institution: "#7C3AED",
+        Email: "#475569",
+        Case: "#B45309",
+        "Reference Number": "#2563EB",
+        Attachment: "#16A34A",
+        "Intake Record": "#DC2626",
+        Cluster: "#64748B"
       }}[type] || "#4B5B6A";
+    }}
+    function icon(type) {{
+      return {{
+        Person: "●",
+        Institution: "◆",
+        Email: "✉",
+        Case: "■",
+        "Reference Number": "#",
+        Attachment: "▣",
+        "Intake Record": "▰",
+        Cluster: "◌"
+      }}[type] || "•";
     }}
     function filters() {{
       const params = new URLSearchParams(new URL(section.dataset.mailboxGraphEndpoint, window.location.origin).search);
@@ -414,49 +467,192 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       }});
       return params;
     }}
+    function filterKey() {{
+      return filters().toString();
+    }}
     function adjacent(id) {{
       const linked = new Set([id]);
-      graph.edges.forEach((edge) => {{
+      visibleGraph.edges.forEach((edge) => {{
         if (edge.source === id) linked.add(edge.target);
         if (edge.target === id) linked.add(edge.source);
       }});
       return linked;
     }}
+    function relationshipCount(id) {{
+      return graph.edges.filter((edge) => edge.source === id || edge.target === id).length;
+    }}
+    function importantNodes() {{
+      return new Set(
+        graph.nodes
+          .map((node) => [node.id, relationshipCount(node.id)])
+          .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+          .slice(0, HIGH_IMPORTANCE_COUNT)
+          .map((entry) => entry[0])
+      );
+    }}
+    function applyTheme(value) {{
+      const theme = value === "high-contrast" ? "high-contrast" : "standard";
+      section.dataset.graphTheme = theme;
+      try {{ localStorage.setItem(THEME_STORAGE_KEY, theme); }} catch (error) {{}}
+      themeInputs.forEach((input) => {{ input.checked = input.value === theme; }});
+    }}
+    function restoreTheme() {{
+      let stored = "standard";
+      try {{ stored = localStorage.getItem(THEME_STORAGE_KEY) || "standard"; }} catch (error) {{}}
+      applyTheme(stored);
+    }}
+    function currentNodeSet() {{
+      if (!clusterToggle.checked) {{
+        visibleGraph = graph;
+        return;
+      }}
+      const buckets = new Map();
+      graph.nodes.forEach((node) => {{
+        const institution = (node.metadata && (node.metadata.institution || node.metadata.document_identifier)) || node.type;
+        const key = node.type + ":" + institution;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(node);
+      }});
+      const clusteredNodes = [];
+      const idMap = new Map();
+      buckets.forEach((nodes, key) => {{
+        if (nodes.length < 4) {{
+          nodes.forEach((node) => {{
+            clusteredNodes.push(node);
+            idMap.set(node.id, node.id);
+          }});
+          return;
+        }}
+        const clusterId = "cluster:" + key.toLowerCase().replace(/[^a-z0-9:-]+/g, "-");
+        nodes.forEach((node) => idMap.set(node.id, clusterId));
+        clusteredNodes.push({{
+          id: clusterId,
+          type: "Cluster",
+          label: nodes[0].type + " cluster (" + nodes.length + ")",
+          metadata: {{
+            node_count: nodes.length,
+            dominant_institution: nodes[0].metadata && (nodes[0].metadata.institution || nodes[0].metadata.document_identifier),
+            cluster_members: nodes.map((node) => node.id)
+          }}
+        }});
+      }});
+      const edgeMap = new Map();
+      graph.edges.forEach((edge) => {{
+        const source = idMap.get(edge.source);
+        const target = idMap.get(edge.target);
+        if (!source || !target || source === target) return;
+        const key = source + "|" + target + "|" + edge.relationship_type;
+        if (!edgeMap.has(key)) edgeMap.set(key, {{source, target, relationship_type: edge.relationship_type, weight: 0, evidence_metadata: {{clustered: true}}}});
+        edgeMap.get(key).weight += Number(edge.weight || 1);
+      }});
+      visibleGraph = {{
+        nodes: clusteredNodes,
+        edges: Array.from(edgeMap.values())
+      }};
+      visibleGraph.nodeMap = new Map(visibleGraph.nodes.map((node) => [node.id, node]));
+    }}
     function layout() {{
-      const typeOrder = ["Intake Record", "Institution", "Case", "Reference Number", "Person", "Attachment", "Email"];
-      graph.nodes.forEach((node, index) => {{
+      currentNodeSet();
+      const key = filterKey() + "|cluster=" + clusterToggle.checked + "|nodes=" + visibleGraph.nodes.map((node) => node.id).join(",");
+      if (layoutCache.has(key)) {{
+        layoutCache.get(key).forEach((position, id) => {{
+          const node = visibleGraph.nodeMap.get(id);
+          if (node) {{
+            node.x = position.x;
+            node.y = position.y;
+            node.vx = 0;
+            node.vy = 0;
+          }}
+        }});
+        cachedLayoutKey = key;
+        return;
+      }}
+      const typeOrder = ["Intake Record", "Institution", "Case", "Reference Number", "Person", "Attachment", "Email", "Cluster"];
+      visibleGraph.nodes.forEach((node, index) => {{
         const ring = Math.max(1, typeOrder.indexOf(node.type) + 1);
         const angle = (index / Math.max(1, graph.nodes.length)) * Math.PI * 2;
-        const radius = 50 + ring * 34 + (index % 7) * 4;
+        const radius = 80 + ring * 48 + (index % 11) * 7;
         node.x = width / 2 + Math.cos(angle) * radius;
         node.y = height / 2 + Math.sin(angle) * radius;
         node.vx = 0;
         node.vy = 0;
       }});
-      for (let step = 0; step < 90; step += 1) {{
-        graph.edges.forEach((edge) => {{
-          const source = graph.nodeMap.get(edge.source);
-          const target = graph.nodeMap.get(edge.target);
+      for (let step = 0; step < 140; step += 1) {{
+        visibleGraph.nodes.forEach((source, index) => {{
+          for (let j = index + 1; j < visibleGraph.nodes.length; j += 1) {{
+            const target = visibleGraph.nodes[j];
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const distance = Math.max(20, Math.hypot(dx, dy));
+            const repulsion = 620 / (distance * distance);
+            const fx = dx / distance * repulsion;
+            const fy = dy / distance * repulsion;
+            source.vx -= fx;
+            source.vy -= fy;
+            target.vx += fx;
+            target.vy += fy;
+            const collision = source.type === "Cluster" || target.type === "Cluster" ? 58 : 36;
+            if (distance < collision) {{
+              const push = (collision - distance) * 0.02;
+              source.vx -= dx / distance * push;
+              source.vy -= dy / distance * push;
+              target.vx += dx / distance * push;
+              target.vy += dy / distance * push;
+            }}
+          }}
+        }});
+        visibleGraph.edges.forEach((edge) => {{
+          const source = visibleGraph.nodeMap.get(edge.source);
+          const target = visibleGraph.nodeMap.get(edge.target);
           if (!source || !target) return;
           const dx = target.x - source.x;
           const dy = target.y - source.y;
           const distance = Math.max(24, Math.hypot(dx, dy));
-          const desired = Math.max(60, 170 - Math.min(120, Number(edge.weight || 1) * 10));
-          const force = (distance - desired) * 0.004;
+          const desired = Math.max(110, 250 - Math.min(100, Number(edge.weight || 1) * 8));
+          const force = (distance - desired) * 0.0035;
           const fx = dx / distance * force;
           const fy = dy / distance * force;
           source.vx += fx; source.vy += fy;
           target.vx -= fx; target.vy -= fy;
         }});
-        graph.nodes.forEach((node) => {{
-          node.vx += (width / 2 - node.x) * 0.0008;
-          node.vy += (height / 2 - node.y) * 0.0008;
+        visibleGraph.nodes.forEach((node) => {{
+          node.vx += (width / 2 - node.x) * 0.00045;
+          node.vy += (height / 2 - node.y) * 0.00045;
           node.x += node.vx;
           node.y += node.vy;
-          node.vx *= 0.82;
-          node.vy *= 0.82;
+          node.vx *= 0.78;
+          node.vy *= 0.78;
         }});
       }}
+      const positions = new Map();
+      visibleGraph.nodes.forEach((node) => positions.set(node.id, {{x: node.x, y: node.y}}));
+      layoutCache.set(key, positions);
+      cachedLayoutKey = key;
+    }}
+    function edgeDash(edge) {{
+      return {{
+        "Replies To": "6 4",
+        References: "2 4",
+        "Mentions Reference": "2 3",
+        "Attached To": "7 3"
+      }}[edge.relationship_type] || "";
+    }}
+    function labelVisible(node, linked, degreeLeaders) {{
+      return (
+        selectedNode === node.id ||
+        hoveredNode === node.id ||
+        focusedNode === node.id ||
+        searchMatches.has(node.id) ||
+        node.type === "Cluster" ||
+        scale >= LABEL_ZOOM_THRESHOLD ||
+        (linked && linked.has(node.id)) ||
+        degreeLeaders.has(node.id)
+      );
+    }}
+    function centeredPan(node) {{
+      panX = width / 2 - node.x * scale;
+      panY = height / 2 - node.y * scale;
+      render();
     }}
     function render() {{
       svg.replaceChildren();
@@ -464,9 +660,10 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       root.setAttribute("transform", "translate(" + panX + " " + panY + ") scale(" + scale + ")");
       svg.appendChild(root);
       const linked = selectedNode ? adjacent(selectedNode) : null;
-      graph.edges.forEach((edge) => {{
-        const source = graph.nodeMap.get(edge.source);
-        const target = graph.nodeMap.get(edge.target);
+      const degreeLeaders = importantNodes();
+      visibleGraph.edges.forEach((edge) => {{
+        const source = visibleGraph.nodeMap.get(edge.source);
+        const target = visibleGraph.nodeMap.get(edge.target);
         if (!source || !target) return;
         const line = document.createElementNS(namespace, "line");
         const active = !linked || (linked.has(edge.source) && linked.has(edge.target));
@@ -474,13 +671,15 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         line.setAttribute("y1", source.y);
         line.setAttribute("x2", target.x);
         line.setAttribute("y2", target.y);
-        line.setAttribute("stroke", active ? "#6D7C86" : "#D7D2C8");
-        line.setAttribute("stroke-width", Math.max(1, Math.min(8, Number(edge.weight || 1))));
+        line.setAttribute("stroke", active ? "#3B82F6" : "#94A3B8");
+        line.setAttribute("stroke-width", active ? Math.max(1.4, Math.min(4, Number(edge.weight || 1) * 0.45)) : "0.8");
         line.setAttribute("opacity", active ? "0.72" : "0.18");
+        line.setAttribute("stroke-dasharray", edgeDash(edge));
         line.dataset.relationshipType = edge.relationship_type;
+        line.classList.add("mailbox-graph-edge");
         root.appendChild(line);
       }});
-      graph.nodes.forEach((node) => {{
+      visibleGraph.nodes.forEach((node) => {{
         const group = document.createElementNS(namespace, "g");
         const active = !linked || linked.has(node.id);
         group.setAttribute("tabindex", "0");
@@ -488,41 +687,122 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         group.setAttribute("aria-label", node.type + ": " + node.label);
         group.setAttribute("transform", "translate(" + node.x + " " + node.y + ")");
         group.setAttribute("opacity", active ? "1" : "0.22");
+        group.dataset.nodeId = node.id;
+        group.classList.add("mailbox-graph-node");
         const circle = document.createElementNS(namespace, "circle");
-        circle.setAttribute("r", node.type === "Email" ? "12" : "10");
+        circle.setAttribute("r", node.type === "Cluster" ? "18" : node.type === "Email" ? "10" : "12");
         circle.setAttribute("fill", colour(node.type));
-        circle.setAttribute("stroke", selectedNode === node.id ? "#111827" : "#fff");
-        circle.setAttribute("stroke-width", selectedNode === node.id ? "3" : "1.5");
+        circle.setAttribute("stroke", selectedNode === node.id ? "#FFFFFF" : searchMatches.has(node.id) ? "#FDE68A" : "#fff");
+        circle.setAttribute("stroke-width", selectedNode === node.id || searchMatches.has(node.id) ? "3" : "1.5");
+        if (hoveredNode === node.id) circle.classList.add("mailbox-graph-hover-glow");
+        const glyph = document.createElementNS(namespace, "text");
+        glyph.setAttribute("class", "mailbox-graph-node-icon");
+        glyph.setAttribute("text-anchor", "middle");
+        glyph.setAttribute("y", "4");
+        glyph.textContent = icon(node.type);
         const text = document.createElementNS(namespace, "text");
+        text.setAttribute("class", "mailbox-graph-label");
         text.setAttribute("x", "15");
         text.setAttribute("y", "4");
         text.textContent = node.label.length > 42 ? node.label.slice(0, 39) + "..." : node.label;
+        text.setAttribute("opacity", labelVisible(node, linked, degreeLeaders) ? "1" : "0");
         group.appendChild(circle);
+        group.appendChild(glyph);
         group.appendChild(text);
         function select() {{
           selectedNode = selectedNode === node.id ? null : node.id;
+          updateInfoPanel(selectedNode ? node : null);
           render();
         }}
         group.addEventListener("click", () => {{
           select();
-          if (node.type === "Email" && node.metadata && node.metadata.url) {{
-            window.location.href = node.metadata.url;
-          }}
-          if ((node.type === "Person" || node.type === "Institution") && node.label) {{
-            const inputId = node.type === "Person" ? "mailbox-graph-filter-person" : "mailbox-graph-filter-institution";
-            const input = document.getElementById(inputId);
-            if (input) input.value = node.label;
-          }}
+          if (node.type === "Cluster") expandCluster(node);
         }});
+        group.addEventListener("dblclick", (event) => {{
+          event.preventDefault();
+          centeredPan(node);
+        }});
+        group.addEventListener("pointerdown", (event) => {{
+          event.stopPropagation();
+          nodeDragState = {{node, x: event.clientX, y: event.clientY, startX: node.x, startY: node.y}};
+          group.setPointerCapture(event.pointerId);
+        }});
+        group.addEventListener("pointermove", (event) => {{
+          if (!nodeDragState || nodeDragState.node !== node) return;
+          node.x = nodeDragState.startX + (event.clientX - nodeDragState.x) / scale;
+          node.y = nodeDragState.startY + (event.clientY - nodeDragState.y) / scale;
+          render();
+        }});
+        group.addEventListener("pointerup", () => {{ nodeDragState = null; }});
+        group.addEventListener("mouseenter", () => {{ hoveredNode = node.id; render(); }});
+        group.addEventListener("mouseleave", () => {{ hoveredNode = null; render(); }});
+        group.addEventListener("focus", () => {{ focusedNode = node.id; render(); }});
+        group.addEventListener("blur", () => {{ focusedNode = null; render(); }});
         group.addEventListener("keydown", (event) => {{
           if (event.key === "Enter" || event.key === " ") {{
             event.preventDefault();
             select();
+          }} else if (event.key === "ArrowRight") {{
+            event.preventDefault();
+            panX -= 28;
+            render();
+          }} else if (event.key === "ArrowLeft") {{
+            event.preventDefault();
+            panX += 28;
+            render();
+          }} else if (event.key === "ArrowDown") {{
+            event.preventDefault();
+            panY -= 28;
+            render();
+          }} else if (event.key === "ArrowUp") {{
+            event.preventDefault();
+            panY += 28;
+            render();
           }}
         }});
         root.appendChild(group);
       }});
-      status.textContent = graph.nodes.length + " nodes and " + graph.edges.length + " relationships shown.";
+      status.textContent = visibleGraph.nodes.length + " nodes and " + visibleGraph.edges.length + " relationships shown.";
+    }}
+    function connectedValues(node, type) {{
+      const linked = adjacent(node.id);
+      return visibleGraph.nodes
+        .filter((candidate) => linked.has(candidate.id) && candidate.type === type)
+        .map((candidate) => candidate.label)
+        .slice(0, 6)
+        .join(" · ") || "—";
+    }}
+    function updateInfoPanel(node) {{
+      if (!node) {{
+        infoPanel.innerHTML = '<h3>Node Information</h3><p class="provenance-boundary">Select a node to inspect relationship counts, connected entities, verification metadata, and quick actions.</p>';
+        return;
+      }}
+      const metadata = node.metadata || {{}};
+      const actions = [];
+      if (node.type === "Email" && metadata.url) actions.push('<a class="mailbox-graph-action" href="' + metadata.url + '">Open message</a>');
+      if (node.type === "Institution") actions.push('<button class="mailbox-graph-action" type="button" data-filter="institution">Filter by institution</button>');
+      if (node.type === "Person") actions.push('<button class="mailbox-graph-action" type="button" data-filter="person">Filter by person</button>');
+      if (node.type === "Case") actions.push('<button class="mailbox-graph-action" type="button" data-filter="case">Filter by case</button>');
+      if (node.type === "Reference Number") actions.push('<button class="mailbox-graph-action" type="button" data-filter="reference">Filter by reference</button>');
+      infoPanel.innerHTML = '<h3>' + node.label + '</h3>' +
+        '<dl>' +
+        '<dt>Node type</dt><dd>' + node.type + '</dd>' +
+        '<dt>Relationship count</dt><dd>' + relationshipCount(node.id) + '</dd>' +
+        '<dt>Connected institutions</dt><dd>' + connectedValues(node, "Institution") + '</dd>' +
+        '<dt>Connected cases</dt><dd>' + connectedValues(node, "Case") + '</dd>' +
+        '<dt>Connected references</dt><dd>' + connectedValues(node, "Reference Number") + '</dd>' +
+        '<dt>Mailbox index</dt><dd>' + (metadata.message_index || "—") + '</dd>' +
+        '<dt>Verification hash</dt><dd>' + (metadata.message_digest || "—") + '</dd>' +
+        '</dl><div class="mailbox-graph-actions">' + (actions.join("") || '<span class="provenance-boundary">No quick actions are available for this node.</span>') + '</div>';
+      infoPanel.querySelectorAll('button[data-filter]').forEach((button) => {{
+        button.addEventListener("click", () => {{
+          const input = document.getElementById("mailbox-graph-filter-" + button.dataset.filter);
+          if (input) {{
+            input.value = node.label;
+            loadGraph(true);
+          }}
+        }});
+      }});
     }}
     function fit() {{
       scale = 1;
@@ -530,7 +810,41 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       panY = 0;
       render();
     }}
-    function loadGraph() {{
+    function resetLayout() {{
+      layoutCache.delete(cachedLayoutKey);
+      layout();
+      fit();
+    }}
+    function runSearch() {{
+      const query = searchInput.value.trim().toLowerCase();
+      searchMatches = new Set();
+      if (query) {{
+        visibleGraph.nodes.forEach((node) => {{
+          const metadata = JSON.stringify(node.metadata || {{}}).toLowerCase();
+          if (node.label.toLowerCase().includes(query) || node.type.toLowerCase().includes(query) || metadata.includes(query)) {{
+            searchMatches.add(node.id);
+          }}
+        }});
+      }}
+      const first = visibleGraph.nodes.find((node) => searchMatches.has(node.id));
+      if (first) {{
+        selectedNode = first.id;
+        updateInfoPanel(first);
+        centeredPan(first);
+      }} else {{
+        render();
+      }}
+    }}
+    function expandCluster(node) {{
+      if (node.type !== "Cluster") return;
+      clusterToggle.checked = false;
+      currentNodeSet();
+      layout();
+      selectedNode = null;
+      updateInfoPanel(null);
+      render();
+    }}
+    function loadGraph(filtersChanged) {{
       status.textContent = "Relationship Graph loading.";
       const url = new URL(section.dataset.mailboxGraphEndpoint, window.location.origin);
       filters().forEach((value, key) => url.searchParams.set(key, value));
@@ -546,8 +860,16 @@ def _render_mbox_relationship_graph(item: dict) -> str:
           }};
           graph.nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
           selectedNode = null;
+          hoveredNode = null;
+          focusedNode = null;
+          searchMatches = new Set();
+          if (filtersChanged) {{
+            scale = 1;
+            panX = 0;
+            panY = 0;
+          }}
           layout();
-          fit();
+          if (filtersChanged) fit(); else render();
         }})
         .catch(() => {{
           status.textContent = "Relationship Graph could not be loaded.";
@@ -559,6 +881,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       render();
     }});
     svg.addEventListener("pointerdown", (event) => {{
+      if (nodeDragState) return;
       dragState = {{x: event.clientX, y: event.clientY, panX, panY}};
       svg.setPointerCapture(event.pointerId);
     }});
@@ -569,9 +892,23 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       render();
     }});
     svg.addEventListener("pointerup", () => {{ dragState = null; }});
+    themeInputs.forEach((input) => input.addEventListener("change", () => applyTheme(input.value)));
+    restoreTheme();
     fitButton.addEventListener("click", fit);
-    applyButton.addEventListener("click", loadGraph);
-    loadGraph();
+    resetButton.addEventListener("click", resetLayout);
+    applyButton.addEventListener("click", () => loadGraph(true));
+    searchButton.addEventListener("click", runSearch);
+    searchInput.addEventListener("keydown", (event) => {{
+      if (event.key === "Enter") {{
+        event.preventDefault();
+        runSearch();
+      }}
+    }});
+    clusterToggle.addEventListener("change", () => {{
+      layout();
+      render();
+    }});
+    loadGraph(true);
   }}
   if (document.readyState === "loading") {{
     document.addEventListener("DOMContentLoaded", initMailboxRelationshipGraph);
@@ -823,7 +1160,7 @@ def _render_document(item: dict, return_to: object | None = None, message: objec
     admin_actions = f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.mailbox-tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}}.mailbox-tabs a{{padding:8px 10px;border:1px solid #d8d2c4;background:#fff;text-decoration:none}}.mailbox-graph-filters{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}}.mailbox-graph-filters label{{display:grid;gap:4px;font-weight:700;color:#555}}.mailbox-graph-filters input{{width:100%;padding:8px;border:1px solid #c9c2b5;background:#fff;color:#1f2933}}.mailbox-graph-filters button{{padding:9px 10px;border:0;background:#245d61;color:#fff;align-self:end}}.mailbox-graph-shell{{height:520px;overflow:hidden;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-relationship-graph-canvas{{display:block;width:100%;height:100%;touch-action:none}}.mailbox-relationship-graph-canvas text{{font:12px system-ui,sans-serif;fill:#1f2933;paint-order:stroke;stroke:#faf9f5;stroke-width:3px;stroke-linejoin:round}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}.mailbox-graph-shell{{height:420px}}}}@media(prefers-color-scheme:dark){{body{{background:#111827;color:#E5E7EB}}h1,h2{{color:#8DD5DD}}.governance,.provenance-boundary,.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder,.mailbox-tabs a{{background:#1F2937;border-color:#374151}}table{{background:#1F2937}}th{{background:#111827;color:#D1D5DB}}th,td{{border-color:#374151}}.mailbox-graph-shell,.email-plain-text,.email-html-view{{background:#111827;border-color:#374151}}.mailbox-relationship-graph-canvas text{{fill:#F9FAFB;stroke:#111827}}.mailbox-graph-filters input{{background:#111827;color:#F9FAFB;border-color:#4B5563}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.mailbox-tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}}.mailbox-tabs a{{padding:8px 10px;border:1px solid #d8d2c4;background:#fff;text-decoration:none}}.mailbox-graph-theme-toggle{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0;padding:10px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-theme-toggle legend{{font-weight:800;color:#143a52}}.mailbox-graph-theme-toggle label{{display:flex;gap:6px;align-items:center}}.mailbox-graph-filters{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}}.mailbox-graph-filters label{{display:grid;gap:4px;font-weight:700;color:#555}}.mailbox-graph-filters input{{width:100%;padding:8px;border:1px solid #c9c2b5;background:#fff;color:#1f2933}}.mailbox-graph-filters button{{padding:9px 10px;border:0;background:#245d61;color:#fff;align-self:end}}.mailbox-graph-cluster-toggle{{align-self:end;display:flex!important;gap:7px;align-items:center;padding:8px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-workspace{{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.34fr);gap:12px;align-items:stretch}}.mailbox-graph-shell{{height:560px;overflow:hidden;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-info-panel{{min-height:560px;padding:12px;border:1px solid #d8d2c4;background:#faf9f5;overflow:auto}}.mailbox-graph-info-panel h3{{margin-top:0}}.mailbox-graph-info-panel dl{{display:grid;grid-template-columns:115px minmax(0,1fr);gap:6px 10px}}.mailbox-graph-info-panel dt{{font-weight:800;color:#555}}.mailbox-graph-info-panel dd{{margin:0;overflow-wrap:anywhere}}.mailbox-graph-actions{{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}}.mailbox-graph-action{{padding:7px 9px;border:1px solid #245d61;background:#fff;color:#245d61;text-decoration:none;font:inherit;cursor:pointer}}.mailbox-graph-legend{{display:flex;flex-wrap:wrap;gap:8px 14px;margin:12px 0;color:#555}}.mailbox-graph-legend span{{display:inline-flex;align-items:center;gap:5px}}.legend-icon{{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:.72rem;color:#fff}}.legend-person{{background:#0F766E}}.legend-institution{{background:#7C3AED}}.legend-email{{background:#475569}}.legend-case{{background:#B45309}}.legend-reference{{background:#2563EB}}.legend-attachment{{background:#16A34A}}.legend-intake{{background:#DC2626}}.mailbox-relationship-graph-canvas{{display:block;width:100%;height:100%;touch-action:none}}.mailbox-relationship-graph-canvas text{{font:12px system-ui,sans-serif;fill:#1f2933;paint-order:stroke;stroke:#faf9f5;stroke-width:3px;stroke-linejoin:round}}.mailbox-graph-label{{transition:opacity .18s ease}}.mailbox-graph-node:focus circle{{stroke:#111827;stroke-width:3px}}.mailbox-graph-hover-glow{{filter:drop-shadow(0 0 7px rgba(45,212,191,.65))}}.mailbox-graph-node-icon{{font-size:10px;fill:#fff;stroke:none;pointer-events:none}}.mailbox-graph-edge{{transition:opacity .16s ease,stroke-width .16s ease}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"]{{background:#111827;border-color:#334155;color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .provenance-boundary,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-info-panel,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-theme-toggle,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-cluster-toggle{{background:#111827;border-color:#334155;color:#94A3B8}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-shell{{background:#0F172A;border-color:#334155}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h2,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h3,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] legend,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] dt{{color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-relationship-graph-canvas text{{fill:#E5E7EB;stroke:#0F172A}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-filters input{{background:#0F172A;border-color:#334155;color:#E5E7EB}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}.mailbox-graph-workspace{{grid-template-columns:1fr}}.mailbox-graph-shell{{height:420px}}.mailbox-graph-info-panel{{min-height:auto}}}}@media(prefers-color-scheme:dark){{body{{background:#111827;color:#E5E7EB}}h1,h2{{color:#8DD5DD}}.governance,.provenance-boundary,.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder,.mailbox-tabs a{{background:#1F2937;border-color:#374151}}table{{background:#1F2937}}th{{background:#111827;color:#D1D5DB}}th,td{{border-color:#374151}}.mailbox-graph-shell,.email-plain-text,.email-html-view{{background:#111827;border-color:#374151}}.mailbox-relationship-graph-canvas text{{fill:#F9FAFB;stroke:#111827}}.mailbox-graph-filters input{{background:#111827;color:#F9FAFB;border-color:#4B5563}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", archive_return), ("Published Documents", "/archive?type=published_document"), (str(item["title"]), None)])}{archive_back_link(archive_return)}<p>{object_type_badge("published_document")}</p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav>{admin_actions}<section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{content_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
 
