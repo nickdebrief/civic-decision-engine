@@ -143,7 +143,7 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
             "category": "Mailbox Archive",
             "description": "Mailbox archive for CASE-2026-MCI-001 and REF-MCI-64.",
             "visibility": "private",
-            "notes": "CDE Platform Stage 38A relationship graph refinement fixture.",
+            "notes": "CDE Platform Stage 38B relationship inspector fixture.",
             "reference_identifier": "CASE-2026-MCI-001",
             "keywords": "relationship graph, CASE-2026-MCI-001, REF-MCI-64",
             "actor": "graph-admin",
@@ -262,13 +262,14 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
-        self.assertIn("CDE Platform Stage 38A — Mailbox Relationship Graph Refinements", page)
+        self.assertIn("CDE Platform Stage 38B — Relationship Inspector", page)
         self.assertIn('href="#mailbox-relationship-graph">Relationship Graph</a>', page)
         self.assertIn(f'data-mailbox-graph-endpoint="/api/mailbox/graph?document={item["intake_id"]}"', page)
         self.assertIn('id="mailbox-relationship-graph-canvas"', page)
         self.assertIn('id="mailbox-graph-fit"', page)
         self.assertIn("DOMContentLoaded", page)
-        self.assertIn("Node Information", page)
+        self.assertIn("Relationship Inspector", page)
+        self.assertNotIn("Node Information", page)
 
     def test_stage38a_label_visibility_zoom_theme_and_legend_controls_render(self):
         item = self._publish(self._store_mailbox())
@@ -318,6 +319,75 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         self.assertIn("visibleGraph.nodes", page)
         self.assertIn('.public-mbox-relationship-graph[data-graph-theme="high-contrast"]', page)
         self.assertNotIn("body[data-graph-theme", page)
+
+    def test_stage38b_empty_relationship_inspector_renders_without_placeholder_text(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn('class="mailbox-graph-info-panel relationship-inspector"', page)
+        self.assertIn("Click or search for any node to inspect it.", page)
+        self.assertIn("<li>relationship summary</li>", page)
+        self.assertIn("<li>connected entities</li>", page)
+        self.assertIn("<li>metadata</li>", page)
+        self.assertIn("<li>available actions</li>", page)
+        self.assertNotIn("lorem", page.lower())
+
+    def test_stage38b_node_type_inspector_fields_and_quick_actions_render(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        for function_name in (
+            "function metadataRows(node)",
+            "function neighbourSummary(node)",
+            "function quickActions(node)",
+            "function bindInspectorActions(node)",
+        ):
+            self.assertIn(function_name, page)
+        for field in (
+            "Institution name",
+            "Institution type",
+            "Connected emails",
+            "Connected people",
+            "Name",
+            "Emails",
+            "Subject",
+            "Sender",
+            "Recipients",
+            "Reference number",
+            "Case identifier",
+            "Filename",
+            "Record title",
+            "Publication status",
+        ):
+            self.assertIn(field, page)
+        for action in (
+            "Open related messages",
+            "Highlight neighbours",
+            "Filter by institution",
+            "Filter by person",
+            "Open message",
+            "Highlight thread",
+            "Show reply chain",
+            "Highlight attachments",
+            "Filter mailbox",
+            "Highlight reuse",
+            "Open record",
+            "Highlight provenance",
+        ):
+            self.assertIn(action, page)
+
+    def test_stage38b_selection_search_keyboard_and_blank_canvas_update_inspector(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn("updateInfoPanel(selectedNode ? node : null)", page)
+        self.assertIn("updateInfoPanel(first)", page)
+        self.assertIn("event.key === \"Enter\"", page)
+        self.assertIn('svg.addEventListener("click"', page)
+        self.assertIn("event.target === svg", page)
+        self.assertIn("updateInfoPanel(null)", page)
+        self.assertIn("searchMatches = adjacent(node.id)", page)
+        self.assertIn("centeredPan(node)", page)
 
 
 if __name__ == "__main__":

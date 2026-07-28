@@ -347,8 +347,8 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     document_id = escape(str(item.get("intake_id") or ""))
     endpoint = f"/api/mailbox/graph?document={document_id}"
     return f"""<section class="public-mbox-relationship-graph" id="mailbox-relationship-graph" data-mailbox-graph-endpoint="{endpoint}">
-<h2>CDE Platform Stage 38A — Mailbox Relationship Graph Refinements</h2>
-<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. CDE Platform Stage 38A refines only presentation, interaction, accessibility, and performance; it does not change relationship extraction or the graph API.</p>
+<h2>CDE Platform Stage 38B — Relationship Inspector</h2>
+<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. CDE Platform Stage 38B refines only the investigation panel and graph interaction experience; it does not change relationship extraction or the graph API.</p>
 <fieldset class="mailbox-graph-theme-toggle" aria-label="Relationship Graph Theme">
   <legend>Relationship Graph Theme</legend>
   <label><input id="mailbox-graph-theme-standard" name="mailbox-graph-theme" type="radio" value="standard" checked> Standard</label>
@@ -374,9 +374,15 @@ def _render_mbox_relationship_graph(item: dict) -> str:
   <div class="mailbox-graph-shell">
     <svg id="mailbox-relationship-graph-canvas" class="mailbox-relationship-graph-canvas" role="img" aria-label="Mailbox Relationship Graph" tabindex="0"></svg>
   </div>
-  <aside id="mailbox-graph-info-panel" class="mailbox-graph-info-panel" aria-live="polite">
-    <h3>Node Information</h3>
-    <p class="provenance-boundary">Select a node to inspect relationship counts, connected entities, verification metadata, and quick actions.</p>
+  <aside id="mailbox-graph-info-panel" class="mailbox-graph-info-panel relationship-inspector" aria-live="polite" aria-label="Relationship Inspector">
+    <h3>Relationship Inspector</h3>
+    <p>Click or search for any node to inspect it.</p>
+    <ul class="relationship-inspector-empty">
+      <li>relationship summary</li>
+      <li>connected entities</li>
+      <li>metadata</li>
+      <li>available actions</li>
+    </ul>
   </aside>
 </div>
 <div class="mailbox-graph-legend" aria-label="Mailbox Relationship Graph legend">
@@ -388,6 +394,18 @@ def _render_mbox_relationship_graph(item: dict) -> str:
   <span><i class="legend-icon legend-attachment" aria-hidden="true">▣</i> Attachment</span>
   <span><i class="legend-icon legend-intake" aria-hidden="true">▰</i> Intake Record</span>
 </div>
+<style>
+  #mailbox-relationship-graph .relationship-inspector-title {{font-weight:800;color:#143a52;margin:0 0 10px}}
+  #mailbox-relationship-graph .relationship-inspector-empty {{margin:10px 0 0;padding-left:18px;color:#555;line-height:1.5}}
+  #mailbox-relationship-graph .relationship-inspector-section {{border-top:1px solid #d8d2c4;padding-top:10px;margin-top:10px}}
+  #mailbox-relationship-graph .relationship-inspector-section h4 {{margin:0 0 8px;color:#143a52;font-size:.88rem;text-transform:uppercase;letter-spacing:.04em}}
+  #mailbox-relationship-graph .relationship-inspector-badges {{display:flex;flex-wrap:wrap;gap:5px}}
+  #mailbox-relationship-graph .relationship-inspector-badge {{display:inline-flex;align-items:center;border:1px solid #c9c2b5;background:#fff;padding:2px 6px;border-radius:999px;font-size:.78rem;color:#4B5B6A}}
+  #mailbox-relationship-graph .relationship-inspector-muted {{color:#666}}
+  #mailbox-relationship-graph[data-graph-theme="high-contrast"] .relationship-inspector-title,
+  #mailbox-relationship-graph[data-graph-theme="high-contrast"] .relationship-inspector-section h4 {{color:#E5E7EB}}
+  #mailbox-relationship-graph[data-graph-theme="high-contrast"] .relationship-inspector-badge {{background:#0F172A;border-color:#334155;color:#E5E7EB}}
+</style>
 <script>
 (function() {{
   function initMailboxRelationshipGraph() {{
@@ -450,6 +468,17 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         Cluster: "◌"
       }}[type] || "•";
     }}
+    function escapeHTML(value) {{
+      return String(value == null || value === "" ? "—" : value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }}
+    function displayType(node) {{
+      return node.type === "Reference Number" ? "Reference" : node.type;
+    }}
     function filters() {{
       const params = new URLSearchParams(new URL(section.dataset.mailboxGraphEndpoint, window.location.origin).search);
       const fieldMap = {{
@@ -480,6 +509,66 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     }}
     function relationshipCount(id) {{
       return graph.edges.filter((edge) => edge.source === id || edge.target === id).length;
+    }}
+    function nodeById(id) {{
+      return graph.nodeMap && graph.nodeMap.get(id);
+    }}
+    function graphEdgesFor(id) {{
+      return graph.edges.filter((edge) => edge.source === id || edge.target === id);
+    }}
+    function graphNeighbours(node) {{
+      const ids = new Set();
+      graphEdgesFor(node.id).forEach((edge) => {{
+        ids.add(edge.source === node.id ? edge.target : edge.source);
+      }});
+      return Array.from(ids).map(nodeById).filter(Boolean);
+    }}
+    function neighboursByType(node, type) {{
+      return graphNeighbours(node)
+        .filter((candidate) => candidate.type === type)
+        .sort((a, b) => String(a.label).localeCompare(String(b.label)))
+        .slice(0, 8);
+    }}
+    function listLabels(nodes) {{
+      return nodes.length ? nodes.map((candidate) => escapeHTML(candidate.label)).join(" · ") : "—";
+    }}
+    function relationshipTypes(node) {{
+      const counts = new Map();
+      graphEdgesFor(node.id).forEach((edge) => {{
+        counts.set(edge.relationship_type, (counts.get(edge.relationship_type) || 0) + 1);
+      }});
+      return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    }}
+    function relationshipBadges(node) {{
+      return relationshipTypes(node).map((entry) => '<span class="relationship-inspector-badge">' + escapeHTML(entry[0]) + ' ' + entry[1] + '</span>').join("") || '<span class="relationship-inspector-muted">—</span>';
+    }}
+    function relatedEmailNodes(node) {{
+      return node.type === "Email" ? [node] : neighboursByType(node, "Email");
+    }}
+    function datesFor(node) {{
+      return relatedEmailNodes(node)
+        .map((candidate) => candidate.metadata && candidate.metadata.date)
+        .filter(Boolean)
+        .sort();
+    }}
+    function firstAppearance(node) {{
+      const dates = datesFor(node);
+      return dates[0] || "—";
+    }}
+    function latestAppearance(node) {{
+      const dates = datesFor(node);
+      return dates[dates.length - 1] || "—";
+    }}
+    function recentActivity(node) {{
+      const dates = datesFor(node).reverse().slice(0, 3);
+      return dates.length ? dates.map(escapeHTML).join(" · ") : "—";
+    }}
+    function topConnectedEntities(node) {{
+      return graphNeighbours(node)
+        .sort((a, b) => relationshipCount(b.id) - relationshipCount(a.id) || String(a.label).localeCompare(String(b.label)))
+        .slice(0, 5)
+        .map((candidate) => escapeHTML(candidate.label))
+        .join(" · ") || "—";
     }}
     function importantNodes() {{
       return new Set(
@@ -772,37 +861,193 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         .slice(0, 6)
         .join(" · ") || "—";
     }}
-    function updateInfoPanel(node) {{
-      if (!node) {{
-        infoPanel.innerHTML = '<h3>Node Information</h3><p class="provenance-boundary">Select a node to inspect relationship counts, connected entities, verification metadata, and quick actions.</p>';
-        return;
+    function inspectorRow(label, value) {{
+      return '<dt>' + escapeHTML(label) + '</dt><dd>' + escapeHTML(value) + '</dd>';
+    }}
+    function inspectorListRow(label, nodes) {{
+      return '<dt>' + escapeHTML(label) + '</dt><dd>' + listLabels(nodes) + '</dd>';
+    }}
+    function neighbourSummary(node) {{
+      return '<section class="relationship-inspector-section"><h4>Neighbour Summary</h4><dl>' +
+        inspectorRow("Relationship count", relationshipCount(node.id)) +
+        inspectorRow("Neighbour count", graphNeighbours(node).length) +
+        '<dt>Relationship types</dt><dd class="relationship-inspector-badges">' + relationshipBadges(node) + '</dd>' +
+        inspectorRow("Top connected entities", topConnectedEntities(node)) +
+        inspectorRow("Recent activity", recentActivity(node)) +
+        '</dl></section>';
+    }}
+    function metadataRows(node) {{
+      const metadata = node.metadata || {{}};
+      const type = node.type;
+      if (type === "Institution") {{
+        return inspectorRow("Institution name", node.label) +
+          inspectorRow("Institution type", metadata.source || "Mailbox institution") +
+          inspectorRow("Relationship degree", relationshipCount(node.id)) +
+          inspectorListRow("Connected emails", neighboursByType(node, "Email")) +
+          inspectorListRow("Connected people", neighboursByType(node, "Person")) +
+          inspectorListRow("Connected references", neighboursByType(node, "Reference Number")) +
+          inspectorListRow("Connected cases", neighboursByType(node, "Case")) +
+          inspectorRow("First appearance", firstAppearance(node)) +
+          inspectorRow("Latest appearance", latestAppearance(node));
       }}
+      if (type === "Person") {{
+        return inspectorRow("Name", node.label) +
+          inspectorRow("Institution", connectedValues(node, "Institution")) +
+          inspectorRow("Relationship degree", relationshipCount(node.id)) +
+          inspectorListRow("Emails", neighboursByType(node, "Email")) +
+          inspectorListRow("Cases", neighboursByType(node, "Case")) +
+          inspectorListRow("References", neighboursByType(node, "Reference Number")) +
+          inspectorRow("First appearance", firstAppearance(node)) +
+          inspectorRow("Latest appearance", latestAppearance(node));
+      }}
+      if (type === "Email") {{
+        return inspectorRow("Subject", node.label) +
+          inspectorRow("Date", metadata.date) +
+          inspectorRow("Sender", listLabels(graph.edges.filter((edge) => edge.source === node.id && edge.relationship_type === "Sent By").map((edge) => nodeById(edge.target)).filter(Boolean))) +
+          inspectorRow("Recipients", listLabels(graph.edges.filter((edge) => edge.source === node.id && edge.relationship_type === "Sent To").map((edge) => nodeById(edge.target)).filter(Boolean))) +
+          inspectorRow("CC", listLabels(graph.edges.filter((edge) => edge.source === node.id && edge.relationship_type === "CC").map((edge) => nodeById(edge.target)).filter(Boolean))) +
+          inspectorListRow("Attachments", neighboursByType(node, "Attachment")) +
+          inspectorListRow("Reference numbers", neighboursByType(node, "Reference Number")) +
+          inspectorRow("Case", connectedValues(node, "Case")) +
+          inspectorRow("Verification hash", metadata.message_digest) +
+          inspectorRow("Relationship degree", relationshipCount(node.id));
+      }}
+      if (type === "Reference Number") {{
+        return inspectorRow("Reference number", node.label) +
+          inspectorRow("Appears in", relatedEmailNodes(node).length + " email(s)") +
+          inspectorListRow("Connected institutions", neighboursByType(node, "Institution")) +
+          inspectorListRow("Connected people", neighboursByType(node, "Person")) +
+          inspectorListRow("Connected cases", neighboursByType(node, "Case")) +
+          inspectorListRow("Connected emails", neighboursByType(node, "Email"));
+      }}
+      if (type === "Case") {{
+        return inspectorRow("Case identifier", node.label) +
+          inspectorListRow("Connected institutions", neighboursByType(node, "Institution")) +
+          inspectorListRow("Connected people", neighboursByType(node, "Person")) +
+          inspectorListRow("Connected emails", neighboursByType(node, "Email")) +
+          inspectorListRow("Connected references", neighboursByType(node, "Reference Number")) +
+          inspectorRow("Relationship degree", relationshipCount(node.id));
+      }}
+      if (type === "Attachment") {{
+        return inspectorRow("Filename", node.label) +
+          inspectorRow("File type", metadata.media_type) +
+          inspectorListRow("Linked emails", neighboursByType(node, "Email")) +
+          inspectorListRow("Linked references", neighboursByType(node, "Reference Number")) +
+          inspectorRow("Verification hash", metadata.message_digest || metadata.content_id);
+      }}
+      if (type === "Intake Record") {{
+        return inspectorRow("Record title", node.label) +
+          inspectorRow("Status", metadata.status || "Published mailbox archive") +
+          inspectorRow("Institution", connectedValues(node, "Institution")) +
+          inspectorListRow("Connected emails", neighboursByType(node, "Email")) +
+          inspectorListRow("Connected references", neighboursByType(node, "Reference Number")) +
+          inspectorRow("Verification hash", metadata.document_id) +
+          inspectorRow("Publication status", metadata.publication_status || "Published");
+      }}
+      if (type === "Cluster") {{
+        return inspectorRow("Cluster", node.label) +
+          inspectorRow("Node count", metadata.node_count) +
+          inspectorRow("Dominant institution", metadata.dominant_institution) +
+          inspectorRow("Relationship degree", relationshipCount(node.id));
+      }}
+      return inspectorRow("Title", node.label) + inspectorRow("Relationship degree", relationshipCount(node.id));
+    }}
+    function quickActions(node) {{
       const metadata = node.metadata || {{}};
       const actions = [];
-      if (node.type === "Email" && metadata.url) actions.push('<a class="mailbox-graph-action" href="' + metadata.url + '">Open message</a>');
-      if (node.type === "Institution") actions.push('<button class="mailbox-graph-action" type="button" data-filter="institution">Filter by institution</button>');
-      if (node.type === "Person") actions.push('<button class="mailbox-graph-action" type="button" data-filter="person">Filter by person</button>');
-      if (node.type === "Case") actions.push('<button class="mailbox-graph-action" type="button" data-filter="case">Filter by case</button>');
-      if (node.type === "Reference Number") actions.push('<button class="mailbox-graph-action" type="button" data-filter="reference">Filter by reference</button>');
-      infoPanel.innerHTML = '<h3>' + node.label + '</h3>' +
-        '<dl>' +
-        '<dt>Node type</dt><dd>' + node.type + '</dd>' +
-        '<dt>Relationship count</dt><dd>' + relationshipCount(node.id) + '</dd>' +
-        '<dt>Connected institutions</dt><dd>' + connectedValues(node, "Institution") + '</dd>' +
-        '<dt>Connected cases</dt><dd>' + connectedValues(node, "Case") + '</dd>' +
-        '<dt>Connected references</dt><dd>' + connectedValues(node, "Reference Number") + '</dd>' +
-        '<dt>Mailbox index</dt><dd>' + (metadata.message_index || "—") + '</dd>' +
-        '<dt>Verification hash</dt><dd>' + (metadata.message_digest || "—") + '</dd>' +
-        '</dl><div class="mailbox-graph-actions">' + (actions.join("") || '<span class="provenance-boundary">No quick actions are available for this node.</span>') + '</div>';
-      infoPanel.querySelectorAll('button[data-filter]').forEach((button) => {{
+      function button(label, action, filter) {{
+        actions.push('<button class="mailbox-graph-action" type="button" data-action="' + action + '"' + (filter ? ' data-filter="' + filter + '"' : '') + '>' + escapeHTML(label) + '</button>');
+      }}
+      if (node.type === "Email" && metadata.url) actions.push('<a class="mailbox-graph-action" href="' + escapeHTML(metadata.url) + '">Open message</a>');
+      if (node.type === "Institution") {{
+        button("Open related messages", "open_related_messages", "institution");
+        button("Highlight neighbours", "highlight_neighbours");
+        button("Focus graph", "focus_graph");
+        button("Filter by institution", "filter", "institution");
+        button("Collapse others", "collapse_others");
+      }} else if (node.type === "Person") {{
+        button("Highlight neighbours", "highlight_neighbours");
+        button("Filter by person", "filter", "person");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Email") {{
+        button("Highlight thread", "highlight_thread");
+        button("Show reply chain", "show_reply_chain");
+        button("Highlight attachments", "highlight_attachments");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Reference Number") {{
+        button("Highlight all", "highlight_neighbours");
+        button("Filter mailbox", "filter", "reference");
+        button("Filter by reference", "filter", "reference");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Case") {{
+        button("Filter mailbox", "filter", "case");
+        button("Filter by case", "filter", "case");
+        button("Highlight case", "highlight_neighbours");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Attachment") {{
+        const related = neighboursByType(node, "Email")[0];
+        if (related && related.metadata && related.metadata.url) actions.push('<a class="mailbox-graph-action" href="' + escapeHTML(related.metadata.url) + '">Open related message</a>');
+        button("Highlight reuse", "highlight_neighbours");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Intake Record") {{
+        if (metadata.document_id) actions.push('<a class="mailbox-graph-action" href="/documents/' + escapeHTML(metadata.document_id) + '">Open record</a>');
+        button("Highlight provenance", "highlight_neighbours");
+        button("Focus graph", "focus_graph");
+      }} else if (node.type === "Cluster") {{
+        button("Expand cluster", "expand_cluster");
+        button("Focus graph", "focus_graph");
+      }}
+      return actions.join("");
+    }}
+    function bindInspectorActions(node) {{
+      infoPanel.querySelectorAll('button[data-action]').forEach((button) => {{
         button.addEventListener("click", () => {{
-          const input = document.getElementById("mailbox-graph-filter-" + button.dataset.filter);
-          if (input) {{
-            input.value = node.label;
+          const action = button.dataset.action;
+          if (action === "filter") {{
+            const input = document.getElementById("mailbox-graph-filter-" + button.dataset.filter);
+            if (input) {{
+              input.value = node.label;
+              loadGraph(true);
+            }}
+          }} else if (action === "open_related_messages") {{
+            const input = document.getElementById("mailbox-graph-filter-" + button.dataset.filter);
+            if (input) input.value = node.label;
             loadGraph(true);
+          }} else if (action === "focus_graph") {{
+            centeredPan(node);
+          }} else if (action === "collapse_others" || action === "highlight_neighbours") {{
+            searchMatches = adjacent(node.id);
+            selectedNode = node.id;
+            render();
+          }} else if (action === "highlight_thread" || action === "show_reply_chain") {{
+            searchMatches = new Set([node.id]);
+            graphEdgesFor(node.id)
+              .filter((edge) => edge.relationship_type === "Replies To" || edge.relationship_type === "References")
+              .forEach((edge) => {{
+                searchMatches.add(edge.source);
+                searchMatches.add(edge.target);
+              }});
+            render();
+          }} else if (action === "highlight_attachments") {{
+            searchMatches = new Set([node.id, ...neighboursByType(node, "Attachment").map((candidate) => candidate.id)]);
+            render();
+          }} else if (action === "expand_cluster") {{
+            expandCluster(node);
           }}
         }});
       }});
+    }}
+    function updateInfoPanel(node) {{
+      if (!node) {{
+        infoPanel.innerHTML = '<h3>Relationship Inspector</h3><p>Click or search for any node to inspect it.</p><ul class="relationship-inspector-empty"><li>relationship summary</li><li>connected entities</li><li>metadata</li><li>available actions</li></ul>';
+        return;
+      }}
+      infoPanel.innerHTML = '<h3>' + escapeHTML(displayType(node)) + '</h3>' +
+        '<p class="relationship-inspector-title">' + escapeHTML(node.label) + '</p>' +
+        '<section class="relationship-inspector-section"><h4>Metadata</h4><dl>' + metadataRows(node) + '</dl></section>' +
+        neighbourSummary(node) +
+        '<section class="relationship-inspector-section"><h4>Available actions</h4><div class="mailbox-graph-actions">' + quickActions(node) + '</div></section>';
+      bindInspectorActions(node);
     }}
     function fit() {{
       scale = 1;
@@ -869,6 +1114,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
             panY = 0;
           }}
           layout();
+          updateInfoPanel(null);
           if (filtersChanged) fit(); else render();
         }})
         .catch(() => {{
@@ -892,6 +1138,14 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       render();
     }});
     svg.addEventListener("pointerup", () => {{ dragState = null; }});
+    svg.addEventListener("click", (event) => {{
+      if (event.target === svg) {{
+        selectedNode = null;
+        searchMatches = new Set();
+        updateInfoPanel(null);
+        render();
+      }}
+    }});
     themeInputs.forEach((input) => input.addEventListener("change", () => applyTheme(input.value)));
     restoreTheme();
     fitButton.addEventListener("click", fit);
