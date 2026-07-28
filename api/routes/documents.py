@@ -29,6 +29,10 @@ from api.email_documents import APPLE_MAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import EMAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import MBOX_GOVERNANCE_BOUNDARY
 from api.email_documents import OUTLOOK_GOVERNANCE_BOUNDARY
+from api.mailbox_relationship_graph import (
+    MailboxGraphFilters,
+    build_mailbox_relationship_graph,
+)
 from api.public_navigation import (
     PUBLIC_NAVIGATION_CSS,
     archive_back_link,
@@ -339,6 +343,246 @@ def _message_by_index(metadata: dict, message_index: object | None) -> dict | No
     return messages[0] if messages and isinstance(messages[0], dict) else None
 
 
+def _render_mbox_relationship_graph(item: dict) -> str:
+    document_id = escape(str(item.get("intake_id") or ""))
+    endpoint = f"/api/mailbox/graph?document={document_id}"
+    return f"""<section class="public-mbox-relationship-graph" id="mailbox-relationship-graph" data-mailbox-graph-endpoint="{endpoint}">
+<h2>CDE Platform Stage 38 — Mailbox Relationship Graph</h2>
+<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. It does not create a duplicate relationship database or infer probabilistic relationships.</p>
+<form class="mailbox-graph-filters" aria-label="Mailbox relationship graph filters">
+  <label>Institution <input id="mailbox-graph-filter-institution" name="institution" type="search" autocomplete="off"></label>
+  <label>Person <input id="mailbox-graph-filter-person" name="person" type="search" autocomplete="off"></label>
+  <label>Case <input id="mailbox-graph-filter-case" name="case" type="search" autocomplete="off"></label>
+  <label>Reference Number <input id="mailbox-graph-filter-reference" name="reference" type="search" autocomplete="off"></label>
+  <label>Date from <input id="mailbox-graph-filter-from" name="from" type="date"></label>
+  <label>Date to <input id="mailbox-graph-filter-to" name="to" type="date"></label>
+  <label>Mailbox Status <input id="mailbox-graph-filter-status" name="status" type="search" autocomplete="off"></label>
+  <button id="mailbox-graph-apply-filters" type="button">Apply filters</button>
+  <button id="mailbox-graph-fit" type="button">Fit to screen</button>
+</form>
+<p id="mailbox-graph-status" class="provenance-boundary" role="status" aria-live="polite">Relationship Graph loading.</p>
+<div class="mailbox-graph-shell">
+  <svg id="mailbox-relationship-graph-canvas" class="mailbox-relationship-graph-canvas" role="img" aria-label="Mailbox Relationship Graph" tabindex="0"></svg>
+</div>
+<script>
+(function() {{
+  function initMailboxRelationshipGraph() {{
+    const section = document.getElementById("mailbox-relationship-graph");
+    if (!section || section.dataset.initialized === "true") return;
+    section.dataset.initialized = "true";
+    const svg = document.getElementById("mailbox-relationship-graph-canvas");
+    const status = document.getElementById("mailbox-graph-status");
+    const fitButton = document.getElementById("mailbox-graph-fit");
+    const applyButton = document.getElementById("mailbox-graph-apply-filters");
+    if (!svg || !status || !fitButton || !applyButton) return;
+    const namespace = "http://www.w3.org/2000/svg";
+    let graph = {{nodes: [], edges: []}};
+    let selectedNode = null;
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    let dragState = null;
+    const width = 900;
+    const height = 520;
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+    function colour(type) {{
+      return {{
+        Email: "#2E8B9A",
+        Person: "#6F5BA7",
+        Institution: "#1F5A65",
+        Case: "#8A6E2F",
+        "Reference Number": "#4B5B6A",
+        Attachment: "#A4563B",
+        "Intake Record": "#143A52"
+      }}[type] || "#4B5B6A";
+    }}
+    function filters() {{
+      const params = new URLSearchParams(new URL(section.dataset.mailboxGraphEndpoint, window.location.origin).search);
+      const fieldMap = {{
+        institution: "mailbox-graph-filter-institution",
+        person: "mailbox-graph-filter-person",
+        case: "mailbox-graph-filter-case",
+        reference: "mailbox-graph-filter-reference",
+        from: "mailbox-graph-filter-from",
+        to: "mailbox-graph-filter-to",
+        status: "mailbox-graph-filter-status"
+      }};
+      Object.keys(fieldMap).forEach((key) => {{
+        const input = document.getElementById(fieldMap[key]);
+        if (input && input.value.trim()) params.set(key, input.value.trim());
+      }});
+      return params;
+    }}
+    function adjacent(id) {{
+      const linked = new Set([id]);
+      graph.edges.forEach((edge) => {{
+        if (edge.source === id) linked.add(edge.target);
+        if (edge.target === id) linked.add(edge.source);
+      }});
+      return linked;
+    }}
+    function layout() {{
+      const typeOrder = ["Intake Record", "Institution", "Case", "Reference Number", "Person", "Attachment", "Email"];
+      graph.nodes.forEach((node, index) => {{
+        const ring = Math.max(1, typeOrder.indexOf(node.type) + 1);
+        const angle = (index / Math.max(1, graph.nodes.length)) * Math.PI * 2;
+        const radius = 50 + ring * 34 + (index % 7) * 4;
+        node.x = width / 2 + Math.cos(angle) * radius;
+        node.y = height / 2 + Math.sin(angle) * radius;
+        node.vx = 0;
+        node.vy = 0;
+      }});
+      for (let step = 0; step < 90; step += 1) {{
+        graph.edges.forEach((edge) => {{
+          const source = graph.nodeMap.get(edge.source);
+          const target = graph.nodeMap.get(edge.target);
+          if (!source || !target) return;
+          const dx = target.x - source.x;
+          const dy = target.y - source.y;
+          const distance = Math.max(24, Math.hypot(dx, dy));
+          const desired = Math.max(60, 170 - Math.min(120, Number(edge.weight || 1) * 10));
+          const force = (distance - desired) * 0.004;
+          const fx = dx / distance * force;
+          const fy = dy / distance * force;
+          source.vx += fx; source.vy += fy;
+          target.vx -= fx; target.vy -= fy;
+        }});
+        graph.nodes.forEach((node) => {{
+          node.vx += (width / 2 - node.x) * 0.0008;
+          node.vy += (height / 2 - node.y) * 0.0008;
+          node.x += node.vx;
+          node.y += node.vy;
+          node.vx *= 0.82;
+          node.vy *= 0.82;
+        }});
+      }}
+    }}
+    function render() {{
+      svg.replaceChildren();
+      const root = document.createElementNS(namespace, "g");
+      root.setAttribute("transform", "translate(" + panX + " " + panY + ") scale(" + scale + ")");
+      svg.appendChild(root);
+      const linked = selectedNode ? adjacent(selectedNode) : null;
+      graph.edges.forEach((edge) => {{
+        const source = graph.nodeMap.get(edge.source);
+        const target = graph.nodeMap.get(edge.target);
+        if (!source || !target) return;
+        const line = document.createElementNS(namespace, "line");
+        const active = !linked || (linked.has(edge.source) && linked.has(edge.target));
+        line.setAttribute("x1", source.x);
+        line.setAttribute("y1", source.y);
+        line.setAttribute("x2", target.x);
+        line.setAttribute("y2", target.y);
+        line.setAttribute("stroke", active ? "#6D7C86" : "#D7D2C8");
+        line.setAttribute("stroke-width", Math.max(1, Math.min(8, Number(edge.weight || 1))));
+        line.setAttribute("opacity", active ? "0.72" : "0.18");
+        line.dataset.relationshipType = edge.relationship_type;
+        root.appendChild(line);
+      }});
+      graph.nodes.forEach((node) => {{
+        const group = document.createElementNS(namespace, "g");
+        const active = !linked || linked.has(node.id);
+        group.setAttribute("tabindex", "0");
+        group.setAttribute("role", "button");
+        group.setAttribute("aria-label", node.type + ": " + node.label);
+        group.setAttribute("transform", "translate(" + node.x + " " + node.y + ")");
+        group.setAttribute("opacity", active ? "1" : "0.22");
+        const circle = document.createElementNS(namespace, "circle");
+        circle.setAttribute("r", node.type === "Email" ? "12" : "10");
+        circle.setAttribute("fill", colour(node.type));
+        circle.setAttribute("stroke", selectedNode === node.id ? "#111827" : "#fff");
+        circle.setAttribute("stroke-width", selectedNode === node.id ? "3" : "1.5");
+        const text = document.createElementNS(namespace, "text");
+        text.setAttribute("x", "15");
+        text.setAttribute("y", "4");
+        text.textContent = node.label.length > 42 ? node.label.slice(0, 39) + "..." : node.label;
+        group.appendChild(circle);
+        group.appendChild(text);
+        function select() {{
+          selectedNode = selectedNode === node.id ? null : node.id;
+          render();
+        }}
+        group.addEventListener("click", () => {{
+          select();
+          if (node.type === "Email" && node.metadata && node.metadata.url) {{
+            window.location.href = node.metadata.url;
+          }}
+          if ((node.type === "Person" || node.type === "Institution") && node.label) {{
+            const inputId = node.type === "Person" ? "mailbox-graph-filter-person" : "mailbox-graph-filter-institution";
+            const input = document.getElementById(inputId);
+            if (input) input.value = node.label;
+          }}
+        }});
+        group.addEventListener("keydown", (event) => {{
+          if (event.key === "Enter" || event.key === " ") {{
+            event.preventDefault();
+            select();
+          }}
+        }});
+        root.appendChild(group);
+      }});
+      status.textContent = graph.nodes.length + " nodes and " + graph.edges.length + " relationships shown.";
+    }}
+    function fit() {{
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      render();
+    }}
+    function loadGraph() {{
+      status.textContent = "Relationship Graph loading.";
+      const url = new URL(section.dataset.mailboxGraphEndpoint, window.location.origin);
+      filters().forEach((value, key) => url.searchParams.set(key, value));
+      fetch(url.toString(), {{headers: {{"Accept": "application/json"}}}})
+        .then((response) => {{
+          if (!response.ok) throw new Error("Graph request failed");
+          return response.json();
+        }})
+        .then((payload) => {{
+          graph = {{
+            nodes: Array.isArray(payload.nodes) ? payload.nodes : [],
+            edges: Array.isArray(payload.edges) ? payload.edges : []
+          }};
+          graph.nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
+          selectedNode = null;
+          layout();
+          fit();
+        }})
+        .catch(() => {{
+          status.textContent = "Relationship Graph could not be loaded.";
+        }});
+    }}
+    svg.addEventListener("wheel", (event) => {{
+      event.preventDefault();
+      scale = Math.max(0.35, Math.min(2.8, scale + (event.deltaY < 0 ? 0.08 : -0.08)));
+      render();
+    }});
+    svg.addEventListener("pointerdown", (event) => {{
+      dragState = {{x: event.clientX, y: event.clientY, panX, panY}};
+      svg.setPointerCapture(event.pointerId);
+    }});
+    svg.addEventListener("pointermove", (event) => {{
+      if (!dragState) return;
+      panX = dragState.panX + event.clientX - dragState.x;
+      panY = dragState.panY + event.clientY - dragState.y;
+      render();
+    }});
+    svg.addEventListener("pointerup", () => {{ dragState = null; }});
+    fitButton.addEventListener("click", fit);
+    applyButton.addEventListener("click", loadGraph);
+    loadGraph();
+  }}
+  if (document.readyState === "loading") {{
+    document.addEventListener("DOMContentLoaded", initMailboxRelationshipGraph);
+  }} else {{
+    initMailboxRelationshipGraph();
+  }}
+}})();
+</script>
+</section>"""
+
+
 def _render_mbox_document(item: dict, *, message_index: object | None = None, page: object | None = None) -> str:
     metadata = _email_metadata(item)
     messages = [message for message in (metadata.get("messages") or []) if isinstance(message, dict)]
@@ -422,8 +666,13 @@ def _render_mbox_document(item: dict, *, message_index: object | None = None, pa
         detail = f"""<section class="public-mbox-message-detail"><h2>Message Detail</h2><table>{detail_rows}</table><h3>Message Body</h3>{plain_block}{html_block}<h3>Attachments</h3><p class="provenance-boundary">Attachments remain components of the preserved MBOX archive unless separately admitted through Document Intake.</p><div class="email-attachments-wrapper"><table><thead><tr><th>Filename</th><th>Media type</th><th>Byte size</th><th>Disposition</th><th>Content ID</th><th>Attached message</th></tr></thead><tbody>{attachment_rows}</tbody></table></div></section>"""
     warnings = metadata.get("parser_warnings") or []
     warning_text = _email_join(warnings) if warnings else "No mailbox-level parser warnings were recorded."
-    return f"""<section class="public-mbox-summary"><h2>Mailbox Overview</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p><table>{overview_rows}</table></section>
+    graph = _render_mbox_relationship_graph(item)
+    return f"""<nav class="mailbox-tabs" aria-label="Mailbox sections"><a href="#mailbox-inbox">Inbox</a><a href="#mailbox-cases">Cases</a><a href="#mailbox-timeline">Timeline</a><a href="#mailbox-relationship-graph">Relationship Graph</a></nav>
+<section class="public-mbox-summary" id="mailbox-inbox"><h2>Mailbox Overview</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p><table>{overview_rows}</table></section>
 <section class="public-mbox-index"><h2>Mailbox Message Index</h2>{pagination}<div class="email-attachments-wrapper"><table class="public-mbox-message-index"><thead><tr><th>Index</th><th>Date</th><th>From</th><th>Subject</th><th>To</th><th>Attachment count</th><th>Parse status</th><th>Warning indicator</th></tr></thead><tbody>{index_rows}</tbody></table></div><p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
+<section class="public-mbox-placeholder" id="mailbox-cases"><h2>Cases</h2><p class="provenance-boundary">Case relationships are represented in the Relationship Graph when case references are present in the mailbox projection.</p></section>
+<section class="public-mbox-placeholder" id="mailbox-timeline"><h2>Timeline</h2><p class="provenance-boundary">Chronological access remains available through the Mailbox Message Index and message dates recorded in the preserved archive.</p></section>
+{graph}
 {detail}
 <section class="public-email-boundary"><h2>Mailbox Governance Boundary</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p></section>"""
 
@@ -574,7 +823,7 @@ def _render_document(item: dict, return_to: object | None = None, message: objec
     admin_actions = f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.mailbox-tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}}.mailbox-tabs a{{padding:8px 10px;border:1px solid #d8d2c4;background:#fff;text-decoration:none}}.mailbox-graph-filters{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}}.mailbox-graph-filters label{{display:grid;gap:4px;font-weight:700;color:#555}}.mailbox-graph-filters input{{width:100%;padding:8px;border:1px solid #c9c2b5;background:#fff;color:#1f2933}}.mailbox-graph-filters button{{padding:9px 10px;border:0;background:#245d61;color:#fff;align-self:end}}.mailbox-graph-shell{{height:520px;overflow:hidden;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-relationship-graph-canvas{{display:block;width:100%;height:100%;touch-action:none}}.mailbox-relationship-graph-canvas text{{font:12px system-ui,sans-serif;fill:#1f2933;paint-order:stroke;stroke:#faf9f5;stroke-width:3px;stroke-linejoin:round}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}.mailbox-graph-shell{{height:420px}}}}@media(prefers-color-scheme:dark){{body{{background:#111827;color:#E5E7EB}}h1,h2{{color:#8DD5DD}}.governance,.provenance-boundary,.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder,.mailbox-tabs a{{background:#1F2937;border-color:#374151}}table{{background:#1F2937}}th{{background:#111827;color:#D1D5DB}}th,td{{border-color:#374151}}.mailbox-graph-shell,.email-plain-text,.email-html-view{{background:#111827;border-color:#374151}}.mailbox-relationship-graph-canvas text{{fill:#F9FAFB;stroke:#111827}}.mailbox-graph-filters input{{background:#111827;color:#F9FAFB;border-color:#4B5563}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", archive_return), ("Published Documents", "/archive?type=published_document"), (str(item["title"]), None)])}{archive_back_link(archive_return)}<p>{object_type_badge("published_document")}</p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav>{admin_actions}<section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{content_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
 
@@ -603,6 +852,37 @@ def public_document_library(
             category=category,
             publication_year=publication_year,
         )
+    )
+
+
+@router.get("/api/mailbox/graph")
+def mailbox_relationship_graph(
+    document: str | None = Query(None),
+    institution: str | None = Query(None),
+    person: str | None = Query(None),
+    case_: str | None = Query(None, alias="case"),
+    reference: str | None = Query(None),
+    from_: str | None = Query(None, alias="from"),
+    to: str | None = Query(None),
+    status: str | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(1000, ge=1, le=5000),
+):
+    documents = list_published_documents(root=intake_root())
+    return build_mailbox_relationship_graph(
+        documents,
+        filters=MailboxGraphFilters(
+            document=document,
+            institution=institution,
+            person=person,
+            case=case_,
+            reference=reference,
+            date_from=from_,
+            date_to=to,
+            status=status,
+            offset=offset,
+            limit=limit,
+        ),
     )
 
 

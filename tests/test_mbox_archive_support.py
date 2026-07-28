@@ -272,7 +272,7 @@ class MBOXArchiveSupportTests(unittest.TestCase):
         self.assertIn("Parsed mailbox and message metadata reflects fields contained", page)
         self.assertIn("HTML mailbox message", page)
         self.assertIn("Visible HTML mailbox text", page)
-        self.assertNotIn("<script", page.lower())
+        self.assertNotIn("<script>alert", page.lower())
         self.assertNotIn("https://tracker.example", page)
         self.assertIn("Download original .mbox", page)
         self.assertIn("MBOX Mailbox Archive", page)
