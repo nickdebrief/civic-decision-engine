@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 38A — Mailbox Relationship Graph Refinements
+Current release: CDE Platform Stage 38B — Relationship Inspector
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md`](docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md`](docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md`](docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md)
 - [`docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md`](docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md)
@@ -828,6 +829,19 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 38B — Relationship Inspector
+
+CDE Platform Stage 38B replaces the Mailbox Relationship Graph placeholder
+panel with a functional Relationship Inspector. Selecting, searching, or
+keyboard-focusing a graph node now opens a compact investigation panel with
+node-specific metadata, relationship counts, neighbour summaries, relationship
+type badges, recent activity, and contextual quick actions.
+
+The inspector supports Email, Person, Institution, Case, Reference Number,
+Attachment, and Intake Record nodes. It reuses the graph payload already loaded
+by `/api/mailbox/graph`; relationship extraction, graph generation, verification,
+publication workflow, CREF methodology, and lifecycle semantics remain unchanged.
 
 ### CDE Platform Stage 38A — Mailbox Relationship Graph Refinements
 
