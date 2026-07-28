@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 37A / v13.0.10 — Large Contained MBOX Message Handling
+Current release: CDE Platform Stage 38 — Mailbox Relationship Graph
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md`](docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md)
 - [`docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md`](docs/releases/STAGE37A_LARGE_CONTAINED_MBOX_MESSAGE_HANDLING.md)
 - [`docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md`](docs/releases/STAGE37_GOVERNED_STREAMING_MBOX_INGESTION.md)
 - [`docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md`](docs/releases/STAGE36_MBOX_ARCHIVE_SUPPORT.md)
@@ -827,6 +828,27 @@ supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
 
+### CDE Platform Stage 38 — Mailbox Relationship Graph
+
+The Civic Decision Engine can now generate a deterministic Mailbox Relationship
+Graph from existing governed MBOX archive projections. The graph visualises how
+contained emails, people, institutions, cases, reference numbers, attachments,
+and intake records are connected without introducing a duplicate relationship
+database or changing mailbox governance.
+
+Published MBOX document pages now include a **Relationship Graph** tab beside
+Inbox, Cases, and Timeline. The graph supports zoom, pan, fit-to-screen,
+connected-node highlighting, node selection, person and institution filtering,
+and deterministic API-backed rebuilding through `/api/mailbox/graph`.
+
+CDE Platform Stage 38 derives relationship weights from explicit metadata:
+reply chains, shared cases, shared institutions, explicit message references,
+reference mentions, attachment reuse, and intake linkage. It does not use AI
+inference, probabilistic relationships, or schema changes. Existing MBOX byte
+preservation, SHA-256 calculation, message ordering, attachment metadata-only
+treatment, search, archive filtering, Publication Provenance, Publication
+Pathway, and original-file download remain unchanged.
+
 ### CDE Platform Stage 37A / CDE v13.0.10 — Large Contained MBOX Message Handling
 
 The Civic Decision Engine can now process large individual messages within
@@ -1517,7 +1539,7 @@ observed states, results, bases, affected outputs, and limitations.
 
 ---
 
-## Stage 38 — Framework Legacy Package
+## CREF Stage 38 — Framework Legacy Package
 
 Assembles the visible portable legacy package for CREF by documenting the
 methodology artefacts, boundaries, documentation duties, governance outputs,
@@ -1525,7 +1547,7 @@ and preservation requirements needed for independent understanding and future
 continuation.
 
 Thirty-six deterministic package items and eight relationships preserve the
-declared methodology through Stage 38. The package records methodology and
+declared methodology through CREF Stage 38. The package records methodology and
 implementation separation without certifying software portability, legal
 validity, external adoption, institutional authority, or implementation
 correctness.
