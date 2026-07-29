@@ -59,14 +59,15 @@ Designed for understanding.
 Current release: CDE Platform Stage 38C — Live Relationship Inspector Binding
 
 Research artefacts:
-- **Civic Decision Engine User Handbook v2.0**
-  DOI: https://doi.org/10.5281/zenodo.21548879
+- **Civic Decision Engine User Handbook — Three-Volume Edition**
+  See the Official Handbook section below.
 - **Civic Record Evaluation Framework (CREF)**
   DOI: https://doi.org/10.5281/zenodo.21033426
 - **Open Science Framework (OSF) Project**
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md`](docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md`](docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md`](docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md`](docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md)
@@ -91,6 +92,43 @@ Release documentation:
 ## Live System
 
 https://civic-decision-engine-production.up.railway.app/
+
+---
+
+## Official Handbook
+
+The **Civic Decision Engine User Handbook — Three-Volume Edition** is the
+official documentation for the Civic Decision Engine (CDE) software platform
+and the Civic Record Exchange Framework (CREF) methodology.
+
+The handbook is organised into three complementary volumes:
+
+- **Volume I — Governance Principles**
+  Defines the governance principles underpinning the Civic Record Exchange
+  Framework, including identity, provenance, verification, traceability,
+  publication, relationships, and lifecycle governance.
+- **Volume II — Platform Operations**
+  Documents the operational workflows of the Civic Decision Engine, including
+  document intake, publication, canonical records, collections, associations,
+  transmissions, verification, administrative workflows, and platform
+  governance.
+- **Volume III — Investigator Guide**
+  Describes how investigators, researchers, journalists, oversight bodies, and
+  members of the public navigate governed records using the Public Archive
+  Explorer, Traceability tools, Mailbox Relationship Graph, and Relationship
+  Inspector while preserving provenance and evidence boundaries.
+
+### Official Citation
+
+Moloney, N. (2026).
+
+Civic Decision Engine User Handbook — Three-Volume Edition (Version 3.0).
+
+Zenodo.
+
+https://doi.org/10.5281/zenodo.21672656
+
+The DOI is the authoritative citable publication for the official handbook.
 
 ---
 
