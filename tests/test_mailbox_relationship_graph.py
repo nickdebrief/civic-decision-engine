@@ -382,7 +382,8 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         page = documents.public_document_page(item["intake_id"]).content
 
         self.assertIn("function selectGraphNode(nodeId, selectionSource, options)", page)
-        self.assertIn('selectGraphNode(node.id, "pointer")', page)
+        self.assertIn('selectGraphNode(node.id, "click")', page)
+        self.assertIn('selectGraphNode(node.id, "pointerup")', page)
         self.assertIn('selectGraphNode(node.id, "keyboard")', page)
         self.assertIn('selectGraphNode(first.id, "search", {center: true, highlightIds})', page)
         self.assertIn('selectGraphNode(node.id, "quick-action", {center: true})', page)
@@ -399,10 +400,12 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         self.assertIn('id="mailbox-graph-clear-selection"', page)
         self.assertIn('clearSelectionButton.addEventListener("click", () => clearGraphSelection("control"))', page)
         self.assertIn('clearGraphSelection("canvas")', page)
+        self.assertIn('clearGraphSelection("canvas-pointerup")', page)
         self.assertIn('clearGraphSelection("keyboard")', page)
         self.assertIn('clearGraphSelection("stale")', page)
         self.assertIn("suppressNextNodeClick", page)
         self.assertIn("suppressNextCanvasClick", page)
+        self.assertIn("event.stopPropagation();", page)
         self.assertIn("nodeDragMoved", page)
         self.assertIn("canvasDragMoved", page)
         self.assertNotIn('if (node.type === "Cluster") expandCluster(node);', page)
