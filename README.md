@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 38B — Relationship Inspector
+Current release: CDE Platform Stage 38C — Live Relationship Inspector Binding
 
 Research artefacts:
 - **Civic Decision Engine User Handbook v2.0**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md`](docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md`](docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md`](docs/releases/CDE_PLATFORM_STAGE_38A_MAILBOX_RELATIONSHIP_GRAPH_REFINEMENTS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md`](docs/releases/CDE_PLATFORM_STAGE_38_MAILBOX_RELATIONSHIP_GRAPH.md)
@@ -829,6 +830,19 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 38C — Live Relationship Inspector Binding
+
+CDE Platform Stage 38C completes the Relationship Inspector binding so pointer,
+search, keyboard, cluster, and quick-action selection all use one authoritative
+selection pathway. Selecting a graph node now replaces the empty instructional
+state with live inspector content from the cached graph payload and keeps the
+inspector synchronized with highlighting, focus, filtering, and selection
+clearing.
+
+The correction preserves the existing `/api/mailbox/graph` response semantics,
+relationship extraction, verification, publication workflow, CREF methodology,
+and lifecycle semantics.
 
 ### CDE Platform Stage 38B — Relationship Inspector
 

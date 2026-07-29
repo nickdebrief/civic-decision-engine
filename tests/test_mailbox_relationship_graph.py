@@ -143,7 +143,7 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
             "category": "Mailbox Archive",
             "description": "Mailbox archive for CASE-2026-MCI-001 and REF-MCI-64.",
             "visibility": "private",
-            "notes": "CDE Platform Stage 38B relationship inspector fixture.",
+            "notes": "CDE Platform Stage 38C live inspector binding fixture.",
             "reference_identifier": "CASE-2026-MCI-001",
             "keywords": "relationship graph, CASE-2026-MCI-001, REF-MCI-64",
             "actor": "graph-admin",
@@ -262,7 +262,7 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
-        self.assertIn("CDE Platform Stage 38B — Relationship Inspector", page)
+        self.assertIn("CDE Platform Stage 38C — Live Relationship Inspector Binding", page)
         self.assertIn('href="#mailbox-relationship-graph">Relationship Graph</a>', page)
         self.assertIn(f'data-mailbox-graph-endpoint="/api/mailbox/graph?document={item["intake_id"]}"', page)
         self.assertIn('id="mailbox-relationship-graph-canvas"', page)
@@ -320,19 +320,20 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         self.assertIn('.public-mbox-relationship-graph[data-graph-theme="high-contrast"]', page)
         self.assertNotIn("body[data-graph-theme", page)
 
-    def test_stage38b_empty_relationship_inspector_renders_without_placeholder_text(self):
+    def test_stage38c_empty_relationship_inspector_renders_without_placeholder_text(self):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
         self.assertIn('class="mailbox-graph-info-panel relationship-inspector"', page)
         self.assertIn("Click or search for any node to inspect it.", page)
+        self.assertIn("The Inspector will display:", page)
         self.assertIn("<li>relationship summary</li>", page)
         self.assertIn("<li>connected entities</li>", page)
         self.assertIn("<li>metadata</li>", page)
         self.assertIn("<li>available actions</li>", page)
         self.assertNotIn("lorem", page.lower())
 
-    def test_stage38b_node_type_inspector_fields_and_quick_actions_render(self):
+    def test_stage38c_node_type_inspector_fields_and_quick_actions_render(self):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
@@ -376,18 +377,69 @@ class MailboxRelationshipGraphTests(unittest.TestCase):
         ):
             self.assertIn(action, page)
 
-    def test_stage38b_selection_search_keyboard_and_blank_canvas_update_inspector(self):
+    def test_stage38c_uses_one_live_selection_path_for_pointer_search_keyboard_and_actions(self):
         item = self._publish(self._store_mailbox())
         page = documents.public_document_page(item["intake_id"]).content
 
-        self.assertIn("updateInfoPanel(selectedNode ? node : null)", page)
-        self.assertIn("updateInfoPanel(first)", page)
-        self.assertIn("event.key === \"Enter\"", page)
-        self.assertIn('svg.addEventListener("click"', page)
-        self.assertIn("event.target === svg", page)
-        self.assertIn("updateInfoPanel(null)", page)
-        self.assertIn("searchMatches = adjacent(node.id)", page)
-        self.assertIn("centeredPan(node)", page)
+        self.assertIn("function selectGraphNode(nodeId, selectionSource, options)", page)
+        self.assertIn('selectGraphNode(node.id, "pointer")', page)
+        self.assertIn('selectGraphNode(node.id, "keyboard")', page)
+        self.assertIn('selectGraphNode(first.id, "search", {center: true, highlightIds})', page)
+        self.assertIn('selectGraphNode(node.id, "quick-action", {center: true})', page)
+        self.assertIn('selectGraphNode(memberId, "cluster-expand", {center: true})', page)
+        self.assertNotIn("updateInfoPanel(selectedNode ? node : null)", page)
+        self.assertNotIn("updateInfoPanel(first)", page)
+        self.assertIn('group.setAttribute("aria-selected", selectedNode === node.id ? "true" : "false")', page)
+        self.assertIn("Relationship Inspector selection could not resolve node", page)
+
+    def test_stage38c_clears_only_through_explicit_stale_keyboard_or_canvas_paths(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertIn('id="mailbox-graph-clear-selection"', page)
+        self.assertIn('clearSelectionButton.addEventListener("click", () => clearGraphSelection("control"))', page)
+        self.assertIn('clearGraphSelection("canvas")', page)
+        self.assertIn('clearGraphSelection("keyboard")', page)
+        self.assertIn('clearGraphSelection("stale")', page)
+        self.assertIn("suppressNextNodeClick", page)
+        self.assertIn("suppressNextCanvasClick", page)
+        self.assertIn("nodeDragMoved", page)
+        self.assertIn("canvasDragMoved", page)
+        self.assertNotIn('if (node.type === "Cluster") expandCluster(node);', page)
+
+    def test_stage38c_cluster_and_common_inspector_fields_render(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        for field in (
+            "Stable node ID",
+            "Relationship Summary",
+            "Unique neighbour count",
+            "Neighbour types",
+            "Connected institutions",
+            "Connected people",
+            "Connected cases",
+            "Connected references",
+            "Connected attachments",
+            "Cluster type",
+            "Cluster size",
+            "Represented node types",
+            "Total internal relationships",
+            "External relationships",
+            "Representative nodes",
+        ):
+            self.assertIn(field, page)
+        self.assertIn("function visibleNodeById(id)", page)
+        self.assertIn("const members = node.metadata && Array.isArray(node.metadata.cluster_members)", page)
+
+    def test_stage38c_inspector_reuses_cached_graph_payload_without_extra_api_request(self):
+        item = self._publish(self._store_mailbox())
+        page = documents.public_document_page(item["intake_id"]).content
+
+        self.assertEqual(page.count("fetch(url.toString()"), 1)
+        self.assertIn("const resolved = visibleNodeById(nodeId);", page)
+        self.assertIn("graph.nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));", page)
+        self.assertIn("previousSelection && graph.nodeMap.has(previousSelection)", page)
 
 
 if __name__ == "__main__":
