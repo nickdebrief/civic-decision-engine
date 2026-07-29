@@ -78,6 +78,7 @@ from api.document_intake import (
     is_email_document,
     is_image_document,
     is_mailbox_document,
+    is_outlook_archive_document,
     list_intake_documents,
     list_published_documents,
     load_published_document,
@@ -175,6 +176,12 @@ DOCUMENT_INTAKE_FILE_ACCEPT = ",".join(
         "text/mbox",
         "application/octet-stream",
         ".mbox",
+        "application/vnd.ms-outlook-pst",
+        "application/x-pst",
+        ".pst",
+        "application/vnd.ms-outlook-ost",
+        "application/x-ost",
+        ".ost",
     )
 )
 APPLE_MAIL_MBOX_UPLOAD_NOTE = (
@@ -46278,7 +46285,7 @@ def _render_document_intake_page(
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
         <label>Document file<input name="file" type="file" accept="{escape(DOCUMENT_INTAKE_FILE_ACCEPT)}" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), Apple Mail Message (.emlx), and MBOX Mailbox Archive (.mbox).</p>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), Apple Mail Message (.emlx), MBOX Mailbox Archive (.mbox), Microsoft Outlook Personal Storage Archive (.pst), and Microsoft Outlook Offline Storage Archive (.ost).</p>
         <p class="full-width notice">{escape(APPLE_MAIL_MBOX_UPLOAD_NOTE)} Current governed Document Intake maximum upload size: {escape(_format_intake_size_limit(intake_max_bytes()))}. Larger Apple Mail archives require a future streaming ingestion path and are not accepted by this synchronous intake form.</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
@@ -46398,7 +46405,7 @@ def _render_document_intake_preview(
 ) -> str:
     correction_notice = _render_intake_correction_notice(item)
     canonical_record_section = _canonical_record_section_for_document(item)
-    fields = (
+    fields = [
         ("Current status", STATUS_LABELS.get(item["status"], item["status"])),
         ("Filename", item["original_filename"]),
         ("Document format", document_type_label(item.get("document_type"))),
@@ -46416,7 +46423,17 @@ def _render_document_intake_preview(
         ("Notes", item["notes"]),
         ("Optional Reference Identifier", item.get("reference_identifier") or "Not provided"),
         ("Proposed storage location", item["proposed_storage_location"]),
-    )
+    ]
+    if is_outlook_archive_document(item):
+        archive_metadata = item.get("outlook_archive_metadata") if isinstance(item.get("outlook_archive_metadata"), dict) else {}
+        fields[5:5] = [
+            ("SHA-512", item.get("sha512_hash") or "Not available"),
+            ("Outlook archive type", archive_metadata.get("archive_type_label") or document_type_label(item.get("document_type"))),
+            ("Outlook parser status", archive_metadata.get("parser_status_message") or archive_metadata.get("parser_status") or "Parser not configured."),
+            ("Outlook parser version", archive_metadata.get("parser_version") or "Not configured"),
+            ("Mailbox discovery", "Not performed in CDE Platform Stage 39A"),
+            ("Message extraction", "Not performed in CDE Platform Stage 39A"),
+        ]
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
@@ -46458,7 +46475,9 @@ def _render_document_intake_preview(
         else ""
     )
     email_notice = ""
-    if is_email_document(item) or is_mailbox_document(item):
+    if is_outlook_archive_document(item):
+        email_notice = '<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39A records archive-level metadata, SHA-256, SHA-512, and parser readiness only; it does not discover folders, extract messages, publish mailbox contents, or create canonical records from contained items.</p>'
+    elif is_email_document(item) or is_mailbox_document(item):
         document_type = str(item.get("document_type") or "").lower()
         if document_type == "msg":
             email_notice = '<p class="notice">Microsoft Outlook message artefacts are preserved as original bytes. Extracted MAPI properties, message body text, message structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
