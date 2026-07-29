@@ -6,7 +6,7 @@ from html import escape
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from api import archive_collection_memberships as acm
@@ -19,7 +19,9 @@ from api.document_intake import (
     document_media_family,
     document_type_label,
     intake_root,
+    is_outlook_archive_document,
     list_published_documents,
+    load_published_document,
 )
 from api.public_navigation import (
     PUBLIC_NAVIGATION_CSS,
@@ -815,3 +817,60 @@ def public_archive_explorer(
     return HTMLResponse(
         content=f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Archive Explorer | Civic Decision Engine</title><link rel="canonical" href="/archive"><meta name="description" content="Unified public discovery interface for Civic Decision Engine records, documents, transmissions, associations, and collections."><style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main.archive-explorer{{width:min(1220px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}a:focus,input:focus,select:focus,button:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}{PUBLIC_NAVIGATION_CSS}.archive-boundary,.archive-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.archive-boundary{{max-width:960px}}.archive-summary{{margin:24px 0;border-left-color:#143a52}}.archive-filter-token{{display:inline-block;margin:3px 6px 3px 0}}.archive-stats-section,.archive-filter-section,.archive-results{{margin:30px 0}}.archive-stats-section h2,.archive-filter-section h2,.archive-results h2{{margin-bottom:12px}}.archive-stats{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.archive-stat-card{{display:block;background:#fff;border:1px solid #d8d4ca;padding:14px;text-decoration:none;color:#1f2933}}.archive-stat-card:hover,.archive-stat-card:focus{{border-color:#245d61;box-shadow:0 0 0 2px rgba(36,93,97,.14)}}.archive-stat-card span{{display:block;color:#555}}.archive-stat-card strong{{display:block;font-size:1.7rem;color:#143a52}}.archive-filters{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px}}.archive-filters label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.archive-filter-help{{font:.84rem system-ui,sans-serif;text-transform:none;color:#626262;line-height:1.4}}.archive-filters input,.archive-filters select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.archive-filters a,.archive-clear-link{{background:#fff;color:#245d61;border:1px solid #245d61}}.archive-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}.archive-page-link{{font-weight:650}}.archive-result-list{{display:grid;gap:14px}}.archive-result-card{{background:#fff;border:1px solid #d8d4ca;padding:16px;overflow-wrap:anywhere}}.archive-result-card h2{{margin:.25rem 0}}.archive-breadcrumb,.archive-reference{{color:#555;margin:.2rem 0}}.archive-reference{{font:700 .9rem ui-monospace,monospace}}.archive-result-summary{{max-width:880px;line-height:1.5}}.archive-result-card dl{{display:grid;grid-template-columns:160px minmax(0,1fr);gap:6px 12px;margin:12px 0}}.archive-result-card dt{{font-weight:700;color:#555}}.archive-result-card dd{{margin:0;min-width:0;overflow-wrap:anywhere}}.archive-actions a{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.archive-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}.archive-empty h2{{margin-top:0}}@media(max-width:980px){{.archive-stats{{grid-template-columns:repeat(2,minmax(0,1fr))}}.archive-filters{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{main.archive-explorer{{width:min(100% - 24px,1220px);margin-top:24px}}.archive-stats,.archive-filters{{grid-template-columns:1fr}}.archive-result-card dl{{grid-template-columns:1fr}}.archive-filters button,.archive-filters a,.archive-clear-link{{width:100%;text-align:center}}}}</style></head><body><main class="archive-explorer">{public_primary_navigation(active="archive")}{public_breadcrumbs([("Home", "/"), ("Archive", None)])}<h1>Public Archive Explorer</h1><p class="archive-boundary">{escape(BOUNDARY_TEXT)} Every result links to the governed object that owns its identity, provenance, lifecycle, verification, and public page.</p>{_render_stats(counts)}<section class="archive-summary" aria-live="polite" aria-labelledby="archive-summary-heading"><h2 id="archive-summary-heading">Current Archive View</h2><p><strong>Total matching public objects:</strong> {total}</p><p><strong>Active filters:</strong> {active_filters_html}</p>{page_summary}<p><a class="archive-clear-link" href="/archive">Clear filters</a></p></section><section class="archive-filter-section" aria-labelledby="archive-filters-heading"><h2 id="archive-filters-heading">Search and Filters</h2><form class="archive-filters" method="get" action="/archive"><label>Search<input name="search" value="{escape(filters['search'])}" placeholder="Search public title, reference, summary, keywords, filename, media, or worksheet" autocomplete="off"><span class="archive-filter-help">Search covers public-safe indexed metadata only.</span></label><label>Object type<select name="type">{_option_list(OBJECT_TYPES, filters['type'], 'Any object type')}</select></label><label>Publication status<input name="status" value="{escape(filters['status'])}" placeholder="Published or active public"></label><label>Publication year<select name="year">{_option_list(years, filters['year'], 'Any publication year')}</select></label><label>Document year<select name="document_year">{_option_list(document_years, filters['document_year'], 'Any document year')}</select></label><label>Record type<select name="record_type">{_option_list(record_types, filters['record_type'], 'Any record type')}</select></label><label>Collection<select name="collection">{_option_list(collection_options, filters['collection'], 'Any collection')}</select></label><label>Media type<select name="media">{_option_list(MEDIA_FILTERS, filters['media'], 'Any media type')}</select></label><label>Sort<select name="sort">{_option_list(SORTS, filters['sort'], 'Sort order')}</select></label><label>Page size<select name="page_size">{_page_size_options(normalized_page_size)}</select></label><button type="submit">Apply filters</button><a href="/archive">Clear filters</a></form></section><section class="archive-results" aria-labelledby="archive-results-heading"><h2 id="archive-results-heading">Archive Results</h2>{pagination_top}<div class="archive-result-list" aria-label="Archive explorer results">{_render_result_cards(page_rows, current_archive_path, has_public_objects=bool(all_rows), has_active_filters=has_active_filters)}</div>{pagination_bottom}</section><p><a href="/records">Public Record Index</a> · <a href="/documents">Public Document Library</a> · <a href="/transmissions">Public Transmission Library</a> · <a href="/associations">Public Association Index</a> · <a href="/collections">Public Archive Collections</a></p></main></body></html>"""
     )
+
+
+def _load_public_outlook_archive(document_id: str) -> dict[str, Any]:
+    try:
+        item = load_published_document(document_id, root=intake_root())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="outlook_archive_not_found") from exc
+    if not is_outlook_archive_document(item):
+        raise HTTPException(status_code=404, detail="outlook_archive_not_found")
+    return item
+
+
+def _outlook_archive_payload(item: dict[str, Any]) -> dict[str, Any]:
+    archive_metadata = item.get("outlook_archive_metadata")
+    metadata = archive_metadata if isinstance(archive_metadata, dict) else {}
+    return {
+        "document_identifier": item.get("document_identifier"),
+        "intake_id": item.get("intake_id"),
+        "title": item.get("title"),
+        "status": item.get("status"),
+        "visibility": item.get("visibility"),
+        "archive_type": metadata.get("archive_type"),
+        "archive_type_label": metadata.get("archive_type_label") or document_type_label(item.get("document_type")),
+        "original_filename": item.get("original_filename"),
+        "file_size_bytes": item.get("file_size_bytes"),
+        "sha256_hash": item.get("sha256_hash"),
+        "sha512_hash": item.get("sha512_hash"),
+        "upload_timestamp": metadata.get("upload_timestamp") or item.get("upload_date"),
+        "parser_available": metadata.get("parser_available", False),
+        "parser_status": metadata.get("parser_status") or "parser_not_configured",
+        "parser_status_message": metadata.get("parser_status_message") or "Parser not configured.",
+        "parser_version": metadata.get("parser_version"),
+        "mailbox_discovery_performed": metadata.get("mailbox_discovery_performed", False),
+        "message_extraction_performed": metadata.get("message_extraction_performed", False),
+        "attachment_extraction_performed": metadata.get("attachment_extraction_performed", False),
+        "canonical_record_generation_performed": metadata.get("canonical_record_generation_performed", False),
+    }
+
+
+@router.get("/archive/{document_id}")
+def public_outlook_archive_metadata(document_id: str):
+    return _outlook_archive_payload(_load_public_outlook_archive(document_id))
+
+
+@router.get("/archive/{document_id}/status")
+def public_outlook_archive_status(document_id: str):
+    payload = _outlook_archive_payload(_load_public_outlook_archive(document_id))
+    return {
+        "document_identifier": payload["document_identifier"],
+        "archive_type": payload["archive_type"],
+        "parser_available": payload["parser_available"],
+        "parser_status": payload["parser_status"],
+        "parser_status_message": payload["parser_status_message"],
+        "parser_version": payload["parser_version"],
+        "mailbox_discovery_performed": payload["mailbox_discovery_performed"],
+        "message_extraction_performed": payload["message_extraction_performed"],
+    }

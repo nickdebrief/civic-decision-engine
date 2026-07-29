@@ -24,6 +24,10 @@ from api.email_documents import (
     validate_mbox_archive_document,
     validate_outlook_msg_document,
 )
+from api.outlook_archives import (
+    build_outlook_archive_metadata,
+    outlook_archive_search_values,
+)
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -47,6 +51,8 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "msg": ".msg",
     "emlx": ".emlx",
     "mbox": ".mbox",
+    "pst": ".pst",
+    "ost": ".ost",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -62,6 +68,8 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "msg": "application/vnd.ms-outlook",
     "emlx": "application/octet-stream",
     "mbox": "application/mbox",
+    "pst": "application/vnd.ms-outlook-pst",
+    "ost": "application/vnd.ms-outlook-ost",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -77,6 +85,8 @@ DOCUMENT_TYPE_LABELS = {
     "msg": "Microsoft Outlook Message",
     "emlx": "Apple Mail Message",
     "mbox": "MBOX Mailbox Archive",
+    "pst": "Microsoft Outlook Personal Storage Archive",
+    "ost": "Microsoft Outlook Offline Storage Archive",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -92,6 +102,8 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "msg": "email",
     "emlx": "email",
     "mbox": "mailbox",
+    "pst": "mailbox",
+    "ost": "mailbox",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -108,6 +120,8 @@ EXTENSION_DOCUMENT_TYPES = {
     ".msg": "msg",
     ".emlx": "emlx",
     ".mbox": "mbox",
+    ".pst": "pst",
+    ".ost": "ost",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -998,6 +1012,12 @@ def validate_document_file(
                 raise workbook_exc
             raise ValueError("document_intake_file_type_mismatch") from workbook_exc
         return expected_type, DOCUMENT_TYPE_MEDIA_TYPES[expected_type], filename
+    if expected_type in {"pst", "ost"}:
+        if not data:
+            raise ValueError("document_intake_file_required")
+        if len(data) > intake_max_bytes():
+            raise ValueError("document_intake_file_too_large")
+        return expected_type, DOCUMENT_TYPE_MEDIA_TYPES[expected_type], filename
     try:
         detected_type = _detected_document_type(data)
     except ValueError:
@@ -1068,6 +1088,10 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "emlx"
     if content_type in {"application/mbox", "text/mbox"}:
         return "mbox"
+    if content_type in {"application/vnd.ms-outlook-pst", "application/x-pst"}:
+        return "pst"
+    if content_type in {"application/vnd.ms-outlook-ost", "application/x-ost"}:
+        return "ost"
     if content_type in {
         "application/vnd.ms-outlook",
         "application/x-msg",
@@ -1107,6 +1131,10 @@ def is_email_document(metadata: dict[str, Any]) -> bool:
 
 def is_mailbox_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) == "mbox"
+
+
+def is_outlook_archive_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) in {"pst", "ost"}
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1492,6 +1520,7 @@ def store_pending_document(
         raise ValueError("document_intake_document_date_invalid") from exc
 
     digest = hashlib.sha256(data).hexdigest()
+    sha512_digest = hashlib.sha512(data).hexdigest()
     normalized_keywords = normalize_document_keywords(keywords)
     workbook_metadata = (
         spreadsheet_workbook_metadata(data, document_type)
@@ -1565,6 +1594,16 @@ def store_pending_document(
         metadata["workbook_metadata"] = workbook_metadata
     if email_metadata:
         metadata["email_metadata"] = email_metadata
+    if document_type in {"pst", "ost"}:
+        metadata["sha512_hash"] = sha512_digest
+        metadata["outlook_archive_metadata"] = build_outlook_archive_metadata(
+            data=data,
+            filename=filename,
+            document_type=document_type,
+            content_type=content_type,
+            uploaded_at=timestamp,
+            actor=actor,
+        )
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)
@@ -1804,6 +1843,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
         document.get("tags"),
     ]
     field_values.extend(email_projection_search_values(document))
+    field_values.extend(outlook_archive_search_values(document))
     flattened: list[str] = []
     seen: set[str] = set()
     for value in field_values:

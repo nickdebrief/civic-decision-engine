@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 38C — Live Relationship Inspector Binding
+Current release: CDE Platform Stage 39A — PST/OST Parser & Intake Boundary
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md`](docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md)
 - [`docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md`](docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md`](docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md`](docs/releases/CDE_PLATFORM_STAGE_38B_RELATIONSHIP_INSPECTOR.md)
@@ -868,6 +869,20 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 39A — PST/OST Parser & Intake Boundary
+
+CDE Platform Stage 39A establishes the governed intake boundary for Microsoft
+Outlook Personal Storage (`.pst`) and Offline Storage (`.ost`) archives.
+Outlook archives can be admitted as first-class preserved evidence objects with
+SHA-256 and SHA-512 verification hashes, archive-level metadata, parser
+readiness status, and original-file download.
+
+This stage is intentionally conservative: it does not discover mailbox folders,
+extract messages, expose mailbox contents publicly, create canonical records
+from contained email, or alter the existing CREF methodology. Future CDE
+Platform stages can attach parser-backed extraction to the stable
+`OutlookArchiveParser` contract without changing the original-byte boundary.
 
 ### CDE Platform Stage 38C — Live Relationship Inspector Binding
 
