@@ -838,7 +838,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
             suppressNextNodeClick = false;
             return;
           }}
-          selectGraphNode(node.id, "pointer");
+          selectGraphNode(node.id, "click");
         }});
         group.addEventListener("dblclick", (event) => {{
           event.preventDefault();
@@ -859,8 +859,14 @@ def _render_mbox_relationship_graph(item: dict) -> str:
           node.y = nodeDragState.startY + dy / scale;
           render();
         }});
-        group.addEventListener("pointerup", () => {{
-          if (nodeDragMoved) suppressNextNodeClick = true;
+        group.addEventListener("pointerup", (event) => {{
+          event.stopPropagation();
+          if (nodeDragMoved) {{
+            suppressNextNodeClick = true;
+          }} else {{
+            suppressNextNodeClick = true;
+            selectGraphNode(node.id, "pointerup");
+          }}
           nodeDragState = null;
           nodeDragMoved = false;
         }});
@@ -1221,8 +1227,13 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       panY = dragState.panY + dy;
       render();
     }});
-    svg.addEventListener("pointerup", () => {{
-      if (canvasDragMoved) suppressNextCanvasClick = true;
+    svg.addEventListener("pointerup", (event) => {{
+      if (event.target === svg && !canvasDragMoved) {{
+        suppressNextCanvasClick = true;
+        clearGraphSelection("canvas-pointerup");
+      }} else if (canvasDragMoved) {{
+        suppressNextCanvasClick = true;
+      }}
       dragState = null;
       canvasDragMoved = false;
     }});

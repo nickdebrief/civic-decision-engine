@@ -67,6 +67,12 @@ Selection is preserved during node drag, graph pan, zoom, layout reuse, quick-ac
 
 Quick actions remain type-specific and are shown only when they can perform a real operation from available metadata. Filter actions update existing filters and reload through the established filter path. Highlight actions update graph emphasis without modifying underlying graph data. Open actions use existing routes only when the graph payload provides safe route metadata.
 
+## Production Pointer/Touch Correction
+
+Post-deployment browser verification confirmed that the Stage 38C code was being served on the live mailbox page and desktop pointer selection populated the inspector. The remaining risk was touch-style SVG activation, where relying on a synthetic `click` after the pointer sequence can leave Safari/iPad interactions dependent on browser-specific click generation.
+
+The production hardening binds non-drag `pointerup` directly to the same authoritative `selectGraphNode(...)` pathway and suppresses the follow-up click to avoid double handling. True blank-canvas pointer release now clears selection through the same clear-selection pathway, while node drag and graph pan remain non-destructive.
+
 ## Accessibility
 
 Graph nodes expose `aria-selected` and remain keyboard selectable. Enter and Space select a node; Escape clears selection. The inspector remains an `aria-live` region with structured headings and accessible text.
