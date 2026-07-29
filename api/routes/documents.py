@@ -347,8 +347,8 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     document_id = escape(str(item.get("intake_id") or ""))
     endpoint = f"/api/mailbox/graph?document={document_id}"
     return f"""<section class="public-mbox-relationship-graph" id="mailbox-relationship-graph" data-mailbox-graph-endpoint="{endpoint}">
-<h2>CDE Platform Stage 38B — Relationship Inspector</h2>
-<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. CDE Platform Stage 38B refines only the investigation panel and graph interaction experience; it does not change relationship extraction or the graph API.</p>
+<h2>CDE Platform Stage 38C — Live Relationship Inspector Binding</h2>
+<p class="provenance-boundary">The graph is generated deterministically from published mailbox projections. CDE Platform Stage 38C binds graph-node selection to live Relationship Inspector content through one selection pathway; it does not change relationship extraction or the graph API.</p>
 <fieldset class="mailbox-graph-theme-toggle" aria-label="Relationship Graph Theme">
   <legend>Relationship Graph Theme</legend>
   <label><input id="mailbox-graph-theme-standard" name="mailbox-graph-theme" type="radio" value="standard" checked> Standard</label>
@@ -368,6 +368,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
   <button id="mailbox-graph-search-button" type="button">Search graph</button>
   <button id="mailbox-graph-fit" type="button">Fit to screen</button>
   <button id="mailbox-graph-reset-layout" type="button">Reset layout</button>
+  <button id="mailbox-graph-clear-selection" type="button">Clear selection</button>
 </form>
 <p id="mailbox-graph-status" class="provenance-boundary" role="status" aria-live="polite">Relationship Graph loading.</p>
 <div class="mailbox-graph-workspace">
@@ -377,6 +378,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
   <aside id="mailbox-graph-info-panel" class="mailbox-graph-info-panel relationship-inspector" aria-live="polite" aria-label="Relationship Inspector">
     <h3>Relationship Inspector</h3>
     <p>Click or search for any node to inspect it.</p>
+    <p>The Inspector will display:</p>
     <ul class="relationship-inspector-empty">
       <li>relationship summary</li>
       <li>connected entities</li>
@@ -416,13 +418,14 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     const status = document.getElementById("mailbox-graph-status");
     const fitButton = document.getElementById("mailbox-graph-fit");
     const resetButton = document.getElementById("mailbox-graph-reset-layout");
+    const clearSelectionButton = document.getElementById("mailbox-graph-clear-selection");
     const applyButton = document.getElementById("mailbox-graph-apply-filters");
     const searchInput = document.getElementById("mailbox-graph-search");
     const searchButton = document.getElementById("mailbox-graph-search-button");
     const clusterToggle = document.getElementById("mailbox-graph-cluster-mode");
     const infoPanel = document.getElementById("mailbox-graph-info-panel");
     const themeInputs = Array.from(section.querySelectorAll('input[name="mailbox-graph-theme"]'));
-    if (!svg || !status || !fitButton || !resetButton || !applyButton || !searchInput || !searchButton || !clusterToggle || !infoPanel) return;
+    if (!svg || !status || !fitButton || !resetButton || !clearSelectionButton || !applyButton || !searchInput || !searchButton || !clusterToggle || !infoPanel) return;
     const namespace = "http://www.w3.org/2000/svg";
     const LABEL_ZOOM_THRESHOLD = 1.35;
     const HIGH_IMPORTANCE_COUNT = 6;
@@ -440,6 +443,10 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     let panY = 0;
     let dragState = null;
     let nodeDragState = null;
+    let nodeDragMoved = false;
+    let suppressNextNodeClick = false;
+    let canvasDragMoved = false;
+    let suppressNextCanvasClick = false;
     const width = 900;
     const height = 520;
     svg.setAttribute("viewBox", "0 0 " + width + " " + height);
@@ -512,6 +519,9 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     }}
     function nodeById(id) {{
       return graph.nodeMap && graph.nodeMap.get(id);
+    }}
+    function visibleNodeById(id) {{
+      return (visibleGraph.nodeMap && visibleGraph.nodeMap.get(id)) || nodeById(id);
     }}
     function graphEdgesFor(id) {{
       return graph.edges.filter((edge) => edge.source === id || edge.target === id);
@@ -743,6 +753,30 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       panY = height / 2 - node.y * scale;
       render();
     }}
+    function clearGraphSelection(reason) {{
+      selectedNode = null;
+      searchMatches = new Set();
+      updateInfoPanel(null);
+      render();
+      if (reason !== "initial") status.textContent = "Relationship Inspector selection cleared.";
+    }}
+    function selectGraphNode(nodeId, selectionSource, options) {{
+      const settings = options || {{}};
+      const resolved = visibleNodeById(nodeId);
+      if (!resolved) {{
+        try {{ console.warn("Relationship Inspector selection could not resolve node", nodeId); }} catch (error) {{}}
+        clearGraphSelection("stale");
+        return null;
+      }}
+      selectedNode = resolved.id;
+      const highlightIds = settings.highlightIds instanceof Set ? settings.highlightIds : adjacent(resolved.id);
+      searchMatches = new Set(highlightIds);
+      searchMatches.add(resolved.id);
+      updateInfoPanel(resolved);
+      if (settings.center === true) centeredPan(resolved); else render();
+      status.textContent = displayType(resolved) + " selected: " + resolved.label + ".";
+      return resolved;
+    }}
     function render() {{
       svg.replaceChildren();
       const root = document.createElementNS(namespace, "g");
@@ -774,6 +808,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         group.setAttribute("tabindex", "0");
         group.setAttribute("role", "button");
         group.setAttribute("aria-label", node.type + ": " + node.label);
+        group.setAttribute("aria-selected", selectedNode === node.id ? "true" : "false");
         group.setAttribute("transform", "translate(" + node.x + " " + node.y + ")");
         group.setAttribute("opacity", active ? "1" : "0.22");
         group.dataset.nodeId = node.id;
@@ -798,31 +833,37 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         group.appendChild(circle);
         group.appendChild(glyph);
         group.appendChild(text);
-        function select() {{
-          selectedNode = selectedNode === node.id ? null : node.id;
-          updateInfoPanel(selectedNode ? node : null);
-          render();
-        }}
         group.addEventListener("click", () => {{
-          select();
-          if (node.type === "Cluster") expandCluster(node);
+          if (suppressNextNodeClick) {{
+            suppressNextNodeClick = false;
+            return;
+          }}
+          selectGraphNode(node.id, "pointer");
         }});
         group.addEventListener("dblclick", (event) => {{
           event.preventDefault();
-          centeredPan(node);
+          selectGraphNode(node.id, "programmatic-focus", {{center: true}});
         }});
         group.addEventListener("pointerdown", (event) => {{
           event.stopPropagation();
+          nodeDragMoved = false;
           nodeDragState = {{node, x: event.clientX, y: event.clientY, startX: node.x, startY: node.y}};
           group.setPointerCapture(event.pointerId);
         }});
         group.addEventListener("pointermove", (event) => {{
           if (!nodeDragState || nodeDragState.node !== node) return;
-          node.x = nodeDragState.startX + (event.clientX - nodeDragState.x) / scale;
-          node.y = nodeDragState.startY + (event.clientY - nodeDragState.y) / scale;
+          const dx = event.clientX - nodeDragState.x;
+          const dy = event.clientY - nodeDragState.y;
+          if (Math.hypot(dx, dy) > 3) nodeDragMoved = true;
+          node.x = nodeDragState.startX + dx / scale;
+          node.y = nodeDragState.startY + dy / scale;
           render();
         }});
-        group.addEventListener("pointerup", () => {{ nodeDragState = null; }});
+        group.addEventListener("pointerup", () => {{
+          if (nodeDragMoved) suppressNextNodeClick = true;
+          nodeDragState = null;
+          nodeDragMoved = false;
+        }});
         group.addEventListener("mouseenter", () => {{ hoveredNode = node.id; render(); }});
         group.addEventListener("mouseleave", () => {{ hoveredNode = null; render(); }});
         group.addEventListener("focus", () => {{ focusedNode = node.id; render(); }});
@@ -830,7 +871,10 @@ def _render_mbox_relationship_graph(item: dict) -> str:
         group.addEventListener("keydown", (event) => {{
           if (event.key === "Enter" || event.key === " ") {{
             event.preventDefault();
-            select();
+            selectGraphNode(node.id, "keyboard");
+          }} else if (event.key === "Escape") {{
+            event.preventDefault();
+            clearGraphSelection("keyboard");
           }} else if (event.key === "ArrowRight") {{
             event.preventDefault();
             panX -= 28;
@@ -854,12 +898,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       status.textContent = visibleGraph.nodes.length + " nodes and " + visibleGraph.edges.length + " relationships shown.";
     }}
     function connectedValues(node, type) {{
-      const linked = adjacent(node.id);
-      return visibleGraph.nodes
-        .filter((candidate) => linked.has(candidate.id) && candidate.type === type)
-        .map((candidate) => candidate.label)
-        .slice(0, 6)
-        .join(" · ") || "—";
+      return neighboursByType(node, type).map((candidate) => candidate.label).join(" · ") || "—";
     }}
     function inspectorRow(label, value) {{
       return '<dt>' + escapeHTML(label) + '</dt><dd>' + escapeHTML(value) + '</dd>';
@@ -868,11 +907,26 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       return '<dt>' + escapeHTML(label) + '</dt><dd>' + listLabels(nodes) + '</dd>';
     }}
     function neighbourSummary(node) {{
-      return '<section class="relationship-inspector-section"><h4>Neighbour Summary</h4><dl>' +
+      const neighbourTypes = new Map();
+      graphNeighbours(node).forEach((candidate) => {{
+        neighbourTypes.set(displayType(candidate), (neighbourTypes.get(displayType(candidate)) || 0) + 1);
+      }});
+      const byType = Array.from(neighbourTypes.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map((entry) => entry[0] + " " + entry[1])
+        .join(" · ") || "—";
+      return '<section class="relationship-inspector-section"><h4>Relationship Summary</h4><dl>' +
+        inspectorRow("Stable node ID", node.id) +
         inspectorRow("Relationship count", relationshipCount(node.id)) +
-        inspectorRow("Neighbour count", graphNeighbours(node).length) +
+        inspectorRow("Unique neighbour count", graphNeighbours(node).length) +
         '<dt>Relationship types</dt><dd class="relationship-inspector-badges">' + relationshipBadges(node) + '</dd>' +
+        inspectorRow("Neighbour types", byType) +
         inspectorRow("Top connected entities", topConnectedEntities(node)) +
+        inspectorRow("Connected institutions", listLabels(neighboursByType(node, "Institution"))) +
+        inspectorRow("Connected people", listLabels(neighboursByType(node, "Person"))) +
+        inspectorRow("Connected cases", listLabels(neighboursByType(node, "Case"))) +
+        inspectorRow("Connected references", listLabels(neighboursByType(node, "Reference Number"))) +
+        inspectorRow("Connected attachments", listLabels(neighboursByType(node, "Attachment"))) +
         inspectorRow("Recent activity", recentActivity(node)) +
         '</dl></section>';
     }}
@@ -945,10 +999,16 @@ def _render_mbox_relationship_graph(item: dict) -> str:
           inspectorRow("Publication status", metadata.publication_status || "Published");
       }}
       if (type === "Cluster") {{
-        return inspectorRow("Cluster", node.label) +
-          inspectorRow("Node count", metadata.node_count) +
+        const members = Array.isArray(metadata.cluster_members) ? metadata.cluster_members.map(nodeById).filter(Boolean) : [];
+        const representedTypes = Array.from(new Set(members.map((member) => displayType(member)))).sort().join(" · ") || "—";
+        const representativeNodes = members.slice(0, 6).map((member) => member.label).join(" · ") || "—";
+        return inspectorRow("Cluster type", node.label) +
+          inspectorRow("Cluster size", metadata.node_count) +
+          inspectorRow("Represented node types", representedTypes) +
           inspectorRow("Dominant institution", metadata.dominant_institution) +
-          inspectorRow("Relationship degree", relationshipCount(node.id));
+          inspectorRow("Total internal relationships", metadata.internal_relationships || "—") +
+          inspectorRow("External relationships", relationshipCount(node.id)) +
+          inspectorRow("Representative nodes", representativeNodes);
       }}
       return inspectorRow("Title", node.label) + inspectorRow("Relationship degree", relationshipCount(node.id));
     }}
@@ -1014,23 +1074,21 @@ def _render_mbox_relationship_graph(item: dict) -> str:
             if (input) input.value = node.label;
             loadGraph(true);
           }} else if (action === "focus_graph") {{
-            centeredPan(node);
+            selectGraphNode(node.id, "quick-action", {{center: true}});
           }} else if (action === "collapse_others" || action === "highlight_neighbours") {{
-            searchMatches = adjacent(node.id);
-            selectedNode = node.id;
-            render();
+            selectGraphNode(node.id, "quick-action", {{highlightIds: adjacent(node.id)}});
           }} else if (action === "highlight_thread" || action === "show_reply_chain") {{
-            searchMatches = new Set([node.id]);
+            const highlightIds = new Set([node.id]);
             graphEdgesFor(node.id)
               .filter((edge) => edge.relationship_type === "Replies To" || edge.relationship_type === "References")
               .forEach((edge) => {{
-                searchMatches.add(edge.source);
-                searchMatches.add(edge.target);
+                highlightIds.add(edge.source);
+                highlightIds.add(edge.target);
               }});
-            render();
+            selectGraphNode(node.id, "quick-action", {{highlightIds}});
           }} else if (action === "highlight_attachments") {{
-            searchMatches = new Set([node.id, ...neighboursByType(node, "Attachment").map((candidate) => candidate.id)]);
-            render();
+            const highlightIds = new Set([node.id, ...neighboursByType(node, "Attachment").map((candidate) => candidate.id)]);
+            selectGraphNode(node.id, "quick-action", {{highlightIds}});
           }} else if (action === "expand_cluster") {{
             expandCluster(node);
           }}
@@ -1039,14 +1097,15 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     }}
     function updateInfoPanel(node) {{
       if (!node) {{
-        infoPanel.innerHTML = '<h3>Relationship Inspector</h3><p>Click or search for any node to inspect it.</p><ul class="relationship-inspector-empty"><li>relationship summary</li><li>connected entities</li><li>metadata</li><li>available actions</li></ul>';
+        infoPanel.innerHTML = '<h3>Relationship Inspector</h3><p>Click or search for any node to inspect it.</p><p>The Inspector will display:</p><ul class="relationship-inspector-empty"><li>relationship summary</li><li>connected entities</li><li>metadata</li><li>available actions</li></ul>';
         return;
       }}
+      const actions = quickActions(node);
       infoPanel.innerHTML = '<h3>' + escapeHTML(displayType(node)) + '</h3>' +
         '<p class="relationship-inspector-title">' + escapeHTML(node.label) + '</p>' +
-        '<section class="relationship-inspector-section"><h4>Metadata</h4><dl>' + metadataRows(node) + '</dl></section>' +
         neighbourSummary(node) +
-        '<section class="relationship-inspector-section"><h4>Available actions</h4><div class="mailbox-graph-actions">' + quickActions(node) + '</div></section>';
+        '<section class="relationship-inspector-section"><h4>Metadata</h4><dl>' + metadataRows(node) + '</dl></section>' +
+        (actions ? '<section class="relationship-inspector-section"><h4>Available actions</h4><div class="mailbox-graph-actions">' + actions + '</div></section>' : '');
       bindInspectorActions(node);
     }}
     function fit() {{
@@ -1063,34 +1122,50 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     function runSearch() {{
       const query = searchInput.value.trim().toLowerCase();
       searchMatches = new Set();
-      if (query) {{
-        visibleGraph.nodes.forEach((node) => {{
-          const metadata = JSON.stringify(node.metadata || {{}}).toLowerCase();
-          if (node.label.toLowerCase().includes(query) || node.type.toLowerCase().includes(query) || metadata.includes(query)) {{
-            searchMatches.add(node.id);
-          }}
-        }});
+      if (!query) {{
+        render();
+        return;
       }}
-      const first = visibleGraph.nodes.find((node) => searchMatches.has(node.id));
+      const matches = graph.nodes.filter((node) => {{
+        const metadata = JSON.stringify(node.metadata || {{}}).toLowerCase();
+        return node.label.toLowerCase().includes(query) || node.type.toLowerCase().includes(query) || metadata.includes(query);
+      }});
+      matches.forEach((node) => searchMatches.add(node.id));
+      const first = matches[0] || visibleGraph.nodes.find((node) => {{
+        const metadata = JSON.stringify(node.metadata || {{}}).toLowerCase();
+        return node.label.toLowerCase().includes(query) || node.type.toLowerCase().includes(query) || metadata.includes(query);
+      }});
       if (first) {{
-        selectedNode = first.id;
-        updateInfoPanel(first);
-        centeredPan(first);
+        if (!visibleGraph.nodeMap || !visibleGraph.nodeMap.has(first.id)) {{
+          clusterToggle.checked = false;
+          layout();
+        }}
+        const highlightIds = new Set(searchMatches);
+        highlightIds.add(first.id);
+        graphEdgesFor(first.id).forEach((edge) => {{
+          highlightIds.add(edge.source);
+          highlightIds.add(edge.target);
+        }});
+        selectGraphNode(first.id, "search", {{center: true, highlightIds}});
       }} else {{
         render();
       }}
     }}
     function expandCluster(node) {{
       if (node.type !== "Cluster") return;
+      const members = node.metadata && Array.isArray(node.metadata.cluster_members) ? node.metadata.cluster_members : [];
       clusterToggle.checked = false;
-      currentNodeSet();
       layout();
-      selectedNode = null;
-      updateInfoPanel(null);
-      render();
+      const memberId = members.find((id) => visibleNodeById(id));
+      if (memberId) {{
+        selectGraphNode(memberId, "cluster-expand", {{center: true}});
+      }} else {{
+        clearGraphSelection("cluster-expand");
+      }}
     }}
     function loadGraph(filtersChanged) {{
       status.textContent = "Relationship Graph loading.";
+      const previousSelection = selectedNode;
       const url = new URL(section.dataset.mailboxGraphEndpoint, window.location.origin);
       filters().forEach((value, key) => url.searchParams.set(key, value));
       fetch(url.toString(), {{headers: {{"Accept": "application/json"}}}})
@@ -1104,7 +1179,6 @@ def _render_mbox_relationship_graph(item: dict) -> str:
             edges: Array.isArray(payload.edges) ? payload.edges : []
           }};
           graph.nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
-          selectedNode = null;
           hoveredNode = null;
           focusedNode = null;
           searchMatches = new Set();
@@ -1114,8 +1188,14 @@ def _render_mbox_relationship_graph(item: dict) -> str:
             panY = 0;
           }}
           layout();
-          updateInfoPanel(null);
-          if (filtersChanged) fit(); else render();
+          if (previousSelection && graph.nodeMap.has(previousSelection)) {{
+            selectGraphNode(previousSelection, filtersChanged ? "filter-preserve" : "payload-preserve");
+            if (filtersChanged) fit();
+          }} else {{
+            selectedNode = null;
+            updateInfoPanel(null);
+            if (filtersChanged) fit(); else render();
+          }}
         }})
         .catch(() => {{
           status.textContent = "Relationship Graph could not be loaded.";
@@ -1128,28 +1208,44 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     }});
     svg.addEventListener("pointerdown", (event) => {{
       if (nodeDragState) return;
+      canvasDragMoved = false;
       dragState = {{x: event.clientX, y: event.clientY, panX, panY}};
       svg.setPointerCapture(event.pointerId);
     }});
     svg.addEventListener("pointermove", (event) => {{
       if (!dragState) return;
-      panX = dragState.panX + event.clientX - dragState.x;
-      panY = dragState.panY + event.clientY - dragState.y;
+      const dx = event.clientX - dragState.x;
+      const dy = event.clientY - dragState.y;
+      if (Math.hypot(dx, dy) > 3) canvasDragMoved = true;
+      panX = dragState.panX + dx;
+      panY = dragState.panY + dy;
       render();
     }});
-    svg.addEventListener("pointerup", () => {{ dragState = null; }});
+    svg.addEventListener("pointerup", () => {{
+      if (canvasDragMoved) suppressNextCanvasClick = true;
+      dragState = null;
+      canvasDragMoved = false;
+    }});
     svg.addEventListener("click", (event) => {{
       if (event.target === svg) {{
-        selectedNode = null;
-        searchMatches = new Set();
-        updateInfoPanel(null);
-        render();
+        if (suppressNextCanvasClick) {{
+          suppressNextCanvasClick = false;
+          return;
+        }}
+        clearGraphSelection("canvas");
+      }}
+    }});
+    svg.addEventListener("keydown", (event) => {{
+      if (event.key === "Escape") {{
+        event.preventDefault();
+        clearGraphSelection("keyboard");
       }}
     }});
     themeInputs.forEach((input) => input.addEventListener("change", () => applyTheme(input.value)));
     restoreTheme();
     fitButton.addEventListener("click", fit);
     resetButton.addEventListener("click", resetLayout);
+    clearSelectionButton.addEventListener("click", () => clearGraphSelection("control"));
     applyButton.addEventListener("click", () => loadGraph(true));
     searchButton.addEventListener("click", runSearch);
     searchInput.addEventListener("keydown", (event) => {{
@@ -1159,8 +1255,15 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       }}
     }});
     clusterToggle.addEventListener("change", () => {{
+      const previousSelection = selectedNode;
       layout();
-      render();
+      if (previousSelection && visibleNodeById(previousSelection)) {{
+        selectGraphNode(previousSelection, "cluster-toggle");
+      }} else if (previousSelection && graph.nodeMap && graph.nodeMap.has(previousSelection)) {{
+        clearGraphSelection("cluster-toggle");
+      }} else {{
+        render();
+      }}
     }});
     loadGraph(true);
   }}
