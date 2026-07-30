@@ -242,7 +242,7 @@ class OutlookArchiveJobTests(unittest.TestCase):
         self.assertFalse(status_payload["message_extraction_performed"])
         public_page = documents.public_document_page(item["intake_id"]).content
         self.assertIn("Preservation complete", public_page)
-        self.assertIn("Not performed in CDE Platform Stage 39B", public_page)
+        self.assertIn("Administrative only in CDE Platform Stage 39C", public_page)
         self.assertNotIn("Mailbox Message Index", public_page)
 
     def test_checksum_mismatch_fails_job_without_removing_preserved_archive(self):

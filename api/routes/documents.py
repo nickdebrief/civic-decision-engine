@@ -259,6 +259,7 @@ def _render_publication_provenance(item: dict) -> str:
         ("Outlook hash verification status", outlook_archive_metadata.get("hash_verification_status") if is_outlook_archive_document(item) else None),
         ("Outlook inspection complete", outlook_archive_metadata.get("inspection_complete") if is_outlook_archive_document(item) else None),
         ("Outlook inspection timestamp", outlook_archive_metadata.get("inspection_timestamp") if is_outlook_archive_document(item) else None),
+        ("Outlook projection state", outlook_archive_metadata.get("projection_state") if is_outlook_archive_document(item) else None),
         ("Outlook archive job identifier", outlook_archive_metadata.get("latest_archive_job_id") if is_outlook_archive_document(item) else None),
         ("Original filename", item.get("original_filename")),
         ("File size", f"{item.get('file_size_bytes')} bytes" if item.get("file_size_bytes") is not None else None),
@@ -1524,10 +1525,11 @@ def _render_outlook_archive_document(item: dict) -> str:
             ("Parser version", metadata.get("parser_version")),
             ("Inspection complete", metadata.get("inspection_complete")),
             ("Inspection timestamp", metadata.get("inspection_timestamp")),
+            ("Projection state", metadata.get("projection_state")),
             ("Archive health", metadata.get("archive_health")),
-            ("Mailbox discovery", "Not exposed in CDE Platform Stage 39B"),
-            ("Message extraction", "Not performed in CDE Platform Stage 39B"),
-            ("Canonical record generation", "Not performed in CDE Platform Stage 39B"),
+            ("Mailbox projection", "Administrative only in CDE Platform Stage 39C"),
+            ("Message body extraction", "Not performed in CDE Platform Stage 39C"),
+            ("Canonical record generation", "Not performed in CDE Platform Stage 39C"),
         )
     )
     return f"""<section class="public-outlook-archive-summary"><h2>Outlook Archive Overview</h2><p class="provenance-boundary">{escape(OUTLOOK_ARCHIVE_BOUNDARY)}</p><table>{rows}</table></section>

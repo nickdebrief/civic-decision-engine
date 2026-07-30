@@ -105,6 +105,15 @@ from api.outlook_archive_jobs import (
     retry_archive_job,
     run_archive_inspection_job,
 )
+from api.outlook_archive_projections import (
+    get_projection_folder,
+    get_projection_message,
+    list_projection_folders,
+    list_projection_messages,
+    load_outlook_archive_projection,
+    projection_statistics,
+    search_projection_metadata,
+)
 
 
 ADMIN_TABLE_READABILITY_CSS = """
@@ -46301,6 +46310,69 @@ def _render_archive_job_detail(
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Job</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{width:230px;background:#faf9f5;color:#555}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/archive/jobs">Back to Archive Jobs</a> · <a href="/admin/document-intake#archive-jobs">Back to Document Intake</a></p><h1>Archive Job</h1><p class="notice">Archive jobs are operational processing metadata. CDE Platform Stage 39B preserves and verifies the original PST/OST archive without exposing mailbox contents or creating derived evidence records.</p><table class="metadata">{rows}</table>{retry_form}<h2>Structured logs</h2><div class="admin-table-scroll" role="region" aria-label="Archive job logs table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-status">Level</th><th scope="col" class="col-category">Event</th><th scope="col" class="col-note">Message</th></tr></thead><tbody>{log_rows}</tbody></table></div></main></body></html>"""
 
 
+def _render_projection_browser(
+    document_id: str,
+    *,
+    admin_session: dict[str, Any] | None = None,
+    query: str = "",
+) -> str:
+    projection = load_outlook_archive_projection(document_id, root=intake_root())
+    statistics = projection.get("statistics") if isinstance(projection.get("statistics"), dict) else {}
+    folders = projection.get("folders") if isinstance(projection.get("folders"), list) else []
+    messages = projection.get("messages") if isinstance(projection.get("messages"), list) else []
+    results = search_projection_metadata(document_id, query, root=intake_root()) if query else []
+    stat_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value if value is not None else '—'))}</td></tr>"
+        for label, value in (
+            ("Projection state", projection.get("projection_state")),
+            ("Mailbox", (projection.get("mailbox") or {}).get("name") if isinstance(projection.get("mailbox"), dict) else None),
+            ("Projection timestamp", projection.get("projection_timestamp")),
+            ("Parser version", projection.get("parser_version")),
+            ("Job ID", projection.get("job_id")),
+            ("Folder count", statistics.get("folder_count")),
+            ("Message count", statistics.get("message_count")),
+            ("Subfolder count", statistics.get("subfolder_count")),
+            ("Attachment count", statistics.get("attachment_count")),
+            ("Projected size", statistics.get("projected_size_bytes")),
+        )
+    )
+    folder_rows = "".join(
+        "<tr>"
+        f'<td class="col-reference"><a href="/admin/archive/{escape(document_id)}/folders/{escape(str(folder.get("folder_id") or ""))}">{escape(str(folder.get("folder_id") or ""))}</a></td>'
+        f'<td class="col-title">{escape(str(folder.get("name") or "—"))}</td>'
+        f'<td class="col-source">{escape(str(folder.get("folder_path") or "—"))}</td>'
+        f'<td class="col-reference">{escape(str(folder.get("parent_id") or "—"))}</td>'
+        f'<td class="col-compact">{escape(str(folder.get("message_count") or 0))}</td>'
+        f'<td class="col-compact">{escape(str(folder.get("subfolder_count") or 0))}</td>'
+        f'<td class="col-compact">{escape(str(folder.get("attachment_count") or 0))}</td>'
+        "</tr>"
+        for folder in folders[:500]
+    ) or '<tr><td colspan="7">No folder projections are available.</td></tr>'
+    message_rows = "".join(
+        "<tr>"
+        f'<td class="col-reference"><a href="/admin/archive/{escape(document_id)}/messages/{escape(str(message.get("projection_id") or ""))}">{escape(str(message.get("projection_id") or ""))}</a></td>'
+        f'<td class="col-title">{escape(str(message.get("subject") or "—"))}</td>'
+        f'<td class="col-source">{escape(str(message.get("sender") or "—"))}</td>'
+        f'<td class="col-source">{escape(", ".join(str(value) for value in (message.get("recipients") or [])) or "—")}</td>'
+        f'<td class="col-timestamp">{escape(str(message.get("sent_timestamp") or message.get("received_timestamp") or "—"))}</td>'
+        f'<td class="col-category">{escape(str(message.get("message_class") or "—"))}</td>'
+        f'<td class="col-compact">{escape(str(message.get("attachment_count") or 0))}</td>'
+        "</tr>"
+        for message in messages[:500]
+    ) or '<tr><td colspan="7">No message projections are available.</td></tr>'
+    result_items = "".join(
+        f"<li>{escape(str(result.get('type') or 'projection'))}: {escape(str((result.get('item') or {}).get('subject') or (result.get('item') or {}).get('name') or (result.get('item') or {}).get('projection_id') or (result.get('item') or {}).get('folder_id') or 'Untitled projection'))}</li>"
+        for result in results[:100]
+        if isinstance(result, dict)
+    ) or ("<li>No projection metadata matched the search.</li>" if query else "")
+    search_section = (
+        f"<section><h2>Search results</h2><ul>{result_items}</ul></section>"
+        if query
+        else ""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Outlook Archive Projection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #d8d4ca;padding:12px;margin:12px 0}}label{{display:grid;gap:4px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input{{padding:8px;border:1px solid #c9c6bd;font:inherit}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(document_id)}">Back to archive review</a></p><h1>Outlook Archive Projection</h1><p class="notice">CDE Platform Stage 39C projections are administrative metadata derived from the preserved archive. They do not expose message bodies, attachment contents, public mailbox contents, or independent evidence records.</p><table class="metadata">{stat_rows}</table><form method="get" action="/admin/archive/{escape(document_id)}/projection"><label>Search projected metadata<input name="q" value="{escape(query)}"></label><button type="submit">Search</button></form>{search_section}<h2>Folders</h2><div class="admin-table-scroll" role="region" aria-label="Outlook folder projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Folder ID</th><th scope="col" class="col-title">Name</th><th scope="col" class="col-source">Path</th><th scope="col" class="col-reference">Parent</th><th scope="col" class="col-compact">Messages</th><th scope="col" class="col-compact">Subfolders</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{folder_rows}</tbody></table></div><h2>Messages</h2><div class="admin-table-scroll" role="region" aria-label="Outlook message metadata projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Subject</th><th scope="col" class="col-source">Sender</th><th scope="col" class="col-source">Recipients</th><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-category">Class</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{message_rows}</tbody></table></div></main></body></html>"""
+
+
 def _start_archive_job_worker(job_id: str) -> None:
     root = intake_root()
     worker = threading.Thread(
@@ -46590,7 +46662,10 @@ def _render_document_intake_preview(
         archive_metadata = item.get("outlook_archive_metadata") if isinstance(item.get("outlook_archive_metadata"), dict) else {}
         if archive_metadata.get("latest_archive_job_id"):
             latest_job_id = f'<p><a href="/admin/archive/jobs/{escape(str(archive_metadata.get("latest_archive_job_id")))}">Open latest archive job</a></p>'
-        email_notice = f'''<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39B records archive-level preservation, hash verification, job progress, and parser inspection readiness only; it does not expose mailbox contents, extract messages, publish mailbox data, or create canonical records from contained items.</p><section><h2>Archive inspection job</h2><p class="notice">Queue a metadata-only archive job to verify preserved hashes and run lightweight parser inspection if a parser is configured. Parser absence is recorded as operational status, not an intake failure.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/inspect"><button type="submit">Queue archive inspection</button></form>{latest_job_id}</section>'''
+        projection_link = ""
+        if archive_metadata.get("projection_state") in {"projected", "rebuilt"}:
+            projection_link = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/projection">Open administrative mailbox projection</a></p>'
+        email_notice = f'''<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39C may create internal folder and message metadata projections for governed administrative review; it does not expose message bodies, attachment contents, public mailbox data, or create canonical records from contained items.</p><section><h2>Archive inspection job</h2><p class="notice">Queue a metadata-only archive job to verify preserved hashes and run lightweight parser inspection. If a configured parser supports projection, folder and message metadata are stored as replaceable administrative projection sidecars.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/inspect"><button type="submit">Queue archive inspection</button></form>{latest_job_id}{projection_link}</section>'''
     elif is_email_document(item) or is_mailbox_document(item):
         document_type = str(item.get("document_type") or "").lower()
         if document_type == "msg":
@@ -48319,6 +48394,142 @@ def admin_archive_job_cancel(job_id: str, request: Request):
         )
     except ValueError as exc:
         raise _http_error(404, "archive_job_not_found") from exc
+
+
+@router.get("/admin/archive/{document_id}/projection", response_class=HTMLResponse)
+def admin_outlook_archive_projection_page(
+    document_id: str,
+    request: Request,
+    q: str | None = Query(None),
+):
+    session = require_admin_session(request)
+    try:
+        return HTMLResponse(
+            content=_render_projection_browser(
+                document_id,
+                admin_session=session,
+                query=str(q or ""),
+            )
+        )
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/admin/archive/{document_id}/folders/{folder_id}", response_class=HTMLResponse)
+def admin_outlook_archive_folder_projection_page(
+    document_id: str,
+    folder_id: str,
+    request: Request,
+):
+    session = require_admin_session(request)
+    try:
+        folder = get_projection_folder(document_id, folder_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_folder_projection_not_found") from exc
+    rows = "".join(
+        f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
+        for key, value in folder.items()
+        if key != "provenance"
+    )
+    provenance = folder.get("provenance") if isinstance(folder.get("provenance"), dict) else {}
+    provenance_rows = "".join(
+        f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
+        for key, value in provenance.items()
+    )
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Projected Folder</title><style>body{{margin:32px;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}a{{color:#245d61}}table{{border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5;color:#555}}</style></head><body>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Folder</h1><table>{rows}</table><h2>Provenance</h2><table>{provenance_rows}</table></body></html>"""
+    return HTMLResponse(content=content)
+
+
+@router.get("/admin/archive/{document_id}/messages/{message_id}", response_class=HTMLResponse)
+def admin_outlook_archive_message_projection_page(
+    document_id: str,
+    message_id: str,
+    request: Request,
+):
+    session = require_admin_session(request)
+    try:
+        message = get_projection_message(document_id, message_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_message_projection_not_found") from exc
+    rows = "".join(
+        f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
+        for key, value in message.items()
+        if key != "provenance"
+    )
+    provenance = message.get("provenance") if isinstance(message.get("provenance"), dict) else {}
+    provenance_rows = "".join(
+        f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
+        for key, value in provenance.items()
+    )
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Projected Message Metadata</title><style>body{{margin:32px;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}a{{color:#245d61}}table{{border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5;color:#555}}</style></head><body>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message Metadata</h1><p>No message body or attachment content is rendered in CDE Platform Stage 39C.</p><table>{rows}</table><h2>Provenance</h2><table>{provenance_rows}</table></body></html>"""
+    return HTMLResponse(content=content)
+
+
+@router.get("/api/admin/session/archive/{document_id}/projection")
+def admin_outlook_archive_projection_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return load_outlook_archive_projection(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/folders")
+def admin_outlook_archive_folders_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return {"folders": list_projection_folders(document_id, root=intake_root())}
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/folders/{folder_id}")
+def admin_outlook_archive_folder_api(document_id: str, folder_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return get_projection_folder(document_id, folder_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_folder_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/messages")
+def admin_outlook_archive_messages_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return {"messages": list_projection_messages(document_id, root=intake_root())}
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/messages/{message_id}")
+def admin_outlook_archive_message_api(document_id: str, message_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return get_projection_message(document_id, message_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_message_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/statistics")
+def admin_outlook_archive_statistics_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return projection_statistics(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/projection/search")
+def admin_outlook_archive_projection_search_api(
+    document_id: str,
+    request: Request,
+    q: str = Query(""),
+):
+    require_admin_session(request)
+    try:
+        return {"results": search_projection_metadata(document_id, str(q or ""), root=intake_root())}
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
 
 
 @router.get("/admin/document-intake/{intake_id}/canonical-record/new", response_class=HTMLResponse)
