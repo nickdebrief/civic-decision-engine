@@ -83,7 +83,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
     def test_release_documentation_records_identity_transition(self):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
-        self.assertIn("Current release: CDE Platform Stage 39A — PST/OST Parser & Intake Boundary", readme)
+        self.assertIn("Current release: CDE Platform Stage 39B — Archive Preservation & Extraction Jobs", readme)
         self.assertIn("## Stage Numbering", readme)
         self.assertIn("CREF stage numbers describe the evolution of the governance methodology.", readme)
         self.assertIn("CDE Platform stage numbers describe implementation milestones within the Civic Decision Engine software.", readme)

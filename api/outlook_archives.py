@@ -7,13 +7,15 @@ from typing import Any, Protocol
 
 
 OUTLOOK_ARCHIVE_PARSER_MODULE_ENV = "CDE_OUTLOOK_ARCHIVE_PARSER_MODULE"
+OUTLOOK_ARCHIVE_PARSER_CLASS_ENV = "CDE_OUTLOOK_ARCHIVE_PARSER_CLASS"
 OUTLOOK_ARCHIVE_PARSER_VERSION_ENV = "CDE_OUTLOOK_ARCHIVE_PARSER_VERSION"
 
 OUTLOOK_ARCHIVE_BOUNDARY = (
     "Microsoft Outlook PST and OST archives are preserved as original bytes. "
-    "CDE Platform Stage 39A records archive-level metadata and parser readiness "
-    "only; it does not discover folders, extract messages, publish mailbox "
-    "contents, or promote contained items into separate governed records."
+    "CDE Platform Stage 39B records archive-level preservation, hash "
+    "verification, job progress, and parser readiness only; it does not expose "
+    "mailbox contents, extract messages, publish mailbox data, or promote "
+    "contained items into separate governed records."
 )
 
 
@@ -25,6 +27,26 @@ class OutlookArchiveParser(Protocol):
 
     def inspect(self, file_path: Path) -> dict[str, Any]:
         ...
+
+
+def configured_outlook_archive_parser() -> OutlookArchiveParser | None:
+    """Load a configured parser without making it mandatory for intake."""
+    configured_module = os.getenv(OUTLOOK_ARCHIVE_PARSER_MODULE_ENV, "").strip()
+    configured_class = os.getenv(OUTLOOK_ARCHIVE_PARSER_CLASS_ENV, "OutlookArchiveParser").strip()
+    if not configured_module:
+        return None
+    module = importlib.import_module(configured_module)
+    parser_factory = getattr(module, configured_class, None)
+    if parser_factory is None and all(
+        hasattr(module, attr) for attr in ("supports", "inspect")
+    ):
+        return module  # type: ignore[return-value]
+    if parser_factory is None:
+        raise RuntimeError("configured_outlook_archive_parser_missing")
+    parser = parser_factory()
+    if not all(hasattr(parser, attr) for attr in ("supports", "inspect")):
+        raise RuntimeError("configured_outlook_archive_parser_invalid")
+    return parser
 
 
 def outlook_archive_type(document_type: str | None) -> str:
@@ -56,9 +78,18 @@ def outlook_archive_parser_status() -> dict[str, Any]:
             "parser_status_message": "Parser not configured.",
             "parser_version": configured_version or None,
             "parser_module": None,
-        }
+    }
     try:
         module = importlib.import_module(configured_module)
+        configured_class = os.getenv(
+            OUTLOOK_ARCHIVE_PARSER_CLASS_ENV,
+            "OutlookArchiveParser",
+        ).strip()
+        parser_factory = getattr(module, configured_class, None)
+        if parser_factory is None and not all(
+            hasattr(module, attr) for attr in ("supports", "inspect")
+        ):
+            raise RuntimeError("configured_outlook_archive_parser_missing")
     except Exception:
         return {
             "parser_available": False,

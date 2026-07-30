@@ -1596,7 +1596,7 @@ def store_pending_document(
         metadata["email_metadata"] = email_metadata
     if document_type in {"pst", "ost"}:
         metadata["sha512_hash"] = sha512_digest
-        metadata["outlook_archive_metadata"] = build_outlook_archive_metadata(
+        outlook_archive_metadata = build_outlook_archive_metadata(
             data=data,
             filename=filename,
             document_type=document_type,
@@ -1604,6 +1604,20 @@ def store_pending_document(
             uploaded_at=timestamp,
             actor=actor,
         )
+        outlook_archive_metadata.update(
+            {
+                "storage_path": str(file_path),
+                "preservation_timestamp": timestamp,
+                "preservation_completed_at": timestamp,
+                "preservation_complete": True,
+                "hash_verification_status": "verified",
+                "inspection_complete": False,
+                "inspection_timestamp": None,
+                "archive_job_id": None,
+                "latest_archive_job_id": None,
+            }
+        )
+        metadata["outlook_archive_metadata"] = outlook_archive_metadata
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)

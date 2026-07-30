@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 from datetime import datetime, timezone
 from html import escape
@@ -94,6 +95,15 @@ from api.email_documents import (
     MAX_MBOX_MESSAGE_BYTES,
     MAX_MBOX_MESSAGE_IN_MEMORY_BYTES,
     MAX_MBOX_MESSAGE_INDEX_BYTES,
+)
+from api.outlook_archive_jobs import (
+    archive_job_status,
+    cancel_archive_job,
+    create_archive_inspection_job,
+    list_archive_jobs,
+    load_archive_job,
+    retry_archive_job,
+    run_archive_inspection_job,
 )
 
 
@@ -46208,6 +46218,100 @@ def _status_badge(status: str) -> str:
     return f'<span class="status status-{escape(status)}">{escape(label)}</span>'
 
 
+def _archive_job_rows(jobs: list[dict[str, Any]]) -> str:
+    rows = []
+    for job in jobs:
+        status = archive_job_status(job)
+        parser = status.get("parser") if isinstance(status.get("parser"), dict) else {}
+        warnings = status.get("warnings") if isinstance(status.get("warnings"), list) else []
+        rows.append(
+            "<tr>"
+            f'<td class="col-reference"><a href="/admin/archive/jobs/{escape(str(status.get("job_id") or ""))}">{escape(str(status.get("job_id") or ""))}</a></td>'
+            f'<td class="col-reference">{escape(str(status.get("document_identifier") or status.get("document_id") or "—"))}</td>'
+            f'<td class="col-filename">{escape(str(status.get("archive_filename") or "—"))}</td>'
+            f'<td class="col-status">{escape(str(status.get("status") or "—"))}</td>'
+            f'<td class="col-category">{escape(str(status.get("phase") or "—"))}</td>'
+            f'<td class="col-compact">{escape(str(status.get("progress_percent") if status.get("progress_percent") is not None else "—"))}%</td>'
+            f'<td class="col-source">{escape(str(parser.get("parser_status_message") or parser.get("parser_status") or "Parser not configured."))}</td>'
+            f'<td class="col-timestamp">{escape(str(status.get("created_at") or "—"))}</td>'
+            f'<td class="col-timestamp">{escape(str(status.get("completed_at") or "—"))}</td>'
+            f'<td class="col-note">{escape("; ".join(str(value) for value in warnings) if warnings else "—")}</td>'
+            "</tr>"
+        )
+    return "".join(rows) or '<tr><td colspan="10">No Outlook archive jobs are recorded.</td></tr>'
+
+
+def _render_archive_jobs_section() -> str:
+    rows = _archive_job_rows(list_archive_jobs(root=intake_root()))
+    return f"""<section class="pending" id="archive-jobs">
+      <h2>Archive Jobs</h2>
+      <p class="notice">Outlook PST/OST archive jobs preserve and inspect archive-level metadata only. CDE Platform Stage 39B does not expose mailbox contents, extract messages, create Canonical Records, or publish derived archive data.</p>
+      <p><a href="/admin/archive/jobs">Open Archive Jobs dashboard</a> · <a href="/admin/document-intake#archive-jobs">Refresh</a></p>
+      <div class="admin-table-scroll archive-jobs-table-wrapper" role="region" aria-label="Outlook archive jobs table"><table class="admin-data-table archive-jobs-table"><thead><tr><th scope="col" class="col-reference">Job ID</th><th scope="col" class="col-reference">Document</th><th scope="col" class="col-filename">Archive</th><th scope="col" class="col-status">Status</th><th scope="col" class="col-category">Phase</th><th scope="col" class="col-compact">Progress</th><th scope="col" class="col-source">Parser</th><th scope="col" class="col-timestamp">Created</th><th scope="col" class="col-timestamp">Completed</th><th scope="col" class="col-note">Warnings</th></tr></thead><tbody>{rows}</tbody></table></div>
+    </section>"""
+
+
+def _render_archive_job_detail(
+    job: dict[str, Any],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    status = archive_job_status(job)
+    parser = status.get("parser") if isinstance(status.get("parser"), dict) else {}
+    inspection = status.get("inspection") if isinstance(status.get("inspection"), dict) else {}
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value if value not in (None, '') else '—'))}</td></tr>"
+        for label, value in (
+            ("Job ID", status.get("job_id")),
+            ("Document", status.get("document_identifier") or status.get("document_id")),
+            ("Archive filename", status.get("archive_filename")),
+            ("Archive type", status.get("archive_type")),
+            ("Status", status.get("status")),
+            ("Phase", status.get("phase")),
+            (
+                "Progress",
+                f"{status.get('progress_percent')}%"
+                if status.get("progress_percent") is not None
+                else None,
+            ),
+            ("Parser status", parser.get("parser_status_message") or parser.get("parser_status")),
+            ("Parser version", parser.get("parser_version")),
+            ("Inspection complete", inspection.get("inspection_complete")),
+            ("Archive validity", inspection.get("archive_validity")),
+            ("Archive health", inspection.get("archive_health")),
+            ("Created", status.get("created_at")),
+            ("Started", status.get("started_at")),
+            ("Completed", status.get("completed_at")),
+            ("Error", status.get("error_message") or status.get("error_code")),
+        )
+    )
+    log_rows = "".join(
+        "<tr>"
+        f'<td class="col-timestamp">{escape(str(entry.get("timestamp") or "—"))}</td>'
+        f'<td class="col-status">{escape(str(entry.get("level") or "info"))}</td>'
+        f'<td class="col-category">{escape(str(entry.get("event") or "—"))}</td>'
+        f'<td class="col-note">{escape(str(entry.get("message") or ""))}</td>'
+        "</tr>"
+        for entry in job.get("logs", [])
+        if isinstance(entry, dict)
+    ) or '<tr><td colspan="4">No job log entries are recorded.</td></tr>'
+    retry_form = ""
+    if status.get("status") in {"failed", "cancelled"}:
+        retry_form = f"""<form method="post" action="/api/admin/session/archive/jobs/{escape(str(status.get("job_id") or ""))}/retry"><button type="submit">Retry inspection</button></form>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Job</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{width:230px;background:#faf9f5;color:#555}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/archive/jobs">Back to Archive Jobs</a> · <a href="/admin/document-intake#archive-jobs">Back to Document Intake</a></p><h1>Archive Job</h1><p class="notice">Archive jobs are operational processing metadata. CDE Platform Stage 39B preserves and verifies the original PST/OST archive without exposing mailbox contents or creating derived evidence records.</p><table class="metadata">{rows}</table>{retry_form}<h2>Structured logs</h2><div class="admin-table-scroll" role="region" aria-label="Archive job logs table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-status">Level</th><th scope="col" class="col-category">Event</th><th scope="col" class="col-note">Message</th></tr></thead><tbody>{log_rows}</tbody></table></div></main></body></html>"""
+
+
+def _start_archive_job_worker(job_id: str) -> None:
+    root = intake_root()
+    worker = threading.Thread(
+        target=run_archive_inspection_job,
+        kwargs={"job_id": job_id, "root": root},
+        daemon=True,
+        name=f"outlook-archive-job-{job_id[-8:]}",
+    )
+    worker.start()
+
+
 def _render_document_intake_page(
     intake_documents: list[dict[str, Any]],
     *,
@@ -46319,6 +46423,7 @@ def _render_document_intake_page(
         <button type="submit">Upload large MBOX archive</button>
       </form>
     </section>
+    {_render_archive_jobs_section()}
     <section class="pending" id="intake-management">
       <h2>Intake management</h2>
       <div class="admin-table-scroll intake-management-table-wrapper" role="region" aria-label="Intake management table"><table class="admin-data-table intake-management-table"><thead><tr><th scope="col" class="intake-title col-title">Title</th><th scope="col" class="intake-document-identifier col-reference">Document Identifier</th><th scope="col" class="intake-filename col-filename">Filename</th><th scope="col" class="intake-source col-source">Institution / source</th><th scope="col" class="intake-category col-category">Category</th><th scope="col" class="intake-status col-status">Current status</th><th scope="col" class="intake-upload-date col-timestamp">Upload date</th><th scope="col" class="intake-actions col-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div>
@@ -46431,8 +46536,13 @@ def _render_document_intake_preview(
             ("Outlook archive type", archive_metadata.get("archive_type_label") or document_type_label(item.get("document_type"))),
             ("Outlook parser status", archive_metadata.get("parser_status_message") or archive_metadata.get("parser_status") or "Parser not configured."),
             ("Outlook parser version", archive_metadata.get("parser_version") or "Not configured"),
-            ("Mailbox discovery", "Not performed in CDE Platform Stage 39A"),
-            ("Message extraction", "Not performed in CDE Platform Stage 39A"),
+            ("Preservation complete", archive_metadata.get("preservation_complete")),
+            ("Hash verification status", archive_metadata.get("hash_verification_status") or "Not verified"),
+            ("Inspection complete", archive_metadata.get("inspection_complete")),
+            ("Inspection timestamp", archive_metadata.get("inspection_timestamp") or "Not inspected"),
+            ("Latest archive job", archive_metadata.get("latest_archive_job_id") or "Not queued"),
+            ("Mailbox discovery", "Not exposed in CDE Platform Stage 39B"),
+            ("Message extraction", "Not performed in CDE Platform Stage 39B"),
         ]
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
@@ -46476,7 +46586,11 @@ def _render_document_intake_preview(
     )
     email_notice = ""
     if is_outlook_archive_document(item):
-        email_notice = '<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39A records archive-level metadata, SHA-256, SHA-512, and parser readiness only; it does not discover folders, extract messages, publish mailbox contents, or create canonical records from contained items.</p>'
+        latest_job_id = ""
+        archive_metadata = item.get("outlook_archive_metadata") if isinstance(item.get("outlook_archive_metadata"), dict) else {}
+        if archive_metadata.get("latest_archive_job_id"):
+            latest_job_id = f'<p><a href="/admin/archive/jobs/{escape(str(archive_metadata.get("latest_archive_job_id")))}">Open latest archive job</a></p>'
+        email_notice = f'''<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39B records archive-level preservation, hash verification, job progress, and parser inspection readiness only; it does not expose mailbox contents, extract messages, publish mailbox data, or create canonical records from contained items.</p><section><h2>Archive inspection job</h2><p class="notice">Queue a metadata-only archive job to verify preserved hashes and run lightweight parser inspection if a parser is configured. Parser absence is recorded as operational status, not an intake failure.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/inspect"><button type="submit">Queue archive inspection</button></form>{latest_job_id}</section>'''
     elif is_email_document(item) or is_mailbox_document(item):
         document_type = str(item.get("document_type") or "").lower()
         if document_type == "msg":
@@ -48099,6 +48213,112 @@ def admin_document_intake_preview_page(intake_id: str, request: Request):
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
     return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
+
+
+@router.get("/admin/archive/jobs", response_class=HTMLResponse)
+def admin_archive_jobs_page(request: Request):
+    session = require_admin_session(request)
+    rows = _archive_job_rows(list_archive_jobs(root=intake_root()))
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Archive Jobs</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{background:#143a52;color:#fff}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/document-intake#archive-jobs">Back to Document Intake</a></p><h1>Archive Jobs</h1><p class="notice">Archive jobs are durable operational records for PST/OST preservation and parser readiness. They do not expose mailbox contents, folders, messages, attachments, or generated evidence objects.</p><p><a href="/admin/archive/jobs">Refresh</a></p><div class="admin-table-scroll" role="region" aria-label="Outlook archive jobs table"><table class="admin-data-table archive-jobs-table"><thead><tr><th scope="col" class="col-reference">Job ID</th><th scope="col" class="col-reference">Document</th><th scope="col" class="col-filename">Archive</th><th scope="col" class="col-status">Status</th><th scope="col" class="col-category">Phase</th><th scope="col" class="col-compact">Progress</th><th scope="col" class="col-source">Parser</th><th scope="col" class="col-timestamp">Created</th><th scope="col" class="col-timestamp">Completed</th><th scope="col" class="col-note">Warnings</th></tr></thead><tbody>{rows}</tbody></table></div></main></body></html>"""
+    return HTMLResponse(content=content)
+
+
+@router.get("/admin/archive/jobs/{job_id}", response_class=HTMLResponse)
+def admin_archive_job_page(job_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        job = load_archive_job(job_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "archive_job_not_found") from exc
+    return HTMLResponse(content=_render_archive_job_detail(job, admin_session=session))
+
+
+@router.post("/api/admin/session/archive/{document_id}/inspect", response_class=HTMLResponse)
+def admin_archive_inspection_job_create(document_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        job = create_archive_inspection_job(
+            document_id,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        if os.getenv("CDE_OUTLOOK_ARCHIVE_JOB_RUN_MODE") == "inline":
+            job = run_archive_inspection_job(str(job["job_id"]), root=intake_root())
+        else:
+            _start_archive_job_worker(str(job["job_id"]))
+    except ValueError as exc:
+        raise _http_error(400, str(exc)) from exc
+    return HTMLResponse(
+        content=_render_archive_job_detail(job, admin_session=session),
+        status_code=202,
+    )
+
+
+@router.get("/api/admin/session/archive/jobs")
+def admin_archive_jobs_api(request: Request):
+    require_admin_session(request)
+    return {
+        "jobs": [
+            archive_job_status(job)
+            for job in list_archive_jobs(root=intake_root())
+        ]
+    }
+
+
+@router.get("/api/admin/session/archive/jobs/{job_id}")
+def admin_archive_job_api(job_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return archive_job_status(load_archive_job(job_id, root=intake_root()))
+    except ValueError as exc:
+        raise _http_error(404, "archive_job_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/jobs/{job_id}/status")
+def admin_archive_job_status_api(job_id: str, request: Request):
+    return admin_archive_job_api(job_id, request)
+
+
+@router.get("/api/admin/session/archive/jobs/{job_id}/logs")
+def admin_archive_job_logs_api(job_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        job = load_archive_job(job_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "archive_job_not_found") from exc
+    return {
+        "job_id": job.get("job_id"),
+        "logs": job.get("logs", []),
+    }
+
+
+@router.post("/api/admin/session/archive/jobs/{job_id}/retry", response_class=HTMLResponse)
+def admin_archive_job_retry(job_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        job = retry_archive_job(
+            job_id,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        raise _http_error(404, "archive_job_not_found") from exc
+    return HTMLResponse(content=_render_archive_job_detail(job, admin_session=session))
+
+
+@router.post("/api/admin/session/archive/jobs/{job_id}/cancel")
+def admin_archive_job_cancel(job_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        return archive_job_status(
+            cancel_archive_job(
+                job_id,
+                actor=_admin_session_actor(session),
+                root=intake_root(),
+            )
+        )
+    except ValueError as exc:
+        raise _http_error(404, "archive_job_not_found") from exc
 
 
 @router.get("/admin/document-intake/{intake_id}/canonical-record/new", response_class=HTMLResponse)
