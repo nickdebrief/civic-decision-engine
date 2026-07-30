@@ -12,10 +12,10 @@ OUTLOOK_ARCHIVE_PARSER_VERSION_ENV = "CDE_OUTLOOK_ARCHIVE_PARSER_VERSION"
 
 OUTLOOK_ARCHIVE_BOUNDARY = (
     "Microsoft Outlook PST and OST archives are preserved as original bytes. "
-    "CDE Platform Stage 39B records archive-level preservation, hash "
-    "verification, job progress, and parser readiness only; it does not expose "
-    "mailbox contents, extract messages, publish mailbox data, or promote "
-    "contained items into separate governed records."
+    "CDE Platform Stage 39C may create internal folder and message metadata "
+    "projections for governed administrative review, but it does not expose "
+    "mailbox contents publicly, extract message bodies, publish mailbox data, "
+    "or promote contained items into separate governed records."
 )
 
 
@@ -26,6 +26,9 @@ class OutlookArchiveParser(Protocol):
         ...
 
     def inspect(self, file_path: Path) -> dict[str, Any]:
+        ...
+
+    def project(self, file_path: Path) -> dict[str, Any]:
         ...
 
 
@@ -136,6 +139,9 @@ def build_outlook_archive_metadata(
         "message_extraction_performed": False,
         "attachment_extraction_performed": False,
         "canonical_record_generation_performed": False,
+        "folder_projection_performed": False,
+        "message_projection_performed": False,
+        "projection_state": "pending",
         "governance_boundary": OUTLOOK_ARCHIVE_BOUNDARY,
     }
 

@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 39B — Archive Preservation & Extraction Jobs
+Current release: CDE Platform Stage 39C — Folder & Message Projection
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md`](docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md`](docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md`](docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md)
 - [`docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md`](docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md)
@@ -870,6 +871,20 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 39C — Folder & Message Projection
+
+CDE Platform Stage 39C adds governed internal projection for Outlook PST/OST
+archives when a configured parser supplies folder and message metadata. The
+projection stores mailbox identity, folder hierarchy, folder statistics, message
+metadata, parser version, projection timestamp, source identifiers, and
+per-object provenance back to the preserved archive and archive job.
+
+Projection is administrative only. It does not publish mailbox contents, render
+message bodies, expose attachment contents, create Canonical Records, promote
+messages into evidence objects, change verification, or alter the independent
+CREF methodology. Projection sidecars are deterministic, replaceable, and
+separate from the preserved archive bytes.
 
 ### CDE Platform Stage 39B — Archive Preservation & Extraction Jobs
 

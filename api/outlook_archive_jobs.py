@@ -18,6 +18,7 @@ from api.outlook_archives import (
     configured_outlook_archive_parser,
     outlook_archive_parser_status,
 )
+from api.outlook_archive_projections import build_outlook_archive_projection
 
 
 ARCHIVE_JOB_STORE = ".outlook_archive_jobs"
@@ -382,6 +383,22 @@ def run_archive_inspection_job(job_id: str, *, root: Path | None = None) -> dict
             "archive_health": inspection.get("archive_health") or "inspected",
             "parser_warnings": warnings,
         }
+        projection = None
+        if callable(getattr(parser, "project", None)):
+            job["progress_percent"] = 85
+            _append_history(
+                job,
+                "projecting",
+                "Projecting",
+                "Administrative folder and message metadata projection started.",
+            )
+            projection = build_outlook_archive_projection(
+                document=document,
+                job=job,
+                file_path=file_path,
+                parser=parser,
+                root=root,
+            )
         job["progress_percent"] = 100
         job["completed_at"] = timestamp
         _append_history(job, "completed", "Completed", "Archive inspection completed.")
@@ -404,6 +421,17 @@ def run_archive_inspection_job(job_id: str, *, root: Path | None = None) -> dict
                 "top_level_folder_count": job["inspection"]["top_level_folder_count"],
                 "archive_health": job["inspection"]["archive_health"],
                 "parser_warnings": warnings,
+                "projection_state": projection.get("projection_state") if projection else "pending",
+                "projection_timestamp": projection.get("projection_timestamp") if projection else None,
+                "projection_job_id": job["job_id"] if projection else None,
+                "folder_projection_performed": bool(projection),
+                "message_projection_performed": bool(projection),
+                "projected_folder_count": (
+                    projection.get("statistics", {}).get("folder_count") if projection else None
+                ),
+                "projected_message_count": (
+                    projection.get("statistics", {}).get("message_count") if projection else None
+                ),
                 "job_history": job.get("history", []),
             },
             root=root,
