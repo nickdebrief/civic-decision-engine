@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 39A — PST/OST Parser & Intake Boundary
+Current release: CDE Platform Stage 39B — Archive Preservation & Extraction Jobs
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md`](docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md`](docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md)
 - [`docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md`](docs/releases/CDE_V13_OFFICIAL_HANDBOOK_PUBLICATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md`](docs/releases/CDE_PLATFORM_STAGE_38C_LIVE_RELATIONSHIP_INSPECTOR_BINDING.md)
@@ -869,6 +870,22 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 39B — Archive Preservation & Extraction Jobs
+
+CDE Platform Stage 39B extends the PST/OST intake boundary with durable archive
+processing jobs. Outlook archives are still preserved as original bytes, while
+metadata-only jobs track preservation completion, streaming hash verification,
+parser availability, lightweight inspection status, bounded job logs, retry
+state, and administrative progress.
+
+If no Outlook archive parser is configured, the archive remains accepted and the
+job completes with `Parser not configured.` recorded as operational status. If a
+parser is configured, Stage 39B permits only lightweight archive inspection
+metadata such as archive validity, parser version, health, and bounded warnings.
+It does not expose mailbox contents, extract messages, build folder trees,
+create Canonical Records, publish derived mailbox data, or alter existing CREF
+methodology.
 
 ### CDE Platform Stage 39A — PST/OST Parser & Intake Boundary
 

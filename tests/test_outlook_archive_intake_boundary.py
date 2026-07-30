@@ -165,8 +165,8 @@ class OutlookArchiveIntakeBoundaryTests(unittest.TestCase):
         ).content
         self.assertIn("SHA-512", preview)
         self.assertIn("Parser not configured.", preview)
-        self.assertIn("Not performed in CDE Platform Stage 39A", preview)
-        self.assertIn("does not discover folders, extract messages", preview)
+        self.assertIn("Not performed in CDE Platform Stage 39B", preview)
+        self.assertIn("does not expose mailbox contents, extract messages", preview)
 
     def test_published_outlook_archive_public_page_preview_endpoints_and_download(self):
         item = self._publish(self._store())
