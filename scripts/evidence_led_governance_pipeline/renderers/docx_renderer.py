@@ -14,10 +14,13 @@ from docx.shared import Inches, Pt
 
 from model import (
     Book,
+    BulletItem,
     BulletList,
     Callout,
     Chapter,
     FlowDiagram,
+    FrontMatter,
+    PageBreak,
     Paragraph,
     Section,
     Volume,
@@ -242,7 +245,13 @@ class DocxRenderer:
 
     def render_block(self, doc, block) -> None:
         if isinstance(block, Volume):
-            self.part_title_page(doc, block.title, block.subtitle)
+            eyebrow = f"VOLUME {block.number}".strip() if block.number else block.title
+            self.part_title_page(doc, eyebrow, block.title)
+            for child in block.blocks:
+                self.render_block(doc, child)
+        elif isinstance(block, FrontMatter):
+            heading = doc.add_heading(block.title, level=1)
+            keep_with_next(heading)
             for child in block.blocks:
                 self.render_block(doc, child)
         elif isinstance(block, Chapter):
@@ -252,7 +261,7 @@ class DocxRenderer:
             for child in block.blocks:
                 self.render_block(doc, child)
         elif isinstance(block, Section):
-            heading = doc.add_heading(block.title, level=min(max(block.level, 2), 3))
+            heading = doc.add_heading(block.heading_text, level=min(max(block.level, 2), 3))
             keep_with_next(heading)
             for child in block.blocks:
                 self.render_block(doc, child)
@@ -260,9 +269,12 @@ class DocxRenderer:
             self.render_paragraph(doc, block)
         elif isinstance(block, BulletList):
             for item in block.items:
-                self.para(doc, item, style="List Bullet")
+                text = item.text if isinstance(item, BulletItem) else str(item)
+                self.para(doc, text, style="List Bullet")
         elif isinstance(block, FlowDiagram):
-            self.flow_diagram(doc, block.pairs)
+            self.flow_diagram(doc, block)
+        elif isinstance(block, PageBreak):
+            doc.add_page_break()
         elif isinstance(block, Callout):
             self.callout_box(doc, block.label, block.title, block.body)
         else:
@@ -321,7 +333,8 @@ class DocxRenderer:
             if isinstance(block, BulletList):
                 for item in block.items:
                     p = cell.add_paragraph(style="List Bullet")
-                    r = p.add_run(item)
+                    text = item.text if isinstance(item, BulletItem) else str(item)
+                    r = p.add_run(text)
                     r.font.name = theme.body_font
                     r.font.size = Pt(theme.callout_body_size_pt)
                     r.font.color.rgb = theme.black
@@ -339,13 +352,13 @@ class DocxRenderer:
 
         doc.add_paragraph().paragraph_format.space_after = Pt(2)
 
-    def flow_diagram(self, doc, pairs: Sequence[tuple[str, str | None]]) -> None:
+    def flow_diagram(self, doc, flow: FlowDiagram) -> None:
         theme = self.theme
-        for index, (node, connector) in enumerate(pairs):
-            self.para(doc, node, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, color=theme.heading_teal, size=theme.flow_node_size_pt, space_after=2)
-            if connector:
-                self.para(doc, connector, align=WD_ALIGN_PARAGRAPH.CENTER, italic=True, color=theme.grey, size=theme.flow_connector_size_pt, space_after=2)
-            if index < len(pairs) - 1:
+        for index, node in enumerate(flow.nodes):
+            self.para(doc, node.label, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, color=theme.heading_teal, size=theme.flow_node_size_pt, space_after=2)
+            if node.connector:
+                self.para(doc, node.connector, align=WD_ALIGN_PARAGRAPH.CENTER, italic=True, color=theme.grey, size=theme.flow_connector_size_pt, space_after=2)
+            if index < len(flow.nodes) - 1:
                 self.para(doc, "↓", align=WD_ALIGN_PARAGRAPH.CENTER, color=theme.grey, size=theme.flow_connector_size_pt, space_after=6)
 
     def part_title_page(self, doc, eyebrow: str, title: str) -> None:
