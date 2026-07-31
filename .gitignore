@@ -13,6 +13,19 @@ records.db
 # macOS system files
 .DS_Store
 
+# Editor and office temporary files
+.~lock.*#
+*.bak
+*.swp
+*.swo
+*~
+
+# Incomplete publication renders and package staging
+*.part
+*.tmp
+scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v*-*/
+scripts/evidence_led_governance_pipeline/output/.render-*/
+
 # C extensions
 *.so
 
