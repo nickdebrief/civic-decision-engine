@@ -277,6 +277,31 @@ class OutputConfig:
     directory: str = "output"
     formats: tuple[str, ...] = ("docx",)
     profile: str = "digital"
+    html: "HtmlOutputConfig" = field(default_factory=lambda: HtmlOutputConfig())
+    pdf: "PdfOutputConfig" = field(default_factory=lambda: PdfOutputConfig())
+    package: "PackageOutputConfig" = field(default_factory=lambda: PackageOutputConfig())
+
+
+@dataclass(frozen=True)
+class HtmlOutputConfig:
+    single_file: bool = True
+    include_navigation: bool = True
+    include_semantic_index: bool = True
+    embed_css: bool = True
+
+
+@dataclass(frozen=True)
+class PdfOutputConfig:
+    source: str = "docx"
+    require_render: bool = True
+    preserve_bookmarks: bool = True
+
+
+@dataclass(frozen=True)
+class PackageOutputConfig:
+    enabled: bool = False
+    include_checksums: bool = True
+    include_build_report: bool = True
 
 
 @dataclass(frozen=True)

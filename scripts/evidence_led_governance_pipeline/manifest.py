@@ -9,11 +9,14 @@ from typing import Any, Sequence
 from model import (
     AssetConfig,
     ChapterOpeningConfig,
+    HtmlOutputConfig,
     LayoutConfig,
     Manifest,
     MetadataConfig,
     OutputConfig,
+    PackageOutputConfig,
     ParserDiagnostic,
+    PdfOutputConfig,
     PublicationConfig,
     PublicationIdentityConfig,
     TitlePageConfig,
@@ -23,6 +26,7 @@ from model import (
 
 
 SUPPORTED_SCHEMA_VERSIONS = {1}
+SUPPORTED_OUTPUT_FORMATS = {"docx", "html", "pdf"}
 DEFAULT_GENERATED_FRONT_MATTER = {
     "table_of_contents": True,
     "governance_principles": True,
@@ -174,13 +178,42 @@ def load_manifest(
     formats = output_raw.get("formats", ["docx"])
     if not isinstance(formats, list) or not formats or not all(isinstance(item, str) for item in formats):
         raise ValueError("book.toml: output.formats must be a non-empty string list")
-    if any(item.casefold() != "docx" for item in formats):
-        raise ValueError(f"book.toml: unsupported output format: {formats}")
+    normalized_formats = tuple(item.casefold() for item in formats)
+    unknown_formats = sorted(set(normalized_formats) - SUPPORTED_OUTPUT_FORMATS)
+    if unknown_formats:
+        raise ValueError(f"book.toml: unsupported output format: {unknown_formats}")
+    if len(normalized_formats) != len(set(normalized_formats)):
+        raise ValueError("book.toml: output.formats contains duplicates")
+    html_raw = _table(output_raw, "html")
+    pdf_raw = _table(output_raw, "pdf")
+    package_raw = _table(output_raw, "package")
+    pdf_source = _string(pdf_raw, "source", PdfOutputConfig.source).casefold()
+    if pdf_source != "docx":
+        raise ValueError("book.toml: output.pdf.source must be 'docx'")
+    html_config = HtmlOutputConfig(
+        single_file=_boolean(html_raw, "single_file", True),
+        include_navigation=_boolean(html_raw, "include_navigation", True),
+        include_semantic_index=_boolean(html_raw, "include_semantic_index", True),
+        embed_css=_boolean(html_raw, "embed_css", True),
+    )
+    if html_config.single_file and not html_config.embed_css:
+        raise ValueError("book.toml: single-file HTML requires output.html.embed_css = true")
     output = OutputConfig(
         basename=_string(output_raw, "basename", OutputConfig.basename),
         directory=_string(output_raw, "directory", OutputConfig.directory),
-        formats=tuple(item.casefold() for item in formats),
+        formats=normalized_formats,
         profile=_string(output_raw, "profile", OutputConfig.profile).casefold(),
+        html=html_config,
+        pdf=PdfOutputConfig(
+            source=pdf_source,
+            require_render=_boolean(pdf_raw, "require_render", True),
+            preserve_bookmarks=_boolean(pdf_raw, "preserve_bookmarks", True),
+        ),
+        package=PackageOutputConfig(
+            enabled=_boolean(package_raw, "enabled", False),
+            include_checksums=_boolean(package_raw, "include_checksums", True),
+            include_build_report=_boolean(package_raw, "include_build_report", True),
+        ),
     )
 
     layout_raw = _table(data, "layout")

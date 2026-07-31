@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Iterable
 
 from docx import Document
@@ -151,6 +152,29 @@ def validate_book(book: Book) -> ValidationResult:
             if section.number and not section.number.startswith(f"{chapter.number}."):
                 bad_sections.append(f"Chapter {chapter.number}: {section.number}")
     bad_flows = [flow for flow in flow_diagrams if len(flow.nodes) < 2]
+    empty_lists = [block for block in blocks if isinstance(block, BulletList) and not block.items]
+    orphan_subsections: list[str] = []
+    heading_gaps: list[str] = []
+
+    def inspect_hierarchy(parent, starting_level: int = 1) -> None:
+        previous_level = starting_level
+        has_section = False
+        for child in child_blocks(parent):
+            if isinstance(child, Section):
+                if child.level > previous_level + 1:
+                    heading_gaps.append(child.heading_text)
+                if isinstance(child, Subsection) and not has_section:
+                    orphan_subsections.append(child.heading_text)
+                if child.level == 2:
+                    has_section = True
+                previous_level = child.level
+                inspect_hierarchy(child, child.level)
+            elif isinstance(child, (Book, Volume, FrontMatter, Chapter, Callout)):
+                inspect_hierarchy(child, 1)
+
+    inspect_hierarchy(book)
+    empty_volumes = [volume.number or volume.title for volume in book.volumes if not volume.chapters]
+    sectionless_chapters = [str(chapter.number or chapter.title) for chapter in chapters if not chapter.sections]
     missing_provenance = [
         type(block).__name__
         for block in blocks
@@ -179,6 +203,11 @@ def validate_book(book: Book) -> ValidationResult:
     result.add("Empty Coded Object Bodies", not empty_coded_bodies, ", ".join(empty_coded_bodies))
     result.add("Section Number Alignment", not bad_sections, ", ".join(bad_sections))
     result.add("Flow Diagram Shape", not bad_flows, f"{len(bad_flows)} invalid")
+    result.add("Non-empty Lists", not empty_lists, f"{len(empty_lists)} empty")
+    result.add("Heading Hierarchy", not heading_gaps, f"{len(heading_gaps)} gaps")
+    result.add("Orphan Subsections", not orphan_subsections, f"{len(orphan_subsections)} orphaned")
+    result.add("Volume Chapter Membership", not empty_volumes, ", ".join(empty_volumes))
+    result.add("Chapter Section Membership", not sectionless_chapters, ", ".join(sectionless_chapters))
     result.add("Source Provenance", not missing_provenance, f"{len(missing_provenance)} missing")
     return result
 
@@ -195,6 +224,19 @@ def validate_enriched_publication(book: Book, enrichment: EnrichmentResult) -> V
     ]
     generated_types = [section.generation_type for section in book.generated_sections]
     duplicate_generated = len(generated_types) != len(set(generated_types))
+    duplicate_identifiers = len(identifiers) != len(set(identifiers))
+    duplicate_bookmarks = len(bookmarks) != len(set(bookmarks))
+    invalid_identifiers = [identifier for identifier in identifiers if not re.fullmatch(r"[a-z][a-z0-9-]*", identifier)]
+    registry_identifiers = {target.identifier for target in book.reference_registry.values()}
+    missing_generated_targets = []
+    index_entries_without_targets = []
+    for section in book.generated_sections:
+        for block in section.blocks:
+            for item in getattr(block, "inline_content", []):
+                if isinstance(item, CrossReference) and item.target_identifier not in registry_identifiers:
+                    missing_generated_targets.append(item.target_identifier or item.target_query)
+                    if section.generation_type == "semantic_index":
+                        index_entries_without_targets.append(item.target_query)
     unresolved_refs = []
     for block in walk_blocks(book):
         if isinstance(block, Paragraph):
@@ -203,12 +245,16 @@ def validate_enriched_publication(book: Book, enrichment: EnrichmentResult) -> V
                     unresolved_refs.append(item.target_query)
 
     result.add("Identifiers assigned", bool(identifiers), f"{len(identifiers)} reference targets")
+    result.add("Identifiers unique", not duplicate_identifiers, f"{len(identifiers) - len(set(identifiers))} duplicates")
+    result.add("Identifiers valid", not invalid_identifiers, f"{len(invalid_identifiers)} invalid")
     result.add("Numbering validated", True, "canonical identifiers stable")
     result.add("Reference registry built", bool(book.reference_registry), f"{enrichment.reference_target_count} targets")
     result.add("Cross-references resolved", not unresolved_refs and enrichment.unresolved_reference_count == 0, f"{enrichment.cross_reference_count} references")
     result.add("Generated lists created", not duplicate_generated, f"{enrichment.generated_section_count} sections")
     result.add("Semantic index created", any(section.generation_type == "semantic_index" for section in book.generated_sections), f"{enrichment.index_entry_count} entries")
-    result.add("Bookmark identifiers", not invalid_bookmarks, f"{len(invalid_bookmarks)} invalid")
+    result.add("Bookmark identifiers", not invalid_bookmarks and not duplicate_bookmarks, f"{len(invalid_bookmarks)} invalid, {len(bookmarks) - len(set(bookmarks))} duplicate")
+    result.add("Generated section targets", not missing_generated_targets, f"{len(missing_generated_targets)} missing")
+    result.add("Semantic index targets", not index_entries_without_targets, f"{len(index_entries_without_targets)} missing")
     result.add("Enrichment diagnostics", not diagnostics_errors, f"{len(diagnostics_errors)} errors")
     return result
 
@@ -231,6 +277,7 @@ def validate_manifest_theme(manifest: Manifest, resolution: ThemeResolutionResul
     error_count = len([item for item in resolution.diagnostics if item.severity == "ERROR"])
     result.add("Manifest schema", manifest.schema_version == 1, f"version {manifest.schema_version}")
     result.add("Publication metadata", bool(manifest.publication.title and manifest.publication.author), manifest.publication.edition)
+    result.add("Output formats", bool(manifest.output.formats), ", ".join(manifest.output.formats))
     result.add("Theme resolved", bool(theme.name), theme.name)
     result.add("Publication profile", bool(theme.publication_profile.name), theme.publication_profile.name)
     result.add("Page profile", bool(theme.page.name), theme.page.name)
@@ -239,6 +286,14 @@ def validate_manifest_theme(manifest: Manifest, resolution: ThemeResolutionResul
     result.add("Chapter template", bool(theme.chapter_opening.template), theme.chapter_opening.template)
     result.add("Semantic callout styles", len(theme.theme.callouts.styles) >= 6, f"{len(theme.theme.callouts.styles)} styles")
     result.add("Theme diagnostics", error_count == 0, f"{error_count} errors, {warning_count} warnings")
+    return result
+
+
+def validate_source_order(book: Book, manifest: Manifest) -> ValidationResult:
+    result = ValidationResult()
+    expected = [path.resolve() for path in manifest.source_files]
+    actual = [path.resolve() for path in book.source_files]
+    result.add("Source ordering", actual == expected, f"{len(actual)} files")
     return result
 
 

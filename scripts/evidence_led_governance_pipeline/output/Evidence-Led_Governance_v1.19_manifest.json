@@ -1,0 +1,76 @@
+{
+  "build": {
+    "git_commit": "e918b0e621d5eb9e95000c704fff359abe078689",
+    "timestamp_utc": "2026-07-31T14:31:48+00:00",
+    "validation_status": "PASS"
+  },
+  "outputs": [
+    {
+      "format": "docx",
+      "path": "Evidence-Led_Governance_v1.19.docx",
+      "sha256": "682d167e728982516b686f52f0bb5b3aa789e6082a656b98d3d5171902a97c68"
+    },
+    {
+      "format": "html",
+      "path": "Evidence-Led_Governance_v1.19.html",
+      "sha256": "9ca23d8748844f0b36458380fa4da123edf59033228509ceed125bf1fb02214e"
+    },
+    {
+      "format": "pdf",
+      "path": "Evidence-Led_Governance_v1.19.pdf",
+      "sha256": "d2b4a8c3d57f980a285789a2b7028831f36c8617c4da47f5b4e514296f79cf4c"
+    }
+  ],
+  "package": {
+    "build_report": "Evidence-Led_Governance_v1.19_build_report.txt",
+    "checksums": "Evidence-Led_Governance_v1.19_checksums.sha256"
+  },
+  "publication": {
+    "author": "Nick Moloney",
+    "page_profile": "letter",
+    "profile": "digital",
+    "theme": "handbook",
+    "title": "Evidence-Led Governance",
+    "version": "1.19"
+  },
+  "renderers": {
+    "docx": "python-docx 1.2.0",
+    "html": "native semantic HTML renderer v1",
+    "pdf": "LibreOfficeDev 26.8.0.0.alpha0 2c87e51eeaa2b413ff4ae097b2705eea1995d8e5"
+  },
+  "schema_version": 1,
+  "sources": [
+    {
+      "path": "00_preface.txt",
+      "sha256": "6c2cfe0a2793846ae9e1fabaf3575c2721985e73c8f1f9d76f28d25555a497e0"
+    },
+    {
+      "path": "01_statement_of_method.txt",
+      "sha256": "003468785c76294a5d5795b864fb0db881eb7450d592d877f11d573ff2bc3543"
+    },
+    {
+      "path": "02_volume1_introduction.txt",
+      "sha256": "48d4bb4511bbf688677143fbd4eab7f8b8f385b1bb20bda771cd3f7cb4b0bf18"
+    },
+    {
+      "path": "03_volume1_chapter1.txt",
+      "sha256": "771d37b7fffef92a145eb0fc16dbc23f88f36084f31abf2ed3b46b317030598a"
+    },
+    {
+      "path": "04_volume1_chapter2.txt",
+      "sha256": "cb7bb7f366b16671973f2486a4e2eb7acb5be4b350b131cfd432f63715a50c7b"
+    },
+    {
+      "path": "05_volume1_chapter3.txt",
+      "sha256": "5aec116b21e92efb5f284478b84c4358b376a4837ac99a909ccda2a559ab8403"
+    },
+    {
+      "path": "06_volume1_chapter4.txt",
+      "sha256": "8e2d80d04317d40e1d74a39aa884f07f114e684e56aadbcd4209f589da50663b"
+    },
+    {
+      "path": "07_volume1_chapter5.txt",
+      "sha256": "8b19c9fd108a74dea52b269557a4cb98df7d3e56e1df9183c5c61d447b084d45"
+    }
+  ]
+}
