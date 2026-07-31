@@ -14,6 +14,7 @@ from model import (
     CanonicalDefinition,
     Chapter,
     ContentBlock,
+    CrossReference,
     FlowDiagram,
     FlowNode,
     FrontMatter,
@@ -49,6 +50,7 @@ CALLOUT_TYPES = {
 
 SEPARATOR_LINES = {"⸻", "—", "---"}
 STRUCTURAL_LABELS = set(CALLOUT_TYPES)
+REF_PATTERN = re.compile(r"\[\[REF:\s*([^|\]]+?)(?:\s*\|\s*([^\]]+?))?\s*\]\]")
 
 
 def _next_nonempty_index(lines: Sequence[str], start: int) -> Optional[int]:
@@ -110,6 +112,33 @@ def parse_section_heading(text: str) -> tuple[Optional[str], str]:
     if match:
         return match.group(1), match.group(2).strip()
     return None, text.strip()
+
+
+def parse_inline_references(
+    text: str,
+    *,
+    source_file: Path,
+    source_line_start: int,
+    source_line_end: int,
+) -> list[str | CrossReference]:
+    inline: list[str | CrossReference] = []
+    last = 0
+    for match in REF_PATTERN.finditer(text):
+        if match.start() > last:
+            inline.append(text[last : match.start()])
+        inline.append(
+            CrossReference(
+                target_query=match.group(1).strip(),
+                display_label=match.group(2).strip() if match.group(2) else None,
+                source_file=source_file,
+                source_line_start=source_line_start,
+                source_line_end=source_line_end,
+            )
+        )
+        last = match.end()
+    if last < len(text):
+        inline.append(text[last:])
+    return inline
 
 
 def normalise_structure(lines: Sequence[str]) -> list[str]:
@@ -339,6 +368,12 @@ class Parser:
                     Paragraph(
                         text=bold_match.group(1) if bold_match else text,
                         role=role,
+                        inline_content=parse_inline_references(
+                            bold_match.group(1) if bold_match else text,
+                            source_file=filepath,
+                            source_line_start=start,
+                            source_line_end=end,
+                        ),
                         **_provenance_kwargs(filepath, start, end),
                     )
                 )
@@ -519,6 +554,12 @@ class Parser:
                     Paragraph(
                         text=stripped[2:].strip(),
                         role="emphasis",
+                        inline_content=parse_inline_references(
+                            stripped[2:].strip(),
+                            source_file=filepath,
+                            source_line_start=line_no,
+                            source_line_end=line_no,
+                        ),
                         **_provenance_kwargs(filepath, line_no),
                     )
                 )
@@ -716,6 +757,12 @@ class Parser:
                 Paragraph(
                     text=bold_match.group(1) if bold_match else text,
                     role="bold" if bold_match else "body",
+                    inline_content=parse_inline_references(
+                        bold_match.group(1) if bold_match else text,
+                        source_file=source_file,
+                        source_line_start=start,
+                        source_line_end=end,
+                    ),
                     **_provenance_kwargs(source_file, start, end),
                 )
             )

@@ -19,6 +19,8 @@ class SourceProvenance:
     source_file: Optional[Path] = None
     source_line_start: Optional[int] = None
     source_line_end: Optional[int] = None
+    identifier: Optional[str] = None
+    bookmark: Optional[str] = None
 
 
 @dataclass
@@ -32,6 +34,7 @@ class ParserDiagnostic(SourceProvenance):
 class Paragraph(SourceProvenance):
     text: str = ""
     role: str = "body"
+    inline_content: list["InlineContent"] = field(default_factory=list)
 
 
 @dataclass
@@ -58,6 +61,19 @@ class PageBreak(SourceProvenance):
 class PartTitle(SourceProvenance):
     eyebrow: str = ""
     title: str = ""
+
+
+@dataclass
+class CrossReference(SourceProvenance):
+    target_query: str = ""
+    display_label: Optional[str] = None
+    target_identifier: Optional[str] = None
+    target_bookmark: Optional[str] = None
+    resolved_label: Optional[str] = None
+
+    @property
+    def render_label(self) -> str:
+        return self.display_label or self.resolved_label or self.target_query
 
 
 @dataclass
@@ -114,6 +130,7 @@ class FlowDiagram(SourceProvenance):
 ContentBlock = (
     Paragraph
     | Emphasis
+    | CrossReference
     | BulletList
     | Callout
     | ResearchFinding
@@ -126,12 +143,16 @@ ContentBlock = (
     | PartTitle
 )
 
+InlineContent = str | CrossReference
+
 
 @dataclass
 class Section(SourceProvenance):
     title: str = ""
     number: Optional[str] = None
     level: int = 2
+    generated: bool = False
+    generation_type: Optional[str] = None
     blocks: list[ContentBlock | "Subsection"] = field(default_factory=list)
 
     @property
@@ -189,9 +210,29 @@ class Book(SourceProvenance):
     source_files: list[Path] = field(default_factory=list)
     metadata: dict[str, str] = field(default_factory=dict)
     diagnostics: list[ParserDiagnostic] = field(default_factory=list)
+    reference_registry: dict[str, "ReferenceTarget"] = field(default_factory=dict)
+    generated_sections: list[Section] = field(default_factory=list)
     blocks: list[Volume | FrontMatter | Chapter | Section | ContentBlock] = field(default_factory=list)
 
     @property
     def chapter_files(self) -> list[Path]:
         """Compatibility alias retained for legacy callers."""
         return self.source_files
+
+
+@dataclass
+class ReferenceTarget(SourceProvenance):
+    identifier: str = ""
+    display_label: str = ""
+    object_type: str = ""
+    title: str = ""
+    bookmark: str = ""
+
+
+@dataclass
+class Manifest:
+    path: Optional[Path] = None
+    loaded: bool = False
+    source_files: list[Path] = field(default_factory=list)
+    generated_front_matter: dict[str, bool] = field(default_factory=dict)
+    diagnostics: list[ParserDiagnostic] = field(default_factory=list)

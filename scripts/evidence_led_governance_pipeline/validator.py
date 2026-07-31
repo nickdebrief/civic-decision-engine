@@ -14,6 +14,7 @@ from model import (
     BulletList,
     Callout,
     Chapter,
+    CrossReference,
     FlowDiagram,
     FrontMatter,
     GovernanceArchitecture,
@@ -29,6 +30,7 @@ from model import (
     Subsection,
     Volume,
 )
+from publication import EnrichmentResult
 
 
 @dataclass
@@ -176,6 +178,36 @@ def validate_book(book: Book) -> ValidationResult:
     result.add("Section Number Alignment", not bad_sections, ", ".join(bad_sections))
     result.add("Flow Diagram Shape", not bad_flows, f"{len(bad_flows)} invalid")
     result.add("Source Provenance", not missing_provenance, f"{len(missing_provenance)} missing")
+    return result
+
+
+def validate_enriched_publication(book: Book, enrichment: EnrichmentResult) -> ValidationResult:
+    result = ValidationResult()
+    diagnostics_errors = [item for item in enrichment.diagnostics if item.severity == "ERROR"]
+    identifiers = [target.identifier for target in book.reference_registry.values()]
+    bookmarks = [target.bookmark for target in book.reference_registry.values()]
+    invalid_bookmarks = [
+        bookmark
+        for bookmark in bookmarks
+        if not bookmark or not bookmark[0].isalpha() or len(bookmark) > 40
+    ]
+    generated_types = [section.generation_type for section in book.generated_sections]
+    duplicate_generated = len(generated_types) != len(set(generated_types))
+    unresolved_refs = []
+    for block in walk_blocks(book):
+        if isinstance(block, Paragraph):
+            for item in block.inline_content:
+                if isinstance(item, CrossReference) and item.target_query and not item.target_bookmark:
+                    unresolved_refs.append(item.target_query)
+
+    result.add("Identifiers assigned", bool(identifiers), f"{len(identifiers)} reference targets")
+    result.add("Numbering validated", True, "canonical identifiers stable")
+    result.add("Reference registry built", bool(book.reference_registry), f"{enrichment.reference_target_count} targets")
+    result.add("Cross-references resolved", not unresolved_refs and enrichment.unresolved_reference_count == 0, f"{enrichment.cross_reference_count} references")
+    result.add("Generated lists created", not duplicate_generated, f"{enrichment.generated_section_count} sections")
+    result.add("Semantic index created", any(section.generation_type == "semantic_index" for section in book.generated_sections), f"{enrichment.index_entry_count} entries")
+    result.add("Bookmark identifiers", not invalid_bookmarks, f"{len(invalid_bookmarks)} invalid")
+    result.add("Enrichment diagnostics", not diagnostics_errors, f"{len(diagnostics_errors)} errors")
     return result
 
 

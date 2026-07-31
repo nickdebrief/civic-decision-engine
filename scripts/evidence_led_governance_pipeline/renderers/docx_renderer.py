@@ -18,6 +18,7 @@ from model import (
     BulletList,
     Callout,
     Chapter,
+    CrossReference,
     FlowDiagram,
     FrontMatter,
     PageBreak,
@@ -110,6 +111,7 @@ def add_page_number(paragraph) -> None:
 class DocxRenderer:
     def __init__(self, theme: HandbookTheme = THEME) -> None:
         self.theme = theme
+        self._bookmark_id = 1
 
     def render(self, book: Book, out_path: Path) -> Path:
         doc = Document()
@@ -199,6 +201,7 @@ class DocxRenderer:
         color=None,
         space_after=None,
         style=None,
+        bookmark=None,
     ):
         theme = self.theme
         p = doc.add_paragraph(style=style)
@@ -214,7 +217,39 @@ class DocxRenderer:
             run.font.color.rgb = color
         if space_after is not None:
             p.paragraph_format.space_after = Pt(space_after)
+        if bookmark:
+            self.add_bookmark(p, bookmark)
         return p
+
+    def add_bookmark(self, paragraph, name: str) -> None:
+        start = OxmlElement("w:bookmarkStart")
+        start.set(qn("w:id"), str(self._bookmark_id))
+        start.set(qn("w:name"), name)
+        end = OxmlElement("w:bookmarkEnd")
+        end.set(qn("w:id"), str(self._bookmark_id))
+        self._bookmark_id += 1
+        paragraph._p.insert(0, start)
+        paragraph._p.append(end)
+
+    def add_internal_hyperlink(self, paragraph, text: str, anchor: str):
+        theme = self.theme
+        hyperlink = OxmlElement("w:hyperlink")
+        hyperlink.set(qn("w:anchor"), anchor)
+        run = OxmlElement("w:r")
+        run_pr = OxmlElement("w:rPr")
+        colour = OxmlElement("w:color")
+        colour.set(qn("w:val"), "0F5F73")
+        underline = OxmlElement("w:u")
+        underline.set(qn("w:val"), "single")
+        run_pr.append(colour)
+        run_pr.append(underline)
+        text_node = OxmlElement("w:t")
+        text_node.text = text
+        run.append(run_pr)
+        run.append(text_node)
+        hyperlink.append(run)
+        paragraph._p.append(hyperlink)
+        return hyperlink
 
     def title_page(self, doc, book: Book) -> None:
         theme = self.theme
@@ -246,22 +281,28 @@ class DocxRenderer:
     def render_block(self, doc, block) -> None:
         if isinstance(block, Volume):
             eyebrow = f"VOLUME {block.number}".strip() if block.number else block.title
-            self.part_title_page(doc, eyebrow, block.title)
+            self.part_title_page(doc, eyebrow, block.title, bookmark=block.bookmark)
             for child in block.blocks:
                 self.render_block(doc, child)
         elif isinstance(block, FrontMatter):
             heading = doc.add_heading(block.title, level=1)
+            if block.bookmark:
+                self.add_bookmark(heading, block.bookmark)
             keep_with_next(heading)
             for child in block.blocks:
                 self.render_block(doc, child)
         elif isinstance(block, Chapter):
             heading_text = f"Chapter {block.number} — {block.title}" if block.number else block.title
             heading = doc.add_heading(heading_text, level=1)
+            if block.bookmark:
+                self.add_bookmark(heading, block.bookmark)
             keep_with_next(heading)
             for child in block.blocks:
                 self.render_block(doc, child)
         elif isinstance(block, Section):
             heading = doc.add_heading(block.heading_text, level=min(max(block.level, 2), 3))
+            if block.bookmark:
+                self.add_bookmark(heading, block.bookmark)
             keep_with_next(heading)
             for child in block.blocks:
                 self.render_block(doc, child)
@@ -276,7 +317,7 @@ class DocxRenderer:
         elif isinstance(block, PageBreak):
             doc.add_page_break()
         elif isinstance(block, Callout):
-            self.callout_box(doc, block.label, block.title, block.body)
+            self.callout_box(doc, block.label, block.title, block.body, bookmark=block.bookmark)
         else:
             raise TypeError(f"Unsupported block: {type(block)!r}")
 
@@ -285,13 +326,46 @@ class DocxRenderer:
         if paragraph.role == "pagebreak":
             doc.add_page_break()
         elif paragraph.role == "emphasis":
-            self.para(doc, paragraph.text, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, color=theme.heading_teal, size=12.5, space_after=14)
+            if paragraph.inline_content:
+                self.render_inline_paragraph(doc, paragraph, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, color=theme.heading_teal, size=12.5, space_after=14)
+            else:
+                self.para(doc, paragraph.text, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, color=theme.heading_teal, size=12.5, space_after=14, bookmark=paragraph.bookmark)
         elif paragraph.role == "bold":
-            self.para(doc, paragraph.text, bold=True, color=theme.heading_teal)
+            if paragraph.inline_content:
+                self.render_inline_paragraph(doc, paragraph, bold=True, color=theme.heading_teal)
+            else:
+                self.para(doc, paragraph.text, bold=True, color=theme.heading_teal, bookmark=paragraph.bookmark)
         else:
-            self.para(doc, paragraph.text)
+            if paragraph.inline_content:
+                self.render_inline_paragraph(doc, paragraph)
+            else:
+                self.para(doc, paragraph.text, bookmark=paragraph.bookmark)
 
-    def callout_box(self, doc, label: str, title: str, body_blocks: Sequence[Paragraph | BulletList]) -> None:
+    def render_inline_paragraph(self, doc, paragraph: Paragraph, **kwargs) -> None:
+        p = doc.add_paragraph(style=kwargs.get("style"))
+        if kwargs.get("align") is not None:
+            p.alignment = kwargs["align"]
+        for item in paragraph.inline_content:
+            if isinstance(item, CrossReference) and item.target_bookmark:
+                self.add_internal_hyperlink(p, item.render_label, item.target_bookmark)
+                continue
+            text = item.render_label if isinstance(item, CrossReference) else str(item)
+            run = p.add_run(text)
+            run.font.name = self.theme.body_font
+            if kwargs.get("bold"):
+                run.bold = True
+            if kwargs.get("italic"):
+                run.italic = True
+            if kwargs.get("color") is not None:
+                run.font.color.rgb = kwargs["color"]
+            if kwargs.get("size") is not None:
+                run.font.size = Pt(kwargs["size"])
+        if kwargs.get("space_after") is not None:
+            p.paragraph_format.space_after = Pt(kwargs["space_after"])
+        if paragraph.bookmark:
+            self.add_bookmark(p, paragraph.bookmark)
+
+    def callout_box(self, doc, label: str, title: str, body_blocks: Sequence[Paragraph | BulletList], *, bookmark: str | None = None) -> None:
         theme = self.theme
         table = doc.add_table(rows=1, cols=1)
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -328,6 +402,8 @@ class DocxRenderer:
         title_run.bold = True
         title_run.font.size = Pt(theme.callout_title_size_pt)
         title_run.font.color.rgb = theme.heading_teal
+        if bookmark:
+            self.add_bookmark(title_p, bookmark)
 
         for block in body_blocks:
             if isinstance(block, BulletList):
@@ -342,13 +418,25 @@ class DocxRenderer:
 
             p = cell.add_paragraph()
             p.paragraph_format.space_after = Pt(4)
-            r = p.add_run(block.text)
-            r.font.name = theme.body_font
-            r.font.size = Pt(theme.callout_body_size_pt)
-            r.font.color.rgb = theme.black
-            if block.role == "bold":
-                r.bold = True
-                r.font.color.rgb = theme.heading_teal
+            if block.inline_content:
+                for item in block.inline_content:
+                    if isinstance(item, CrossReference) and item.target_bookmark:
+                        self.add_internal_hyperlink(p, item.render_label, item.target_bookmark)
+                        continue
+                    text = item.render_label if isinstance(item, CrossReference) else str(item)
+                    r = p.add_run(text)
+                    r.font.name = theme.body_font
+                    r.font.size = Pt(theme.callout_body_size_pt)
+                    r.font.color.rgb = theme.heading_teal if block.role == "bold" else theme.black
+                    r.bold = block.role == "bold"
+            else:
+                r = p.add_run(block.text)
+                r.font.name = theme.body_font
+                r.font.size = Pt(theme.callout_body_size_pt)
+                r.font.color.rgb = theme.black
+                if block.role == "bold":
+                    r.bold = True
+                    r.font.color.rgb = theme.heading_teal
 
         doc.add_paragraph().paragraph_format.space_after = Pt(2)
 
@@ -361,9 +449,9 @@ class DocxRenderer:
             if index < len(flow.nodes) - 1:
                 self.para(doc, "↓", align=WD_ALIGN_PARAGRAPH.CENTER, color=theme.grey, size=theme.flow_connector_size_pt, space_after=6)
 
-    def part_title_page(self, doc, eyebrow: str, title: str) -> None:
+    def part_title_page(self, doc, eyebrow: str, title: str, *, bookmark: str | None = None) -> None:
         theme = self.theme
         p = self.para(doc, eyebrow, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, size=13, color=theme.grey, space_after=6)
         p.paragraph_format.space_before = Pt(theme.part_title_space_before_pt)
-        self.para(doc, title, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, size=22, color=theme.heading_teal, space_after=theme.part_title_space_after_pt)
+        self.para(doc, title, align=WD_ALIGN_PARAGRAPH.CENTER, bold=True, size=22, color=theme.heading_teal, space_after=theme.part_title_space_after_pt, bookmark=bookmark)
         doc.add_page_break()

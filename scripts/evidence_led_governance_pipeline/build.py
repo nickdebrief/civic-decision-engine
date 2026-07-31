@@ -7,14 +7,17 @@ import re
 from pathlib import Path
 from typing import Sequence
 
+from manifest import discover_source_files, load_manifest
 from parser import Parser
+from publication import enrich_publication
 from renderers.docx_renderer import DocxRenderer
-from validator import merge_results, validate_book, validate_output
+from validator import merge_results, validate_book, validate_enriched_publication, validate_output
 
 
 PIPELINE_DIR = Path(__file__).resolve().parent
 CHAPTERS_DIR = PIPELINE_DIR / "chapters"
 OUTPUT_DIR = PIPELINE_DIR / "Output"
+MANIFEST_PATH = PIPELINE_DIR / "book.toml"
 
 TITLE = "Evidence-Led Governance"
 SUBTITLE = "A Research Methodology for Analysing Statutory Administration"
@@ -38,16 +41,7 @@ def next_version(output_dir: Path, basename: str, start: str = "1.0") -> str:
 
 
 def chapter_files(chapters_dir: Path) -> list[Path]:
-    if not chapters_dir.exists():
-        raise FileNotFoundError(f"Chapter directory not found: {chapters_dir}")
-    files = sorted(
-        path
-        for path in chapters_dir.glob("*.txt")
-        if not path.name.startswith(("~$", "."))
-    )
-    if not files:
-        raise FileNotFoundError(f"No chapter .txt files found in {chapters_dir}")
-    return files
+    return discover_source_files(chapters_dir)
 
 
 def build_document(
@@ -61,12 +55,19 @@ def build_document(
     running_title: str,
     tagline: str | None = None,
     start_version: str = "1.0",
+    manifest_path: Path | None = None,
 ):
     chapters_path = Path(chapters_dir)
     output_path = Path(output_dir)
-    files = chapter_files(chapters_path)
+    manifest = load_manifest(
+        Path(manifest_path) if manifest_path else MANIFEST_PATH,
+        chapters_dir=chapters_path,
+        fallback_files=chapter_files(chapters_path),
+    )
+    files = manifest.source_files
     version = next_version(output_path, basename, start=start_version)
-    book = Parser().parse_files(
+    parser = Parser()
+    book = parser.parse_files(
         files,
         title=title,
         subtitle=subtitle,
@@ -75,16 +76,33 @@ def build_document(
         tagline=tagline or "",
         version=version,
     )
+    book.diagnostics.extend(manifest.diagnostics)
+    book.metadata["manifest_loaded"] = "true" if manifest.loaded else "false"
+    book.metadata["manifest_path"] = str(manifest.path or "")
 
     model_validation = validate_book(book)
+    enrichment = enrich_publication(book, manifest.generated_front_matter)
+    enrichment_validation = validate_enriched_publication(book, enrichment)
     out_path = output_path / f"{basename}_v{version}.docx"
-    if model_validation.ok:
+    preflight_validation = merge_results(model_validation, enrichment_validation)
+    if preflight_validation.ok:
         DocxRenderer().render(book, out_path)
     output_validation = validate_output(out_path) if out_path.exists() else validate_output(out_path)
-    validation = merge_results(model_validation, output_validation)
+    validation = merge_results(model_validation, enrichment_validation, output_validation)
     print(validation.render())
     if not validation.ok:
         raise RuntimeError("publication validation failed")
+    print("")
+    print("Build Summary")
+    print(f"Manifest loaded: {'yes' if manifest.loaded else 'no'}")
+    print(f"Source files resolved: {len(files)}")
+    print(f"Reference targets: {enrichment.reference_target_count}")
+    print(f"Cross-references: {enrichment.cross_reference_count}")
+    print(f"Generated sections: {enrichment.generated_section_count}")
+    print(f"Index entries: {enrichment.index_entry_count}")
+    print(f"Bookmarks: {enrichment.bookmark_count}")
+    print(f"Internal links: {enrichment.hyperlink_count}")
+    print(f"Unresolved references: {enrichment.unresolved_reference_count}")
     return out_path, version, files
 
 
