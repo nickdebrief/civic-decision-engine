@@ -45,7 +45,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
             root = Path(temp)
             a = write_source(root, "chapters/a.txt", "# Preface\n\nA")
             b = write_source(root, "chapters/b.txt", "# Chapter 1 — One\n\nB")
-            manifest = write_source(root, "book.toml", 'sources = ["chapters/b.txt", "chapters/a.txt"]')
+            manifest = write_source(root, "book.toml", 'schema_version = 1\nsources = ["chapters/b.txt", "chapters/a.txt"]')
 
             loaded = load_manifest(manifest, chapters_dir=root / "chapters")
 
@@ -65,7 +65,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
     def test_missing_source_file_in_manifest_fails_clearly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            manifest = write_source(root, "book.toml", 'sources = ["chapters/missing.txt"]')
+            manifest = write_source(root, "book.toml", 'schema_version = 1\nsources = ["chapters/missing.txt"]')
             with self.assertRaises(FileNotFoundError):
                 load_manifest(manifest, chapters_dir=root / "chapters")
 
@@ -73,7 +73,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             write_source(root, "chapters/a.txt", "# Preface\n\nA")
-            manifest = write_source(root, "book.toml", 'sources = ["chapters/a.txt", "chapters/a.txt"]')
+            manifest = write_source(root, "book.toml", 'schema_version = 1\nsources = ["chapters/a.txt", "chapters/a.txt"]')
             with self.assertRaises(ValueError):
                 load_manifest(manifest, chapters_dir=root / "chapters")
 

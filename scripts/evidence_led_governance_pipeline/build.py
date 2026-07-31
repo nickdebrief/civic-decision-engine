@@ -7,11 +7,18 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from manifest import discover_source_files, load_manifest
+from manifest import discover_source_files, load_manifest, resolve_output_directory
 from parser import Parser
 from publication import enrich_publication
 from renderers.docx_renderer import DocxRenderer
-from validator import merge_results, validate_book, validate_enriched_publication, validate_output
+from theme_resolution import resolve_theme
+from validator import (
+    merge_results,
+    validate_book,
+    validate_enriched_publication,
+    validate_manifest_theme,
+    validate_output,
+)
 
 
 PIPELINE_DIR = Path(__file__).resolve().parent
@@ -65,37 +72,68 @@ def build_document(
         fallback_files=chapter_files(chapters_path),
     )
     files = manifest.source_files
-    version = next_version(output_path, basename, start=start_version)
+    output_path = resolve_output_directory(manifest, output_path)
+    effective_basename = manifest.output.basename if manifest.loaded else basename
+    effective_start = manifest.version.start if manifest.loaded else start_version
+    version = effective_start if manifest.version.mode == "fixed" else next_version(output_path, effective_basename, start=effective_start)
+    theme_resolution = resolve_theme(manifest, assets_dir=PIPELINE_DIR / "assets")
+    effective_title = manifest.publication.title if manifest.loaded else title
+    effective_subtitle = manifest.publication.subtitle if manifest.loaded else subtitle
+    effective_author = manifest.publication.author if manifest.loaded else author
+    effective_running_title = manifest.publication.identity.running_title if manifest.loaded else running_title
+    effective_tagline = manifest.publication.identity.tagline if manifest.loaded else (tagline or "")
     parser = Parser()
     book = parser.parse_files(
         files,
-        title=title,
-        subtitle=subtitle,
-        author=author,
-        running_title=running_title,
-        tagline=tagline or "",
+        title=effective_title,
+        subtitle=effective_subtitle,
+        author=effective_author,
+        running_title=effective_running_title,
+        tagline=effective_tagline,
         version=version,
     )
     book.diagnostics.extend(manifest.diagnostics)
+    book.diagnostics.extend(theme_resolution.diagnostics)
     book.metadata["manifest_loaded"] = "true" if manifest.loaded else "false"
     book.metadata["manifest_path"] = str(manifest.path or "")
+    book.metadata["subject"] = effective_subtitle
+    book.metadata["language"] = manifest.publication.language
+    book.metadata["edition"] = manifest.publication.edition
+    book.metadata["keywords"] = ", ".join(manifest.metadata.keywords)
+    book.metadata["comments"] = manifest.metadata.comments
+    book.metadata["build_identifier"] = manifest.metadata.build_identifier
+    book.metadata["theme"] = theme_resolution.effective_theme.name
+    book.metadata["publication_profile"] = theme_resolution.effective_theme.publication_profile.name
+    book.metadata["page_profile"] = theme_resolution.effective_theme.page.name
 
+    manifest_validation = validate_manifest_theme(manifest, theme_resolution)
     model_validation = validate_book(book)
-    enrichment = enrich_publication(book, manifest.generated_front_matter)
+    generated_options = dict(manifest.generated_front_matter)
+    if not theme_resolution.effective_theme.publication_profile.generated_semantic_index:
+        generated_options["semantic_index"] = False
+    enrichment = enrich_publication(book, generated_options)
     enrichment_validation = validate_enriched_publication(book, enrichment)
-    out_path = output_path / f"{basename}_v{version}.docx"
-    preflight_validation = merge_results(model_validation, enrichment_validation)
+    out_path = output_path / f"{effective_basename}_v{version}.docx"
+    preflight_validation = merge_results(manifest_validation, model_validation, enrichment_validation)
     if preflight_validation.ok:
-        DocxRenderer().render(book, out_path)
+        DocxRenderer(theme_resolution.effective_theme).render(book, out_path)
     output_validation = validate_output(out_path) if out_path.exists() else validate_output(out_path)
-    validation = merge_results(model_validation, enrichment_validation, output_validation)
+    validation = merge_results(manifest_validation, model_validation, enrichment_validation, output_validation)
     print(validation.render())
     if not validation.ok:
         raise RuntimeError("publication validation failed")
     print("")
     print("Build Summary")
     print(f"Manifest loaded: {'yes' if manifest.loaded else 'no'}")
+    print(f"Manifest schema: {manifest.schema_version}")
     print(f"Source files resolved: {len(files)}")
+    print(f"Theme: {theme_resolution.effective_theme.name}")
+    print(f"Publication profile: {theme_resolution.effective_theme.publication_profile.name}")
+    print(f"Page profile: {theme_resolution.effective_theme.page.name}")
+    print(f"Title template: {theme_resolution.effective_theme.title_page.template}")
+    print(f"Volume template: {theme_resolution.effective_theme.volume_page.template}")
+    print(f"Chapter template: {theme_resolution.effective_theme.chapter_opening.template}")
+    print(f"Theme warnings: {len(theme_resolution.diagnostics)}")
     print(f"Reference targets: {enrichment.reference_target_count}")
     print(f"Cross-references: {enrichment.cross_reference_count}")
     print(f"Generated sections: {enrichment.generated_section_count}")

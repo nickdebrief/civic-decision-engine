@@ -31,6 +31,8 @@ from model import (
     Volume,
 )
 from publication import EnrichmentResult
+from theme_resolution import ThemeResolutionResult
+from model import Manifest
 
 
 @dataclass
@@ -219,6 +221,24 @@ def validate_output(path: Path) -> ValidationResult:
         Document(path)
         reopened = True
     result.add("Output generated", exists and reopened, str(path))
+    return result
+
+
+def validate_manifest_theme(manifest: Manifest, resolution: ThemeResolutionResult) -> ValidationResult:
+    result = ValidationResult()
+    theme = resolution.effective_theme
+    warning_count = len([item for item in resolution.diagnostics if item.severity == "WARNING"])
+    error_count = len([item for item in resolution.diagnostics if item.severity == "ERROR"])
+    result.add("Manifest schema", manifest.schema_version == 1, f"version {manifest.schema_version}")
+    result.add("Publication metadata", bool(manifest.publication.title and manifest.publication.author), manifest.publication.edition)
+    result.add("Theme resolved", bool(theme.name), theme.name)
+    result.add("Publication profile", bool(theme.publication_profile.name), theme.publication_profile.name)
+    result.add("Page profile", bool(theme.page.name), theme.page.name)
+    result.add("Title template", bool(theme.title_page.template), theme.title_page.template)
+    result.add("Volume template", bool(theme.volume_page.template), theme.volume_page.template)
+    result.add("Chapter template", bool(theme.chapter_opening.template), theme.chapter_opening.template)
+    result.add("Semantic callout styles", len(theme.theme.callouts.styles) >= 6, f"{len(theme.theme.callouts.styles)} styles")
+    result.add("Theme diagnostics", error_count == 0, f"{error_count} errors, {warning_count} warnings")
     return result
 
 

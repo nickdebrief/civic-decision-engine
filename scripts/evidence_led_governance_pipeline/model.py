@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 
 DiagnosticSeverity = Literal["INFO", "WARNING", "ERROR"]
@@ -233,6 +233,94 @@ class ReferenceTarget(SourceProvenance):
 class Manifest:
     path: Optional[Path] = None
     loaded: bool = False
+    schema_version: int = 1
     source_files: list[Path] = field(default_factory=list)
     generated_front_matter: dict[str, bool] = field(default_factory=dict)
+    publication: "PublicationConfig" = field(default_factory=lambda: PublicationConfig())
+    version: "VersionConfig" = field(default_factory=lambda: VersionConfig())
+    output: "OutputConfig" = field(default_factory=lambda: OutputConfig())
+    layout: "LayoutConfig" = field(default_factory=lambda: LayoutConfig())
+    title_page: "TitlePageConfig" = field(default_factory=lambda: TitlePageConfig())
+    volume_page: "VolumePageConfig" = field(default_factory=lambda: VolumePageConfig())
+    chapter_opening: "ChapterOpeningConfig" = field(default_factory=lambda: ChapterOpeningConfig())
+    metadata: "MetadataConfig" = field(default_factory=lambda: MetadataConfig())
+    assets: dict[str, "AssetConfig"] = field(default_factory=dict)
     diagnostics: list[ParserDiagnostic] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PublicationIdentityConfig:
+    running_title: str = "EVIDENCE-LED GOVERNANCE"
+    tagline: str = "Structured · Traceable · Governed"
+
+
+@dataclass(frozen=True)
+class PublicationConfig:
+    title: str = "Evidence-Led Governance"
+    subtitle: str = "A Research Methodology for Analysing Statutory Administration"
+    author: str = "Nick Moloney"
+    language: str = "en"
+    edition: str = "Working Manuscript"
+    theme: str = "handbook"
+    identity: PublicationIdentityConfig = field(default_factory=PublicationIdentityConfig)
+
+
+@dataclass(frozen=True)
+class VersionConfig:
+    mode: str = "auto"
+    start: str = "1.0"
+
+
+@dataclass(frozen=True)
+class OutputConfig:
+    basename: str = "Evidence-Led_Governance"
+    directory: str = "output"
+    formats: tuple[str, ...] = ("docx",)
+    profile: str = "digital"
+
+
+@dataclass(frozen=True)
+class LayoutConfig:
+    page_profile: str = "letter"
+    chapter_starts_on_new_page: bool = True
+    volume_starts_on_new_page: bool = True
+    suppress_header_on_title_page: bool = True
+    suppress_footer_on_title_page: bool = True
+
+
+@dataclass(frozen=True)
+class TitlePageConfig:
+    template: str = "handbook"
+    show_author: bool = True
+    show_version: bool = True
+    show_tagline: bool = True
+    show_date: bool = False
+
+
+@dataclass(frozen=True)
+class VolumePageConfig:
+    template: str = "institutional"
+    suppress_header: bool = False
+    suppress_footer: bool = False
+
+
+@dataclass(frozen=True)
+class ChapterOpeningConfig:
+    template: str = "standard"
+
+
+@dataclass(frozen=True)
+class MetadataConfig:
+    keywords: tuple[str, ...] = ()
+    comments: str = ""
+    build_identifier: str = ""
+
+
+@dataclass(frozen=True)
+class AssetConfig:
+    path: str
+    required: bool = False
+    role: str = ""
+
+
+ManifestValue = str | int | float | bool | tuple[str, ...] | dict[str, Any]
