@@ -8,18 +8,25 @@ from typing import Optional, Sequence
 
 from model import (
     Book,
+    BulletItem,
     BulletList,
     Callout,
     CanonicalDefinition,
     Chapter,
     ContentBlock,
     FlowDiagram,
+    FlowNode,
+    FrontMatter,
     GovernanceArchitecture,
     GovernancePrinciple,
+    PageBreak,
     Paragraph,
+    ParserDiagnostic,
+    PartTitle,
     ResearchFinding,
     ResearchMethodology,
     Section,
+    Subsection,
     Volume,
 )
 
@@ -49,6 +56,23 @@ def _next_nonempty_index(lines: Sequence[str], start: int) -> Optional[int]:
         if lines[index].strip():
             return index
     return None
+
+
+def _provenance_kwargs(filepath: Path, start: int, end: int | None = None) -> dict:
+    return {
+        "source_file": filepath,
+        "source_line_start": start,
+        "source_line_end": end or start,
+    }
+
+
+def _canonical_label(label: str, code: str | None = None) -> str:
+    cleaned = re.sub(r"\s+No\.\s+\d+$", "", label.strip(), flags=re.IGNORECASE)
+    if cleaned in CALLOUT_TYPES:
+        return cleaned
+    if code:
+        return CODE_LABELS.get(code.split("-", 1)[0].upper(), cleaned)
+    return cleaned
 
 
 def parse_code_title(line: str) -> tuple[str, str, str] | None:
@@ -81,8 +105,20 @@ def parse_chapter_heading(text: str) -> tuple[Optional[int], str]:
     return None, text.strip()
 
 
+def parse_section_heading(text: str) -> tuple[Optional[str], str]:
+    match = re.match(r"^(\d+\.\d+(?:\.\d+)?)\s+(.+)$", text.strip())
+    if match:
+        return match.group(1), match.group(2).strip()
+    return None, text.strip()
+
+
 def normalise_structure(lines: Sequence[str]) -> list[str]:
-    """Convert legacy readable structure into semantic source events."""
+    """Compatibility helper retained for older imports.
+
+    Stage 2 parses semantic structures directly so source provenance is not
+    lost. Older wrapper scripts imported this helper, so it remains as a
+    non-rendering source normaliser with the Stage 1 behaviour.
+    """
     output: list[str] = []
     index = 0
     block_end: str | None = None
@@ -110,7 +146,6 @@ def normalise_structure(lines: Sequence[str]) -> list[str]:
             index += 1
             continue
 
-        # Volume followed by a chapter is metadata in legacy files.
         if re.fullmatch(r"Volume\s+[IVXLC]+", stripped, flags=re.IGNORECASE):
             next_index = _next_nonempty_index(lines, index + 1)
             if next_index is not None and re.fullmatch(
@@ -158,6 +193,28 @@ def normalise_structure(lines: Sequence[str]) -> list[str]:
 
 
 class Parser:
+    def __init__(self) -> None:
+        self.diagnostics: list[ParserDiagnostic] = []
+
+    def diagnostic(
+        self,
+        severity: str,
+        code: str,
+        message: str,
+        source_file: Path | None = None,
+        line: int | None = None,
+    ) -> None:
+        self.diagnostics.append(
+            ParserDiagnostic(
+                severity=severity,  # type: ignore[arg-type]
+                code=code,
+                message=message,
+                source_file=source_file,
+                source_line_start=line,
+                source_line_end=line,
+            )
+        )
+
     def parse_files(
         self,
         chapter_files: Sequence[Path],
@@ -176,19 +233,63 @@ class Parser:
             running_title=running_title,
             tagline=tagline,
             version=version,
-            chapter_files=list(chapter_files),
+            source_files=list(chapter_files),
         )
+        current_volume: Volume | None = None
+
         for chapter_file in chapter_files:
-            book.blocks.extend(self.parse_chapter_file(chapter_file))
+            parsed_blocks = self.parse_chapter_file(chapter_file)
+            for block in parsed_blocks:
+                if isinstance(block, PartTitle):
+                    current_volume = Volume(
+                        number=block.eyebrow.replace("VOLUME", "").strip(),
+                        title=block.title,
+                        blocks=[],
+                        source_file=block.source_file,
+                        source_line_start=block.source_line_start,
+                        source_line_end=block.source_line_end,
+                    )
+                    book.volumes.append(current_volume)
+                    book.blocks.append(current_volume)
+                    continue
+
+                if isinstance(block, Chapter) and block.number is None and block.title in {
+                    "Preface",
+                    "Statement of Method",
+                }:
+                    front = FrontMatter(
+                        title=block.title,
+                        blocks=block.blocks,
+                        source_file=block.source_file or block.source_path,
+                        source_line_start=block.source_line_start,
+                        source_line_end=block.source_line_end,
+                    )
+                    book.front_matter.append(front)
+                    book.blocks.append(front)
+                    continue
+
+                if current_volume is not None:
+                    if isinstance(block, Chapter):
+                        current_volume.chapters.append(block)
+                    else:
+                        current_volume.introduction.append(block)
+                    current_volume.blocks.append(block)
+                    continue
+
+                if isinstance(block, Chapter):
+                    book.standalone_chapters.append(block)
+                book.blocks.append(block)
+
+        book.diagnostics = list(self.diagnostics)
         return book
 
     def parse_chapter_file(self, filepath: Path) -> list[Volume | Chapter | Section | ContentBlock]:
         raw_lines = filepath.read_text(encoding="utf-8").splitlines()
-        lines = normalise_structure(raw_lines)
         root_blocks: list[Volume | Chapter | Section | ContentBlock] = []
         current_chapter: Chapter | None = None
         current_section: Section | None = None
-        body_buffer: list[str] = []
+        paragraph_start: int | None = None
+        body_buffer: list[tuple[int, str]] = []
         index = 0
 
         def append_block(block: Volume | Chapter | Section | ContentBlock) -> None:
@@ -200,6 +301,7 @@ class Parser:
             elif isinstance(block, Section):
                 if current_chapter is not None:
                     current_chapter.blocks.append(block)
+                    current_chapter.sections.append(block)
                 else:
                     root_blocks.append(block)
                 current_section = block
@@ -216,24 +318,75 @@ class Parser:
                     root_blocks.append(block)
 
         def flush_body() -> None:
+            nonlocal paragraph_start
             if not body_buffer:
                 return
-            text = " ".join(line.strip() for line in body_buffer if line.strip())
-            body_buffer.clear()
-            if not text:
-                return
-            bold_match = re.fullmatch(r"\*\*(.+?)\*\*", text)
-            if bold_match:
-                append_block(Paragraph(bold_match.group(1), role="bold"))
-                return
-            bullet_match = re.match(r"^(?:[-*])\s+(.+)$", text)
-            if bullet_match:
-                append_block(BulletList([bullet_match.group(1)]))
-                return
-            append_block(Paragraph(text))
+            start = body_buffer[0][0]
+            end = body_buffer[-1][0]
+            bullet_items: list[BulletItem] = []
+            paragraph_lines: list[str] = []
 
-        while index < len(lines):
-            raw_line = lines[index]
+            def flush_paragraph_lines() -> None:
+                if not paragraph_lines:
+                    return
+                text = " ".join(line.strip() for line in paragraph_lines if line.strip())
+                paragraph_lines.clear()
+                if not text:
+                    return
+                bold_match = re.fullmatch(r"\*\*(.+?)\*\*", text)
+                role = "bold" if bold_match else "body"
+                append_block(
+                    Paragraph(
+                        text=bold_match.group(1) if bold_match else text,
+                        role=role,
+                        **_provenance_kwargs(filepath, start, end),
+                    )
+                )
+
+            for line_no, raw in body_buffer:
+                stripped = raw.strip()
+                bullet_match = re.match(r"^(?:[-*])\s+(.+)$", stripped)
+                if bullet_match:
+                    flush_paragraph_lines()
+                    bullet_items.append(
+                        BulletItem(
+                            text=bullet_match.group(1),
+                            **_provenance_kwargs(filepath, line_no),
+                        )
+                    )
+                    continue
+                if bullet_items:
+                    append_block(
+                        BulletList(
+                            items=bullet_items,
+                            **_provenance_kwargs(
+                                filepath,
+                                bullet_items[0].source_line_start or start,
+                                bullet_items[-1].source_line_end or end,
+                            ),
+                        )
+                    )
+                    bullet_items = []
+                paragraph_lines.append(raw)
+
+            if bullet_items:
+                append_block(
+                    BulletList(
+                        items=bullet_items,
+                        **_provenance_kwargs(
+                            filepath,
+                            bullet_items[0].source_line_start or start,
+                            bullet_items[-1].source_line_end or end,
+                        ),
+                    )
+                )
+            flush_paragraph_lines()
+            body_buffer.clear()
+            paragraph_start = None
+
+        while index < len(raw_lines):
+            line_no = index + 1
+            raw_line = raw_lines[index]
             stripped = raw_line.strip()
 
             if not stripped:
@@ -246,34 +399,135 @@ class Parser:
                 index += 1
                 continue
 
+            if re.fullmatch(r"Volume\s+[IVXLC]+", stripped, flags=re.IGNORECASE):
+                next_index = _next_nonempty_index(raw_lines, index + 1)
+                if next_index is not None and re.fullmatch(
+                    r"Chapter\s+\d+", raw_lines[next_index].strip(), flags=re.IGNORECASE
+                ):
+                    index += 1
+                    continue
+
+            chapter_match = re.fullmatch(r"Chapter\s+(\d+)", stripped, flags=re.IGNORECASE)
+            if chapter_match:
+                title_index = _next_nonempty_index(raw_lines, index + 1)
+                if title_index is not None:
+                    title = raw_lines[title_index].strip()
+                    if (
+                        title
+                        and title not in SEPARATOR_LINES
+                        and not title.startswith("[[")
+                        and not title.startswith("#")
+                        and parse_code_title(title) is None
+                    ):
+                        flush_body()
+                        append_block(
+                            Chapter(
+                                title=title,
+                                number=int(chapter_match.group(1)),
+                                source_path=filepath,
+                                **_provenance_kwargs(filepath, line_no, title_index + 1),
+                            )
+                        )
+                        index = title_index + 1
+                        continue
+                self.diagnostic(
+                    "WARNING",
+                    "CHAPTER_TITLE_MISSING",
+                    f"Chapter {chapter_match.group(1)} has no following title line.",
+                    filepath,
+                    line_no,
+                )
+
+            if re.match(r"^\d+\.\d+(?:\.\d+)?\s+\S", stripped):
+                flush_body()
+                number, title = parse_section_heading(stripped)
+                cls = Subsection if number and number.count(".") > 1 else Section
+                append_block(
+                    cls(
+                        number=number,
+                        title=title,
+                        level=3 if cls is Subsection else 2,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
+                index += 1
+                continue
+
+            if stripped.casefold() == "chapter synthesis":
+                flush_body()
+                append_block(
+                    Section(
+                        title=stripped,
+                        level=2,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
+                index += 1
+                continue
+
+            if stripped in STRUCTURAL_LABELS:
+                next_index = _next_nonempty_index(raw_lines, index + 1)
+                if next_index is not None and parse_code_title(raw_lines[next_index].strip()):
+                    index += 1
+                    continue
+
             if stripped.startswith("### "):
                 flush_body()
-                append_block(Section(stripped[4:].strip(), level=3))
+                number, title = parse_section_heading(stripped[4:].strip())
+                append_block(
+                    Subsection(
+                        number=number,
+                        title=title,
+                        level=3,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
                 index += 1
                 continue
 
             if stripped.startswith("## "):
                 flush_body()
-                append_block(Section(stripped[3:].strip(), level=2))
+                number, title = parse_section_heading(stripped[3:].strip())
+                append_block(
+                    Section(
+                        number=number,
+                        title=title,
+                        level=2,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
                 index += 1
                 continue
 
             if stripped.startswith("# "):
                 flush_body()
                 number, title = parse_chapter_heading(stripped[2:].strip())
-                append_block(Chapter(title=title, number=number, source_path=filepath))
+                append_block(
+                    Chapter(
+                        title=title,
+                        number=number,
+                        source_path=filepath,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
                 index += 1
                 continue
 
             if stripped.startswith("> "):
                 flush_body()
-                append_block(Paragraph(stripped[2:].strip(), role="emphasis"))
+                append_block(
+                    Paragraph(
+                        text=stripped[2:].strip(),
+                        role="emphasis",
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
                 index += 1
                 continue
 
             if stripped == "[[PAGEBREAK]]":
                 flush_body()
-                append_block(Paragraph("", role="pagebreak"))
+                append_block(PageBreak(**_provenance_kwargs(filepath, line_no)))
                 index += 1
                 continue
 
@@ -282,8 +536,22 @@ class Parser:
                 inner = stripped[len("[[PARTTITLE:") :].rstrip("]").strip()
                 eyebrow, separator, title = inner.partition("|")
                 if not separator:
-                    raise ValueError(f"{filepath.name}: malformed PARTTITLE at line {index + 1}")
-                append_block(Volume(eyebrow.strip(), title.strip()))
+                    self.diagnostic(
+                        "ERROR",
+                        "MALFORMED_PARTTITLE",
+                        "Malformed PARTTITLE block.",
+                        filepath,
+                        line_no,
+                    )
+                    index += 1
+                    continue
+                append_block(
+                    PartTitle(
+                        eyebrow=eyebrow.strip(),
+                        title=title.strip(),
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
                 index += 1
                 continue
 
@@ -292,54 +560,108 @@ class Parser:
                 header = stripped[len("[[CALLOUT:") :].rstrip("]").strip()
                 label, separator, title = header.partition("|")
                 if not separator:
-                    raise ValueError(f"{filepath.name}: malformed CALLOUT at line {index + 1}")
-                body_lines: list[str] = []
-                index += 1
-                while index < len(lines) and lines[index].strip() != "[[/CALLOUT]]":
-                    body_lines.append(lines[index])
+                    self.diagnostic(
+                        "ERROR",
+                        "MALFORMED_CALLOUT",
+                        "Malformed CALLOUT block.",
+                        filepath,
+                        line_no,
+                    )
                     index += 1
-                if index >= len(lines):
-                    raise ValueError(f"{filepath.name}: unclosed CALLOUT")
-                append_block(self._build_callout(label.strip(), title.strip(), body_lines))
+                    continue
+                body_lines: list[tuple[int, str]] = []
+                block_start = line_no
+                index += 1
+                while index < len(raw_lines) and raw_lines[index].strip() != "[[/CALLOUT]]":
+                    body_lines.append((index + 1, raw_lines[index]))
+                    index += 1
+                if index >= len(raw_lines):
+                    self.diagnostic(
+                        "ERROR",
+                        "UNCLOSED_CALLOUT",
+                        "Unclosed CALLOUT block.",
+                        filepath,
+                        block_start,
+                    )
+                    break
+                end_line = index + 1
+                code_match = parse_code_title(title.strip())
+                code = code_match[2] if code_match else None
+                append_block(
+                    self._build_callout(
+                        label.strip(),
+                        title.strip(),
+                        body_lines,
+                        source_file=filepath,
+                        source_line_start=block_start,
+                        source_line_end=end_line,
+                        code=code,
+                    )
+                )
                 index += 1
                 continue
 
             if stripped == "[[FLOW]]":
                 flush_body()
-                pairs: list[tuple[str, str | None]] = []
+                block_start = line_no
+                flow_lines: list[tuple[int, str]] = []
                 index += 1
-                while index < len(lines) and lines[index].strip() != "[[/FLOW]]":
-                    flow_line = lines[index].strip()
-                    if flow_line and flow_line != "↓":
-                        if "|" in flow_line:
-                            node, _, connector = flow_line.partition("|")
-                            pairs.append((node.strip(), connector.strip() or None))
-                        else:
-                            pairs.append((flow_line, None))
+                while index < len(raw_lines) and raw_lines[index].strip() != "[[/FLOW]]":
+                    flow_lines.append((index + 1, raw_lines[index]))
                     index += 1
-                if index >= len(lines):
-                    raise ValueError(f"{filepath.name}: unclosed FLOW")
-                append_block(FlowDiagram(pairs))
+                if index >= len(raw_lines):
+                    self.diagnostic(
+                        "ERROR",
+                        "UNCLOSED_FLOW",
+                        "Unclosed FLOW block.",
+                        filepath,
+                        block_start,
+                    )
+                    break
+                append_block(
+                    self._build_flow(
+                        flow_lines,
+                        source_file=filepath,
+                        source_line_start=block_start,
+                        source_line_end=index + 1,
+                    )
+                )
                 index += 1
                 continue
 
             code = parse_code_title(stripped)
             if code is not None:
                 flush_body()
-                label, title, _code = code
-                next_index, body = self._collect_until_boundary(lines, index + 1)
-                append_block(self._build_callout(label, title, body, code=_code))
+                label, title, code_value = code
+                next_index, body = self._collect_until_boundary(raw_lines, index + 1)
+                append_block(
+                    self._build_callout(
+                        label,
+                        title,
+                        body,
+                        source_file=filepath,
+                        source_line_start=line_no,
+                        source_line_end=body[-1][0] if body else line_no,
+                        code=code_value,
+                    )
+                )
                 index = next_index
                 continue
 
-            body_buffer.append(raw_line)
+            if paragraph_start is None:
+                paragraph_start = line_no
+            body_buffer.append((line_no, raw_line))
             index += 1
 
         flush_body()
         return root_blocks
 
-    def _collect_until_boundary(self, lines: Sequence[str], start: int) -> tuple[int, list[str]]:
-        body: list[str] = []
+    def _collect_until_boundary(
+        self,
+        lines: Sequence[str],
+        start: int,
+    ) -> tuple[int, list[tuple[int, str]]]:
+        body: list[tuple[int, str]] = []
         index = start
         while index < len(lines):
             line = lines[index].strip()
@@ -347,10 +669,12 @@ class Parser:
                 line in SEPARATOR_LINES
                 or line.startswith("#")
                 or line.startswith("[[")
+                or re.match(r"^\d+\.\d+(?:\.\d+)?\s+\S", line)
+                or line.casefold() == "chapter synthesis"
                 or parse_code_title(line) is not None
             ):
                 break
-            body.append(lines[index])
+            body.append((index + 1, lines[index]))
             index += 1
         return index, body
 
@@ -358,38 +682,124 @@ class Parser:
         self,
         label: str,
         title: str,
-        body_lines: Sequence[str],
+        body_lines: Sequence[tuple[int, str]],
         *,
+        source_file: Path,
+        source_line_start: int,
+        source_line_end: int,
         code: str | None = None,
     ) -> Callout:
-        body: list[Paragraph | BulletList] = []
-        pending: list[str] = []
+        canonical_label = _canonical_label(label, code=code)
+        if code is None:
+            parsed_code = parse_code_title(title)
+            if parsed_code is not None:
+                canonical_label = parsed_code[0]
+                code = parsed_code[2]
+
+        body: list[ContentBlock] = []
+        pending: list[tuple[int, str]] = []
+
+        def append_to_body(block: ContentBlock) -> None:
+            body.append(block)
 
         def flush_pending() -> None:
             if not pending:
                 return
-            text = " ".join(line.strip() for line in pending if line.strip())
+            start = pending[0][0]
+            end = pending[-1][0]
+            text = " ".join(line.strip() for _, line in pending if line.strip())
             pending.clear()
             if not text:
                 return
             bold_match = re.fullmatch(r"\*\*(.+?)\*\*", text)
-            if bold_match:
-                body.append(Paragraph(bold_match.group(1), role="bold"))
-            else:
-                body.append(Paragraph(text))
+            append_to_body(
+                Paragraph(
+                    text=bold_match.group(1) if bold_match else text,
+                    role="bold" if bold_match else "body",
+                    **_provenance_kwargs(source_file, start, end),
+                )
+            )
 
-        for raw in body_lines:
+        bullet_items: list[BulletItem] = []
+
+        def flush_bullets() -> None:
+            nonlocal bullet_items
+            if not bullet_items:
+                return
+            append_to_body(
+                BulletList(
+                    items=bullet_items,
+                    **_provenance_kwargs(
+                        source_file,
+                        bullet_items[0].source_line_start or source_line_start,
+                        bullet_items[-1].source_line_end or source_line_end,
+                    ),
+                )
+            )
+            bullet_items = []
+
+        for line_no, raw in body_lines:
             line = raw.strip()
             if not line or line in SEPARATOR_LINES:
                 flush_pending()
+                flush_bullets()
                 continue
             bullet_match = re.match(r"^(?:[-*])\s+(.+)$", line)
             if bullet_match:
                 flush_pending()
-                body.append(BulletList([bullet_match.group(1)]))
+                bullet_items.append(
+                    BulletItem(
+                        text=bullet_match.group(1),
+                        **_provenance_kwargs(source_file, line_no),
+                    )
+                )
                 continue
-            pending.append(raw)
-        flush_pending()
+            flush_bullets()
+            pending.append((line_no, raw))
 
-        cls = CALLOUT_TYPES.get(label, Callout)
-        return cls(label=label, title=title, body=body, code=code)
+        flush_pending()
+        flush_bullets()
+
+        cls = CALLOUT_TYPES.get(canonical_label, Callout)
+        return cls(
+            label=label.strip(),
+            title=title,
+            body=body,
+            code=code,
+            **_provenance_kwargs(source_file, source_line_start, source_line_end),
+        )
+
+    def _build_flow(
+        self,
+        flow_lines: Sequence[tuple[int, str]],
+        *,
+        source_file: Path,
+        source_line_start: int,
+        source_line_end: int,
+    ) -> FlowDiagram:
+        nodes: list[FlowNode] = []
+        for line_no, raw in flow_lines:
+            flow_line = raw.strip()
+            if not flow_line or flow_line == "↓" or flow_line in SEPARATOR_LINES:
+                continue
+            if "|" in flow_line:
+                node, _, connector = flow_line.partition("|")
+                nodes.append(
+                    FlowNode(
+                        label=node.strip(),
+                        connector=connector.strip() or None,
+                        **_provenance_kwargs(source_file, line_no),
+                    )
+                )
+            else:
+                nodes.append(
+                    FlowNode(
+                        label=flow_line,
+                        connector=None,
+                        **_provenance_kwargs(source_file, line_no),
+                    )
+                )
+        return FlowDiagram(
+            nodes=nodes,
+            **_provenance_kwargs(source_file, source_line_start, source_line_end),
+        )

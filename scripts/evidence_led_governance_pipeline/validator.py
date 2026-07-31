@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Iterable
 
 from docx import Document
 
 from model import (
     Book,
+    BulletList,
     Callout,
     Chapter,
     FlowDiagram,
+    FrontMatter,
     GovernanceArchitecture,
     GovernancePrinciple,
+    PageBreak,
+    Paragraph,
+    ParserDiagnostic,
+    PartTitle,
     ResearchFinding,
     ResearchMethodology,
     CanonicalDefinition,
     Section,
+    Subsection,
     Volume,
 )
 
@@ -43,17 +52,45 @@ class ValidationResult:
         return "\n".join(lines)
 
 
-def walk_blocks(book: Book):
-    stack = list(book.blocks)
+def child_blocks(block) -> list:
+    if isinstance(block, Book):
+        return list(block.blocks)
+    if isinstance(block, Volume):
+        return list(block.blocks)
+    if isinstance(block, FrontMatter):
+        return list(block.blocks)
+    if isinstance(block, Chapter):
+        return list(block.blocks)
+    if isinstance(block, Section):
+        return list(block.blocks)
+    if isinstance(block, Callout):
+        return list(block.body)
+    return []
+
+
+def walk_blocks(root) -> Iterable:
+    stack = child_blocks(root) if isinstance(root, Book) else [root]
     while stack:
         block = stack.pop(0)
         yield block
-        if isinstance(block, Volume):
-            stack[0:0] = block.blocks
-        elif isinstance(block, Chapter):
-            stack[0:0] = block.blocks
-        elif isinstance(block, Section):
-            stack[0:0] = block.blocks
+        stack[0:0] = child_blocks(block)
+
+
+def _has_provenance(block) -> bool:
+    if isinstance(block, Book):
+        return True
+    return bool(
+        getattr(block, "source_file", None)
+        and getattr(block, "source_line_start", None)
+        and getattr(block, "source_line_end", None)
+    )
+
+
+def _diagnostic_summary(diagnostics: list[ParserDiagnostic]) -> tuple[bool, str]:
+    errors = [item for item in diagnostics if item.severity == "ERROR"]
+    warnings = [item for item in diagnostics if item.severity == "WARNING"]
+    detail = f"{len(errors)} errors, {len(warnings)} warnings"
+    return not errors, detail
 
 
 def validate_book(book: Book) -> ValidationResult:
@@ -67,15 +104,12 @@ def validate_book(book: Book) -> ValidationResult:
     research_methodologies = [block for block in blocks if isinstance(block, ResearchMethodology)]
     governance_architectures = [block for block in blocks if isinstance(block, GovernanceArchitecture)]
     flow_diagrams = [block for block in blocks if isinstance(block, FlowDiagram)]
+    coded_objects = [block for block in blocks if isinstance(block, Callout) and block.code]
     chapter_five = next(
-        (block for block in blocks if isinstance(block, Chapter) and block.number == 5),
+        (block for block in chapters if block.number == 5),
         None,
     )
-    chapter_five_sections = []
-    if chapter_five is not None:
-        chapter_five_sections = [
-            block for block in chapter_five.blocks if isinstance(block, Section)
-        ]
+    chapter_five_sections = chapter_five.sections if chapter_five is not None else []
     chapter_five_synthesis = any(
         section.title == "Chapter Synthesis" for section in chapter_five_sections
     )
@@ -83,7 +117,46 @@ def validate_book(book: Book) -> ValidationResult:
         finding.code == "RF-5" or finding.title.startswith("RF-5")
         for finding in research_findings
     )
+    volume_one = next((volume for volume in book.volumes if volume.number == "I"), None)
+    volume_one_chapters = volume_one.chapters if volume_one else []
 
+    duplicate_chapters: list[str] = []
+    for volume in book.volumes:
+        seen: set[int] = set()
+        for chapter in volume.chapters:
+            if chapter.number is not None and chapter.number in seen:
+                duplicate_chapters.append(f"Volume {volume.number} Chapter {chapter.number}")
+            if chapter.number is not None:
+                seen.add(chapter.number)
+
+    duplicate_codes_by_file: list[str] = []
+    codes_by_file: dict[tuple[Path | None, str], int] = defaultdict(int)
+    for item in coded_objects:
+        codes_by_file[(item.source_file, item.code or "")] += 1
+    for (source_file, code), count in codes_by_file.items():
+        if count > 1:
+            duplicate_codes_by_file.append(f"{source_file.name if source_file else 'unknown'}:{code}")
+
+    empty_chapter_titles = [chapter for chapter in chapters if not chapter.title.strip()]
+    empty_coded_bodies = [item.code or item.title for item in coded_objects if not item.body]
+    bad_sections = []
+    for chapter in chapters:
+        if chapter.number is None:
+            continue
+        for section in chapter.sections:
+            if section.number and not section.number.startswith(f"{chapter.number}."):
+                bad_sections.append(f"Chapter {chapter.number}: {section.number}")
+    bad_flows = [flow for flow in flow_diagrams if len(flow.nodes) < 2]
+    missing_provenance = [
+        type(block).__name__
+        for block in blocks
+        if not isinstance(block, (Volume,)) and not _has_provenance(block)
+    ]
+    parser_ok, parser_detail = _diagnostic_summary(book.diagnostics)
+
+    result.add("Source files discovered", bool(book.source_files), f"{len(book.source_files)} files")
+    result.add("Front Matter", bool(book.front_matter), f"{len(book.front_matter)} entries")
+    result.add("Volumes", bool(book.volumes), f"{len(book.volumes)} detected")
     result.add("Chapters", bool(chapters), f"{len(chapters)} detected")
     result.add("Sections", bool(sections), f"{len(sections)} detected")
     result.add("Governance Principles", bool(governance_principles), f"{len(governance_principles)} detected")
@@ -92,8 +165,17 @@ def validate_book(book: Book) -> ValidationResult:
     result.add("Research Methodologies", bool(research_methodologies), f"{len(research_methodologies)} detected")
     result.add("Governance Architectures", bool(governance_architectures), f"{len(governance_architectures)} detected")
     result.add("Flow Diagrams", bool(flow_diagrams), f"{len(flow_diagrams)} detected")
+    result.add("Parser Diagnostics", parser_ok, parser_detail)
+    result.add("Volume I Chapter Membership", [c.number for c in volume_one_chapters] == [1, 2, 3, 4, 5], "Chapters 1-5")
     result.add("Chapter 5 Synthesis", chapter_five_synthesis, "plain-English Chapter Synthesis heading")
     result.add("RF-5 Research Finding", rf5_recognised, "legacy Research Finding / RF-5 structure")
+    result.add("Duplicate Chapter Numbers", not duplicate_chapters, ", ".join(duplicate_chapters))
+    result.add("Duplicate Coded Identifiers", not duplicate_codes_by_file, ", ".join(duplicate_codes_by_file))
+    result.add("Empty Chapter Titles", not empty_chapter_titles, f"{len(empty_chapter_titles)} empty")
+    result.add("Empty Coded Object Bodies", not empty_coded_bodies, ", ".join(empty_coded_bodies))
+    result.add("Section Number Alignment", not bad_sections, ", ".join(bad_sections))
+    result.add("Flow Diagram Shape", not bad_flows, f"{len(bad_flows)} invalid")
+    result.add("Source Provenance", not missing_provenance, f"{len(missing_provenance)} missing")
     return result
 
 
