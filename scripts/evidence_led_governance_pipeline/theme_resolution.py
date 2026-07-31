@@ -32,6 +32,17 @@ def _validate_colour(value: str, token: str) -> None:
         raise ValueError(f"Invalid theme colour {token}: {value!r}")
 
 
+def _relative_luminance(value: str) -> float:
+    channels = [int(value[index:index + 2], 16) / 255 for index in (0, 2, 4)]
+    linear = [channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast_ratio(foreground: str, background: str) -> float:
+    light, dark = sorted((_relative_luminance(foreground), _relative_luminance(background)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
 def validate_theme(theme: Theme) -> None:
     required_strings = {
         "name": theme.name,
@@ -50,6 +61,10 @@ def validate_theme(theme: Theme) -> None:
     for callout_name, style in theme.callouts.styles.items():
         for colour_name in ("fill", "border", "accent", "title_colour", "code_colour", "body_colour"):
             _validate_colour(getattr(style, colour_name), f"callouts.{callout_name}.{colour_name}")
+    for token, value in (("body_text", theme.colours.body_text), ("hyperlink", theme.colours.hyperlink)):
+        ratio = contrast_ratio(value, theme.colours.page_background)
+        if ratio < 4.5:
+            raise ValueError(f"Insufficient theme colour contrast for {token}: {ratio:.2f}:1")
 
     sizes = [
         theme.typography.body_size_pt,

@@ -30,8 +30,24 @@ start = "1.0"
 [output]
 basename = "Evidence-Led_Governance"
 directory = "output"
-formats = ["docx"]
+formats = ["docx", "pdf", "html"]
 profile = "digital"
+
+[output.html]
+single_file = true
+include_navigation = true
+include_semantic_index = true
+embed_css = true
+
+[output.pdf]
+source = "docx"
+require_render = true
+preserve_bookmarks = true
+
+[output.package]
+enabled = true
+include_checksums = true
+include_build_report = true
 
 [layout]
 page_profile = "letter"
