@@ -1,0 +1,248 @@
+Volume I
+
+Chapter 5
+
+Canonical Definitions
+
+⸻
+
+5.1 Introduction
+
+Every scholarly discipline develops a shared vocabulary.
+
+Legal systems define concepts through legislation and judicial interpretation.
+
+Scientific disciplines establish technical terminology to ensure that researchers use common language.
+
+Evidence-Led Governance requires the same discipline.
+
+The following definitions are referred to throughout this handbook.
+
+They are not intended to replace statutory definitions where legislation provides one.
+
+Rather, they establish how recurring concepts are used within this methodology.
+
+These definitions remain constant throughout every subsequent volume.
+
+⸻
+
+CD-1 Governance
+
+Governance is the continuous relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review through which statutory obligations are translated into accountable public administration.
+
+Governance is therefore understood as a relationship rather than an institution or isolated administrative act.
+
+⸻
+
+CD-2 Evidence-Led Governance
+
+Evidence-Led Governance is a methodology for reconstructing statutory administration by examining authoritative legal sources, judicial interpretation, institutional design, administrative practice and documentary evidence before reaching evaluative conclusions.
+
+Its defining characteristic is reconstruction before evaluation.
+
+⸻
+
+CD-3 Legal Authority
+
+Legal Authority is the lawful power created by constitutions, legislation, delegated legislation or other recognised legal sources enabling institutions to exercise public functions.
+
+Authority always derives from law.
+
+It is never assumed.
+
+⸻
+
+CD-4 Institutional Design
+
+Institutional Design is the organisational structure through which statutory obligations are translated into administrative capability.
+
+It includes:
+
+* statutory bodies;
+* governance arrangements;
+* operational responsibilities;
+* published procedures;
+* administrative systems.
+
+Institutional Design explains how legal obligations become operational functions.
+
+⸻
+
+CD-5 Administrative Practice
+
+Administrative Practice is the day-to-day exercise of statutory powers by institutions acting within their lawful authority.
+
+Administrative practice includes:
+
+* receiving applications;
+* conducting investigations;
+* gathering evidence;
+* communicating with affected persons;
+* making decisions;
+* implementing statutory duties.
+
+Administrative practice should always remain distinguishable from institutional design.
+
+⸻
+
+CD-6 Documentary Evidence
+
+Documentary Evidence consists of records generated during the exercise of statutory administration.
+
+Examples include:
+
+* applications;
+* correspondence;
+* reports;
+* policies;
+* decisions;
+* notices;
+* meeting records;
+* timelines.
+
+Within this methodology, documentary evidence is treated as an independent evidential category.
+
+It records the exercise of public power rather than creating legal obligations.
+
+⸻
+
+CD-7 Institutional Memory
+
+Institutional Memory is the preserved documentary record through which previous administrative activity remains capable of reconstruction, explanation and independent review.
+
+Institutional memory enables continuity.
+
+Without preservation, governance becomes fragmented.
+
+⸻
+
+CD-8 Reasons
+
+Reasons are the explanation connecting legal authority, evidence and judgment to an administrative decision.
+
+Reasons demonstrate:
+
+* the statutory framework;
+* the relevant evidence;
+* the exercise of discretion;
+* the pathway to the decision.
+
+Reasons therefore support transparency and accountability.
+
+⸻
+
+CD-9 Governance Architecture
+
+Governance Architecture is the recurring structural relationship identified between:
+
+Law
+
+↓
+
+Authority
+
+↓
+
+Institutional Design
+
+↓
+
+Administration
+
+↓
+
+Evidence
+
+↓
+
+Reasons
+
+↓
+
+Documentary Record
+
+↓
+
+Review
+
+↓
+
+Governance
+
+This architecture provides the analytical model used throughout this handbook.
+
+⸻
+
+CD-10 Traceability
+
+Traceability is the ability to reconstruct every stage of administrative decision-making from the governing legal authority through to the documentary record and subsequent review.
+
+Traceability is a necessary condition of accountable governance.
+
+⸻
+
+CD-11 Reconstruction
+
+Reconstruction is the analytical process of rebuilding the complete statutory and administrative pathway before evaluation begins.
+
+Reconstruction requires examination of:
+
+* legal obligations;
+* judicial interpretation;
+* institutional design;
+* administrative practice;
+* documentary evidence.
+
+Only after reconstruction is complete does governance analysis begin.
+
+⸻
+
+CD-12 Governance Analysis
+
+Governance Analysis is the comparison between the reconstructed legal framework and the documentary record to determine whether statutory administration corresponds with the governing legal obligations.
+
+Governance Analysis is therefore the final stage of the Evidence-Led Governance methodology.
+
+⸻
+
+5.2 Relationship Between Definitions
+
+The Canonical Definitions should not be understood as independent concepts.
+
+They form an integrated vocabulary.
+
+Legal Authority creates Institutional Design.
+
+Institutional Design enables Administrative Practice.
+
+Administrative Practice produces Documentary Evidence.
+
+Documentary Evidence preserves Institutional Memory.
+
+Institutional Memory supports Traceability.
+
+Traceability enables Governance Analysis.
+
+Governance Analysis strengthens Governance.
+
+The definitions therefore describe one continuous administrative relationship.
+
+⸻
+
+Research Finding
+
+RF-5
+
+The repeated application of the Evidence-Led Governance methodology demonstrates that a stable analytical vocabulary can be developed across multiple statutory frameworks without altering the underlying legal obligations of those frameworks.
+
+The Canonical Definitions therefore provide methodological consistency rather than replacing statutory terminology.
+
+⸻
+
+Chapter Synthesis
+
+The Canonical Definitions established in this chapter provide the common language used throughout the remainder of the handbook.
+
+Each definition has emerged from the repeated examination of independent statutory systems rather than from abstract theory.
+
+Accordingly, these definitions should be read as methodological tools designed to support consistent reconstruction and analysis of statutory administration.

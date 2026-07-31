@@ -1,0 +1,239 @@
+# Chapter 2 — The Governance Architecture
+## 2.1 Introduction
+Every system of statutory administration possesses an internal structure.
+
+That structure is rarely described in legislation itself.
+
+Nor is it fully explained by judicial decisions, institutional reports or documentary evidence when each is examined in isolation.
+
+Throughout the research presented in this handbook, a recurring pattern emerged across multiple independent statutory frameworks.
+
+The same sequence appeared in victims’ rights, criminal injuries compensation, housing law and administrative justice.
+
+The repetition of that sequence suggested the presence of an underlying governance architecture.
+
+This chapter describes that architecture.
+
+It is not presented as an abstract theory.
+
+It is presented as the recurring structure revealed through the examination of authoritative legal sources.
+
+## 2.2 Governance as Relationship
+Governance is often described as decision-making, management or institutional oversight.
+
+This handbook adopts a different understanding.
+
+Governance is not a single institution.
+
+Nor is it a single decision.
+
+Governance is the relationship between:
+
+legal authority;
+
+institutional responsibility;
+
+administrative practice;
+
+documentary evidence;
+
+independent review.
+
+No single element is sufficient.
+
+Only their relationship explains how statutory administration operates.
+
+[[CALLOUT: Canonical Definition | CD-1 — Governance]]
+Governance is the continuous relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review through which statutory obligations are translated into accountable public administration.
+[[/CALLOUT]]
+## 2.3 The Governance Continuum
+The research repeatedly revealed the same progression.
+
+[[FLOW]]
+Law | creates
+Authority | confers
+Institutions | organise
+Administration | acts
+Evidence | records
+Reasons | explain
+The Record | preserves
+Review | examines
+Governance | learns
+[[/FLOW]]
+Each stage depends upon those preceding it.
+
+None can be removed without weakening the integrity of the whole.
+
+[[CALLOUT: Governance Architecture | GA-1 — The Governance Continuum]]
+This architecture forms the structural model used throughout this handbook.
+[[/CALLOUT]]
+## 2.4 The Function of Each Stage
+### Law
+Legislation establishes the legal obligation.
+
+It creates the statutory powers, duties and responsibilities that govern institutional behaviour.
+
+Without legal authority there can be no lawful exercise of public power.
+
+### Authority
+Authority provides the legal capacity to act.
+
+It is always derived from law.
+
+Authority is therefore delegated rather than inherent.
+
+### Institutions
+Institutions transform legal obligations into operational systems.
+
+They establish governance arrangements, procedures and organisational responsibilities through which statutory functions may be performed.
+
+### Administration
+Administration performs the statutory function.
+
+Applications are received.
+
+Evidence is gathered.
+
+Assessments are undertaken.
+
+Decisions are reached.
+
+Administration therefore becomes the point at which legal obligations enter lived experience.
+
+### Evidence
+Administrative activity produces evidence.
+
+Correspondence.
+
+Applications.
+
+Reports.
+
+Decisions.
+
+Policies.
+
+Records.
+
+Evidence documents the exercise of public power.
+
+### Reasons
+Reasons explain why statutory authority produced a particular decision.
+
+They connect:
+
+evidence
+
+to
+
+judgment.
+
+Without reasons the pathway between evidence and decision becomes incomplete.
+
+### Documentary Record
+The documentary record preserves institutional memory.
+
+It enables later reconstruction of:
+
+legal authority;
+
+administrative process;
+
+evidence;
+
+reasoning;
+
+decision-making.
+
+Without preservation, governance cannot be examined.
+
+### Independent Review
+Independent review examines legality.
+
+It reconstructs the pathway preserved by the documentary record.
+
+Its function is not to recreate administration.
+
+Its function is to determine whether public power remained within the governing legal framework.
+
+### Governance
+Governance represents institutional learning.
+
+Review informs future administration.
+
+Administration improves institutional practice.
+
+The cycle therefore continues.
+
+Governance is not static.
+
+It evolves through evidence.
+
+## 2.5 Relationships Rather Than Hierarchies
+One of the most significant findings emerging from this research is that governance should not be understood as a hierarchy alone.
+
+Instead it should be understood as a continuous relationship.
+
+Each stage informs the next.
+
+Each stage depends upon the integrity of those before it.
+
+Governance therefore resembles a continuous evidential chain rather than a series of isolated administrative acts.
+
+## 2.6 Traceability
+Every administrative decision should remain traceable.
+
+[[FLOW]]
+Decision
+Reasons
+Evidence
+Administrative Procedure
+Institutional Responsibility
+Legal Authority
+[[/FLOW]]
+Traceability therefore performs two functions.
+
+It supports legality.
+
+It supports accountability.
+
+[[CALLOUT: Governance Principle | GP-2 — Power Must Remain Traceable]]
+Every exercise of public power should remain connected to the legal authority from which it derives.
+
+Evidence records that exercise.
+
+Reasons explain it.
+
+The documentary record preserves it.
+
+Review examines it.
+
+Governance learns from it.
+
+[[/CALLOUT]]
+## 2.7 Institutional Memory
+Repeated examination of multiple statutory frameworks demonstrated that governance depends upon continuity.
+
+Institutions cannot administer consistently if they cannot remember.
+
+Institutional memory is therefore not merely administrative convenience.
+
+It is a condition of accountable governance.
+
+[[CALLOUT: Canonical Definition | CD-2 — Institutional Memory]]
+Institutional Memory is the preserved documentary record through which the exercise of public power remains capable of reconstruction, explanation and independent review.
+[[/CALLOUT]]
+## 2.8 Research Finding
+[[CALLOUT: Research Finding | RF-2]]
+The examination of independent statutory frameworks demonstrates that governance consistently operates through a recurring sequence linking legal authority, institutional responsibility, administration, evidence, reasons, documentary preservation and independent review.
+
+This architecture appears to be general rather than subject-specific.
+[[/CALLOUT]]
+## 2.9 Chapter Synthesis
+This chapter has established the conceptual architecture that will guide every subsequent volume of the handbook.
+
+It demonstrates that governance is not reducible to legislation, institutions or administration considered separately.
+
+Instead, governance emerges from the continuous relationship between those elements.
+
+The recurring architecture identified in this chapter provides the analytical framework through which victims’ rights, compensation, housing, administrative justice and future statutory systems will be examined.

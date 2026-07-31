@@ -1,0 +1,348 @@
+# Chapter 3 — The Evidence-Led Governance Methodology
+
+## 3.1 Introduction
+
+Every discipline is distinguished by its methodology.
+
+Medicine relies upon clinical investigation.
+
+History relies upon documentary reconstruction.
+
+Science relies upon observation, experimentation and verification.
+
+Evidence-Led Governance is distinguished by a methodology designed to reconstruct statutory administration before reaching evaluative conclusions.
+
+The methodology developed throughout this handbook does not begin with criticism, advocacy or predetermined outcomes.
+
+Instead, it proceeds through a structured sequence of legal and evidential reconstruction.
+
+The objective is to understand governance before evaluating it.
+
+## 3.2 Why Methodology Matters
+
+Governance cannot be evaluated reliably through isolated documents or individual administrative decisions.
+
+Nor can legislation, judicial interpretation or institutional practice be understood independently of one another.
+
+Each represents only one part of a continuous legal process.
+
+Accordingly, this methodology requires that every stage be reconstructed before conclusions emerge.
+
+This discipline protects the integrity of both the research and the institutions being examined.
+
+## 3.3 Reconstruction Before Evaluation
+
+The defining characteristic of this methodology is that reconstruction precedes evaluation.
+
+The research therefore asks:
+
+First
+
+> What legal obligation exists?
+
+Then
+
+> How has that obligation been interpreted?
+
+Then
+
+> How has it been translated into institutional design?
+
+Then
+
+> How is that design implemented through administration?
+
+Then
+
+> What documentary evidence records that administration?
+
+Only then is the final question asked.
+
+> What conclusions are supported by the reconstructed framework and the evidential record?
+
+This ordering is deliberate.
+
+Changing the order changes the character of the research.
+
+Beginning with conclusions risks confirmation bias.
+
+Beginning with reconstruction promotes analytical discipline.
+
+[[CALLOUT: Research Methodology | RM-1 — Reconstruction Precedes Evaluation]]
+
+No evaluative conclusion should be reached until the governing legal framework and the evidential record have been independently reconstructed.
+
+[[/CALLOUT]]
+
+## 3.4 The Six Stages of Evidence-Led Governance
+
+The methodology proceeds through six sequential stages.
+
+### Stage One — Legal Authority
+
+Identify the governing legal obligation.
+
+Sources include:
+
+constitutions;
+
+legislation;
+
+regulations;
+
+directives;
+
+statutory instruments.
+
+Question:
+
+> What does the law require?
+
+### Stage Two — Judicial Interpretation
+
+Determine how courts have interpreted those obligations.
+
+Question:
+
+> How has the legal obligation been understood?
+
+### Stage Three — Institutional Design
+
+Identify the institutions responsible for implementation.
+
+Examine:
+
+statutory bodies;
+
+governance structures;
+
+published procedures;
+
+organisational responsibilities.
+
+Question:
+
+> How has the legal obligation been translated into institutional practice?
+
+### Stage Four — Administrative Practice
+
+Reconstruct how statutory responsibilities are exercised.
+
+Examples include:
+
+applications;
+
+investigations;
+
+assessments;
+
+communications;
+
+decision-making;
+
+review procedures.
+
+Question:
+
+> How does administration perform the statutory function?
+
+### Stage Five — Documentary Evidence
+
+Reconstruct the documentary record.
+
+This includes:
+
+correspondence;
+
+reports;
+
+applications;
+
+policies;
+
+notices;
+
+decisions;
+
+timelines.
+
+Question:
+
+> What does the record establish?
+
+### Stage Six — Governance Analysis
+
+Only after the preceding stages are complete does governance analysis begin.
+
+The reconstructed legal framework is compared with the documentary record.
+
+Question:
+
+> Does the evidence demonstrate correspondence between statutory obligation and administrative practice?
+
+[[CALLOUT: Governance Architecture | GA-2 — Evidence-Led Governance Methodology]]
+
+This sequence forms the methodological framework adopted throughout the handbook.
+
+[[/CALLOUT]]
+
+[[FLOW]]
+Law
+Interpretation
+Institutional Design
+Administration
+Evidence
+Governance Analysis
+[[/FLOW]]
+
+## 3.5 Distinguishing Evidence from Inference
+
+One of the defining characteristics of this methodology is the distinction between evidence and inference.
+
+Evidence establishes:
+
+what occurred;
+
+what was recorded;
+
+what was communicated.
+
+Inference explains:
+
+relationships;
+
+implications;
+
+governance conclusions.
+
+The distinction is essential.
+
+Research loses integrity when inference is presented as evidence.
+
+[[CALLOUT: Research Methodology | RM-2 — Evidence Before Inference]]
+
+Inference begins only after the documentary record has been reconstructed.
+
+[[/CALLOUT]]
+
+## 3.6 Independence of Sources
+
+Each source contributes something different.
+
+Legislation creates obligations.
+
+Courts interpret those obligations.
+
+Institutions design administrative systems.
+
+Administrative practice exercises statutory powers.
+
+Documentary evidence records those exercises.
+
+No source substitutes for another.
+
+[[CALLOUT: Research Methodology | RM-3 — Independent Authority]]
+
+Every authoritative source contributes only what it is competent to establish.
+
+[[/CALLOUT]]
+
+## 3.7 Traceability
+
+Every conclusion should remain traceable.
+
+[[FLOW]]
+Research Finding
+Evidence
+Administrative Record
+Institutional Practice
+Legal Authority
+[[/FLOW]]
+
+Readers should be capable of reconstructing every conclusion independently.
+
+[[CALLOUT: Research Methodology | RM-4 — Traceability]]
+
+Every analytical conclusion should remain capable of being traced to the authoritative sources upon which it depends.
+
+[[/CALLOUT]]
+
+## 3.8 Repeatability
+
+Perhaps the strongest test of a methodology is whether it remains effective when applied to unrelated statutory frameworks.
+
+This methodology has now been applied to:
+
+Victims’ Rights;
+
+Criminal Injuries Compensation;
+
+Housing Law;
+
+Administrative Justice.
+
+Despite their different legal contexts, each revealed the same recurring governance architecture.
+
+The methodology therefore demonstrates repeatability across independent areas of statutory administration.
+
+[[CALLOUT: Research Finding | RF-3]]
+
+Evidence-Led Governance is capable of reconstructing multiple independent statutory systems through a common analytical framework.
+
+[[/CALLOUT]]
+
+## 3.9 The Role of the Researcher
+
+The researcher does not determine the destination.
+
+The researcher reconstructs the pathway.
+
+The distinction is fundamental.
+
+The methodology therefore requires restraint.
+
+The objective is not to persuade.
+
+The objective is to understand.
+
+Conclusions arise because the governing framework and the documentary record point towards them.
+
+[[CALLOUT: Research Methodology | RM-5 — The Researcher’s Discipline]]
+
+The role of the researcher is to reconstruct statutory administration faithfully before attempting to evaluate it.
+
+[[/CALLOUT]]
+
+## 3.10 Chapter Synthesis
+
+The methodology presented in this chapter provides the operational framework for every volume that follows.
+
+It establishes:
+
+the order of analysis;
+
+the distinction between authoritative sources;
+
+the independence of documentary evidence;
+
+the discipline of reconstruction;
+
+the traceability of conclusions.
+
+The methodology therefore becomes more than a research technique.
+
+It becomes the mechanism through which statutory governance is made intelligible.
+
+[[CALLOUT: Governance Principle | GP-3 — THE PATHWAY PRECEDES THE CONCLUSION]]
+
+Understanding does not begin with answers.
+
+It begins with reconstruction.
+
+Law defines the obligation.
+
+Evidence records its exercise.
+
+Governance emerges only after the pathway has been faithfully rebuilt.
+
+[[/CALLOUT]]
