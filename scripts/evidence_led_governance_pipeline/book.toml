@@ -1,0 +1,19 @@
+sources = [
+  "chapters/00_preface.txt",
+  "chapters/01_statement_of_method.txt",
+  "chapters/02_volume1_introduction.txt",
+  "chapters/03_volume1_chapter1.txt",
+  "chapters/04_volume1_chapter2.txt",
+  "chapters/05_volume1_chapter3.txt",
+  "chapters/06_volume1_chapter4.txt",
+  "chapters/07_volume1_chapter5.txt",
+]
+
+[generated_front_matter]
+table_of_contents = true
+governance_principles = true
+research_findings = true
+canonical_definitions = true
+governance_architectures = true
+research_methodologies = true
+semantic_index = true
