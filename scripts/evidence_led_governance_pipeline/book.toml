@@ -1,3 +1,5 @@
+schema_version = 1
+
 sources = [
   "chapters/00_preface.txt",
   "chapters/01_statement_of_method.txt",
@@ -7,6 +9,58 @@ sources = [
   "chapters/05_volume1_chapter3.txt",
   "chapters/06_volume1_chapter4.txt",
   "chapters/07_volume1_chapter5.txt",
+]
+
+[publication]
+title = "Evidence-Led Governance"
+subtitle = "A Research Methodology for Analysing Statutory Administration"
+author = "Nick Moloney"
+language = "en"
+edition = "Working Manuscript"
+theme = "handbook"
+
+[publication.identity]
+running_title = "EVIDENCE-LED GOVERNANCE"
+tagline = "Structured · Traceable · Governed"
+
+[version]
+mode = "auto"
+start = "1.0"
+
+[output]
+basename = "Evidence-Led_Governance"
+directory = "output"
+formats = ["docx"]
+profile = "digital"
+
+[layout]
+page_profile = "letter"
+chapter_starts_on_new_page = true
+volume_starts_on_new_page = true
+suppress_header_on_title_page = true
+suppress_footer_on_title_page = true
+
+[title_page]
+template = "handbook"
+show_author = true
+show_version = true
+show_tagline = true
+show_date = false
+
+[volume_page]
+template = "institutional"
+suppress_header = false
+suppress_footer = false
+
+[chapter_opening]
+template = "standard"
+
+[metadata]
+keywords = [
+  "governance",
+  "public administration",
+  "documentary evidence",
+  "statutory administration",
 ]
 
 [generated_front_matter]
