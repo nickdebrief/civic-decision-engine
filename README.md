@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md`](docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md`](docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md`](docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md)
@@ -132,6 +133,31 @@ Zenodo.
 https://doi.org/10.5281/zenodo.21672656
 
 The DOI is the authoritative citable publication for the official handbook.
+
+---
+
+## Publication Engine
+
+Publication Engine v2 builds governed, multi-format publications from semantic
+chapter sources. Its canonical entry point is:
+
+```bash
+python3 scripts/evidence_led_governance_pipeline/build.py
+```
+
+The manifest-driven pipeline parses source text into a canonical model,
+validates and enriches that model, resolves a publication theme, and renders
+validated DOCX, HTML, and PDF outputs. It then performs cross-format content
+and link checks and creates checksums, a build report, and a package manifest.
+
+Supported themes are `handbook`, `cde`, and `cref`. Supported publication
+profiles are `digital`, `print`, and `archive`, with `letter`, `a4`, and
+`book_6x9` page profiles.
+
+See [`docs/PUBLICATION_ENGINE.md`](docs/PUBLICATION_ENGINE.md) for the build,
+configuration, validation, dependency, and release workflow. Publication
+Engine v2 release preparation is documented in
+[`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md).
 
 ---
 
