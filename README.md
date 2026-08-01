@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 39D — Governed Promotion
+Current release: CDE Platform Stage 39E — Attachment Governance
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
+- [`docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md`](docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md)
 - [`docs/releases/STAGE39D_GOVERNED_PROMOTION.md`](docs/releases/STAGE39D_GOVERNED_PROMOTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md`](docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md`](docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md)
@@ -898,6 +899,22 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 39E — Attachment Governance
+
+CDE Platform Stage 39E establishes extracted Outlook attachments as private
+governed evidence objects. Each attachment receives a stable identifier, an
+immutable SHA-256 digest, byte size, filename, MIME type, extraction timestamp,
+and complete provenance to its preserved archive, folder projection, message
+projection, extraction job, and source attachment identifier.
+
+Authenticated administrators may inspect attachments and their deterministic
+message, archive, institution, and participant relationships. Attachment content
+is not rendered or downloadable. Eligible attachments may be promoted only
+through explicit administrator confirmation into the existing Canonical Record
+lifecycle. Duplicate SHA-256 values prevent duplicate Canonical Records and
+direct the administrator to the existing record. No attachment is automatically
+promoted or published, and public archive behaviour remains unchanged.
 
 ### CDE Platform Stage 39D — Governed Promotion
 

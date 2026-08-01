@@ -933,6 +933,9 @@ def _render_mbox_relationship_graph(item: dict) -> str:
     function inspectorRow(label, value) {{
       return '<dt>' + escapeHTML(label) + '</dt><dd>' + escapeHTML(value) + '</dd>';
     }}
+    function inspectorOptionalRow(label, value) {{
+      return value === undefined || value === null || value === "" ? "" : inspectorRow(label, value);
+    }}
     function inspectorListRow(label, nodes) {{
       return '<dt>' + escapeHTML(label) + '</dt><dd>' + listLabels(nodes) + '</dd>';
     }}
@@ -1015,9 +1018,17 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       if (type === "Attachment") {{
         return inspectorRow("Filename", node.label) +
           inspectorRow("File type", metadata.media_type) +
+          inspectorOptionalRow("Attachment ID", metadata.attachment_id) +
+          inspectorOptionalRow("SHA-256", metadata.sha256_hash) +
+          inspectorOptionalRow("File size", metadata.file_size_bytes) +
+          inspectorOptionalRow("Originating archive", metadata.originating_archive) +
+          inspectorOptionalRow("Originating message", metadata.originating_message) +
+          inspectorOptionalRow("Extraction time", metadata.extraction_time) +
+          inspectorOptionalRow("Promotion status", metadata.promotion_status) +
+          inspectorOptionalRow("Existing Canonical Record", metadata.canonical_record_reference) +
           inspectorListRow("Linked emails", neighboursByType(node, "Email")) +
           inspectorListRow("Linked references", neighboursByType(node, "Reference Number")) +
-          inspectorRow("Verification hash", metadata.message_digest || metadata.content_id);
+          inspectorRow("Verification hash", metadata.sha256_hash || metadata.message_digest || metadata.content_id);
       }}
       if (type === "Intake Record") {{
         return inspectorRow("Record title", node.label) +
@@ -1077,6 +1088,7 @@ def _render_mbox_relationship_graph(item: dict) -> str:
       }} else if (node.type === "Attachment") {{
         const related = neighboursByType(node, "Email")[0];
         if (related && related.metadata && related.metadata.url) actions.push('<a class="mailbox-graph-action" href="' + escapeHTML(related.metadata.url) + '">Open related message</a>');
+        if (metadata.url) actions.push('<a class="mailbox-graph-action" href="' + escapeHTML(metadata.url) + '">Open governed attachment</a>');
         button("Highlight reuse", "highlight_neighbours");
         button("Focus graph", "focus_graph");
       }} else if (node.type === "Intake Record") {{

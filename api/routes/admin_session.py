@@ -120,6 +120,16 @@ from api.outlook_archive_promotion import (
     build_outlook_message_promotion_provenance,
     validate_outlook_message_promotion,
 )
+from api.outlook_archive_attachments import (
+    OutlookAttachmentGovernanceError,
+    OutlookAttachmentPromotionContext,
+    build_outlook_attachment_promotion_provenance,
+    list_outlook_attachments,
+    load_outlook_attachment,
+    mark_outlook_attachment_promoted,
+    validate_outlook_attachment_promotion,
+)
+from api.mailbox_relationship_graph import build_outlook_attachment_relationship_graph
 
 
 ADMIN_TABLE_READABILITY_CSS = """
@@ -45040,6 +45050,39 @@ def _existing_outlook_message_promotion(
     return None
 
 
+def _existing_outlook_attachment_promotion(
+    conn: sqlite3.Connection,
+    *,
+    attachment_id: str | None = None,
+    sha256_hash: str | None = None,
+) -> dict[str, Any] | None:
+    try:
+        rows = conn.execute(
+            "SELECT reference, report_json FROM records ORDER BY exported_at DESC"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for row in rows:
+        try:
+            report = json.loads(row["report_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        provenance = (
+            report.get("attachment_promotion_provenance") if isinstance(report, dict) else None
+        )
+        if not isinstance(provenance, dict):
+            continue
+        identifier_matches = attachment_id and str(provenance.get("attachment_id") or "") == str(
+            attachment_id
+        )
+        digest_matches = sha256_hash and str(provenance.get("sha256_hash") or "") == str(
+            sha256_hash
+        )
+        if identifier_matches or digest_matches:
+            return {"reference": row["reference"], "provenance": provenance}
+    return None
+
+
 def _outlook_message_record_proposal(
     context: OutlookArchivePromotionContext,
     conn: sqlite3.Connection,
@@ -45082,6 +45125,63 @@ def _outlook_message_record_proposal(
         "conditions": "GOVERNED_MAILBOX_MESSAGE_PROMOTION",
         "signals": "EXPLICIT_ADMINISTRATIVE_PROMOTION",
     }
+
+
+def _outlook_attachment_record_proposal(
+    context: OutlookAttachmentPromotionContext,
+    conn: sqlite3.Connection,
+) -> dict[str, str]:
+    attachment = context.attachment
+    document = context.message_context.document
+    institution = str(document.get("institution_source") or "").strip() or "Unknown institution"
+    event_date = str(document.get("document_date") or "").strip()
+    filename = str(attachment.get("filename") or "Governed attachment")
+    return {
+        "record_type": "administrative_action",
+        "reference": _next_record_reference(
+            conn,
+            record_type="administrative_action",
+            institution=institution,
+            event_date=event_date,
+        ),
+        "title": filename,
+        "institution": institution,
+        "event_date": event_date,
+        "summary": f"Governed Canonical Record promoted from Outlook attachment: {filename}.",
+        "trajectory": "Submitted",
+        "system_state": "Canonical Record created through explicit governed attachment promotion.",
+        "conditions": "GOVERNED_MAILBOX_ATTACHMENT_PROMOTION",
+        "signals": "EXPLICIT_ADMINISTRATIVE_PROMOTION",
+    }
+
+
+def _render_outlook_attachment_promotion_form(
+    context: OutlookAttachmentPromotionContext,
+    *,
+    proposal: Mapping[str, str],
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    attachment = context.attachment
+    provenance = attachment["provenance"]
+    archive_id = str(provenance["archive_id"])
+    attachment_id = str(attachment["attachment_id"])
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value or '—'))}</td></tr>"
+        for label, value in (
+            ("Attachment ID", attachment_id),
+            ("Filename", attachment.get("filename")),
+            ("MIME type", attachment.get("mime_type")),
+            ("File size", attachment.get("file_size_bytes")),
+            ("SHA-256", attachment.get("sha256_hash")),
+            ("Archive", archive_id),
+            ("Folder Projection", provenance.get("folder_projection_id")),
+            ("Message Projection", provenance.get("message_projection_id")),
+            ("Extraction Job", provenance.get("extraction_job")),
+        )
+    )
+    action = f"/api/admin/session/archive/{escape(archive_id)}/attachments/{escape(attachment_id)}/promote"
+    back = f"/admin/archive/{escape(archive_id)}/attachments/{escape(attachment_id)}"
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Promote Attachment</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}.confirmation{{grid-template-columns:auto 1fr;align-items:start;text-transform:none;font:1rem system-ui,sans-serif}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="{back}">Back to governed attachment</a></p><h1>Promote Attachment</h1><p><strong>Explicit administrative confirmation is required.</strong> The attachment remains immutable evidence linked to its originating archive and message. Promotion creates an ordinary Canonical Record; it does not publish or replace the attachment.</p><h2>Evidence provenance</h2><table>{rows}</table><form method="post" action="{action}"><label>Record type<select name="record_type" required>{_record_type_options(proposal.get('record_type'))}</select></label><label>Canonical record reference<input name="reference" required value="{escape(str(proposal.get('reference') or ''))}"></label><label>Title<input name="record_title" required value="{escape(str(proposal.get('title') or ''))}"></label><label>Institution<input name="institution" required value="{escape(str(proposal.get('institution') or ''))}"></label><label>Event date<input name="event_date" required value="{escape(str(proposal.get('event_date') or ''))}"></label><label>Summary<textarea name="summary" required>{escape(str(proposal.get('summary') or ''))}</textarea></label><label>Trajectory<input name="trajectory" required value="{escape(str(proposal.get('trajectory') or ''))}"></label><label>System state<textarea name="system_state" required>{escape(str(proposal.get('system_state') or ''))}</textarea></label><label>Conditions<input name="conditions" value="{escape(str(proposal.get('conditions') or ''))}"></label><label>Signals<input name="signals" value="{escape(str(proposal.get('signals') or ''))}"></label><label class="confirmation"><input type="checkbox" name="confirm_promotion" value="1" required><span>I confirm this explicit attachment promotion. No attachment is promoted automatically.</span></label><button type="submit">Promote Attachment</button></form></main></body></html>"""
 
 
 def _render_outlook_message_promotion_form(
@@ -48595,6 +48695,23 @@ def admin_outlook_archive_message_projection_page(
         f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
         for key, value in provenance.items()
     )
+    governed_attachments = list_outlook_attachments(
+        document_id, message_id=message_id, root=intake_root()
+    )
+    attachment_rows = "".join(
+        "<tr>"
+        f"<td><a href=\"/admin/archive/{escape(document_id)}/attachments/{escape(str(item.get('attachment_id') or ''))}\">{escape(str(item.get('attachment_id') or ''))}</a></td>"
+        f"<td>{escape(str(item.get('filename') or ''))}</td>"
+        f"<td>{escape(str(item.get('mime_type') or ''))}</td>"
+        f"<td>{escape(str(item.get('promotion_status') or 'eligible'))}</td>"
+        "</tr>"
+        for item in governed_attachments
+    )
+    attachment_section = (
+        f'<table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Promotion status</th></tr></thead><tbody>{attachment_rows}</tbody></table>'
+        if attachment_rows
+        else "<p>No governed attachment objects have been registered for this projected message.</p>"
+    )
     promotion_section = ""
     try:
         context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
@@ -48623,8 +48740,114 @@ def admin_outlook_archive_message_projection_page(
             '<p class="notice">Promotion is unavailable because the governed projection is not eligible: '
             f'{escape(exc.code)}.</p>'
         )
-    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2><p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2><p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p></section><section><h2>Governed Attachments</h2>{attachment_section}<p>No attachment content or download is exposed from this interface.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
     return HTMLResponse(content=content)
+
+
+@router.get("/admin/archive/{document_id}/attachments", response_class=HTMLResponse)
+def admin_outlook_archive_attachments_page(document_id: str, request: Request):
+    session = require_admin_session(request)
+    attachments = list_outlook_attachments(document_id, root=intake_root())
+    rows = "".join(
+        f'<tr><td><a href="/admin/archive/{escape(document_id)}/attachments/{escape(str(item.get("attachment_id") or ""))}">{escape(str(item.get("attachment_id") or ""))}</a></td><td>{escape(str(item.get("filename") or ""))}</td><td>{escape(str(item.get("mime_type") or ""))}</td><td>{escape(str(item.get("file_size_bytes") or ""))}</td><td>{escape(str(item.get("promotion_status") or "eligible"))}</td></tr>'
+        for item in attachments
+    ) or '<tr><td colspan="5">No governed attachments are available.</td></tr>'
+    content = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Attachment Governance</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1100px,calc(100% - 32px));margin:32px auto}}h1{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>CDE Platform Stage 39E — Attachment Governance</h1><p>Attachments are private governed evidence objects. No attachment is published or promoted automatically.</p><p><a href="/api/admin/session/archive/{escape(document_id)}/attachment-graph">View graph data</a></p><table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Bytes</th><th>Promotion</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>'''
+    return HTMLResponse(content=content)
+
+
+@router.get("/admin/archive/{document_id}/attachments/{attachment_id}", response_class=HTMLResponse)
+def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        context = validate_outlook_attachment_promotion(document_id, attachment_id, root=intake_root())
+    except OutlookAttachmentGovernanceError as exc:
+        raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
+    attachment = context.attachment
+    provenance = attachment["provenance"]
+    conn = get_db()
+    try:
+        existing = _existing_outlook_attachment_promotion(
+            conn,
+            attachment_id=attachment_id,
+            sha256_hash=str(attachment.get("sha256_hash") or ""),
+        )
+    finally:
+        conn.close()
+    promotion = (
+        f'<p>This attachment is already represented by <a href="/verify/{escape(str(existing["reference"]))}">Canonical Record {escape(str(existing["reference"]))}</a>.</p>'
+        if existing
+        else f'<p><a href="/admin/archive/{escape(document_id)}/attachments/{escape(attachment_id)}/promote">Promote Attachment</a></p>'
+    )
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value or '—'))}</td></tr>"
+        for label, value in (
+            ("Attachment ID", attachment_id),
+            ("Filename", attachment.get("filename")),
+            ("MIME type", attachment.get("mime_type")),
+            ("SHA-256", attachment.get("sha256_hash")),
+            ("File size", attachment.get("file_size_bytes")),
+            ("Originating archive", provenance.get("archive_id")),
+            ("Originating folder", provenance.get("folder_projection_id")),
+            ("Originating message", provenance.get("message_projection_id")),
+            ("Extraction time", attachment.get("extraction_timestamp")),
+            ("Promotion status", "promoted" if existing else attachment.get("promotion_status")),
+            ("Existing Canonical Record", existing.get("reference") if existing else None),
+        )
+    )
+    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Governed Attachment</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}th{{width:230px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/attachments">Back to governed attachments</a></p><h1>Attachment Inspector</h1><table>{rows}</table><h2>Governance</h2><p>The original bytes remain private evidence. No attachment download, rendering, or automatic Canonical Record creation is provided.</p>{promotion}</main></body></html>''')
+
+
+@router.get("/admin/archive/{document_id}/attachments/{attachment_id}/promote", response_class=HTMLResponse)
+def admin_outlook_archive_attachment_promotion_page(document_id: str, attachment_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        context = validate_outlook_attachment_promotion(document_id, attachment_id, root=intake_root())
+    except OutlookAttachmentGovernanceError as exc:
+        raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
+    conn = get_db()
+    try:
+        existing = _existing_outlook_attachment_promotion(
+            conn,
+            attachment_id=attachment_id,
+            sha256_hash=str(context.attachment.get("sha256_hash") or ""),
+        )
+        if existing:
+            raise _http_error(409, "outlook_attachment_duplicate_canonical_record")
+        proposal = _outlook_attachment_record_proposal(context, conn)
+    finally:
+        conn.close()
+    return HTMLResponse(content=_render_outlook_attachment_promotion_form(context, proposal=proposal, admin_session=session))
+
+
+@router.get("/api/admin/session/archive/{document_id}/attachments")
+def admin_outlook_archive_attachments_api(document_id: str, request: Request):
+    require_admin_session(request)
+    return {"attachments": list_outlook_attachments(document_id, root=intake_root())}
+
+
+@router.get("/api/admin/session/archive/{document_id}/attachments/{attachment_id}")
+def admin_outlook_archive_attachment_api(document_id: str, attachment_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return load_outlook_attachment(document_id, attachment_id, root=intake_root())
+    except OutlookAttachmentGovernanceError as exc:
+        raise _http_error(404, exc.code) from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/attachment-graph")
+def admin_outlook_archive_attachment_graph_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        document = load_pending_document(document_id, root=intake_root())
+        projection = load_outlook_archive_projection(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "outlook_archive_projection_not_found") from exc
+    return build_outlook_attachment_relationship_graph(
+        document,
+        projection,
+        list_outlook_attachments(document_id, root=intake_root()),
+    )
 
 
 @router.get(
@@ -49219,6 +49442,128 @@ def admin_outlook_archive_message_promotion_create(
         f'<a href="/admin/archive/{escape(document_id)}/messages/{escape(message_id)}">Return to projected message</a></p>'
         '</main></body></html>'
     )
+    return HTMLResponse(content=page, status_code=201)
+
+
+@router.post(
+    "/api/admin/session/archive/{document_id}/attachments/{attachment_id}/promote",
+    response_class=HTMLResponse,
+)
+def admin_outlook_archive_attachment_promotion_create(
+    document_id: str,
+    attachment_id: str,
+    request: Request,
+    record_type: str = Form(...),
+    reference: str = Form(...),
+    record_title: str = Form(...),
+    institution: str = Form(...),
+    event_date: str = Form(...),
+    summary: str = Form(...),
+    trajectory: str = Form(...),
+    system_state: str = Form(...),
+    conditions: str | None = Form(None),
+    signals: str | None = Form(None),
+    confirm_promotion: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    actor = _admin_session_actor(session)
+    if str(confirm_promotion or "").strip() != "1":
+        raise _http_error(400, "outlook_attachment_promotion_confirmation_required")
+    try:
+        context = validate_outlook_attachment_promotion(
+            document_id, attachment_id, root=intake_root()
+        )
+    except OutlookAttachmentGovernanceError as exc:
+        raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
+
+    normalized_reference = str(reference or "").strip()
+    if not normalized_reference:
+        raise _http_error(400, "record_reference_required")
+    conn = get_db()
+    try:
+        record_routes.ensure_record_metadata_columns(conn)
+        if conn.execute(
+            "SELECT 1 FROM records WHERE reference = ? LIMIT 1", (normalized_reference,)
+        ).fetchone():
+            raise _http_error(409, "record_reference_already_exists")
+        existing = _existing_outlook_attachment_promotion(
+            conn,
+            attachment_id=attachment_id,
+            sha256_hash=str(context.attachment.get("sha256_hash") or ""),
+        )
+        if existing:
+            raise _http_error(
+                409,
+                {
+                    "detail": "outlook_attachment_duplicate_canonical_record",
+                    "existing_canonical_record": existing["reference"],
+                },
+            )
+    finally:
+        conn.close()
+
+    promotion_provenance = build_outlook_attachment_promotion_provenance(
+        context, administrator=actor
+    )
+    generated_at = (
+        str(event_date or "").strip() + "T00:00:00Z"
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", str(event_date or "").strip())
+        else datetime.now(timezone.utc).isoformat()
+    )
+    source_reference = str(
+        context.message_context.document.get("document_identifier")
+        or context.message_context.document.get("reference_identifier")
+        or document_id
+    )
+    payload = SimpleNamespace(
+        reference=normalized_reference,
+        record_type=str(record_type or "administrative_action").strip(),
+        record_title=str(record_title or "").strip(),
+        institution=str(institution or "").strip(),
+        event_date=str(event_date or "").strip(),
+        summary=str(summary or "").strip(),
+        source_document_id=document_id,
+        source_document_reference=source_reference,
+        generated_at=generated_at,
+        trajectory=str(trajectory or "").strip(),
+        system_state=str(system_state or "").strip(),
+        conditions=_split_terms(conditions),
+        signals=_split_terms(signals),
+        finding=str(summary or "").strip(),
+        report={
+            "record_title": str(record_title or "").strip(),
+            "institution": str(institution or "").strip(),
+            "event_date": str(event_date or "").strip(),
+            "source_document_reference": source_reference,
+            "attachment_promotion_provenance": promotion_provenance,
+            "governance_boundary": (
+                "The archive, projected message, and attachment remain source evidence; "
+                "this Canonical Record is a separately governed administrative artefact."
+            ),
+        },
+        language="en",
+        supersedes=None,
+        source_narrative=(
+            "Created through explicit governed administrative promotion from an attachment "
+            f"in preserved Outlook archive {source_reference}. The original archive, "
+            "message projection, and governed attachment remain authoritative source context."
+        ),
+    )
+    try:
+        record_routes.create_record_entry(payload)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _http_error(400, str(exc)) from exc
+    mark_outlook_attachment_promoted(
+        document_id,
+        attachment_id,
+        canonical_record_reference=normalized_reference,
+        administrator=actor,
+        promoted_at=str(promotion_provenance["promotion_timestamp"]),
+        root=intake_root(),
+    )
+    page = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Attachment promoted</title></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>Canonical record created</h1><p>Created Canonical Record <strong>{escape(normalized_reference)}</strong> through explicit governed attachment promotion. The attachment and originating archive remain unchanged.</p><p><a href="/verify/{escape(normalized_reference)}">View Canonical Record</a> · <a href="/admin/archive/{escape(document_id)}/attachments/{escape(attachment_id)}">Return to attachment</a></p></main></body></html>'''
     return HTMLResponse(content=page, status_code=201)
 
 

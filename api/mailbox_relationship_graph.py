@@ -36,6 +36,8 @@ EDGE_WEIGHTS = {
     "Created Intake": 5,
     "Mentions Reference": 2,
     "Related Communication": 1,
+    "Has Attachment": 3,
+    "Belongs To Archive": 5,
 }
 
 
@@ -421,4 +423,155 @@ def build_mailbox_relationship_graph(
     return {
         "nodes": sorted(nodes.values(), key=lambda node: (_clean(node.get("type")), _clean(node.get("label")).casefold(), _clean(node.get("id")))),
         "edges": sorted(edges.values(), key=lambda edge: (_clean(edge.get("source")), _clean(edge.get("target")), _clean(edge.get("relationship_type")))),
+    }
+
+
+def build_outlook_attachment_relationship_graph(
+    document: dict[str, Any],
+    projection: dict[str, Any],
+    attachments: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Build the private Stage 39E graph from governed attachment metadata.
+
+    This deliberately does not feed the public MBOX graph. Relationships are
+    limited to the originating projection, archive metadata, and message
+    participants already present in the governed projection.
+    """
+
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str, str], dict[str, Any]] = {}
+    messages = {
+        str(message.get("projection_id") or ""): message
+        for message in projection.get("messages") or []
+        if isinstance(message, dict) and message.get("projection_id")
+    }
+    archive_id = _clean(document.get("intake_id"))
+    archive_label = _clean(
+        document.get("document_identifier") or document.get("title") or archive_id
+    )
+    archive_node = f"intake_record:{_slug(archive_id)}"
+    institution_label = _clean(document.get("institution_source"))
+    institution_node = _node_id("Institution", institution_label) if institution_label else ""
+    _add_node(
+        nodes,
+        archive_node,
+        "Intake Record",
+        archive_label,
+        {
+            "document_id": archive_id,
+            "status": document.get("status"),
+            "publication_status": "Not public",
+            "url": f"/admin/document-intake/{archive_id}",
+        },
+    )
+    if institution_label:
+        _add_node(
+            nodes,
+            institution_node,
+            "Institution",
+            institution_label,
+            {"source": "document.institution_source"},
+        )
+
+    for attachment in sorted(attachments, key=lambda item: str(item.get("attachment_id") or "")):
+        provenance = attachment.get("provenance")
+        if not isinstance(provenance, dict) or str(provenance.get("archive_id") or "") != archive_id:
+            continue
+        message_id = str(provenance.get("message_projection_id") or "")
+        message = messages.get(message_id)
+        if not message:
+            continue
+        email_node = f"email:{_slug(archive_id)}:{_slug(message_id)}"
+        attachment_id = str(attachment.get("attachment_id") or "")
+        attachment_node = f"attachment:{_slug(attachment_id)}"
+        _add_node(
+            nodes,
+            email_node,
+            "Email",
+            _clean(message.get("subject")) or message_id,
+            {
+                "document_id": archive_id,
+                "projection_id": message_id,
+                "message_id": message.get("message_id"),
+                "date": message.get("sent_timestamp") or message.get("received_timestamp"),
+                "url": f"/admin/archive/{archive_id}/messages/{message_id}",
+            },
+        )
+        _add_node(
+            nodes,
+            attachment_node,
+            "Attachment",
+            _clean(attachment.get("filename")) or attachment_id,
+            {
+                "attachment_id": attachment_id,
+                "media_type": attachment.get("mime_type"),
+                "sha256_hash": attachment.get("sha256_hash"),
+                "file_size_bytes": attachment.get("file_size_bytes"),
+                "originating_archive": archive_id,
+                "originating_message": message_id,
+                "extraction_time": attachment.get("extraction_timestamp"),
+                "promotion_status": attachment.get("promotion_status"),
+                "canonical_record_reference": attachment.get("canonical_record_reference"),
+                "url": f"/admin/archive/{archive_id}/attachments/{attachment_id}",
+            },
+        )
+        evidence = {
+            "archive_id": archive_id,
+            "message_projection_id": message_id,
+            "attachment_id": attachment_id,
+            "sha256_hash": attachment.get("sha256_hash"),
+        }
+        _add_edge(edges, email_node, attachment_node, "Has Attachment", evidence=evidence)
+        _add_edge(edges, attachment_node, email_node, "Attached To", evidence=evidence)
+        _add_edge(
+            edges,
+            attachment_node,
+            archive_node,
+            "Belongs To Archive",
+            evidence={"archive_id": archive_id},
+        )
+        if institution_label:
+            _add_edge(
+                edges,
+                attachment_node,
+                institution_node,
+                "Related Communication",
+                evidence={"field": "institution_source", "message_projection_id": message_id},
+            )
+        participant_fields = (
+            ("sender", message.get("sender")),
+            ("recipient", message.get("recipients")),
+            ("cc", message.get("cc")),
+        )
+        for role, raw_value in participant_fields:
+            values = raw_value if isinstance(raw_value, list) else [raw_value]
+            for value in values:
+                for person in _participant_label(value):
+                    person_node = _node_id("Person", person)
+                    _add_node(nodes, person_node, "Person", person, {"field": role})
+                    _add_edge(
+                        edges,
+                        attachment_node,
+                        person_node,
+                        "Related Communication",
+                        evidence={"participant_role": role, "message_projection_id": message_id},
+                    )
+
+    return {
+        "nodes": sorted(
+            nodes.values(),
+            key=lambda node: (
+                _clean(node.get("type")),
+                _clean(node.get("label")).casefold(),
+                _clean(node.get("id")),
+            ),
+        ),
+        "edges": sorted(
+            edges.values(),
+            key=lambda edge: (
+                _clean(edge.get("source")),
+                _clean(edge.get("target")),
+                _clean(edge.get("relationship_type")),
+            ),
+        ),
     }
