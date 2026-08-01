@@ -7,6 +7,7 @@ from typing import Any
 
 from api.document_intake import (
     intake_root,
+    is_gmail_takeout_document,
     is_outlook_archive_document,
     load_pending_document,
 )
@@ -140,6 +141,26 @@ def validate_outlook_message_promotion(
     )
 
 
+def validate_archive_message_promotion(
+    document_id: str,
+    message_id: str,
+    *,
+    root: Path | None = None,
+) -> OutlookArchivePromotionContext:
+    """Dispatch promotion validation without changing either source model."""
+
+    storage_root = root or intake_root()
+    try:
+        document = load_pending_document(document_id, root=storage_root)
+    except ValueError as exc:
+        raise OutlookArchivePromotionError("archive_promotion_archive_unavailable") from exc
+    if is_gmail_takeout_document(document):
+        from api.gmail_takeout import validate_gmail_message_promotion
+
+        return validate_gmail_message_promotion(document_id, message_id, root=storage_root)
+    return validate_outlook_message_promotion(document_id, message_id, root=storage_root)
+
+
 def build_outlook_message_promotion_provenance(
     context: OutlookArchivePromotionContext,
     *,
@@ -152,7 +173,7 @@ def build_outlook_message_promotion_provenance(
     timestamp = promoted_at or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
         "+00:00", "Z"
     )
-    return {
+    result = {
         "promotion_version": OUTLOOK_ARCHIVE_PROMOTION_VERSION,
         "archive_id": str(context.document["intake_id"]),
         "folder_projection_id": str(message["folder_id"]),
@@ -169,3 +190,18 @@ def build_outlook_message_promotion_provenance(
         "source_hash": str(context.document["sha256_hash"]),
         "projection_version": str(projection["projection_version"]),
     }
+    if str(projection.get("source_format") or "") == "gmail_takeout":
+        result.update(
+            {
+                "archive_source": "gmail_takeout",
+                "label_projection_ids": list(message.get("label_ids") or []),
+                "thread_identifier": message.get("thread_id"),
+                "provenance_chain": [
+                    str(context.document["intake_id"]),
+                    *[str(value) for value in message.get("label_ids") or []],
+                    str(message.get("thread_id") or ""),
+                    str(message["projection_id"]),
+                ],
+            }
+        )
+    return result
