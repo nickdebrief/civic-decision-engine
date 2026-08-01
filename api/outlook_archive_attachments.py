@@ -362,15 +362,14 @@ def validate_archive_attachment_promotion(
 ) -> OutlookAttachmentPromotionContext:
     attachment = load_outlook_attachment(document_id, attachment_id, root=root)
     provenance = attachment.get("provenance") or {}
-    if provenance.get("archive_source") != "gmail_takeout":
+    archive_source = str(provenance.get("archive_source") or "outlook_archive")
+    if archive_source == "outlook_archive":
         return validate_outlook_attachment_promotion(document_id, attachment_id, root=root)
-    from api.gmail_takeout import validate_gmail_message_promotion
+    from api.outlook_archive_promotion import validate_archive_message_promotion
 
     message_id = str(provenance.get("message_projection_id") or "")
     try:
-        context = validate_gmail_message_promotion(
-            document_id, message_id, root=root or intake_root()
-        )
+        context = validate_archive_message_promotion(document_id, message_id, root=root)
     except OutlookArchivePromotionError as exc:
         raise OutlookAttachmentGovernanceError(exc.code) from exc
     required_matches = {

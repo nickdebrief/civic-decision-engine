@@ -20,6 +20,7 @@ from api.document_intake import (
     is_image_document,
     is_mailbox_document,
     is_gmail_takeout_document,
+    is_imap_acquisition_document,
     is_outlook_archive_document,
     is_rich_text_document,
     is_spreadsheet_document,
@@ -172,6 +173,8 @@ def _presentation_mode(item: dict) -> str:
         return "Outlook archive metadata, parser status, verification hashes, and original-file download"
     if is_gmail_takeout_document(item):
         return "Google Takeout archive metadata only; no message, attachment, or archive download"
+    if is_imap_acquisition_document(item):
+        return "IMAP acquisition metadata only; no mailbox, message, attachment, configuration, or archive download"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
         return "Microsoft Outlook Message metadata, safe body preview, and original-file download"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Apple Mail Message":
@@ -196,6 +199,8 @@ def _original_download_availability(item: dict) -> str:
         return f"Original .{str(item.get('document_type') or 'pst').lower()} download available"
     if is_gmail_takeout_document(item):
         return "Original archive download not publicly exposed"
+    if is_imap_acquisition_document(item):
+        return "IMAP acquisition archive download not publicly exposed"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Microsoft Outlook Message":
         return "Original .msg download available"
     if is_email_document(item) and document_type_label(item.get("document_type")) == "Apple Mail Message":
@@ -216,6 +221,8 @@ def _media_family_label(item: dict) -> str:
             return "Outlook Archive"
         if is_gmail_takeout_document(item):
             return "Google Takeout Archive"
+        if is_imap_acquisition_document(item):
+            return "IMAP Acquisition"
         return "Mailbox"
     return family.title()
 
@@ -242,6 +249,7 @@ def _render_publication_provenance(item: dict) -> str:
     email_metadata = _email_metadata(item)
     outlook_archive_metadata = _outlook_archive_metadata(item)
     gmail_takeout_metadata = _gmail_takeout_metadata(item)
+    imap_acquisition_metadata = _imap_acquisition_metadata(item)
     intake_mode = item.get("intake_mode") or email_metadata.get("intake_mode")
     intake_mode_label = (
         "Governed Streaming Mailbox Intake"
@@ -273,10 +281,15 @@ def _render_publication_provenance(item: dict) -> str:
         ("Gmail Takeout parser version", gmail_takeout_metadata.get("parser_version") if is_gmail_takeout_document(item) else None),
         ("Gmail Takeout preservation complete", gmail_takeout_metadata.get("preservation_complete") if is_gmail_takeout_document(item) else None),
         ("Gmail Takeout projection state", gmail_takeout_metadata.get("projection_state") if is_gmail_takeout_document(item) else None),
+        ("Archive source", imap_acquisition_metadata.get("archive_type_label") if is_imap_acquisition_document(item) else None),
+        ("IMAP acquisition timestamp", imap_acquisition_metadata.get("acquisition_timestamp") if is_imap_acquisition_document(item) else None),
+        ("IMAP acquisition hash", imap_acquisition_metadata.get("acquisition_hash") if is_imap_acquisition_document(item) else None),
+        ("IMAP preservation complete", imap_acquisition_metadata.get("preservation_complete") if is_imap_acquisition_document(item) else None),
+        ("IMAP projection state", imap_acquisition_metadata.get("projection_state") if is_imap_acquisition_document(item) else None),
         ("Original filename", item.get("original_filename")),
         ("File size", f"{item.get('file_size_bytes')} bytes" if item.get("file_size_bytes") is not None else None),
         ("SHA-256 digest", item.get("sha256_hash")),
-        ("SHA-512 digest", item.get("sha512_hash") if is_outlook_archive_document(item) or is_gmail_takeout_document(item) else None),
+        ("SHA-512 digest", item.get("sha512_hash") if is_outlook_archive_document(item) or is_gmail_takeout_document(item) or is_imap_acquisition_document(item) else None),
         ("Document Identifier", item.get("document_identifier")),
         ("Initial intake actor", initial_event.get("actor") if initial_event else None),
         ("Review actor", review_event.get("actor") if review_event else None),
@@ -362,6 +375,11 @@ def _outlook_archive_metadata(item: dict) -> dict:
 
 def _gmail_takeout_metadata(item: dict) -> dict:
     metadata = item.get("gmail_takeout_metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _imap_acquisition_metadata(item: dict) -> dict:
+    metadata = item.get("imap_acquisition_metadata")
     return metadata if isinstance(metadata, dict) else {}
 
 
@@ -1592,6 +1610,30 @@ def _render_gmail_takeout_document(item: dict) -> str:
 <section class="public-email-boundary"><h2>Google Takeout Governance Boundary</h2><p class="provenance-boundary">{escape(boundary)}</p></section>"""
 
 
+def _render_imap_acquisition_document(item: dict) -> str:
+    metadata = _imap_acquisition_metadata(item)
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(_display_value(value))}</td></tr>"
+        for label, value in (
+            ("Archive type", metadata.get("archive_type_label")),
+            ("Acquisition timestamp", metadata.get("acquisition_timestamp")),
+            ("Acquisition hash", metadata.get("acquisition_hash")),
+            ("Preservation complete", metadata.get("preservation_complete")),
+            ("Hash verification status", metadata.get("hash_verification_status")),
+            ("Parser version", metadata.get("parser_version")),
+            ("Projection state", metadata.get("projection_state")),
+        )
+    )
+    boundary = (
+        "The preserved IMAP acquisition envelope is authoritative. Server configuration, "
+        "folder names, UIDs, messages, body projections, attachments, credentials, and "
+        "promotion controls remain private. This public page exposes acquisition metadata "
+        "only and provides no archive or attachment download."
+    )
+    return f"""<section class="public-outlook-archive-summary"><h2>IMAP Acquisition Overview</h2><p class="provenance-boundary">{escape(boundary)}</p><table>{rows}</table></section>
+<section class="public-email-boundary"><h2>IMAP Acquisition Governance Boundary</h2><p class="provenance-boundary">{escape(boundary)}</p></section>"""
+
+
 def _render_document(item: dict, return_to: object | None = None, message: object | None = None, page: object | None = None) -> str:
     publication_timestamp = _publication_timestamp(item)
     archive_return = sanitize_archive_return(return_to)
@@ -1632,6 +1674,8 @@ def _render_document(item: dict, return_to: object | None = None, message: objec
         content_block = f"""<section id="document-content">{_render_outlook_archive_document(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">{download_label}</a></section>"""
     elif is_gmail_takeout_document(item):
         content_block = f"""<section id="document-content">{_render_gmail_takeout_document(item)}</section>"""
+    elif is_imap_acquisition_document(item):
+        content_block = f"""<section id="document-content">{_render_imap_acquisition_document(item)}</section>"""
     elif is_email_document(item):
         download_label = "Download original .msg" if document_type_label(item.get("document_type")) == "Microsoft Outlook Message" else "Download original .emlx" if document_type_label(item.get("document_type")) == "Apple Mail Message" else "Download original .eml"
         content_block = f"""<section id="document-content">{_render_email_document(item)}<a class="download" href="/documents/{escape(item['intake_id'])}/download">{download_label}</a></section>"""
@@ -1748,7 +1792,7 @@ def public_document_download(document_id: str):
         file_path, item = published_document_file(document_id, root=intake_root())
     except ValueError as exc:
         _not_found(exc)
-    if is_gmail_takeout_document(item):
+    if is_gmail_takeout_document(item) or is_imap_acquisition_document(item):
         raise HTTPException(status_code=404, detail="public_document_download_not_available")
     headers = None
     if is_image_document(item) or is_audio_document(item) or is_spreadsheet_document(item) or is_rich_text_document(item) or is_email_document(item) or is_mailbox_document(item) or is_outlook_archive_document(item):

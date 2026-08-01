@@ -8,6 +8,7 @@ from typing import Any
 from api.document_intake import (
     intake_root,
     is_gmail_takeout_document,
+    is_imap_acquisition_document,
     is_outlook_archive_document,
     load_pending_document,
 )
@@ -158,6 +159,10 @@ def validate_archive_message_promotion(
         from api.gmail_takeout import validate_gmail_message_promotion
 
         return validate_gmail_message_promotion(document_id, message_id, root=storage_root)
+    if is_imap_acquisition_document(document):
+        from api.imap_acquisition import validate_imap_message_promotion
+
+        return validate_imap_message_promotion(document_id, message_id, root=storage_root)
     return validate_outlook_message_promotion(document_id, message_id, root=storage_root)
 
 
@@ -201,6 +206,22 @@ def build_outlook_message_promotion_provenance(
                     *[str(value) for value in message.get("label_ids") or []],
                     str(message.get("thread_id") or ""),
                     str(message["projection_id"]),
+                ],
+            }
+        )
+    elif str(projection.get("source_format") or "") == "imap_acquisition":
+        result.update(
+            {
+                "archive_source": "imap_acquisition",
+                "acquisition_identifier": projection.get("acquisition_id"),
+                "imap_uid": message.get("source_uid"),
+                "uidvalidity": message.get("uidvalidity"),
+                "thread_identifier": message.get("thread_id"),
+                "provenance_chain": [
+                    str(projection.get("acquisition_id") or ""),
+                    str(message.get("folder_id") or ""),
+                    str(message.get("thread_id") or ""),
+                    str(message.get("projection_id") or ""),
                 ],
             }
         )

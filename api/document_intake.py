@@ -34,6 +34,13 @@ from api.gmail_takeout import (
     gmail_takeout_search_values,
     validate_gmail_takeout_archive,
 )
+from api.imap_acquisition import (
+    ImapAcquisitionError,
+    build_imap_acquisition_metadata,
+    imap_acquisition_search_values,
+    is_imap_acquisition_archive,
+    validate_imap_acquisition_archive,
+)
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -60,6 +67,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "pst": ".pst",
     "ost": ".ost",
     "gmail_takeout": ".zip",
+    "imap_acquisition": ".zip",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -78,6 +86,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "pst": "application/vnd.ms-outlook-pst",
     "ost": "application/vnd.ms-outlook-ost",
     "gmail_takeout": "application/zip",
+    "imap_acquisition": "application/vnd.cde.imap-acquisition+zip",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -96,6 +105,7 @@ DOCUMENT_TYPE_LABELS = {
     "pst": "Microsoft Outlook Personal Storage Archive",
     "ost": "Microsoft Outlook Offline Storage Archive",
     "gmail_takeout": "Google Takeout Gmail Export",
+    "imap_acquisition": "Governed IMAP Acquisition",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -114,6 +124,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pst": "mailbox",
     "ost": "mailbox",
     "gmail_takeout": "mailbox",
+    "imap_acquisition": "mailbox",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -1032,6 +1043,16 @@ def validate_document_file(
     if expected_type == "gmail_takeout":
         if len(data) > intake_max_bytes():
             raise ValueError("document_intake_file_too_large")
+        if is_imap_acquisition_archive(data):
+            try:
+                validate_imap_acquisition_archive(data)
+            except ImapAcquisitionError as exc:
+                raise ValueError(exc.code) from exc
+            return (
+                "imap_acquisition",
+                DOCUMENT_TYPE_MEDIA_TYPES["imap_acquisition"],
+                filename,
+            )
         try:
             validate_gmail_takeout_archive(data)
         except GmailTakeoutError as exc:
@@ -1113,6 +1134,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "ost"
     if content_type in {"application/zip", "application/x-zip-compressed"}:
         return "gmail_takeout"
+    if content_type == "application/vnd.cde.imap-acquisition+zip":
+        return "imap_acquisition"
     if content_type in {
         "application/vnd.ms-outlook",
         "application/x-msg",
@@ -1162,8 +1185,16 @@ def is_gmail_takeout_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) == "gmail_takeout"
 
 
+def is_imap_acquisition_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) == "imap_acquisition"
+
+
 def is_governed_mail_archive_document(metadata: dict[str, Any]) -> bool:
-    return is_outlook_archive_document(metadata) or is_gmail_takeout_document(metadata)
+    return (
+        is_outlook_archive_document(metadata)
+        or is_gmail_takeout_document(metadata)
+        or is_imap_acquisition_document(metadata)
+    )
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1667,6 +1698,28 @@ def store_pending_document(
             }
         )
         metadata["gmail_takeout_metadata"] = gmail_metadata
+    elif document_type == "imap_acquisition":
+        metadata["sha512_hash"] = sha512_digest
+        imap_metadata = build_imap_acquisition_metadata(
+            data=data,
+            filename=filename,
+            content_type=content_type,
+            uploaded_at=timestamp,
+            actor=actor,
+        )
+        imap_metadata.update(
+            {
+                "storage_path": str(file_path),
+                "preservation_timestamp": timestamp,
+                "preservation_completed_at": timestamp,
+                "inspection_complete": False,
+                "inspection_timestamp": None,
+                "latest_archive_job_id": None,
+                "acquisition_status": "preserved",
+                "acquisition_progress": 50,
+            }
+        )
+        metadata["imap_acquisition_metadata"] = imap_metadata
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)
@@ -1908,6 +1961,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
     field_values.extend(email_projection_search_values(document))
     field_values.extend(outlook_archive_search_values(document))
     field_values.extend(gmail_takeout_search_values(document))
+    field_values.extend(imap_acquisition_search_values(document))
     flattened: list[str] = []
     seen: set[str] = set()
     for value in field_values:
