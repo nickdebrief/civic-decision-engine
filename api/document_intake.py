@@ -28,6 +28,12 @@ from api.outlook_archives import (
     build_outlook_archive_metadata,
     outlook_archive_search_values,
 )
+from api.gmail_takeout import (
+    GmailTakeoutError,
+    build_gmail_takeout_metadata,
+    gmail_takeout_search_values,
+    validate_gmail_takeout_archive,
+)
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -53,6 +59,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "mbox": ".mbox",
     "pst": ".pst",
     "ost": ".ost",
+    "gmail_takeout": ".zip",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -70,6 +77,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "mbox": "application/mbox",
     "pst": "application/vnd.ms-outlook-pst",
     "ost": "application/vnd.ms-outlook-ost",
+    "gmail_takeout": "application/zip",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -87,6 +95,7 @@ DOCUMENT_TYPE_LABELS = {
     "mbox": "MBOX Mailbox Archive",
     "pst": "Microsoft Outlook Personal Storage Archive",
     "ost": "Microsoft Outlook Offline Storage Archive",
+    "gmail_takeout": "Google Takeout Gmail Export",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -104,6 +113,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "mbox": "mailbox",
     "pst": "mailbox",
     "ost": "mailbox",
+    "gmail_takeout": "mailbox",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -122,6 +132,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".mbox": "mbox",
     ".pst": "pst",
     ".ost": "ost",
+    ".zip": "gmail_takeout",
 }
 INTAKE_STATUSES = {
     "pending",
@@ -1018,6 +1029,14 @@ def validate_document_file(
         if len(data) > intake_max_bytes():
             raise ValueError("document_intake_file_too_large")
         return expected_type, DOCUMENT_TYPE_MEDIA_TYPES[expected_type], filename
+    if expected_type == "gmail_takeout":
+        if len(data) > intake_max_bytes():
+            raise ValueError("document_intake_file_too_large")
+        try:
+            validate_gmail_takeout_archive(data)
+        except GmailTakeoutError as exc:
+            raise ValueError(exc.code) from exc
+        return expected_type, DOCUMENT_TYPE_MEDIA_TYPES[expected_type], filename
     try:
         detected_type = _detected_document_type(data)
     except ValueError:
@@ -1092,6 +1111,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "pst"
     if content_type in {"application/vnd.ms-outlook-ost", "application/x-ost"}:
         return "ost"
+    if content_type in {"application/zip", "application/x-zip-compressed"}:
+        return "gmail_takeout"
     if content_type in {
         "application/vnd.ms-outlook",
         "application/x-msg",
@@ -1135,6 +1156,14 @@ def is_mailbox_document(metadata: dict[str, Any]) -> bool:
 
 def is_outlook_archive_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"pst", "ost"}
+
+
+def is_gmail_takeout_document(metadata: dict[str, Any]) -> bool:
+    return normalized_document_type(metadata) == "gmail_takeout"
+
+
+def is_governed_mail_archive_document(metadata: dict[str, Any]) -> bool:
+    return is_outlook_archive_document(metadata) or is_gmail_takeout_document(metadata)
 
 
 def document_media_family(metadata: dict[str, Any]) -> str:
@@ -1618,6 +1647,26 @@ def store_pending_document(
             }
         )
         metadata["outlook_archive_metadata"] = outlook_archive_metadata
+    elif document_type == "gmail_takeout":
+        metadata["sha512_hash"] = sha512_digest
+        gmail_metadata = build_gmail_takeout_metadata(
+            data=data,
+            filename=filename,
+            content_type=content_type,
+            uploaded_at=timestamp,
+            actor=actor,
+        )
+        gmail_metadata.update(
+            {
+                "storage_path": str(file_path),
+                "preservation_timestamp": timestamp,
+                "preservation_completed_at": timestamp,
+                "inspection_complete": False,
+                "inspection_timestamp": None,
+                "latest_archive_job_id": None,
+            }
+        )
+        metadata["gmail_takeout_metadata"] = gmail_metadata
     try:
         file_path.write_bytes(data)
         os.chmod(file_path, 0o600)
@@ -1858,6 +1907,7 @@ def build_document_search_text(document: dict[str, Any]) -> str:
     ]
     field_values.extend(email_projection_search_values(document))
     field_values.extend(outlook_archive_search_values(document))
+    field_values.extend(gmail_takeout_search_values(document))
     flattened: list[str] = []
     seen: set[str] = set()
     for value in field_values:

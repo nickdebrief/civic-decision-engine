@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 39E — Attachment Governance
+Current release: CDE Platform Stage 40 — Gmail Takeout
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md`](docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md)
 - [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
 - [`docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md`](docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md)
 - [`docs/releases/STAGE39D_GOVERNED_PROMOTION.md`](docs/releases/STAGE39D_GOVERNED_PROMOTION.md)
@@ -899,6 +900,26 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 40 — Gmail Takeout
+
+CDE Platform Stage 40 adds Google Takeout Gmail exports as a second governed
+mail archive source. Administrators may admit a Takeout ZIP unchanged or select
+an extracted Takeout directory, whose files are preserved byte-for-byte in a
+deterministic uncompressed storage envelope. A built-in adapter projects Gmail
+labels, threads, messages, bounded body views, and attachments into the existing
+archive projection model.
+
+Messages appearing under multiple Gmail labels retain one stable projection
+identity with multiple label relationships. Attachments reuse CDE Platform
+Stage 39E identity, hashing, duplicate detection, and explicit promotion.
+Message promotion reuses CDE Platform Stage 39D. Private graph data adds label
+and thread nodes without changing the public mailbox graph API or Canonical
+Record lifecycle. Public pages expose archive metadata only: no Gmail message
+body, attachment, promotion control, or Takeout download is public.
+
+See [`docs/GMAIL_TAKEOUT.md`](docs/GMAIL_TAKEOUT.md) and the
+[CDE Platform Stage 40 release note](docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md).
 
 ### CDE Platform Stage 39E — Attachment Governance
 

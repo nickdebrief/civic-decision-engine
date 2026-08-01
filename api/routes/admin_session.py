@@ -79,6 +79,7 @@ from api.document_intake import (
     is_email_document,
     is_image_document,
     is_mailbox_document,
+    is_gmail_takeout_document,
     is_outlook_archive_document,
     list_intake_documents,
     list_published_documents,
@@ -105,20 +106,22 @@ from api.outlook_archive_jobs import (
     retry_archive_job,
     run_archive_inspection_job,
 )
-from api.outlook_archive_projections import (
-    get_projection_folder,
-    get_projection_message,
-    list_projection_folders,
-    list_projection_messages,
-    load_outlook_archive_projection,
-    projection_statistics,
-    search_projection_metadata,
+from api.archive_projection_access import (
+    get_archive_folder as get_projection_folder,
+    get_archive_message as get_projection_message,
+    list_archive_folders as list_projection_folders,
+    list_archive_messages as list_projection_messages,
+    load_archive_projection as load_outlook_archive_projection,
+    archive_projection_statistics as projection_statistics,
+    search_archive_projection as search_projection_metadata,
+    get_archive_thread,
+    list_archive_threads,
 )
 from api.outlook_archive_promotion import (
     OutlookArchivePromotionContext,
     OutlookArchivePromotionError,
     build_outlook_message_promotion_provenance,
-    validate_outlook_message_promotion,
+    validate_archive_message_promotion,
 )
 from api.outlook_archive_attachments import (
     OutlookAttachmentGovernanceError,
@@ -127,9 +130,17 @@ from api.outlook_archive_attachments import (
     list_outlook_attachments,
     load_outlook_attachment,
     mark_outlook_attachment_promoted,
-    validate_outlook_attachment_promotion,
+    validate_archive_attachment_promotion,
 )
-from api.mailbox_relationship_graph import build_outlook_attachment_relationship_graph
+from api.gmail_takeout import (
+    GmailTakeoutError,
+    package_gmail_takeout_directory,
+    project_gmail_takeout_document,
+)
+from api.mailbox_relationship_graph import (
+    build_gmail_takeout_relationship_graph,
+    build_outlook_attachment_relationship_graph,
+)
 
 
 ADMIN_TABLE_READABILITY_CSS = """
@@ -217,6 +228,9 @@ DOCUMENT_INTAKE_FILE_ACCEPT = ",".join(
         "application/vnd.ms-outlook-ost",
         "application/x-ost",
         ".ost",
+        "application/zip",
+        "application/x-zip-compressed",
+        ".zip",
     )
 )
 APPLE_MAIL_MBOX_UPLOAD_NOTE = (
@@ -46530,7 +46544,11 @@ def _render_projection_browser(
     admin_session: dict[str, Any] | None = None,
     query: str = "",
 ) -> str:
+    document = load_pending_document(document_id, root=intake_root())
     projection = load_outlook_archive_projection(document_id, root=intake_root())
+    gmail = is_gmail_takeout_document(document)
+    archive_label = "Gmail Takeout" if gmail else "Outlook"
+    folder_label = "Labels" if gmail else "Folders"
     statistics = projection.get("statistics") if isinstance(projection.get("statistics"), dict) else {}
     folders = projection.get("folders") if isinstance(projection.get("folders"), list) else []
     messages = projection.get("messages") if isinstance(projection.get("messages"), list) else []
@@ -46547,6 +46565,7 @@ def _render_projection_browser(
             ("Message count", statistics.get("message_count")),
             ("Subfolder count", statistics.get("subfolder_count")),
             ("Attachment count", statistics.get("attachment_count")),
+            ("Thread count", statistics.get("thread_count") if gmail else None),
             ("Projected size", statistics.get("projected_size_bytes")),
         )
     )
@@ -46554,7 +46573,7 @@ def _render_projection_browser(
         "<tr>"
         f'<td class="col-reference"><a href="/admin/archive/{escape(document_id)}/folders/{escape(str(folder.get("folder_id") or ""))}">{escape(str(folder.get("folder_id") or ""))}</a></td>'
         f'<td class="col-title">{escape(str(folder.get("name") or "—"))}</td>'
-        f'<td class="col-source">{escape(str(folder.get("folder_path") or "—"))}</td>'
+        f'<td class="col-source">{escape(str(folder.get("folder_path") or folder.get("path") or "—"))}</td>'
         f'<td class="col-reference">{escape(str(folder.get("parent_id") or "—"))}</td>'
         f'<td class="col-compact">{escape(str(folder.get("message_count") or 0))}</td>'
         f'<td class="col-compact">{escape(str(folder.get("subfolder_count") or 0))}</td>'
@@ -46584,7 +46603,12 @@ def _render_projection_browser(
         if query
         else ""
     )
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Outlook Archive Projection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #d8d4ca;padding:12px;margin:12px 0}}label{{display:grid;gap:4px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input{{padding:8px;border:1px solid #c9c6bd;font:inherit}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(document_id)}">Back to archive review</a></p><h1>Outlook Archive Projection</h1><p class="notice">CDE Platform Stage 39C projections are administrative metadata derived from the preserved archive. They do not expose message bodies, attachment contents, public mailbox contents, or independent evidence records.</p><table class="metadata">{stat_rows}</table><form method="get" action="/admin/archive/{escape(document_id)}/projection"><label>Search projected metadata<input name="q" value="{escape(query)}"></label><button type="submit">Search</button></form>{search_section}<h2>Folders</h2><div class="admin-table-scroll" role="region" aria-label="Outlook folder projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Folder ID</th><th scope="col" class="col-title">Name</th><th scope="col" class="col-source">Path</th><th scope="col" class="col-reference">Parent</th><th scope="col" class="col-compact">Messages</th><th scope="col" class="col-compact">Subfolders</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{folder_rows}</tbody></table></div><h2>Messages</h2><div class="admin-table-scroll" role="region" aria-label="Outlook message metadata projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Subject</th><th scope="col" class="col-source">Sender</th><th scope="col" class="col-source">Recipients</th><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-category">Class</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{message_rows}</tbody></table></div></main></body></html>"""
+    thread_link = (
+        f'<p><a href="/admin/archive/{escape(document_id)}/threads">Inspect projected threads</a></p>'
+        if gmail
+        else ""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{archive_label} Archive Projection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #d8d4ca;padding:12px;margin:12px 0}}label{{display:grid;gap:4px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input{{padding:8px;border:1px solid #c9c6bd;font:inherit}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(document_id)}">Back to archive review</a></p><h1>{archive_label} Archive Projection</h1><p class="notice">These projections are private administrative representations derived from the preserved archive. They do not publish message bodies or attachment content, and they create no Canonical Record automatically.</p><table class="metadata">{stat_rows}</table>{thread_link}<form method="get" action="/admin/archive/{escape(document_id)}/projection"><label>Search projected metadata<input name="q" value="{escape(query)}"></label><button type="submit">Search</button></form>{search_section}<h2>{folder_label}</h2><div class="admin-table-scroll" role="region" aria-label="{archive_label} folder or label projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Name</th><th scope="col" class="col-source">Path</th><th scope="col" class="col-reference">Parent</th><th scope="col" class="col-compact">Messages</th><th scope="col" class="col-compact">Subfolders</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{folder_rows}</tbody></table></div><h2>Messages</h2><div class="admin-table-scroll" role="region" aria-label="{archive_label} message metadata projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Subject</th><th scope="col" class="col-source">Sender</th><th scope="col" class="col-source">Recipients</th><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-category">Class</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{message_rows}</tbody></table></div></main></body></html>"""
 
 
 def _start_archive_job_worker(job_id: str) -> None:
@@ -46675,7 +46699,7 @@ def _render_document_intake_page(
       <h2>New pending document</h2>
       <form class="intake-form" method="post" action="/api/admin/session/document-intake" enctype="multipart/form-data">
         <label>Document file<input name="file" type="file" accept="{escape(DOCUMENT_INTAKE_FILE_ACCEPT)}" required></label>
-        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), Apple Mail Message (.emlx), MBOX Mailbox Archive (.mbox), Microsoft Outlook Personal Storage Archive (.pst), and Microsoft Outlook Offline Storage Archive (.ost).</p>
+        <p class="full-width notice">Supported formats: PDF, JPEG, PNG, M4A, MP3, WAV, Excel 97-2003 Workbook (.xls), Excel Workbook (.xlsx), Rich Text Format (.rtf), RFC 5322 Email (.eml), Microsoft Outlook Message (.msg), Apple Mail Message (.emlx), MBOX Mailbox Archive (.mbox), Microsoft Outlook Personal Storage Archive (.pst), Microsoft Outlook Offline Storage Archive (.ost), and Google Takeout Gmail Export (.zip).</p>
         <p class="full-width notice">{escape(APPLE_MAIL_MBOX_UPLOAD_NOTE)} Current governed Document Intake maximum upload size: {escape(_format_intake_size_limit(intake_max_bytes()))}. Larger Apple Mail archives require a future streaming ingestion path and are not accepted by this synchronous intake form.</p>
         <label>Title<input name="title" maxlength="240" required></label>
         <label>Institution / source<input name="institution_source" maxlength="240" required></label>
@@ -46687,6 +46711,23 @@ def _render_document_intake_page(
         <label class="full-width">Description<textarea name="description" required></textarea></label>
         <label class="full-width">Notes<textarea name="notes" required></textarea></label>
         <button type="submit">Store as pending</button>
+      </form>
+    </section>
+    <section class="pending" id="gmail-takeout-directory-intake">
+      <h2>Google Takeout Gmail Directory Intake</h2>
+      <p class="notice">Select an extracted Google Takeout directory. Each selected file is preserved byte-for-byte inside a deterministic, uncompressed governed ZIP envelope because browsers cannot transmit a directory as one original archive.</p>
+      <form class="intake-form" method="post" action="/api/admin/session/gmail-takeout-directory-intake" enctype="multipart/form-data">
+        <label class="full-width">Extracted Takeout directory<input name="files" type="file" webkitdirectory directory multiple required></label>
+        <label>Title<input name="title" maxlength="240" required></label>
+        <label>Institution / source<input name="institution_source" maxlength="240" required></label>
+        <label>Document date<input name="document_date" type="date" required></label>
+        <label>Category<input name="category" maxlength="120" required></label>
+        <label>Keywords<input name="keywords" maxlength="500"></label>
+        <label>Visibility<select name="visibility" required><option value="private">Private</option><option value="restricted">Restricted</option></select></label>
+        <label>Optional Reference Identifier<input name="reference_identifier" maxlength="160"></label>
+        <label class="full-width">Description<textarea name="description" required></textarea></label>
+        <label class="full-width">Notes<textarea name="notes" required></textarea></label>
+        <button type="submit">Preserve Takeout directory</button>
       </form>
     </section>
     <section class="pending" id="streaming-mbox-intake">
@@ -46830,6 +46871,18 @@ def _render_document_intake_preview(
             ("Mailbox discovery", "Not exposed in CDE Platform Stage 39B"),
             ("Message extraction", "Not performed in CDE Platform Stage 39B"),
         ]
+    elif is_gmail_takeout_document(item):
+        archive_metadata = item.get("gmail_takeout_metadata") if isinstance(item.get("gmail_takeout_metadata"), dict) else {}
+        fields[5:5] = [
+            ("SHA-512", item.get("sha512_hash") or "Not available"),
+            ("Archive source", archive_metadata.get("archive_type_label") or "Google Takeout Gmail Export"),
+            ("Parser status", archive_metadata.get("parser_status_message") or archive_metadata.get("parser_status")),
+            ("Parser version", archive_metadata.get("parser_version")),
+            ("Preservation complete", archive_metadata.get("preservation_complete")),
+            ("Hash verification status", archive_metadata.get("hash_verification_status")),
+            ("Projection state", archive_metadata.get("projection_state")),
+            ("Mailbox files detected", archive_metadata.get("mailbox_count")),
+        ]
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
@@ -46880,6 +46933,12 @@ def _render_document_intake_preview(
         if archive_metadata.get("projection_state") in {"projected", "rebuilt"}:
             projection_link = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/projection">Open administrative mailbox projection</a></p>'
         email_notice = f'''<p class="notice">Microsoft Outlook PST/OST archives are preserved as original bytes. CDE Platform Stage 39C may create internal folder and message metadata projections for governed administrative review; it does not expose message bodies, attachment contents, public mailbox data, or create canonical records from contained items.</p><section><h2>Archive inspection job</h2><p class="notice">Queue a metadata-only archive job to verify preserved hashes and run lightweight parser inspection. If a configured parser supports projection, folder and message metadata are stored as replaceable administrative projection sidecars.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/inspect"><button type="submit">Queue archive inspection</button></form>{latest_job_id}{projection_link}</section>'''
+    elif is_gmail_takeout_document(item):
+        archive_metadata = item.get("gmail_takeout_metadata") if isinstance(item.get("gmail_takeout_metadata"), dict) else {}
+        projection_link = ""
+        if archive_metadata.get("projection_state") in {"projected", "rebuilt"}:
+            projection_link = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/projection">Open administrative Gmail projection</a> · <a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/attachments">Open governed attachments</a></p>'
+        email_notice = f'''<p class="notice">Google Takeout Gmail exports are preserved unchanged as authoritative archive evidence. Labels, threads, messages, body previews, and attachments remain private governed projections; no contained item is published or promoted automatically.</p><section><h2>Gmail Takeout projection</h2><p class="notice">Projection uses the built-in source adapter and the existing archive, message, attachment, graph, and Canonical Record governance boundaries.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/project"><button type="submit">Project Gmail Takeout</button></form>{projection_link}</section>'''
     elif is_email_document(item) or is_mailbox_document(item):
         document_type = str(item.get("document_type") or "").lower()
         if document_type == "msg":
@@ -48543,6 +48602,24 @@ def admin_archive_inspection_job_create(document_id: str, request: Request):
     )
 
 
+@router.post("/api/admin/session/archive/{document_id}/project", response_class=HTMLResponse)
+def admin_gmail_takeout_projection_create(document_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        project_gmail_takeout_document(
+            document_id,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+    except (GmailTakeoutError, ValueError) as exc:
+        code = getattr(exc, "code", str(exc))
+        raise _http_error(400, code) from exc
+    return HTMLResponse(
+        content=_render_projection_browser(document_id, admin_session=session),
+        status_code=201,
+    )
+
+
 @router.get("/api/admin/session/archive/jobs")
 def admin_archive_jobs_api(request: Request):
     require_admin_session(request)
@@ -48654,6 +48731,38 @@ def admin_outlook_archive_folder_projection_page(
     return HTMLResponse(content=content)
 
 
+@router.get("/admin/archive/{document_id}/threads", response_class=HTMLResponse)
+def admin_archive_threads_page(document_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        threads = list_archive_threads(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "archive_thread_projection_not_found") from exc
+    rows = "".join(
+        f'<tr><td><a href="/admin/archive/{escape(document_id)}/threads/{escape(str(thread.get("thread_id") or ""))}">{escape(str(thread.get("thread_id") or ""))}</a></td><td>{len(thread.get("message_projection_ids") or [])}</td></tr>'
+        for thread in threads
+    ) or '<tr><td colspan="2">No projected threads are available.</td></tr>'
+    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Projected Threads</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Threads</h1><p>Threads are private deterministic relationships between projected messages. They are not public records.</p><table><thead><tr><th>Thread ID</th><th>Messages</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>''')
+
+
+@router.get("/admin/archive/{document_id}/threads/{thread_id}", response_class=HTMLResponse)
+def admin_archive_thread_page(document_id: str, thread_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        thread = get_archive_thread(document_id, thread_id, root=intake_root())
+        messages = {
+            str(message.get("projection_id") or ""): message
+            for message in list_projection_messages(document_id, root=intake_root())
+        }
+    except ValueError as exc:
+        raise _http_error(404, "archive_thread_projection_not_found") from exc
+    members = "".join(
+        f'<li><a href="/admin/archive/{escape(document_id)}/messages/{escape(message_id)}">{escape(str((messages.get(message_id) or {}).get("subject") or message_id))}</a></li>'
+        for message_id in thread.get("message_projection_ids") or []
+    ) or "<li>No projected messages.</li>"
+    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Projected Thread</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(900px,calc(100% - 32px));margin:32px auto}}a{{color:#245d61}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/threads">Back to threads</a></p><h1>Thread Inspector</h1><p><strong>Thread ID:</strong> {escape(thread_id)}</p><h2>Projected messages</h2><ul>{members}</ul></main></body></html>''')
+
+
 @router.get("/admin/archive/{document_id}/messages/{message_id}", response_class=HTMLResponse)
 def admin_outlook_archive_message_projection_page(
     document_id: str,
@@ -48688,6 +48797,8 @@ def admin_outlook_archive_message_projection_page(
             ("Folder path", message.get("folder_path")),
             ("Conversation ID", message.get("conversation_id")),
             ("Thread Index", message.get("thread_index")),
+            ("Labels", ", ".join(str(value) for value in (message.get("labels") or []))),
+            ("References", ", ".join(str(value) for value in (message.get("references") or []))),
         )
     )
     provenance = message.get("provenance") if isinstance(message.get("provenance"), dict) else {}
@@ -48714,7 +48825,7 @@ def admin_outlook_archive_message_projection_page(
     )
     promotion_section = ""
     try:
-        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+        context = validate_archive_message_promotion(document_id, message_id, root=intake_root())
         conn = get_db()
         try:
             existing = _existing_outlook_message_promotion(
@@ -48740,7 +48851,19 @@ def admin_outlook_archive_message_projection_page(
             '<p class="notice">Promotion is unavailable because the governed projection is not eligible: '
             f'{escape(exc.code)}.</p>'
         )
-    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2><p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p></section><section><h2>Governed Attachments</h2>{attachment_section}<p>No attachment content or download is exposed from this interface.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
+    document = load_pending_document(document_id, root=intake_root())
+    if is_gmail_takeout_document(document):
+        plain = str(message.get("plain_text_preview") or "")
+        html_preview = str(message.get("sanitized_html_preview") or "")
+        preview = (
+            f'<pre>{escape(plain)}</pre>' if plain else '<p>No bounded plain-text preview is available.</p>'
+        )
+        if html_preview:
+            preview += f'<details><summary>Sanitised HTML preview</summary><div>{html_preview}</div></details>'
+        preview += '<p class="notice">These are bounded private projections. The preserved Google Takeout export remains authoritative.</p>'
+    else:
+        preview = '<p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p>'
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}pre{{white-space:pre-wrap;background:#fff;border:1px solid #e1dfd8;padding:12px}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2>{preview}</section><section><h2>Governed Attachments</h2>{attachment_section}<p>No attachment content or download is exposed from this interface.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
     return HTMLResponse(content=content)
 
 
@@ -48760,7 +48883,7 @@ def admin_outlook_archive_attachments_page(document_id: str, request: Request):
 def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, request: Request):
     session = require_admin_session(request)
     try:
-        context = validate_outlook_attachment_promotion(document_id, attachment_id, root=intake_root())
+        context = validate_archive_attachment_promotion(document_id, attachment_id, root=intake_root())
     except OutlookAttachmentGovernanceError as exc:
         raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
     attachment = context.attachment
@@ -48802,7 +48925,7 @@ def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, 
 def admin_outlook_archive_attachment_promotion_page(document_id: str, attachment_id: str, request: Request):
     session = require_admin_session(request)
     try:
-        context = validate_outlook_attachment_promotion(document_id, attachment_id, root=intake_root())
+        context = validate_archive_attachment_promotion(document_id, attachment_id, root=intake_root())
     except OutlookAttachmentGovernanceError as exc:
         raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
     conn = get_db()
@@ -48843,7 +48966,12 @@ def admin_outlook_archive_attachment_graph_api(document_id: str, request: Reques
         projection = load_outlook_archive_projection(document_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, "outlook_archive_projection_not_found") from exc
-    return build_outlook_attachment_relationship_graph(
+    builder = (
+        build_gmail_takeout_relationship_graph
+        if is_gmail_takeout_document(document)
+        else build_outlook_attachment_relationship_graph
+    )
+    return builder(
         document,
         projection,
         list_outlook_attachments(document_id, root=intake_root()),
@@ -48861,7 +48989,7 @@ def admin_outlook_archive_message_promotion_page(
 ):
     session = require_admin_session(request)
     try:
-        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+        context = validate_archive_message_promotion(document_id, message_id, root=intake_root())
     except OutlookArchivePromotionError as exc:
         status_code = 404 if exc.code.endswith("unavailable") else 409
         raise _http_error(status_code, exc.code) from exc
@@ -48951,6 +49079,24 @@ def admin_outlook_archive_projection_search_api(
         return {"results": search_projection_metadata(document_id, str(q or ""), root=intake_root())}
     except ValueError as exc:
         raise _http_error(404, "outlook_archive_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/threads")
+def admin_archive_threads_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return {"threads": list_archive_threads(document_id, root=intake_root())}
+    except ValueError as exc:
+        raise _http_error(404, "archive_thread_projection_not_found") from exc
+
+
+@router.get("/api/admin/session/archive/{document_id}/threads/{thread_id}")
+def admin_archive_thread_api(document_id: str, thread_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return get_archive_thread(document_id, thread_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "archive_thread_projection_not_found") from exc
 
 
 @router.get("/admin/document-intake/{intake_id}/canonical-record/new", response_class=HTMLResponse)
@@ -49082,6 +49228,61 @@ def admin_document_intake_upload(
                 content_type=getattr(file, "content_type", None),
             )
         raise _http_error(status_code, response_detail) from exc
+    return HTMLResponse(
+        content=_render_document_intake_preview(item, admin_session=session),
+        status_code=201,
+    )
+
+
+@router.post("/api/admin/session/gmail-takeout-directory-intake", response_class=HTMLResponse)
+def admin_gmail_takeout_directory_upload(
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    document_date: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    visibility: str = Form(...),
+    notes: str = Form(...),
+    reference_identifier: str | None = Form(None),
+    keywords: str | None = Form(None),
+    files: list[UploadFile] = File(...),
+):
+    session = require_admin_session(request)
+    try:
+        entries = [
+            (getattr(file, "filename", None) or "", _read_uploaded_file(file))
+            for file in files
+        ]
+        data = package_gmail_takeout_directory(entries)
+        item = store_pending_document(
+            data=data,
+            original_filename="Google_Takeout_Gmail_Directory.zip",
+            content_type="application/zip",
+            title=title,
+            institution_source=institution_source,
+            document_date=document_date,
+            category=category,
+            description=description,
+            visibility=visibility,
+            notes=notes,
+            reference_identifier=reference_identifier,
+            keywords=keywords,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        metadata_path = intake_root() / str(item["intake_id"]) / "metadata.json"
+        stored = json.loads(metadata_path.read_text(encoding="utf-8"))
+        stored["gmail_takeout_metadata"]["source_container"] = "extracted_directory"
+        stored["gmail_takeout_metadata"]["preservation_envelope"] = "deterministic_zip_stored"
+        temporary = metadata_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(stored, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, metadata_path)
+        item = stored
+    except (GmailTakeoutError, ValueError) as exc:
+        code = getattr(exc, "code", str(exc))
+        raise _http_error(400, code) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),
         status_code=201,
@@ -49350,7 +49551,7 @@ def admin_outlook_archive_message_promotion_create(
     if str(confirm_promotion or "").strip() != "1":
         raise _http_error(400, "outlook_archive_promotion_confirmation_required")
     try:
-        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+        context = validate_archive_message_promotion(document_id, message_id, root=intake_root())
     except OutlookArchivePromotionError as exc:
         status_code = 404 if exc.code.endswith("unavailable") else 409
         raise _http_error(status_code, exc.code) from exc
@@ -49390,9 +49591,14 @@ def admin_outlook_archive_message_promotion_create(
         or context.document.get("intake_id")
         or ""
     )
+    archive_source_label = (
+        "Google Takeout Gmail export"
+        if is_gmail_takeout_document(context.document)
+        else "Outlook archive"
+    )
     public_source_narrative = (
         "Created through explicit governed administrative promotion from a projected "
-        f"message in preserved Outlook archive {source_reference}. The original archive "
+        f"message in preserved {archive_source_label} {source_reference}. The original archive "
         "remains authoritative; the projection remains derived administrative metadata."
     )
     payload = SimpleNamespace(
@@ -49470,7 +49676,7 @@ def admin_outlook_archive_attachment_promotion_create(
     if str(confirm_promotion or "").strip() != "1":
         raise _http_error(400, "outlook_attachment_promotion_confirmation_required")
     try:
-        context = validate_outlook_attachment_promotion(
+        context = validate_archive_attachment_promotion(
             document_id, attachment_id, root=intake_root()
         )
     except OutlookAttachmentGovernanceError as exc:
@@ -49515,6 +49721,11 @@ def admin_outlook_archive_attachment_promotion_create(
         or context.message_context.document.get("reference_identifier")
         or document_id
     )
+    archive_source_label = (
+        "Google Takeout Gmail export"
+        if is_gmail_takeout_document(context.message_context.document)
+        else "Outlook archive"
+    )
     payload = SimpleNamespace(
         reference=normalized_reference,
         record_type=str(record_type or "administrative_action").strip(),
@@ -49545,7 +49756,7 @@ def admin_outlook_archive_attachment_promotion_create(
         supersedes=None,
         source_narrative=(
             "Created through explicit governed administrative promotion from an attachment "
-            f"in preserved Outlook archive {source_reference}. The original archive, "
+            f"in preserved {archive_source_label} {source_reference}. The original archive, "
             "message projection, and governed attachment remain authoritative source context."
         ),
     )

@@ -139,23 +139,18 @@ def _attachment_id(
     return "ATT-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:24].upper()
 
 
-def govern_outlook_attachment_bytes(
-    document_id: str,
-    message_id: str,
+def govern_archive_attachment_bytes(
+    context: OutlookArchivePromotionContext,
     *,
     data: bytes,
     filename: str,
     mime_type: str,
     source_attachment_id: str,
+    archive_source: str = "outlook_archive",
     extracted_at: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Admit extracted bytes into private attachment governance storage.
-
-    The Outlook parser and message projection remain unchanged. A future extraction
-    worker calls this boundary once it has extracted an attachment from the preserved
-    archive and can provide the evidence-backed message and attachment identifiers.
-    """
+    """Admit extracted bytes into the source-neutral private attachment store."""
 
     if not isinstance(data, bytes) or not data:
         raise OutlookAttachmentGovernanceError("outlook_attachment_empty")
@@ -169,11 +164,6 @@ def govern_outlook_attachment_bytes(
         character in normalized_mime for character in "\r\n"
     ):
         raise OutlookAttachmentGovernanceError("outlook_attachment_mime_type_invalid")
-    try:
-        context = validate_outlook_message_promotion(document_id, message_id, root=root)
-    except OutlookArchivePromotionError as exc:
-        raise OutlookAttachmentGovernanceError(exc.code) from exc
-
     digest = hashlib.sha256(data).hexdigest()
     archive_id = str(context.document["intake_id"])
     folder_id = str(context.message["folder_id"])
@@ -209,6 +199,21 @@ def govern_outlook_attachment_bytes(
         if _sha256_file(content_path) != digest:
             raise OutlookAttachmentGovernanceError("outlook_attachment_hash_verification_failed")
         provenance = context.message["provenance"]
+        attachment_provenance = {
+            "archive_id": archive_id,
+            "document_identifier": context.document.get("document_identifier"),
+            "folder_projection_id": folder_id,
+            "folder_path": context.message.get("folder_path"),
+            "message_projection_id": projection_id,
+            "message_identifier": context.message.get("message_id"),
+            "source_attachment_identifier": safe_source_id,
+            "extraction_job": context.job.get("job_id"),
+            "parser_version": provenance.get("parser_version"),
+            "projection_version": context.projection.get("projection_version"),
+            "source_archive_sha256": context.document.get("sha256_hash"),
+        }
+        if archive_source != "outlook_archive":
+            attachment_provenance["archive_source"] = str(archive_source or "archive")
         metadata = {
             "attachment_id": attachment_id,
             "governance_version": OUTLOOK_ATTACHMENT_GOVERNANCE_VERSION,
@@ -221,19 +226,7 @@ def govern_outlook_attachment_bytes(
             "hash_verification_status": "verified",
             "promotion_status": "eligible",
             "canonical_record_reference": None,
-            "provenance": {
-                "archive_id": archive_id,
-                "document_identifier": context.document.get("document_identifier"),
-                "folder_projection_id": folder_id,
-                "folder_path": context.message.get("folder_path"),
-                "message_projection_id": projection_id,
-                "message_identifier": context.message.get("message_id"),
-                "source_attachment_identifier": safe_source_id,
-                "extraction_job": context.job.get("job_id"),
-                "parser_version": provenance.get("parser_version"),
-                "projection_version": context.projection.get("projection_version"),
-                "source_archive_sha256": context.document.get("sha256_hash"),
-            },
+            "provenance": attachment_provenance,
         }
         _write_json_atomic(metadata_path, metadata)
         return metadata
@@ -245,6 +238,35 @@ def govern_outlook_attachment_bytes(
         except OSError:
             pass
         raise
+
+
+def govern_outlook_attachment_bytes(
+    document_id: str,
+    message_id: str,
+    *,
+    data: bytes,
+    filename: str,
+    mime_type: str,
+    source_attachment_id: str,
+    extracted_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Compatibility wrapper for the Stage 39E Outlook extraction boundary."""
+
+    try:
+        context = validate_outlook_message_promotion(document_id, message_id, root=root)
+    except OutlookArchivePromotionError as exc:
+        raise OutlookAttachmentGovernanceError(exc.code) from exc
+    return govern_archive_attachment_bytes(
+        context,
+        data=data,
+        filename=filename,
+        mime_type=mime_type,
+        source_attachment_id=source_attachment_id,
+        archive_source="outlook_archive",
+        extracted_at=extracted_at,
+        root=root,
+    )
 
 
 def load_outlook_attachment(
@@ -332,6 +354,51 @@ def validate_outlook_attachment_promotion(
     )
 
 
+def validate_archive_attachment_promotion(
+    document_id: str,
+    attachment_id: str,
+    *,
+    root: Path | None = None,
+) -> OutlookAttachmentPromotionContext:
+    attachment = load_outlook_attachment(document_id, attachment_id, root=root)
+    provenance = attachment.get("provenance") or {}
+    if provenance.get("archive_source") != "gmail_takeout":
+        return validate_outlook_attachment_promotion(document_id, attachment_id, root=root)
+    from api.gmail_takeout import validate_gmail_message_promotion
+
+    message_id = str(provenance.get("message_projection_id") or "")
+    try:
+        context = validate_gmail_message_promotion(
+            document_id, message_id, root=root or intake_root()
+        )
+    except OutlookArchivePromotionError as exc:
+        raise OutlookAttachmentGovernanceError(exc.code) from exc
+    required_matches = {
+        "archive_id": context.document.get("intake_id"),
+        "folder_projection_id": context.message.get("folder_id"),
+        "message_projection_id": context.message.get("projection_id"),
+        "extraction_job": context.job.get("job_id"),
+        "projection_version": context.projection.get("projection_version"),
+        "source_archive_sha256": context.document.get("sha256_hash"),
+    }
+    if any(str(provenance.get(key) or "") != str(value or "") for key, value in required_matches.items()):
+        raise OutlookAttachmentGovernanceError("outlook_attachment_provenance_invalid")
+    source_path = _source_path(document_id, attachment_id, root)
+    if (
+        attachment.get("extraction_status") != "extracted"
+        or attachment.get("hash_verification_status") != "verified"
+        or not source_path.is_file()
+        or _sha256_file(source_path) != attachment.get("sha256_hash")
+        or source_path.stat().st_size != int(attachment.get("file_size_bytes") or -1)
+    ):
+        raise OutlookAttachmentGovernanceError("outlook_attachment_hash_verification_failed")
+    return OutlookAttachmentPromotionContext(
+        attachment=attachment,
+        message_context=context,
+        source_path=source_path,
+    )
+
+
 def build_outlook_attachment_promotion_provenance(
     context: OutlookAttachmentPromotionContext,
     *,
@@ -362,6 +429,12 @@ def build_outlook_attachment_promotion_provenance(
         "source_archive_sha256": provenance["source_archive_sha256"],
         "provenance_chain": [
             provenance["archive_id"],
+            *[str(value) for value in context.message_context.message.get("label_ids") or []],
+            *(
+                [str(context.message_context.message.get("thread_id"))]
+                if context.message_context.message.get("thread_id")
+                else []
+            ),
             provenance["folder_projection_id"],
             provenance["message_projection_id"],
             context.attachment["attachment_id"],
