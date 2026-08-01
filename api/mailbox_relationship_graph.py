@@ -27,6 +27,7 @@ NODE_STYLE = {
     "Thread": ("messages", "thread"),
     "Folder": ("folder", "folder"),
     "IMAP Acquisition": ("server", "acquisition"),
+    "Canonical Record": ("badge-check", "canonical-record"),
 }
 
 EDGE_WEIGHTS = {
@@ -45,6 +46,7 @@ EDGE_WEIGHTS = {
     "Contains": 5,
     "Labeled As": 4,
     "In Thread": 5,
+    "Promoted To": 6,
 }
 
 
@@ -433,12 +435,12 @@ def build_mailbox_relationship_graph(
     }
 
 
-def build_outlook_attachment_relationship_graph(
+def build_attachment_relationship_graph(
     document: dict[str, Any],
     projection: dict[str, Any],
     attachments: list[dict[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
-    """Build the private Stage 39E graph from governed attachment metadata.
+    """Build the private source-neutral graph from governed attachment metadata.
 
     This deliberately does not feed the public MBOX graph. Relationships are
     limited to the originating projection, archive metadata, and message
@@ -491,6 +493,15 @@ def build_outlook_attachment_relationship_graph(
         email_node = f"email:{_slug(archive_id)}:{_slug(message_id)}"
         attachment_id = str(attachment.get("attachment_id") or "")
         attachment_node = f"attachment:{_slug(attachment_id)}"
+        folder_id = str(provenance.get("folder_projection_id") or "")
+        thread_id = str(
+            provenance.get("thread_projection_id")
+            or message.get("thread_id")
+            or message.get("conversation_id")
+            or ""
+        )
+        folder_node = f"folder:{_slug(folder_id)}" if folder_id else ""
+        thread_node = f"thread:{_slug(thread_id)}" if thread_id else ""
         _add_node(
             nodes,
             email_node,
@@ -513,10 +524,16 @@ def build_outlook_attachment_relationship_graph(
                 "attachment_id": attachment_id,
                 "media_type": attachment.get("mime_type"),
                 "sha256_hash": attachment.get("sha256_hash"),
+                "sha512_hash": attachment.get("sha512_hash"),
                 "file_size_bytes": attachment.get("file_size_bytes"),
                 "originating_archive": archive_id,
+                "originating_folder": folder_id,
+                "originating_thread": thread_id,
                 "originating_message": message_id,
+                "acquisition_source": attachment.get("acquisition_source"),
                 "extraction_time": attachment.get("extraction_timestamp"),
+                "evidence_status": attachment.get("evidence_status"),
+                "duplicate_references": attachment.get("duplicate_references") or [],
                 "promotion_status": attachment.get("promotion_status"),
                 "canonical_record_reference": attachment.get("canonical_record_reference"),
                 "url": f"/admin/archive/{archive_id}/attachments/{attachment_id}",
@@ -530,6 +547,60 @@ def build_outlook_attachment_relationship_graph(
         }
         _add_edge(edges, email_node, attachment_node, "Has Attachment", evidence=evidence)
         _add_edge(edges, attachment_node, email_node, "Attached To", evidence=evidence)
+        if folder_node:
+            _add_node(
+                nodes,
+                folder_node,
+                "Folder",
+                _clean(provenance.get("folder_path")) or folder_id,
+                {
+                    "folder_id": folder_id,
+                    "folder_path": provenance.get("folder_path"),
+                    "archive_id": archive_id,
+                    "url": f"/admin/archive/{archive_id}/folders/{folder_id}",
+                },
+            )
+            _add_edge(
+                edges,
+                archive_node,
+                folder_node,
+                "Contains",
+                evidence={"archive_id": archive_id, "folder_projection_id": folder_id},
+            )
+        if thread_node:
+            _add_node(
+                nodes,
+                thread_node,
+                "Thread",
+                thread_id,
+                {
+                    "thread_id": thread_id,
+                    "archive_id": archive_id,
+                    "url": f"/admin/archive/{archive_id}/threads/{thread_id}",
+                },
+            )
+            _add_edge(
+                edges,
+                folder_node or archive_node,
+                thread_node,
+                "Contains",
+                evidence={"archive_id": archive_id, "thread_id": thread_id},
+            )
+            _add_edge(
+                edges,
+                thread_node,
+                email_node,
+                "Contains",
+                evidence={"thread_id": thread_id, "message_projection_id": message_id},
+            )
+        elif folder_node:
+            _add_edge(
+                edges,
+                folder_node,
+                email_node,
+                "Contains",
+                evidence={"folder_projection_id": folder_id, "message_projection_id": message_id},
+            )
         _add_edge(
             edges,
             attachment_node,
@@ -537,6 +608,26 @@ def build_outlook_attachment_relationship_graph(
             "Belongs To Archive",
             evidence={"archive_id": archive_id},
         )
+        canonical_reference = str(attachment.get("canonical_record_reference") or "")
+        if canonical_reference:
+            canonical_node = f"canonical_record:{_slug(canonical_reference)}"
+            _add_node(
+                nodes,
+                canonical_node,
+                "Canonical Record",
+                canonical_reference,
+                {
+                    "reference": canonical_reference,
+                    "url": f"/verify/{canonical_reference}",
+                },
+            )
+            _add_edge(
+                edges,
+                attachment_node,
+                canonical_node,
+                "Promoted To",
+                evidence={"attachment_id": attachment_id, "reference": canonical_reference},
+            )
         if institution_label:
             _add_edge(
                 edges,
@@ -584,6 +675,10 @@ def build_outlook_attachment_relationship_graph(
     }
 
 
+# Stage 39E compatibility name retained for integrations and historical tests.
+build_outlook_attachment_relationship_graph = build_attachment_relationship_graph
+
+
 def build_gmail_takeout_relationship_graph(
     document: dict[str, Any],
     projection: dict[str, Any],
@@ -591,7 +686,7 @@ def build_gmail_takeout_relationship_graph(
 ) -> dict[str, list[dict[str, Any]]]:
     """Build a private deterministic Gmail archive graph from governed projections."""
 
-    graph = build_outlook_attachment_relationship_graph(document, projection, attachments)
+    graph = build_attachment_relationship_graph(document, projection, attachments)
     nodes = {str(node["id"]): dict(node) for node in graph["nodes"]}
     edges = {
         (str(edge["source"]), str(edge["target"]), str(edge["relationship_type"])): dict(edge)
@@ -722,7 +817,7 @@ def build_imap_acquisition_relationship_graph(
 ) -> dict[str, list[dict[str, Any]]]:
     """Build the private deterministic IMAP acquisition graph."""
 
-    graph = build_outlook_attachment_relationship_graph(document, projection, attachments)
+    graph = build_attachment_relationship_graph(document, projection, attachments)
     nodes = {str(node["id"]): dict(node) for node in graph["nodes"]}
     edges = {
         (str(edge["source"]), str(edge["target"]), str(edge["relationship_type"])): dict(edge)

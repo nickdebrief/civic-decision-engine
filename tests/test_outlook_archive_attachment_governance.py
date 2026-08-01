@@ -178,8 +178,10 @@ class OutlookArchiveAttachmentGovernanceTests(unittest.TestCase):
         self.assertEqual(first["mime_type"], "application/pdf")
         self.assertEqual(first["hash_verification_status"], "verified")
         self.assertEqual(self._record_count(), 0)
-        stored = self.root / ".outlook_archive_attachments" / self.item["intake_id"] / first["attachment_id"] / "original.bin"
+        stored = self.root / ".governed_attachments" / "objects" / first["attachment_id"] / "original.bin"
         self.assertEqual(stored.read_bytes(), ATTACHMENT_BYTES)
+        self.assertEqual(first["sha512_hash"], hashlib.sha512(ATTACHMENT_BYTES).hexdigest())
+        self.assertEqual(first["extension"], "pdf")
 
     def test_provenance_and_eligibility_are_bound_to_projection(self):
         attachment = self._govern()
@@ -226,7 +228,12 @@ class OutlookArchiveAttachmentGovernanceTests(unittest.TestCase):
             "Attachment Inspector",
             attachment["attachment_id"],
             attachment["sha256_hash"],
+            attachment["sha512_hash"],
+            "Evidence status",
+            "Acquisition source",
             "Originating archive",
+            "Provenance chain",
+            "Duplicate references",
             "Originating message",
             "Promote Attachment",
             "No attachment download",
@@ -260,7 +267,13 @@ class OutlookArchiveAttachmentGovernanceTests(unittest.TestCase):
         self.assertEqual(provenance["administrator"], "attachment-admin")
         self.assertEqual(
             provenance["provenance_chain"],
-            [self.item["intake_id"], "folder-inbox", "message-001", attachment["attachment_id"]],
+            [
+                self.item["intake_id"],
+                "folder-inbox",
+                "conversation-001",
+                "message-001",
+                attachment["attachment_id"],
+            ],
         )
         updated = load_outlook_attachment(
             self.item["intake_id"], attachment["attachment_id"], root=self.root
@@ -271,8 +284,9 @@ class OutlookArchiveAttachmentGovernanceTests(unittest.TestCase):
     def test_duplicate_sha256_blocks_second_canonical_record_and_identifies_existing(self):
         first = self._govern(source_id="attachment-entry-001")
         second = self._govern(source_id="attachment-entry-002")
-        self.assertNotEqual(first["attachment_id"], second["attachment_id"])
+        self.assertEqual(first["attachment_id"], second["attachment_id"])
         self.assertEqual(first["sha256_hash"], second["sha256_hash"])
+        self.assertEqual(second["occurrence_count"], 2)
         self._promote(first)
         with self.assertRaises(Exception) as duplicate:
             self._promote(second, reference="ADM-COI-20260801-002")
