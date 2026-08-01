@@ -114,6 +114,12 @@ from api.outlook_archive_projections import (
     projection_statistics,
     search_projection_metadata,
 )
+from api.outlook_archive_promotion import (
+    OutlookArchivePromotionContext,
+    OutlookArchivePromotionError,
+    build_outlook_message_promotion_provenance,
+    validate_outlook_message_promotion,
+)
 
 
 ADMIN_TABLE_READABILITY_CSS = """
@@ -45005,6 +45011,114 @@ def _canonical_record_proposal(item: Mapping[str, Any], conn: sqlite3.Connection
     }
 
 
+def _existing_outlook_message_promotion(
+    conn: sqlite3.Connection,
+    *,
+    archive_id: str,
+    message_projection_id: str,
+) -> dict[str, Any] | None:
+    try:
+        rows = conn.execute(
+            "SELECT reference, report_json FROM records WHERE is_latest = 1 ORDER BY exported_at DESC"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    for row in rows:
+        try:
+            report = json.loads(row["report_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        provenance = report.get("promotion_provenance") if isinstance(report, dict) else None
+        if not isinstance(provenance, dict):
+            continue
+        if (
+            str(provenance.get("archive_id") or "") == str(archive_id)
+            and str(provenance.get("message_projection_id") or "")
+            == str(message_projection_id)
+        ):
+            return {"reference": row["reference"], "provenance": provenance}
+    return None
+
+
+def _outlook_message_record_proposal(
+    context: OutlookArchivePromotionContext,
+    conn: sqlite3.Connection,
+) -> dict[str, str]:
+    message = context.message
+    document = context.document
+    institution = str(document.get("institution_source") or "").strip() or "Unknown institution"
+    timestamp = str(
+        message.get("sent_timestamp")
+        or message.get("received_timestamp")
+        or document.get("document_date")
+        or ""
+    ).strip()
+    event_date = timestamp[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", timestamp) else str(
+        document.get("document_date") or ""
+    ).strip()
+    subject = str(message.get("subject") or "").strip() or "Promoted Outlook mailbox message"
+    sender = str(message.get("sender") or "").strip()
+    recipients = ", ".join(str(value) for value in (message.get("recipients") or []))
+    summary_parts = [f"Governed Canonical Record promoted from projected Outlook message: {subject}."]
+    if sender:
+        summary_parts.append(f"Sender: {sender}.")
+    if recipients:
+        summary_parts.append(f"Recipients: {recipients}.")
+    record_type = "administrative_action"
+    return {
+        "record_type": record_type,
+        "reference": _next_record_reference(
+            conn,
+            record_type=record_type,
+            institution=institution,
+            event_date=event_date,
+        ),
+        "title": subject,
+        "institution": institution,
+        "event_date": event_date,
+        "summary": " ".join(summary_parts),
+        "trajectory": "Submitted",
+        "system_state": "Canonical Record created through explicit governed mailbox-message promotion.",
+        "conditions": "GOVERNED_MAILBOX_MESSAGE_PROMOTION",
+        "signals": "EXPLICIT_ADMINISTRATIVE_PROMOTION",
+    }
+
+
+def _render_outlook_message_promotion_form(
+    context: OutlookArchivePromotionContext,
+    *,
+    proposal: Mapping[str, str],
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    document = context.document
+    message = context.message
+    projection = context.projection
+    provenance = message.get("provenance") if isinstance(message.get("provenance"), dict) else {}
+    document_id = str(document.get("intake_id") or "")
+    message_id = str(message.get("projection_id") or "")
+    source_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value or '—'))}</td></tr>"
+        for label, value in (
+            ("Archive", document.get("title")),
+            ("Archive ID", document_id),
+            ("Document Identifier", document.get("document_identifier")),
+            ("Archive SHA-256", document.get("sha256_hash")),
+            ("Folder Projection ID", message.get("folder_id")),
+            ("Message Projection ID", message_id),
+            ("Message Identifier", message.get("message_id")),
+            ("Extraction Job", projection.get("job_id")),
+            ("Projection Version", projection.get("projection_version")),
+            ("Source Identifier", provenance.get("source_identifier")),
+        )
+    )
+    action = (
+        f"/api/admin/session/archive/{escape(document_id)}/messages/"
+        f"{escape(message_id)}/promote"
+    )
+    back = f"/admin/archive/{escape(document_id)}/messages/{escape(message_id)}"
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Promote to Canonical Record</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}.confirmation{{grid-template-columns:auto 1fr;align-items:start;text-transform:none;font:1rem system-ui,sans-serif}}.confirmation input{{margin-top:4px}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="{back}">Back to projected message</a></p><h1>Promote to Canonical Record</h1><p class="notice"><strong>Explicit administrative decision required.</strong> The preserved mailbox archive and its message projection remain evidence. The Canonical Record is a separate governance artefact and will use the existing Canonical Record lifecycle and public verification route.</p><h2>Source projection</h2><table>{source_rows}</table><form method="post" action="{action}"><label>Record type<select name="record_type" required>{_record_type_options(proposal.get('record_type'))}</select></label><label>Canonical record reference<input name="reference" required value="{escape(str(proposal.get('reference') or ''))}"></label><label>Title<input name="record_title" required value="{escape(str(proposal.get('title') or ''))}"></label><label>Institution<input name="institution" required value="{escape(str(proposal.get('institution') or ''))}"></label><label>Event date<input name="event_date" required value="{escape(str(proposal.get('event_date') or ''))}"></label><label>Summary<textarea name="summary" required>{escape(str(proposal.get('summary') or ''))}</textarea></label><label>Trajectory<input name="trajectory" required value="{escape(str(proposal.get('trajectory') or ''))}"></label><label>System state<textarea name="system_state" required>{escape(str(proposal.get('system_state') or ''))}</textarea></label><label>Conditions<input name="conditions" value="{escape(str(proposal.get('conditions') or ''))}"></label><label>Signals<input name="signals" value="{escape(str(proposal.get('signals') or ''))}"></label><label class="confirmation"><input type="checkbox" name="confirm_promotion" value="1" required><span>I confirm this explicit administrative promotion. No mailbox message is promoted automatically.</span></label><button type="submit">Promote to Canonical Record</button></form></main></body></html>"""
+
+
 def _word_safe_truncate(value: Any, limit: int = 180) -> str:
     text = " ".join(str(value or "").split())
     if len(text) <= limit:
@@ -48451,18 +48565,102 @@ def admin_outlook_archive_message_projection_page(
         message = get_projection_message(document_id, message_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, "outlook_archive_message_projection_not_found") from exc
-    rows = "".join(
-        f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
-        for key, value in message.items()
-        if key != "provenance"
+    metadata_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value if value not in (None, '', []) else '—'))}</td></tr>"
+        for label, value in (
+            ("Message Identifier", message.get("message_id")),
+            ("Sender", message.get("sender")),
+            ("Recipients", ", ".join(str(value) for value in (message.get("recipients") or []))),
+            ("CC", ", ".join(str(value) for value in (message.get("cc") or []))),
+            ("Sent", message.get("sent_timestamp")),
+            ("Received", message.get("received_timestamp")),
+            ("Message class", message.get("message_class")),
+            ("Read status", message.get("read_status")),
+            ("Importance", message.get("importance")),
+            ("Categories", ", ".join(str(value) for value in (message.get("categories") or []))),
+            ("Attachment count", message.get("attachment_count")),
+        )
+    )
+    relationship_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value or '—'))}</td></tr>"
+        for label, value in (
+            ("Folder Projection ID", message.get("folder_id")),
+            ("Folder path", message.get("folder_path")),
+            ("Conversation ID", message.get("conversation_id")),
+            ("Thread Index", message.get("thread_index")),
+        )
     )
     provenance = message.get("provenance") if isinstance(message.get("provenance"), dict) else {}
     provenance_rows = "".join(
         f"<tr><th>{escape(str(key))}</th><td>{escape(str(value))}</td></tr>"
         for key, value in provenance.items()
     )
-    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Projected Message Metadata</title><style>body{{margin:32px;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}a{{color:#245d61}}table{{border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top}}th{{background:#faf9f5;color:#555}}</style></head><body>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message Metadata</h1><p>No message body or attachment content is rendered in CDE Platform Stage 39C.</p><table>{rows}</table><h2>Provenance</h2><table>{provenance_rows}</table></body></html>"""
+    promotion_section = ""
+    try:
+        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+        conn = get_db()
+        try:
+            existing = _existing_outlook_message_promotion(
+                conn,
+                archive_id=document_id,
+                message_projection_id=message_id,
+            )
+        finally:
+            conn.close()
+        if existing:
+            reference = str(existing.get("reference") or "")
+            promotion_section = (
+                '<p class="notice">This projected message has already been explicitly promoted to '
+                f'<a href="/verify/{escape(reference)}">Canonical Record {escape(reference)}</a>.</p>'
+            )
+        else:
+            promotion_section = (
+                '<p>This eligible projection may be promoted only through an explicit administrator decision.</p>'
+                f'<p><a class="button-link" href="/admin/archive/{escape(document_id)}/messages/{escape(message_id)}/promote">Promote to Canonical Record</a></p>'
+            )
+    except OutlookArchivePromotionError as exc:
+        promotion_section = (
+            '<p class="notice">Promotion is unavailable because the governed projection is not eligible: '
+            f'{escape(exc.code)}.</p>'
+        )
+    content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2><p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
     return HTMLResponse(content=content)
+
+
+@router.get(
+    "/admin/archive/{document_id}/messages/{message_id}/promote",
+    response_class=HTMLResponse,
+)
+def admin_outlook_archive_message_promotion_page(
+    document_id: str,
+    message_id: str,
+    request: Request,
+):
+    session = require_admin_session(request)
+    try:
+        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+    except OutlookArchivePromotionError as exc:
+        status_code = 404 if exc.code.endswith("unavailable") else 409
+        raise _http_error(status_code, exc.code) from exc
+    conn = get_db()
+    try:
+        existing = _existing_outlook_message_promotion(
+            conn,
+            archive_id=document_id,
+            message_projection_id=message_id,
+        )
+        if existing:
+            raise _http_error(409, "outlook_archive_message_already_promoted")
+        proposal = _outlook_message_record_proposal(context, conn)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        content=_render_outlook_message_promotion_form(
+            context,
+            proposal=proposal,
+            admin_session=session,
+        )
+    )
 
 
 @router.get("/api/admin/session/archive/{document_id}/projection")
@@ -48900,6 +49098,126 @@ def admin_canonical_record_from_document_create(
         f'{association_notice}<p><a href="/verify/{escape(normalized_reference)}">View canonical record</a> · '
         f'<a href="/admin/document-intake/{escape(intake_id)}">Return to source document</a> · '
         '<a href="/admin/associations/new">Create association</a></p></main></body></html>'
+    )
+    return HTMLResponse(content=page, status_code=201)
+
+
+@router.post(
+    "/api/admin/session/archive/{document_id}/messages/{message_id}/promote",
+    response_class=HTMLResponse,
+)
+def admin_outlook_archive_message_promotion_create(
+    document_id: str,
+    message_id: str,
+    request: Request,
+    record_type: str = Form(...),
+    reference: str = Form(...),
+    record_title: str = Form(...),
+    institution: str = Form(...),
+    event_date: str = Form(...),
+    summary: str = Form(...),
+    trajectory: str = Form(...),
+    system_state: str = Form(...),
+    conditions: str | None = Form(None),
+    signals: str | None = Form(None),
+    confirm_promotion: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    actor = _admin_session_actor(session)
+    if str(confirm_promotion or "").strip() != "1":
+        raise _http_error(400, "outlook_archive_promotion_confirmation_required")
+    try:
+        context = validate_outlook_message_promotion(document_id, message_id, root=intake_root())
+    except OutlookArchivePromotionError as exc:
+        status_code = 404 if exc.code.endswith("unavailable") else 409
+        raise _http_error(status_code, exc.code) from exc
+
+    normalized_reference = str(reference or "").strip()
+    if not normalized_reference:
+        raise _http_error(400, "record_reference_required")
+    conn = get_db()
+    try:
+        record_routes.ensure_record_metadata_columns(conn)
+        if conn.execute(
+            "SELECT 1 FROM records WHERE reference = ? LIMIT 1",
+            (normalized_reference,),
+        ).fetchone():
+            raise _http_error(409, "record_reference_already_exists")
+        if _existing_outlook_message_promotion(
+            conn,
+            archive_id=document_id,
+            message_projection_id=message_id,
+        ):
+            raise _http_error(409, "outlook_archive_message_already_promoted")
+    finally:
+        conn.close()
+
+    promotion_provenance = build_outlook_message_promotion_provenance(
+        context,
+        administrator=actor,
+    )
+    generated_at = (
+        str(event_date or "").strip() + "T00:00:00Z"
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", str(event_date or "").strip())
+        else datetime.now(timezone.utc).isoformat()
+    )
+    source_reference = str(
+        context.document.get("document_identifier")
+        or context.document.get("reference_identifier")
+        or context.document.get("intake_id")
+        or ""
+    )
+    public_source_narrative = (
+        "Created through explicit governed administrative promotion from a projected "
+        f"message in preserved Outlook archive {source_reference}. The original archive "
+        "remains authoritative; the projection remains derived administrative metadata."
+    )
+    payload = SimpleNamespace(
+        reference=normalized_reference,
+        record_type=str(record_type or "administrative_action").strip(),
+        record_title=str(record_title or "").strip(),
+        institution=str(institution or "").strip(),
+        event_date=str(event_date or "").strip(),
+        summary=str(summary or "").strip(),
+        source_document_id=str(context.document.get("intake_id") or ""),
+        source_document_reference=source_reference,
+        generated_at=generated_at,
+        trajectory=str(trajectory or "").strip(),
+        system_state=str(system_state or "").strip(),
+        conditions=_split_terms(conditions),
+        signals=_split_terms(signals),
+        finding=str(summary or "").strip(),
+        report={
+            "record_title": str(record_title or "").strip(),
+            "institution": str(institution or "").strip(),
+            "event_date": str(event_date or "").strip(),
+            "source_document_reference": source_reference,
+            "promotion_provenance": promotion_provenance,
+            "governance_boundary": (
+                "The mailbox archive and contained message remain source evidence; the "
+                "projection remains derived administrative metadata; this Canonical Record "
+                "is a separately governed administrative artefact."
+            ),
+        },
+        language="en",
+        supersedes=None,
+        source_narrative=public_source_narrative,
+    )
+    try:
+        record_routes.create_record_entry(payload)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise _http_error(400, str(exc)) from exc
+
+    page = (
+        '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Canonical record created</title>'
+        '<style>body{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}main{width:min(900px,calc(100% - 32px));margin:32px auto}.notice{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}a{color:#245d61}</style></head>'
+        f'<body><main>{_render_admin_console_navigation(admin_session=session)}<h1>Canonical record created</h1>'
+        f'<p class="notice">Created Canonical Record <strong>{escape(normalized_reference)}</strong> through explicit governed promotion. The preserved archive and its projection remain unchanged.</p>'
+        f'<p><a href="/verify/{escape(normalized_reference)}">View Canonical Record</a> · '
+        f'<a href="/admin/archive/{escape(document_id)}/messages/{escape(message_id)}">Return to projected message</a></p>'
+        '</main></body></html>'
     )
     return HTMLResponse(content=page, status_code=201)
 
