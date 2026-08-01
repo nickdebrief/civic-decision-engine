@@ -124,14 +124,14 @@ from api.outlook_archive_promotion import (
     build_outlook_message_promotion_provenance,
     validate_archive_message_promotion,
 )
-from api.outlook_archive_attachments import (
-    OutlookAttachmentGovernanceError,
-    OutlookAttachmentPromotionContext,
-    build_outlook_attachment_promotion_provenance,
-    list_outlook_attachments,
-    load_outlook_attachment,
-    mark_outlook_attachment_promoted,
-    validate_archive_attachment_promotion,
+from api.attachment_governance import (
+    AttachmentGovernanceError as OutlookAttachmentGovernanceError,
+    AttachmentPromotionContext as OutlookAttachmentPromotionContext,
+    build_attachment_promotion_provenance as build_outlook_attachment_promotion_provenance,
+    list_attachments as list_outlook_attachments,
+    load_attachment as load_outlook_attachment,
+    mark_attachment_promoted as mark_outlook_attachment_promoted,
+    validate_attachment_promotion as validate_archive_attachment_promotion,
 )
 from api.gmail_takeout import (
     GmailTakeoutError,
@@ -145,9 +145,9 @@ from api.imap_acquisition import (
     project_imap_acquisition_document,
 )
 from api.mailbox_relationship_graph import (
+    build_attachment_relationship_graph,
     build_gmail_takeout_relationship_graph,
     build_imap_acquisition_relationship_graph,
-    build_outlook_attachment_relationship_graph,
 )
 
 
@@ -48933,7 +48933,7 @@ def admin_outlook_archive_attachments_page(document_id: str, request: Request):
         f'<tr><td><a href="/admin/archive/{escape(document_id)}/attachments/{escape(str(item.get("attachment_id") or ""))}">{escape(str(item.get("attachment_id") or ""))}</a></td><td>{escape(str(item.get("filename") or ""))}</td><td>{escape(str(item.get("mime_type") or ""))}</td><td>{escape(str(item.get("file_size_bytes") or ""))}</td><td>{escape(str(item.get("promotion_status") or "eligible"))}</td></tr>'
         for item in attachments
     ) or '<tr><td colspan="5">No governed attachments are available.</td></tr>'
-    content = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Attachment Governance</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1100px,calc(100% - 32px));margin:32px auto}}h1{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>CDE Platform Stage 39E — Attachment Governance</h1><p>Attachments are private governed evidence objects. No attachment is published or promoted automatically.</p><p><a href="/api/admin/session/archive/{escape(document_id)}/attachment-graph">View graph data</a></p><table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Bytes</th><th>Promotion</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>'''
+    content = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Unified Attachment Governance</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1100px,calc(100% - 32px));margin:32px auto}}h1{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>CDE Platform Stage 42 — Unified Attachment Governance</h1><p>Attachments from every acquisition source share one private governed evidence layer. Content-identical attachments reuse one immutable identity while every source occurrence retains its provenance. No attachment is published or promoted automatically.</p><p><a href="/api/admin/session/archive/{escape(document_id)}/attachment-graph">View graph data</a></p><table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Bytes</th><th>Promotion</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>'''
     return HTMLResponse(content=content)
 
 
@@ -48946,6 +48946,7 @@ def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, 
         raise _http_error(404 if exc.code.endswith("not_found") else 409, exc.code) from exc
     attachment = context.attachment
     provenance = attachment["provenance"]
+    duplicate_references = attachment.get("duplicate_references") or []
     conn = get_db()
     try:
         existing = _existing_outlook_attachment_promotion(
@@ -48967,16 +48968,39 @@ def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, 
             ("Filename", attachment.get("filename")),
             ("MIME type", attachment.get("mime_type")),
             ("SHA-256", attachment.get("sha256_hash")),
+            ("SHA-512", attachment.get("sha512_hash")),
             ("File size", attachment.get("file_size_bytes")),
+            ("Evidence status", attachment.get("evidence_status")),
+            ("Acquisition source", provenance.get("acquisition_source")),
+            ("Acquisition time", provenance.get("acquisition_timestamp")),
             ("Originating archive", provenance.get("archive_id")),
             ("Originating folder", provenance.get("folder_projection_id")),
+            ("Originating thread", provenance.get("thread_projection_id")),
             ("Originating message", provenance.get("message_projection_id")),
             ("Extraction time", attachment.get("extraction_timestamp")),
+            ("Governed occurrences", attachment.get("occurrence_count")),
+            ("Duplicate references", len(duplicate_references)),
             ("Promotion status", "promoted" if existing else attachment.get("promotion_status")),
             ("Existing Canonical Record", existing.get("reference") if existing else None),
         )
     )
-    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Governed Attachment</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}th{{width:230px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/attachments">Back to governed attachments</a></p><h1>Attachment Inspector</h1><table>{rows}</table><h2>Governance</h2><p>The original bytes remain private evidence. No attachment download, rendering, or automatic Canonical Record creation is provided.</p>{promotion}</main></body></html>''')
+    chain = " &rarr; ".join(
+        escape(str(value))
+        for value in (
+            provenance.get("archive_id"),
+            provenance.get("folder_projection_id"),
+            provenance.get("thread_projection_id"),
+            provenance.get("message_projection_id"),
+            attachment_id,
+            existing.get("reference") if existing else None,
+        )
+        if value
+    )
+    duplicates = "".join(
+        f'<li>{escape(str(item.get("acquisition_source") or "archive"))}: {escape(str(item.get("archive_id") or ""))} / {escape(str(item.get("message_projection_id") or ""))}</li>'
+        for item in duplicate_references
+    ) or "<li>No duplicate occurrence is recorded.</li>"
+    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Governed Attachment</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}th{{width:230px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/attachments">Back to governed attachments</a></p><h1>Attachment Inspector</h1><table>{rows}</table><h2>Provenance chain</h2><p>{chain}</p><h2>Duplicate references</h2><ul>{duplicates}</ul><h2>Governance</h2><p>The original bytes remain private evidence. No attachment download, rendering, or automatic Canonical Record creation is provided.</p>{promotion}</main></body></html>''')
 
 
 @router.get("/admin/archive/{document_id}/attachments/{attachment_id}/promote", response_class=HTMLResponse)
@@ -49029,7 +49053,7 @@ def admin_outlook_archive_attachment_graph_api(document_id: str, request: Reques
     elif is_gmail_takeout_document(document):
         builder = build_gmail_takeout_relationship_graph
     else:
-        builder = build_outlook_attachment_relationship_graph
+        builder = build_attachment_relationship_graph
     return builder(
         document,
         projection,

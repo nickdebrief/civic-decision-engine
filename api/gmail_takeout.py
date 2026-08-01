@@ -605,7 +605,7 @@ def project_gmail_takeout_document(
     actor: str,
 ) -> dict[str, Any]:
     from api.document_intake import intake_document_file, load_pending_document
-    from api.outlook_archive_attachments import govern_archive_attachment_bytes
+    from api.attachment_governance import govern_attachment_bytes
 
     document = load_pending_document(document_id, root=root)
     if not is_gmail_takeout_document(document):
@@ -627,13 +627,13 @@ def project_gmail_takeout_document(
     for attachment in parser.iter_attachments():
         context = context_by_message[str(attachment["message_projection_id"])]
         governed.append(
-            govern_archive_attachment_bytes(
+            govern_attachment_bytes(
                 context,
                 data=attachment["data"],
                 filename=attachment["filename"],
                 mime_type=attachment["mime_type"],
                 source_attachment_id=attachment["source_attachment_identifier"],
-                archive_source=GMAIL_TAKEOUT_SOURCE_FORMAT,
+                acquisition_source=GMAIL_TAKEOUT_SOURCE_FORMAT,
                 extracted_at=projection["projection_timestamp"],
                 root=root,
             )

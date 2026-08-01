@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 41 — IMAP Acquisition
+Current release: CDE Platform Stage 42 — Unified Attachment Governance
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_42_UNIFIED_ATTACHMENT_GOVERNANCE.md`](docs/releases/CDE_PLATFORM_STAGE_42_UNIFIED_ATTACHMENT_GOVERNANCE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md`](docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md`](docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md)
 - [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
@@ -902,6 +903,27 @@ supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
 
+### CDE Platform Stage 42 — Unified Attachment Governance
+
+CDE Platform Stage 42 consolidates Outlook PST/OST, Gmail Takeout, and IMAP
+attachments into one source-neutral governed attachment layer. Attachment IDs
+are derived deterministically from SHA-256, and each object also records
+SHA-512, normalized metadata, private evidence status, and promotion history.
+Identical bytes reuse one protected stored object even when acquired through
+different sources; immutable occurrence records preserve every archive,
+folder, thread, message, source, and acquisition-time provenance chain.
+
+The private administrative relationship graph and Attachment Inspector reuse
+this normalized model. Promotion remains an explicit administrator decision
+through the ordinary Canonical Record lifecycle, with hash duplicate blocking
+and permanent provenance. Attachment rendering, preview, download, automatic
+promotion, and public graph exposure remain unavailable. No acquisition,
+parser, database schema, dependency, or public evidence-boundary change is
+introduced.
+
+See [`docs/UNIFIED_ATTACHMENT_GOVERNANCE.md`](docs/UNIFIED_ATTACHMENT_GOVERNANCE.md)
+and the [CDE Platform Stage 42 release note](docs/releases/CDE_PLATFORM_STAGE_42_UNIFIED_ATTACHMENT_GOVERNANCE.md).
+
 ### CDE Platform Stage 41 — IMAP Acquisition
 
 CDE Platform Stage 41 adds explicit administrator-controlled IMAP acquisition
@@ -911,7 +933,8 @@ UIDVALIDITY, UID, acquisition-manifest, SHA-256, and SHA-512 provenance.
 
 The acquisition produces the existing private Folder, Thread, Message, and
 Attachment projections. Message promotion reuses CDE Platform Stage 39D;
-attachment identity and promotion reuse CDE Platform Stage 39E. Credentials are
+attachment identity and promotion now pass through the source-neutral layer
+formalised by CDE Platform Stage 42. Credentials are
 request-scoped and never enter metadata, projections, graph data, provenance,
 Canonical Records, or public pages. This stage introduces no synchronisation,
 polling, scheduled monitoring, automatic promotion, dependency, or schema
@@ -930,8 +953,9 @@ labels, threads, messages, bounded body views, and attachments into the existing
 archive projection model.
 
 Messages appearing under multiple Gmail labels retain one stable projection
-identity with multiple label relationships. Attachments reuse CDE Platform
-Stage 39E identity, hashing, duplicate detection, and explicit promotion.
+identity with multiple label relationships. Attachments now reuse the
+source-neutral CDE Platform Stage 42 identity, hashing, duplicate detection,
+and explicit promotion layer.
 Message promotion reuses CDE Platform Stage 39D. Private graph data adds label
 and thread nodes without changing the public mailbox graph API or Canonical
 Record lifecycle. Public pages expose archive metadata only: no Gmail message
