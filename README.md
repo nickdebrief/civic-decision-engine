@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 39C — Folder & Message Projection
+Current release: CDE Platform Stage 39D — Governed Promotion
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
+- [`docs/releases/STAGE39D_GOVERNED_PROMOTION.md`](docs/releases/STAGE39D_GOVERNED_PROMOTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md`](docs/releases/CDE_PLATFORM_STAGE_39C_FOLDER_MESSAGE_PROJECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md`](docs/releases/CDE_PLATFORM_STAGE_39B_ARCHIVE_PRESERVATION_EXTRACTION_JOBS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md`](docs/releases/CDE_PLATFORM_STAGE_39A_PST_OST_PARSER_INTAKE_BOUNDARY.md)
@@ -897,6 +898,22 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 39D — Governed Promotion
+
+CDE Platform Stage 39D adds an explicit administrator-only workflow for
+promoting an eligible Outlook message projection into an ordinary Canonical
+Record. Promotion is available only after archive inspection and projection
+complete successfully and all required source provenance is present. The
+administrator reviews and confirms the proposed record; there is no automatic,
+background, or bulk promotion.
+
+The preserved PST/OST archive remains authoritative, and the contained mailbox
+message remains evidence within that archive. Its administrative projection
+remains derived and replaceable. The resulting Canonical Record permanently
+stores the archive, folder projection, message projection, message identifier,
+extraction job, source hash, projection version, promotion timestamp, and
+administrator provenance. Public mailbox behavior is unchanged.
 
 ### CDE Platform Stage 39C — Folder & Message Projection
 
