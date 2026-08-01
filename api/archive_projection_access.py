@@ -3,8 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from api.document_intake import intake_root, is_gmail_takeout_document, load_pending_document
+from api.document_intake import (
+    intake_root,
+    is_gmail_takeout_document,
+    is_imap_acquisition_document,
+    load_pending_document,
+)
 from api.gmail_takeout import load_gmail_takeout_projection
+from api.imap_acquisition import load_imap_acquisition_projection
 from api.outlook_archive_projections import load_outlook_archive_projection
 
 
@@ -13,6 +19,8 @@ def load_archive_projection(document_id: str, *, root: Path | None = None) -> di
     document = load_pending_document(document_id, root=storage_root)
     if is_gmail_takeout_document(document):
         return load_gmail_takeout_projection(document_id, root=storage_root)
+    if is_imap_acquisition_document(document):
+        return load_imap_acquisition_projection(document_id, root=storage_root)
     return load_outlook_archive_projection(document_id, root=storage_root)
 
 

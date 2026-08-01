@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 40 — Gmail Takeout
+Current release: CDE Platform Stage 41 — IMAP Acquisition
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,7 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md`](docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md`](docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md)
 - [`docs/releases/PUBLICATION_ENGINE_V2.md`](docs/releases/PUBLICATION_ENGINE_V2.md)
 - [`docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md`](docs/releases/STAGE39E_ATTACHMENT_GOVERNANCE.md)
@@ -900,6 +901,24 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 41 — IMAP Acquisition
+
+CDE Platform Stage 41 adds explicit administrator-controlled IMAP acquisition
+through the existing governed archive model. An administrator selects folders,
+acquires a single read-only snapshot, and preserves exact RFC822 responses with
+UIDVALIDITY, UID, acquisition-manifest, SHA-256, and SHA-512 provenance.
+
+The acquisition produces the existing private Folder, Thread, Message, and
+Attachment projections. Message promotion reuses CDE Platform Stage 39D;
+attachment identity and promotion reuse CDE Platform Stage 39E. Credentials are
+request-scoped and never enter metadata, projections, graph data, provenance,
+Canonical Records, or public pages. This stage introduces no synchronisation,
+polling, scheduled monitoring, automatic promotion, dependency, or schema
+change.
+
+See [`docs/IMAP_ACQUISITION.md`](docs/IMAP_ACQUISITION.md) and the
+[CDE Platform Stage 41 release note](docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md).
 
 ### CDE Platform Stage 40 — Gmail Takeout
 

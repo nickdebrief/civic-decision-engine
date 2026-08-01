@@ -80,6 +80,7 @@ from api.document_intake import (
     is_image_document,
     is_mailbox_document,
     is_gmail_takeout_document,
+    is_imap_acquisition_document,
     is_outlook_archive_document,
     list_intake_documents,
     list_published_documents,
@@ -137,8 +138,15 @@ from api.gmail_takeout import (
     package_gmail_takeout_directory,
     project_gmail_takeout_document,
 )
+from api.imap_acquisition import (
+    ImapAcquisitionError,
+    ImapAcquisitionSettings,
+    acquire_imap_document,
+    project_imap_acquisition_document,
+)
 from api.mailbox_relationship_graph import (
     build_gmail_takeout_relationship_graph,
+    build_imap_acquisition_relationship_graph,
     build_outlook_attachment_relationship_graph,
 )
 
@@ -46547,7 +46555,8 @@ def _render_projection_browser(
     document = load_pending_document(document_id, root=intake_root())
     projection = load_outlook_archive_projection(document_id, root=intake_root())
     gmail = is_gmail_takeout_document(document)
-    archive_label = "Gmail Takeout" if gmail else "Outlook"
+    imap = is_imap_acquisition_document(document)
+    archive_label = "IMAP Acquisition" if imap else ("Gmail Takeout" if gmail else "Outlook")
     folder_label = "Labels" if gmail else "Folders"
     statistics = projection.get("statistics") if isinstance(projection.get("statistics"), dict) else {}
     folders = projection.get("folders") if isinstance(projection.get("folders"), list) else []
@@ -46565,7 +46574,7 @@ def _render_projection_browser(
             ("Message count", statistics.get("message_count")),
             ("Subfolder count", statistics.get("subfolder_count")),
             ("Attachment count", statistics.get("attachment_count")),
-            ("Thread count", statistics.get("thread_count") if gmail else None),
+            ("Thread count", statistics.get("thread_count") if gmail or imap else None),
             ("Projected size", statistics.get("projected_size_bytes")),
         )
     )
@@ -46605,7 +46614,7 @@ def _render_projection_browser(
     )
     thread_link = (
         f'<p><a href="/admin/archive/{escape(document_id)}/threads">Inspect projected threads</a></p>'
-        if gmail
+        if gmail or imap
         else ""
     )
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{archive_label} Archive Projection</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:230px;background:#faf9f5;color:#555}}form{{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #d8d4ca;padding:12px;margin:12px 0}}label{{display:grid;gap:4px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input{{padding:8px;border:1px solid #c9c6bd;font:inherit}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(document_id)}">Back to archive review</a></p><h1>{archive_label} Archive Projection</h1><p class="notice">These projections are private administrative representations derived from the preserved archive. They do not publish message bodies or attachment content, and they create no Canonical Record automatically.</p><table class="metadata">{stat_rows}</table>{thread_link}<form method="get" action="/admin/archive/{escape(document_id)}/projection"><label>Search projected metadata<input name="q" value="{escape(query)}"></label><button type="submit">Search</button></form>{search_section}<h2>{folder_label}</h2><div class="admin-table-scroll" role="region" aria-label="{archive_label} folder or label projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Name</th><th scope="col" class="col-source">Path</th><th scope="col" class="col-reference">Parent</th><th scope="col" class="col-compact">Messages</th><th scope="col" class="col-compact">Subfolders</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{folder_rows}</tbody></table></div><h2>Messages</h2><div class="admin-table-scroll" role="region" aria-label="{archive_label} message metadata projection table"><table class="admin-data-table"><thead><tr><th scope="col" class="col-reference">Projection ID</th><th scope="col" class="col-title">Subject</th><th scope="col" class="col-source">Sender</th><th scope="col" class="col-source">Recipients</th><th scope="col" class="col-timestamp">Timestamp</th><th scope="col" class="col-category">Class</th><th scope="col" class="col-compact">Attachments</th></tr></thead><tbody>{message_rows}</tbody></table></div></main></body></html>"""
@@ -46728,6 +46737,29 @@ def _render_document_intake_page(
         <label class="full-width">Description<textarea name="description" required></textarea></label>
         <label class="full-width">Notes<textarea name="notes" required></textarea></label>
         <button type="submit">Preserve Takeout directory</button>
+      </form>
+    </section>
+    <section class="pending" id="imap-acquisition">
+      <h2>Governed IMAP Acquisition</h2>
+      <p class="notice">Create one explicit read-only mailbox snapshot. This is not synchronisation: no polling, monitoring, scheduled update, or stored password is introduced. Credentials exist only for this request.</p>
+      <form class="intake-form" method="post" action="/api/admin/session/imap-acquisition">
+        <label>IMAP server hostname<input name="hostname" maxlength="253" required></label>
+        <label>Port<input name="port" type="number" min="1" max="65535" value="993" required></label>
+        <label>TLS mode<select name="tls_mode" required><option value="ssl">Implicit TLS</option><option value="starttls">STARTTLS</option></select></label>
+        <label>Mailbox identifier<input name="mailbox_identifier" maxlength="240" required><span class="field-help">A governed administrative label. It need not be the login username.</span></label>
+        <label>Username<input name="username" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <label class="full-width">Selected folders<textarea name="selected_folders" required placeholder="INBOX&#10;Sent"></textarea><span class="field-help">Enter one existing IMAP folder per line. Only explicitly selected folders are acquired.</span></label>
+        <label>Title<input name="title" maxlength="240" required></label>
+        <label>Institution / source<input name="institution_source" maxlength="240" required></label>
+        <label>Document date<input name="document_date" type="date" required></label>
+        <label>Category<input name="category" maxlength="120" required></label>
+        <label>Keywords<input name="keywords" maxlength="500"></label>
+        <label>Visibility<select name="visibility" required><option value="private">Private</option><option value="restricted">Restricted</option></select></label>
+        <label>Optional Reference Identifier<input name="reference_identifier" maxlength="160"></label>
+        <label class="full-width">Description<textarea name="description" required></textarea></label>
+        <label class="full-width">Notes<textarea name="notes" required></textarea></label>
+        <button type="submit">Acquire selected folders</button>
       </form>
     </section>
     <section class="pending" id="streaming-mbox-intake">
@@ -46883,6 +46915,21 @@ def _render_document_intake_preview(
             ("Projection state", archive_metadata.get("projection_state")),
             ("Mailbox files detected", archive_metadata.get("mailbox_count")),
         ]
+    elif is_imap_acquisition_document(item):
+        archive_metadata = item.get("imap_acquisition_metadata") if isinstance(item.get("imap_acquisition_metadata"), dict) else {}
+        fields[5:5] = [
+            ("SHA-512", item.get("sha512_hash") or "Not available"),
+            ("Archive source", archive_metadata.get("archive_type_label") or "Governed IMAP Acquisition"),
+            ("Acquisition identifier", archive_metadata.get("acquisition_id")),
+            ("Mailbox identifier", archive_metadata.get("mailbox_identifier")),
+            ("Server hostname", archive_metadata.get("server_hostname")),
+            ("Acquisition timestamp", archive_metadata.get("acquisition_timestamp")),
+            ("Acquisition hash", archive_metadata.get("acquisition_hash")),
+            ("Selected folders", ", ".join(archive_metadata.get("selected_folders") or [])),
+            ("Acquisition status", archive_metadata.get("acquisition_status")),
+            ("Acquisition progress", f"{archive_metadata.get('acquisition_progress', 0)}%"),
+            ("Projection state", archive_metadata.get("projection_state")),
+        ]
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
@@ -46939,6 +46986,10 @@ def _render_document_intake_preview(
         if archive_metadata.get("projection_state") in {"projected", "rebuilt"}:
             projection_link = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/projection">Open administrative Gmail projection</a> · <a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/attachments">Open governed attachments</a></p>'
         email_notice = f'''<p class="notice">Google Takeout Gmail exports are preserved unchanged as authoritative archive evidence. Labels, threads, messages, body previews, and attachments remain private governed projections; no contained item is published or promoted automatically.</p><section><h2>Gmail Takeout projection</h2><p class="notice">Projection uses the built-in source adapter and the existing archive, message, attachment, graph, and Canonical Record governance boundaries.</p><form method="post" action="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/project"><button type="submit">Project Gmail Takeout</button></form>{projection_link}</section>'''
+    elif is_imap_acquisition_document(item):
+        archive_metadata = item.get("imap_acquisition_metadata") if isinstance(item.get("imap_acquisition_metadata"), dict) else {}
+        projection_link = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/projection">Inspect acquired mailbox</a> · <a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/attachments">Inspect governed attachments</a> · <a href="/api/admin/session/archive/{escape(str(item.get("intake_id") or ""))}/attachment-graph">Inspect relationship graph data</a></p>'
+        email_notice = f'''<p class="notice">This explicit IMAP snapshot is preserved as an immutable governed acquisition envelope. Credentials were not retained. Folder, thread, message, and attachment data remain private projections, and no Canonical Record is created automatically.</p><section><h2>IMAP acquisition summary</h2><p>Status: {escape(str(archive_metadata.get("acquisition_status") or "completed"))} · Progress: {escape(str(archive_metadata.get("acquisition_progress") or 100))}%</p>{projection_link}</section>'''
     elif is_email_document(item) or is_mailbox_document(item):
         document_type = str(item.get("document_type") or "").lower()
         if document_type == "msg":
@@ -48606,12 +48657,14 @@ def admin_archive_inspection_job_create(document_id: str, request: Request):
 def admin_gmail_takeout_projection_create(document_id: str, request: Request):
     session = require_admin_session(request)
     try:
-        project_gmail_takeout_document(
-            document_id,
-            actor=_admin_session_actor(session),
-            root=intake_root(),
+        document = load_pending_document(document_id, root=intake_root())
+        projector = (
+            project_imap_acquisition_document
+            if is_imap_acquisition_document(document)
+            else project_gmail_takeout_document
         )
-    except (GmailTakeoutError, ValueError) as exc:
+        projector(document_id, actor=_admin_session_actor(session), root=intake_root())
+    except (GmailTakeoutError, ImapAcquisitionError, ValueError) as exc:
         code = getattr(exc, "code", str(exc))
         raise _http_error(400, code) from exc
     return HTMLResponse(
@@ -48852,7 +48905,7 @@ def admin_outlook_archive_message_projection_page(
             f'{escape(exc.code)}.</p>'
         )
     document = load_pending_document(document_id, root=intake_root())
-    if is_gmail_takeout_document(document):
+    if is_gmail_takeout_document(document) or is_imap_acquisition_document(document):
         plain = str(message.get("plain_text_preview") or "")
         html_preview = str(message.get("sanitized_html_preview") or "")
         preview = (
@@ -48860,7 +48913,12 @@ def admin_outlook_archive_message_projection_page(
         )
         if html_preview:
             preview += f'<details><summary>Sanitised HTML preview</summary><div>{html_preview}</div></details>'
-        preview += '<p class="notice">These are bounded private projections. The preserved Google Takeout export remains authoritative.</p>'
+        source_label = (
+            "IMAP acquisition envelope"
+            if is_imap_acquisition_document(document)
+            else "Google Takeout export"
+        )
+        preview += f'<p class="notice">These are bounded private projections. The preserved {source_label} remains authoritative.</p>'
     else:
         preview = '<p>No message body or attachment content is rendered. This administrative projection contains bounded metadata only; the preserved Outlook archive remains authoritative.</p>'
     content = f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Projected Message Metadata</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word}}th{{width:230px;background:#faf9f5;color:#555}}pre{{white-space:pre-wrap;background:#fff;border:1px solid #e1dfd8;padding:12px}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.button-link{{display:inline-block;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/projection">Back to projection</a></p><h1>Projected Message</h1><section><h2>Message</h2><p><strong>{escape(str(message.get('subject') or 'Untitled projected message'))}</strong></p><p>Projection ID: <code>{escape(str(message.get('projection_id') or ''))}</code></p></section><section><h2>Metadata</h2><table>{metadata_rows}</table></section><section><h2>Relationships</h2><table>{relationship_rows}</table></section><section><h2>Preview</h2>{preview}</section><section><h2>Governed Attachments</h2>{attachment_section}<p>No attachment content or download is exposed from this interface.</p></section><section><h2>Provenance</h2><table>{provenance_rows}</table></section><section><h2>Promote to Canonical Record</h2>{promotion_section}</section></main></body></html>"""
@@ -48966,11 +49024,12 @@ def admin_outlook_archive_attachment_graph_api(document_id: str, request: Reques
         projection = load_outlook_archive_projection(document_id, root=intake_root())
     except ValueError as exc:
         raise _http_error(404, "outlook_archive_projection_not_found") from exc
-    builder = (
-        build_gmail_takeout_relationship_graph
-        if is_gmail_takeout_document(document)
-        else build_outlook_attachment_relationship_graph
-    )
+    if is_imap_acquisition_document(document):
+        builder = build_imap_acquisition_relationship_graph
+    elif is_gmail_takeout_document(document):
+        builder = build_gmail_takeout_relationship_graph
+    else:
+        builder = build_outlook_attachment_relationship_graph
     return builder(
         document,
         projection,
@@ -49289,6 +49348,97 @@ def admin_gmail_takeout_directory_upload(
     )
 
 
+@router.post("/api/admin/session/imap-acquisition", response_class=HTMLResponse)
+def admin_imap_acquisition_create(
+    request: Request,
+    hostname: str = Form(...),
+    port: int = Form(993),
+    tls_mode: str = Form("ssl"),
+    username: str = Form(...),
+    password: str = Form(...),
+    mailbox_identifier: str = Form(...),
+    selected_folders: str = Form(...),
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    document_date: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    visibility: str = Form(...),
+    notes: str = Form(...),
+    reference_identifier: str | None = Form(None),
+    keywords: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    folders = tuple(
+        value.strip() for value in str(selected_folders or "").splitlines() if value.strip()
+    )
+    settings = ImapAcquisitionSettings(
+        hostname=str(hostname or "").strip(),
+        port=int(port),
+        tls_mode=str(tls_mode or "").strip().lower(),
+        username=str(username or ""),
+        password=str(password or ""),
+        mailbox_identifier=str(mailbox_identifier or "").strip(),
+        selected_folders=folders,
+    )
+    try:
+        result = acquire_imap_document(
+            settings,
+            title=title,
+            institution_source=institution_source,
+            document_date=document_date,
+            category=category,
+            description=description,
+            visibility=visibility,
+            notes=notes,
+            reference_identifier=reference_identifier,
+            keywords=keywords,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+        document_id = str(result["document"]["intake_id"])
+        item = load_pending_document(document_id, root=intake_root())
+    except (ImapAcquisitionError, ValueError) as exc:
+        code = getattr(exc, "code", str(exc))
+        raise _http_error(400, code) from exc
+    return HTMLResponse(
+        content=_render_document_intake_preview(item, admin_session=session),
+        status_code=201,
+    )
+
+
+@router.get("/admin/imap-acquisition/{document_id}", response_class=HTMLResponse)
+def admin_imap_acquisition_summary_page(document_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        document = load_pending_document(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "imap_acquisition_not_found") from exc
+    if not is_imap_acquisition_document(document):
+        raise _http_error(404, "imap_acquisition_not_found")
+    return HTMLResponse(content=_render_document_intake_preview(document, admin_session=session))
+
+
+@router.get("/api/admin/session/imap-acquisition/{document_id}")
+def admin_imap_acquisition_summary_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        document = load_pending_document(document_id, root=intake_root())
+        if not is_imap_acquisition_document(document):
+            raise ValueError("imap_acquisition_not_found")
+        return {
+            "document_id": document_id,
+            "document_identifier": document.get("document_identifier"),
+            "status": document.get("status"),
+            "sha256_hash": document.get("sha256_hash"),
+            "sha512_hash": document.get("sha512_hash"),
+            "acquisition": document.get("imap_acquisition_metadata") or {},
+            "statistics": projection_statistics(document_id, root=intake_root()),
+        }
+    except ValueError as exc:
+        raise _http_error(404, "imap_acquisition_not_found") from exc
+
+
 def _streaming_mbox_upload_error_detail(
     code: str,
     *,
@@ -49592,9 +49742,13 @@ def admin_outlook_archive_message_promotion_create(
         or ""
     )
     archive_source_label = (
-        "Google Takeout Gmail export"
-        if is_gmail_takeout_document(context.document)
-        else "Outlook archive"
+        "governed IMAP acquisition"
+        if is_imap_acquisition_document(context.document)
+        else (
+            "Google Takeout Gmail export"
+            if is_gmail_takeout_document(context.document)
+            else "Outlook archive"
+        )
     )
     public_source_narrative = (
         "Created through explicit governed administrative promotion from a projected "
@@ -49722,9 +49876,13 @@ def admin_outlook_archive_attachment_promotion_create(
         or document_id
     )
     archive_source_label = (
-        "Google Takeout Gmail export"
-        if is_gmail_takeout_document(context.message_context.document)
-        else "Outlook archive"
+        "governed IMAP acquisition"
+        if is_imap_acquisition_document(context.message_context.document)
+        else (
+            "Google Takeout Gmail export"
+            if is_gmail_takeout_document(context.message_context.document)
+            else "Outlook archive"
+        )
     )
     payload = SimpleNamespace(
         reference=normalized_reference,

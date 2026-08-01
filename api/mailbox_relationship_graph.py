@@ -25,6 +25,8 @@ NODE_STYLE = {
     "Intake Record": ("archive", "intake"),
     "Label": ("tag", "label"),
     "Thread": ("messages", "thread"),
+    "Folder": ("folder", "folder"),
+    "IMAP Acquisition": ("server", "acquisition"),
 }
 
 EDGE_WEIGHTS = {
@@ -691,6 +693,163 @@ def build_gmail_takeout_relationship_graph(
                     thread_node,
                     "In Thread",
                     evidence={"message_projection_id": member, "thread_id": thread_id},
+                )
+
+    return {
+        "nodes": sorted(
+            nodes.values(),
+            key=lambda node: (
+                _clean(node.get("type")),
+                _clean(node.get("label")).casefold(),
+                _clean(node.get("id")),
+            ),
+        ),
+        "edges": sorted(
+            edges.values(),
+            key=lambda edge: (
+                _clean(edge.get("source")),
+                _clean(edge.get("target")),
+                _clean(edge.get("relationship_type")),
+            ),
+        ),
+    }
+
+
+def build_imap_acquisition_relationship_graph(
+    document: dict[str, Any],
+    projection: dict[str, Any],
+    attachments: list[dict[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Build the private deterministic IMAP acquisition graph."""
+
+    graph = build_outlook_attachment_relationship_graph(document, projection, attachments)
+    nodes = {str(node["id"]): dict(node) for node in graph["nodes"]}
+    edges = {
+        (str(edge["source"]), str(edge["target"]), str(edge["relationship_type"])): dict(edge)
+        for edge in graph["edges"]
+    }
+    archive_id = _clean(document.get("intake_id"))
+    archive_node = f"intake_record:{_slug(archive_id)}"
+    acquisition_id = _clean(projection.get("acquisition_id"))
+    acquisition_node = f"imap_acquisition:{_slug(acquisition_id)}"
+    metadata = document.get("imap_acquisition_metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    _add_node(
+        nodes,
+        acquisition_node,
+        "IMAP Acquisition",
+        acquisition_id,
+        {
+            "acquisition_id": acquisition_id,
+            "archive_id": archive_id,
+            "mailbox_identifier": metadata.get("mailbox_identifier"),
+            "acquisition_timestamp": metadata.get("acquisition_timestamp"),
+            "acquisition_hash": metadata.get("acquisition_hash"),
+            "url": f"/admin/imap-acquisition/{archive_id}",
+        },
+    )
+    _add_edge(
+        edges,
+        archive_node,
+        acquisition_node,
+        "Contains",
+        evidence={"archive_id": archive_id, "acquisition_id": acquisition_id},
+    )
+
+    folder_nodes: dict[str, str] = {}
+    for folder in projection.get("folders") or []:
+        if not isinstance(folder, dict) or not folder.get("folder_id"):
+            continue
+        folder_id = str(folder["folder_id"])
+        folder_node = f"folder:{_slug(folder_id)}"
+        folder_nodes[folder_id] = folder_node
+        _add_node(
+            nodes,
+            folder_node,
+            "Folder",
+            _clean(folder.get("name")) or folder_id,
+            {
+                "folder_id": folder_id,
+                "folder_path": folder.get("folder_path") or folder.get("path"),
+                "uidvalidity": folder.get("uidvalidity"),
+                "message_count": folder.get("message_count"),
+                "archive_id": archive_id,
+                "url": f"/admin/archive/{archive_id}/folders/{folder_id}",
+            },
+        )
+        _add_edge(
+            edges,
+            acquisition_node,
+            folder_node,
+            "Contains",
+            evidence={"acquisition_id": acquisition_id, "folder_id": folder_id},
+        )
+
+    message_nodes: dict[str, str] = {}
+    message_folders: dict[str, str] = {}
+    for message in projection.get("messages") or []:
+        if not isinstance(message, dict) or not message.get("projection_id"):
+            continue
+        projection_id = str(message["projection_id"])
+        email_node = f"email:{_slug(archive_id)}:{_slug(projection_id)}"
+        message_nodes[projection_id] = email_node
+        message_folders[projection_id] = str(message.get("folder_id") or "")
+        _add_node(
+            nodes,
+            email_node,
+            "Email",
+            _clean(message.get("subject")) or projection_id,
+            {
+                "document_id": archive_id,
+                "projection_id": projection_id,
+                "message_id": message.get("message_id"),
+                "imap_uid": message.get("source_uid"),
+                "uidvalidity": message.get("uidvalidity"),
+                "thread_id": message.get("thread_id"),
+                "date": message.get("sent_timestamp") or message.get("received_timestamp"),
+                "url": f"/admin/archive/{archive_id}/messages/{projection_id}",
+            },
+        )
+
+    for thread in projection.get("threads") or []:
+        if not isinstance(thread, dict) or not thread.get("thread_id"):
+            continue
+        thread_id = str(thread["thread_id"])
+        thread_node = f"thread:{_slug(thread_id)}"
+        members = [
+            str(value) for value in thread.get("message_projection_ids") or [] if str(value)
+        ]
+        _add_node(
+            nodes,
+            thread_node,
+            "Thread",
+            thread_id,
+            {
+                "thread_id": thread_id,
+                "message_count": len(members),
+                "archive_id": archive_id,
+                "url": f"/admin/archive/{archive_id}/threads/{thread_id}",
+            },
+        )
+        for folder_id in sorted({message_folders.get(member, "") for member in members}):
+            folder_node = folder_nodes.get(folder_id)
+            if folder_node:
+                _add_edge(
+                    edges,
+                    folder_node,
+                    thread_node,
+                    "Contains",
+                    evidence={"folder_id": folder_id, "thread_id": thread_id},
+                )
+        for member in members:
+            email_node = message_nodes.get(member)
+            if email_node:
+                _add_edge(
+                    edges,
+                    thread_node,
+                    email_node,
+                    "Contains",
+                    evidence={"thread_id": thread_id, "message_projection_id": member},
                 )
 
     return {
