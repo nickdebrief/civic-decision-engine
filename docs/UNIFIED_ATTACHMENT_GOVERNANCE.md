@@ -49,5 +49,5 @@ promoted automatically or in bulk.
 
 Attachments remain private governed evidence objects. Public pages do not show
 attachment content, previews, downloads, private graph nodes, or promotion
-controls. Stage 42 introduces no schema migration, parser change, acquisition
+controls. CDE Platform Stage 42 introduces no schema migration, parser change, acquisition
 workflow change, runtime dependency, or public evidence-boundary change.

@@ -39,5 +39,5 @@ Public archive behavior remains metadata-only.
 ## Compatibility and exclusions
 
 Stage 39E import names and stored metadata remain readable. Outlook, Gmail, and
-IMAP acquisition contracts are unchanged. Stage 42 adds no database migration,
+IMAP acquisition contracts are unchanged. CDE Platform Stage 42 adds no database migration,
 runtime dependency, acquisition source, parser behavior, or public API.
