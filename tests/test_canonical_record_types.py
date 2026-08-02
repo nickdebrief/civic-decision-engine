@@ -10,6 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from api.document_intake import store_pending_document, update_intake_status
+from api import canonical_record_types
+from api import archive_collection_memberships
+from api import record_indexing
 from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
@@ -249,6 +252,131 @@ class CanonicalRecordTypesTests(unittest.TestCase):
             row["generated_by"],
         )
         self.assertEqual(row["verification_hash"], expected_hash)
+
+    def test_clinical_record_type_enum_and_selector_order(self):
+        expected_clinical_types = {
+            "clinical_episode": "Clinical Episode",
+            "medical_event": "Medical Event",
+            "treatment_episode": "Treatment Episode",
+            "care_episode": "Care Episode",
+            "clinical_record": "Clinical Record",
+        }
+        self.assertEqual(
+            {
+                member.value: canonical_record_types.RECORD_TYPE_LABELS[member.value]
+                for member in (
+                    canonical_record_types.CanonicalRecordType.CLINICAL_EPISODE,
+                    canonical_record_types.CanonicalRecordType.MEDICAL_EVENT,
+                    canonical_record_types.CanonicalRecordType.TREATMENT_EPISODE,
+                    canonical_record_types.CanonicalRecordType.CARE_EPISODE,
+                    canonical_record_types.CanonicalRecordType.CLINICAL_RECORD,
+                )
+            },
+            expected_clinical_types,
+        )
+        self.assertEqual(records.RECORD_TYPE_LABELS, canonical_record_types.RECORD_TYPE_LABELS)
+        self.assertEqual(record_indexing.RECORD_TYPE_LABELS, records.RECORD_TYPE_LABELS)
+        self.assertEqual(
+            archive_collection_memberships.RECORD_TYPE_LABELS,
+            records.RECORD_TYPE_LABELS,
+        )
+
+        options = admin_session._record_type_options("clinical_record")
+        ordered_values = [f'value="{value}"' for value in records.RECORD_TYPE_LABELS]
+        positions = [options.index(value) for value in ordered_values]
+        self.assertEqual(positions, sorted(positions))
+        for value, label in expected_clinical_types.items():
+            self.assertIn(f'value="{value}"', options)
+            self.assertIn(f">{label}</option>", options)
+        self.assertIn('value="clinical_record" selected', options)
+        self.assertLess(
+            options.index('value="administrative_action"'),
+            options.index('value="clinical_episode"'),
+        )
+        self.assertLess(
+            options.index('value="clinical_record"'),
+            options.index('value="public_submission"'),
+        )
+
+        page = admin_session.admin_canonical_record_from_document_page(
+            self.document_id, self.request
+        ).content
+        for label in expected_clinical_types.values():
+            self.assertIn(f">{label}</option>", page)
+        self.assertIn('value="complaint" selected', page)
+
+    def test_clinical_record_types_create_update_filter_and_serialize(self):
+        expected_hash = None
+        for index, record_type in enumerate(
+            (
+                "clinical_episode",
+                "medical_event",
+                "treatment_episode",
+                "care_episode",
+                "clinical_record",
+            ),
+            start=1,
+        ):
+            reference = f"CLIN-MC-20260802-{index:03d}"
+            response = asyncio.run(
+                records.create_record(
+                    self._complaint_payload(
+                        reference=reference,
+                        record_type=record_type,
+                        generated_at=f"2026-08-02T09:{index:02d}:00Z",
+                    )
+                )
+            )
+            self.assertEqual(response.content["record_type"], record_type)
+            self.assertEqual(response.content["version"], 1)
+            if record_type == "medical_event":
+                expected_hash = response.content["verification_hash"]
+
+        indexed = asyncio.run(records.api_records_index(record_type="medical_event"))
+        self.assertEqual(len(indexed.content["records"]), 1)
+        self.assertEqual(indexed.content["records"][0]["record_type"], "medical_event")
+        self.assertEqual(
+            indexed.content["records"][0]["record_type_label"], "Medical Event"
+        )
+        filtered = asyncio.run(records.records_index(record_type="medical_event")).content
+        self.assertIn("CLIN-MC-20260802-002", filtered)
+        self.assertIn("Medical Event", filtered)
+        self.assertNotIn("CLIN-MC-20260802-001", filtered)
+
+        indexed_fields = record_indexing.build_indexed_fields(
+            {"reference": "CLIN-MC-20260802-002", "record_type": "medical_event"}
+        )
+        self.assertEqual(indexed_fields["record_type"], "medical_event")
+        self.assertEqual(indexed_fields["record_type_label"], "Medical Event")
+
+        update = asyncio.run(
+            records.create_record(
+                self._complaint_payload(
+                    reference="CLIN-MC-20260802-002",
+                    record_type="treatment_episode",
+                    generated_at="2026-08-02T10:02:00Z",
+                    trajectory="Treatment reviewed",
+                )
+            )
+        )
+        self.assertEqual(update.content["record_type"], "treatment_episode")
+        self.assertEqual(update.content["version"], 2)
+        self.assertTrue(update.content["is_superseding"])
+
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                "SELECT version, record_type, verification_hash, is_latest "
+                "FROM records WHERE reference = ? ORDER BY version",
+                ("CLIN-MC-20260802-002",),
+            ).fetchall()
+        finally:
+            conn.close()
+        self.assertEqual(
+            [(row["version"], row["record_type"], row["is_latest"]) for row in rows],
+            [(1, "medical_event", 0), (2, "treatment_episode", 1)],
+        )
+        self.assertEqual(rows[0]["verification_hash"], expected_hash)
 
     def test_unsupported_record_type_is_rejected(self):
         with self.assertRaises(FakeHTTPException) as ctx:

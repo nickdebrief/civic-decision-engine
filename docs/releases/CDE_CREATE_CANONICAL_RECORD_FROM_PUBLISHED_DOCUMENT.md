@@ -51,6 +51,12 @@ semantic classification, OCR, body text interpretation, or AI inference.
 
 The administrator must confirm or edit the proposed type before creation.
 
+Clinical Episode, Medical Event, Treatment Episode, Care Episode, and Clinical
+Record are available as explicit administrator selections. Existing category
+mapping and its default remain unchanged. This stage does not infer a clinical
+type from a document category, filename, metadata, OCR, body text, or other
+content.
+
 ## Provenance
 
 Created records store source-document provenance in record metadata:

@@ -44,6 +44,11 @@ from api.public_navigation import (
     public_primary_navigation,
     sanitize_archive_return,
 )
+from api.canonical_record_types import (
+    DEFAULT_RECORD_TYPE,
+    RECORD_TYPE_LABELS,
+    RECORD_TYPE_PREFIXES,
+)
 
 router = APIRouter()
 
@@ -57,28 +62,6 @@ ALLOWED_ATTACHMENT_CONTENT_TYPES = {
     "image/png",
     "text/plain",
 }
-RECORD_TYPE_LABELS = {
-    "strike": "Strike",
-    "complaint": "Complaint",
-    "investigation": "Investigation",
-    "decision": "Decision",
-    "proceeding": "Proceeding",
-    "administrative_action": "Administrative Action",
-    "public_submission": "Public Submission",
-    "policy_event": "Policy Event",
-    "research_record": "Research Record",
-}
-RECORD_TYPE_PREFIXES = {
-    "complaint": "CMP",
-    "investigation": "INV",
-    "decision": "DEC",
-    "proceeding": "PRC",
-    "administrative_action": "ADM",
-    "public_submission": "SUB",
-    "policy_event": "POL",
-    "research_record": "RSR",
-}
-DEFAULT_RECORD_TYPE = "strike"
 
 
 def normalize_record_type(value: object) -> str:
