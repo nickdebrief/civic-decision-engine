@@ -668,9 +668,10 @@ visibility boundaries are changed.
 The canonical record model now supports a governed `record_type` field so CDE
 records can represent distinct civic and administrative events, including
 Strike, Complaint, Investigation, Decision, Proceeding, Administrative Action,
-Public Submission, Policy Event, and Research Record. Existing records without
-an explicit type continue to behave as Strike records without changing their
-references, URLs, lifecycle state, verification hashes, associations, or
+Clinical Episode, Medical Event, Treatment Episode, Care Episode, Clinical
+Record, Public Submission, Policy Event, and Research Record. Existing records
+without an explicit type continue to behave as Strike records without changing
+their references, URLs, lifecycle state, verification hashes, associations, or
 history.
 
 Record type is stored as a stable machine value and displayed with a public
@@ -680,6 +681,13 @@ published documents can be attached to the correct canonical record type, such
 as a Complaint record, without using an unrelated Strike record. Record type is
 not added to legacy verification-hash inputs; existing hashes remain
 verifiable.
+
+Clinical types are semantic classifications only. They do not infer clinical
+meaning from source documents or alter publication, provenance, verification,
+hashing, evidence preservation, associations, the Public Archive Explorer,
+Administrative Audit, or Canonical Record lifecycle behaviour. Administrators
+may select them explicitly when creating or superseding a record; existing
+document-category suggestions retain their previous defaults.
 
 ### Create Canonical Record from Published Document
 

@@ -21,11 +21,36 @@ labels:
 | `decision` | Decision |
 | `proceeding` | Proceeding |
 | `administrative_action` | Administrative Action |
+| `clinical_episode` | Clinical Episode |
+| `medical_event` | Medical Event |
+| `treatment_episode` | Treatment Episode |
+| `care_episode` | Care Episode |
+| `clinical_record` | Clinical Record |
 | `public_submission` | Public Submission |
 | `policy_event` | Policy Event |
 | `research_record` | Research Record |
 
 Unsupported values are rejected with `record_type_invalid`.
+
+The ordering above is used by administrator Record Type selectors. The five
+clinical values are available through the same creation and superseding paths
+as every existing type.
+
+## Semantic Classification Boundary
+
+Record Type describes the meaning assigned to a Canonical Record. It does not
+change how that record is governed. Selecting a clinical type does not alter:
+
+- publication workflow or lifecycle transitions;
+- provenance or evidence preservation;
+- verification or hashing;
+- Record-Document Associations;
+- Public Archive Explorer presentation or filtering semantics;
+- Administrative Audit;
+- canonical identifiers or public URLs.
+
+No clinical meaning is inferred automatically from document content. An
+administrator must select a clinical type explicitly.
 
 ## Backward Compatibility
 
@@ -36,6 +61,36 @@ or empty type values are interpreted as `strike`.
 The migration does not rename existing references, rewrite lifecycle state,
 alter findings, conditions, signals, trajectories, timestamps, public URLs,
 associations, audit history, or publication state.
+
+No migration is required for the additional controlled-vocabulary values.
+Existing values and the default `strike` behaviour remain unchanged.
+
+## Administrator Guidance
+
+Choose the narrowest type supported by the governed record context:
+
+- **Clinical Episode** for a bounded period of clinical activity;
+- **Medical Event** for a discrete medically relevant occurrence;
+- **Treatment Episode** for a bounded course of treatment;
+- **Care Episode** for a bounded period of care delivery;
+- **Clinical Record** for a clinical record that is not more accurately
+  represented by one of the episode or event classifications.
+
+Record Type remains editable only through an explicit administrative creation
+or superseding action. Changing it does not convert evidence, rewrite source
+documents, or alter the established verification hash inputs.
+
+## Handbook Alignment
+
+For **Volume II — Platform Operations**, the administrator workflow should
+describe these values as explicit choices in Canonical Record creation and
+superseding, with the existing default and document-category suggestions
+unchanged.
+
+For **Volume III — Investigator Guide**, investigators should interpret Record
+Type as navigational and semantic metadata. A clinical label does not establish
+clinical truth, change evidential weight, or replace review of provenance and
+the underlying governed evidence.
 
 ## Verification Hash Treatment
 

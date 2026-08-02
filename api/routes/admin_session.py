@@ -61,6 +61,10 @@ from api import archive_collections as ac
 from api import document_intake_corrections as dic
 from api import public_transmissions as trm
 from api import record_document_associations as rda
+from api.canonical_record_types import (
+    RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
+    RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
+)
 from api.routes import records as record_routes
 from api.document_intake import (
     STATUS_LABELS,
@@ -44832,19 +44836,6 @@ def _association_record_institution_label(reference: Any) -> str:
     return ""
 
 
-ASSOCIATION_RECORD_TYPE_LABELS = {
-    "strike": "Strike",
-    "complaint": "Complaint",
-    "investigation": "Investigation",
-    "decision": "Decision",
-    "proceeding": "Proceeding",
-    "administrative_action": "Administrative Action",
-    "public_submission": "Public Submission",
-    "policy_event": "Policy Event",
-    "research_record": "Research Record",
-}
-
-
 def _association_record_type_label(value: Any) -> str:
     normalized = str(value or "strike").strip().lower() or "strike"
     return ASSOCIATION_RECORD_TYPE_LABELS.get(normalized, "Strike")
@@ -44859,19 +44850,6 @@ DOCUMENT_CATEGORY_RECORD_TYPE_SUGGESTIONS = {
     "proceeding": "proceeding",
     "research": "research_record",
 }
-
-RECORD_TYPE_REFERENCE_PREFIXES = {
-    "strike": "Strike",
-    "complaint": "CMP",
-    "investigation": "INV",
-    "decision": "DEC",
-    "proceeding": "PRC",
-    "administrative_action": "ADM",
-    "public_submission": "SUB",
-    "policy_event": "POL",
-    "research_record": "RSR",
-}
-
 
 def _record_type_options(selected: str | None = None) -> str:
     selected_value = str(selected or "strike").strip().lower() or "strike"

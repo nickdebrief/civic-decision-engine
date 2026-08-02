@@ -5,6 +5,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from api.canonical_record_types import RECORD_TYPE_LABELS
+
 
 INDEXED_RECORD_FIELDS = (
     "reference",
@@ -21,19 +23,6 @@ INDEXED_RECORD_FIELDS = (
     "system_state",
     "generated_by",
 )
-
-RECORD_TYPE_LABELS = {
-    "strike": "Strike",
-    "complaint": "Complaint",
-    "investigation": "Investigation",
-    "decision": "Decision",
-    "proceeding": "Proceeding",
-    "administrative_action": "Administrative Action",
-    "public_submission": "Public Submission",
-    "policy_event": "Policy Event",
-    "research_record": "Research Record",
-}
-
 
 def _record_type(value: Any) -> str:
     normalized = str(value or "strike").strip().lower() or "strike"

@@ -8,6 +8,7 @@ from typing import Any
 
 from api import archive_collections as ac
 from api import record_document_associations as rda
+from api.canonical_record_types import RECORD_TYPE_LABELS
 from api.document_intake import STATUS_LABELS, document_type_label, load_pending_document
 
 
@@ -37,18 +38,6 @@ MEMBER_TYPE_ALIASES: dict[str, str] = {
     "record_document_association": "record_document_association",
     "transmission": "public_transmission",
     "public_transmission": "public_transmission",
-}
-
-RECORD_TYPE_LABELS: dict[str, str] = {
-    "strike": "Strike",
-    "complaint": "Complaint",
-    "investigation": "Investigation",
-    "decision": "Decision",
-    "proceeding": "Proceeding",
-    "administrative_action": "Administrative Action",
-    "public_submission": "Public Submission",
-    "policy_event": "Policy Event",
-    "research_record": "Research Record",
 }
 
 MEMBERSHIP_ACTION_LABELS: dict[str, str] = {
