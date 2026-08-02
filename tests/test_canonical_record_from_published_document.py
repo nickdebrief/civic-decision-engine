@@ -95,12 +95,18 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
         associations.ensure_association_tables(conn)
         return conn
 
-    def _create_record(self, *, create_association=None):
+    def _create_record(
+        self,
+        *,
+        create_association=None,
+        record_type="complaint",
+        reference="CMP-MC-20191202-001",
+    ):
         return admin_session.admin_canonical_record_from_document_create(
             self.document_id,
             self.request,
-            record_type="complaint",
-            reference="CMP-MC-20191202-001",
+            record_type=record_type,
+            reference=reference,
             record_title="Initial Complaint to the Medical Council of Ireland",
             institution="Medical Council of Ireland",
             event_date="2019-12-02",
@@ -165,6 +171,75 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
         self.assertIn("NM-EVID-PKG-20191202-001", content)
         self.assertIn(hashlib.sha256(PDF_BYTES).hexdigest(), content)
         self.assertIn("Document SHA-256 is preserved on the document", content)
+        self.assertIn(
+            "Recommended based on Published Document category",
+            content,
+        )
+
+    def test_clinical_category_recommendation_prefills_without_locking_selector(self):
+        item = load_pending_document(self.document_id, root=self.root)
+        item["category"] = "Hospital Admission"
+        conn = self._conn()
+        try:
+            proposal = admin_session._canonical_record_proposal(item, conn)
+        finally:
+            conn.close()
+
+        content = admin_session._render_canonical_record_from_document_form(
+            item,
+            proposal=proposal,
+            duplicate_links=[],
+        )
+
+        self.assertEqual(proposal["record_type"], "clinical_episode")
+        self.assertIn(
+            'value="clinical_episode" selected>Clinical Episode</option>', content
+        )
+        self.assertIn('value="medical_event">Medical Event</option>', content)
+        self.assertIn(
+            "Recommended based on Published Document category",
+            content,
+        )
+
+    def test_unmapped_category_preserves_default_without_recommendation_advisory(self):
+        item = load_pending_document(self.document_id, root=self.root)
+        item["category"] = "Correspondence"
+        conn = self._conn()
+        try:
+            proposal = admin_session._canonical_record_proposal(item, conn)
+        finally:
+            conn.close()
+
+        content = admin_session._render_canonical_record_from_document_form(
+            item,
+            proposal=proposal,
+            duplicate_links=[],
+        )
+
+        self.assertEqual(proposal["record_type"], "strike")
+        self.assertIn('value="strike" selected>Strike</option>', content)
+        self.assertNotIn(
+            "Recommended based on Published Document category",
+            content,
+        )
+
+    def test_administrator_can_override_recommended_record_type(self):
+        response = self._create_record(
+            record_type="clinical_record",
+            reference="CLR-MC-20191202-001",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT record_type FROM records WHERE reference = ?",
+                ("CLR-MC-20191202-001",),
+            ).fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(row["record_type"], "clinical_record")
 
     def test_create_record_preserves_document_identity_and_declining_association(self):
         before_document = load_pending_document(self.document_id, root=self.root)

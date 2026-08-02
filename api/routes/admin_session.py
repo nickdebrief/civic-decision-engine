@@ -64,6 +64,8 @@ from api import record_document_associations as rda
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
+    default_record_type_for_document_category,
+    recommended_record_type_for_document_category,
 )
 from api.routes import records as record_routes
 from api.document_intake import (
@@ -44841,16 +44843,6 @@ def _association_record_type_label(value: Any) -> str:
     return ASSOCIATION_RECORD_TYPE_LABELS.get(normalized, "Strike")
 
 
-DOCUMENT_CATEGORY_RECORD_TYPE_SUGGESTIONS = {
-    "evidence package": "complaint",
-    "complaint": "complaint",
-    "investigation material": "investigation",
-    "decision": "decision",
-    "submission": "public_submission",
-    "proceeding": "proceeding",
-    "research": "research_record",
-}
-
 def _record_type_options(selected: str | None = None) -> str:
     selected_value = str(selected or "strike").strip().lower() or "strike"
     return "".join(
@@ -44865,8 +44857,7 @@ def _split_terms(value: Any) -> list[str]:
 
 
 def _suggest_record_type_from_document(item: Mapping[str, Any]) -> str:
-    category = str(item.get("category") or "").strip().casefold()
-    return DOCUMENT_CATEGORY_RECORD_TYPE_SUGGESTIONS.get(category, "strike")
+    return default_record_type_for_document_category(item.get("category"))
 
 
 def _suggest_institution_from_document(item: Mapping[str, Any]) -> str:
@@ -46808,6 +46799,11 @@ def _render_canonical_record_from_document_form(
     duplicate_links: list[dict[str, Any]],
     admin_session: dict[str, Any] | None = None,
 ) -> str:
+    recommendation_advisory = ""
+    if recommended_record_type_for_document_category(item.get("category")):
+        recommendation_advisory = (
+            '<span class="field-help">Recommended based on Published Document category</span>'
+        )
     duplicate_warning = ""
     if duplicate_links:
         links = ", ".join(str(row.get("reference") or "") for row in duplicate_links)
@@ -46831,7 +46827,7 @@ def _render_canonical_record_from_document_form(
     source_reference = str(item.get("document_identifier") or item.get("intake_id") or "")
     default_public_label = str(item.get("title") or "Supporting document")
     default_public_note = str(item.get("description") or "").strip()
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Canonical Record from Published Document</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(str(item.get('intake_id') or ''))}">Back to Published document</a></p><h1>Create Canonical Record from Published Document</h1><p class="notice">This workflow proposes a new canonical CDE record from Published document metadata. The document remains an independently preserved evidential artefact. Creating a record does not copy bytes, reuse the document SHA-256 as the record verification hash, or silently create an association.</p>{duplicate_warning}<h2>Source Published document</h2><table>{source_rows}</table><form method="post" action="/api/admin/session/document-intake/{escape(str(item.get('intake_id') or ''))}/canonical-record"><label>Record type<select name="record_type" required>{_record_type_options(proposal.get('record_type'))}</select><span class="field-help">Suggested from document category; administrator confirmation is required.</span></label><label>Canonical record reference<input name="reference" required value="{escape(str(proposal.get('reference') or ''))}"></label><label>Title<input name="record_title" required value="{escape(str(proposal.get('title') or ''))}"></label><label>Institution<input name="institution" required value="{escape(str(proposal.get('institution') or ''))}"></label><label>Event date<input name="event_date" required value="{escape(str(proposal.get('event_date') or ''))}"></label><label>Summary<textarea name="summary" required>{escape(str(proposal.get('summary') or ''))}</textarea></label><label>Trajectory<input name="trajectory" required value="{escape(str(proposal.get('trajectory') or ''))}"></label><label>System state<textarea name="system_state" required>{escape(str(proposal.get('system_state') or ''))}</textarea></label><label>Conditions<input name="conditions" value="{escape(str(proposal.get('conditions') or ''))}"><span class="field-help">Comma-separated governed condition labels. No conditions are inferred from document text.</span></label><label>Signals<input name="signals" value="{escape(str(proposal.get('signals') or ''))}"><span class="field-help">Comma-separated governed signal labels. No signals are inferred from document text.</span></label><label>Source provenance<textarea name="source_narrative" required>Created from Published document: {escape(source_reference)}
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Canonical Record from Published Document</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(str(item.get('intake_id') or ''))}">Back to Published document</a></p><h1>Create Canonical Record from Published Document</h1><p class="notice">This workflow proposes a new canonical CDE record from Published document metadata. The document remains an independently preserved evidential artefact. Creating a record does not copy bytes, reuse the document SHA-256 as the record verification hash, or silently create an association.</p>{duplicate_warning}<h2>Source Published document</h2><table>{source_rows}</table><form method="post" action="/api/admin/session/document-intake/{escape(str(item.get('intake_id') or ''))}/canonical-record"><label>Record type<select name="record_type" required>{_record_type_options(proposal.get('record_type'))}</select>{recommendation_advisory}</label><label>Canonical record reference<input name="reference" required value="{escape(str(proposal.get('reference') or ''))}"></label><label>Title<input name="record_title" required value="{escape(str(proposal.get('title') or ''))}"></label><label>Institution<input name="institution" required value="{escape(str(proposal.get('institution') or ''))}"></label><label>Event date<input name="event_date" required value="{escape(str(proposal.get('event_date') or ''))}"></label><label>Summary<textarea name="summary" required>{escape(str(proposal.get('summary') or ''))}</textarea></label><label>Trajectory<input name="trajectory" required value="{escape(str(proposal.get('trajectory') or ''))}"></label><label>System state<textarea name="system_state" required>{escape(str(proposal.get('system_state') or ''))}</textarea></label><label>Conditions<input name="conditions" value="{escape(str(proposal.get('conditions') or ''))}"><span class="field-help">Comma-separated governed condition labels. No conditions are inferred from document text.</span></label><label>Signals<input name="signals" value="{escape(str(proposal.get('signals') or ''))}"><span class="field-help">Comma-separated governed signal labels. No signals are inferred from document text.</span></label><label>Source provenance<textarea name="source_narrative" required>Created from Published document: {escape(source_reference)}
 Document title: {escape(str(item.get('title') or ''))}
 Document Identifier: {escape(str(item.get('document_identifier') or ''))}
 Optional Reference Identifier: {escape(str(item.get('reference_identifier') or ''))}
