@@ -686,8 +686,14 @@ Clinical types are semantic classifications only. They do not infer clinical
 meaning from source documents or alter publication, provenance, verification,
 hashing, evidence preservation, associations, the Public Archive Explorer,
 Administrative Audit, or Canonical Record lifecycle behaviour. Administrators
-may select them explicitly when creating or superseding a record; existing
-document-category suggestions retain their previous defaults.
+may select them explicitly when creating or superseding a record.
+
+When a Canonical Record is created from a Published Document, an explicit
+category mapping may preselect a recommended Record Type. The form labels this
+as **Recommended based on Published Document category**, and the administrator
+may freely choose any other type before saving. Unmapped categories retain the
+existing default. The recommendation layer uses no AI, document-body analysis,
+automatic creation, or post-creation modification.
 
 ### Create Canonical Record from Published Document
 
@@ -705,6 +711,11 @@ confirmed. The document SHA-256 is not reused as the record verification hash,
 document bytes are not copied into the record, OCR/body text is not converted
 into findings, and associations continue to pass the existing Published-only
 document and public-record validation rules.
+
+Record Type recommendations are advisory defaults derived only from the
+Published Document category through a centralized explicit mapping. The
+selector remains editable, and an administrator's submitted choice is
+authoritative.
 
 ### Governed Document Keywords
 

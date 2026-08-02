@@ -49,8 +49,10 @@ change how that record is governed. Selecting a clinical type does not alter:
 - Administrative Audit;
 - canonical identifiers or public URLs.
 
-No clinical meaning is inferred automatically from document content. An
-administrator must select a clinical type explicitly.
+No clinical meaning is inferred from document content. During explicit creation
+from a Published Document, its governed category may preselect a clinical type
+from the centralized recommendation mapping. This is an editable advisory
+default only; the administrator's submitted selection remains authoritative.
 
 ## Backward Compatibility
 
@@ -80,17 +82,24 @@ Record Type remains editable only through an explicit administrative creation
 or superseding action. Changing it does not convert evidence, rewrite source
 documents, or alter the established verification hash inputs.
 
+The **Create Canonical Record from Published Document** form displays
+**Recommended based on Published Document category** when an explicit category
+mapping exists. Unmapped categories preserve the established default. The
+recommendation does not inspect document bytes, OCR, filenames, free text, or
+relationships, and it does not save or create a record automatically.
+
 ## Handbook Alignment
 
 For **Volume II — Platform Operations**, the administrator workflow should
 describe these values as explicit choices in Canonical Record creation and
-superseding, with the existing default and document-category suggestions
-unchanged.
+superseding, and explain that a category-based recommendation remains freely
+editable before saving.
 
 For **Volume III — Investigator Guide**, investigators should interpret Record
 Type as navigational and semantic metadata. A clinical label does not establish
 clinical truth, change evidential weight, or replace review of provenance and
-the underlying governed evidence.
+the underlying governed evidence. A recommendation records no independent
+finding and does not displace administrator judgment.
 
 ## Verification Hash Treatment
 

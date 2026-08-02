@@ -46,3 +46,37 @@ RECORD_TYPE_PREFIXES: dict[str, str] = {
     record_type.value: prefix for record_type, _label, prefix in RECORD_TYPE_DEFINITIONS
 }
 DEFAULT_RECORD_TYPE = CanonicalRecordType.STRIKE.value
+
+
+DOCUMENT_CATEGORY_RECORD_TYPE_RECOMMENDATIONS: dict[str, str] = {
+    "evidence package": CanonicalRecordType.COMPLAINT.value,
+    "complaint": CanonicalRecordType.COMPLAINT.value,
+    "investigation material": CanonicalRecordType.INVESTIGATION.value,
+    "decision": CanonicalRecordType.DECISION.value,
+    "submission": CanonicalRecordType.PUBLIC_SUBMISSION.value,
+    "proceeding": CanonicalRecordType.PROCEEDING.value,
+    "research": CanonicalRecordType.RESEARCH_RECORD.value,
+    "hospital admission": CanonicalRecordType.CLINICAL_EPISODE.value,
+    "admission form": CanonicalRecordType.CLINICAL_EPISODE.value,
+    "consent form": CanonicalRecordType.CLINICAL_RECORD.value,
+    "operation record": CanonicalRecordType.TREATMENT_EPISODE.value,
+    "procedure record": CanonicalRecordType.TREATMENT_EPISODE.value,
+    "pain intervention record": CanonicalRecordType.MEDICAL_EVENT.value,
+    "clinical assessment": CanonicalRecordType.CLINICAL_RECORD.value,
+    "medical report": CanonicalRecordType.CLINICAL_RECORD.value,
+    "discharge summary": CanonicalRecordType.CARE_EPISODE.value,
+    "post-operative instructions": CanonicalRecordType.CARE_EPISODE.value,
+}
+
+
+def recommended_record_type_for_document_category(category: object) -> str | None:
+    """Return an explicit advisory recommendation for a document category."""
+
+    normalized = str(category or "").strip().casefold()
+    return DOCUMENT_CATEGORY_RECORD_TYPE_RECOMMENDATIONS.get(normalized)
+
+
+def default_record_type_for_document_category(category: object) -> str:
+    """Return the recommendation or preserve the established default."""
+
+    return recommended_record_type_for_document_category(category) or DEFAULT_RECORD_TYPE

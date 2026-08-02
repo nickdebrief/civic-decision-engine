@@ -305,6 +305,47 @@ class CanonicalRecordTypesTests(unittest.TestCase):
             self.assertIn(f">{label}</option>", page)
         self.assertIn('value="complaint" selected', page)
 
+    def test_document_category_record_type_recommendations_are_explicit(self):
+        expected = {
+            "Hospital Admission": "clinical_episode",
+            "Admission Form": "clinical_episode",
+            "Consent Form": "clinical_record",
+            "Operation Record": "treatment_episode",
+            "Procedure Record": "treatment_episode",
+            "Pain Intervention Record": "medical_event",
+            "Clinical Assessment": "clinical_record",
+            "Medical Report": "clinical_record",
+            "Discharge Summary": "care_episode",
+            "Post-Operative Instructions": "care_episode",
+        }
+
+        for category, record_type in expected.items():
+            with self.subTest(category=category):
+                self.assertEqual(
+                    canonical_record_types.recommended_record_type_for_document_category(
+                        category
+                    ),
+                    record_type,
+                )
+                self.assertEqual(
+                    canonical_record_types.default_record_type_for_document_category(
+                        f"  {category.upper()}  "
+                    ),
+                    record_type,
+                )
+
+        self.assertIsNone(
+            canonical_record_types.recommended_record_type_for_document_category(
+                "Correspondence"
+            )
+        )
+        self.assertEqual(
+            canonical_record_types.default_record_type_for_document_category(
+                "Correspondence"
+            ),
+            canonical_record_types.DEFAULT_RECORD_TYPE,
+        )
+
     def test_clinical_record_types_create_update_filter_and_serialize(self):
         expected_hash = None
         for index, record_type in enumerate(

@@ -49,13 +49,29 @@ Complaint record with:
 Record type suggestion is governed by explicit category mapping. It does not use
 semantic classification, OCR, body text interpretation, or AI inference.
 
-The administrator must confirm or edit the proposed type before creation.
+The form preselects a mapped recommendation and displays **Recommended based on
+Published Document category**. The selector is never locked. The administrator
+may retain or replace the recommendation before creation, and the submitted
+choice is authoritative.
 
-Clinical Episode, Medical Event, Treatment Episode, Care Episode, and Clinical
-Record are available as explicit administrator selections. Existing category
-mapping and its default remain unchanged. This stage does not infer a clinical
-type from a document category, filename, metadata, OCR, body text, or other
-content.
+| Published Document category | Recommended Canonical Record Type |
+| --- | --- |
+| Hospital Admission | Clinical Episode |
+| Admission Form | Clinical Episode |
+| Consent Form | Clinical Record |
+| Operation Record | Treatment Episode |
+| Procedure Record | Treatment Episode |
+| Pain Intervention Record | Medical Event |
+| Clinical Assessment | Clinical Record |
+| Medical Report | Clinical Record |
+| Discharge Summary | Care Episode |
+| Post-Operative Instructions | Care Episode |
+
+The pre-existing mappings for Evidence Package, Complaint, Investigation
+Material, Decision, Submission, Proceeding, and Research remain unchanged. An
+unmapped category retains the established default. No filename, body text, OCR,
+machine learning, hidden inference, or background update contributes to the
+recommendation.
 
 ## Provenance
 
