@@ -1,8 +1,8 @@
-# CDE Platform Stage 40B — Canonical Record Type Recommendation
+# CDE Platform Stage 44 — Canonical Record Type Recommendation
 
 ## Purpose
 
-CDE Platform Stage 40B adds an advisory Record Type recommendation to the
+CDE Platform Stage 44 adds an advisory Record Type recommendation to the
 authenticated **Create Canonical Record from Published Document** workflow.
 The recommendation reduces repetitive selection while preserving administrator
 authority over Canonical Record classification.
@@ -16,15 +16,11 @@ the following clinical mappings are added:
 | Published Document category | Recommended Canonical Record Type |
 | --- | --- |
 | Hospital Admission | Clinical Episode |
-| Hospital Admission / Administrative Record | Clinical Episode |
 | Admission Form | Clinical Episode |
 | Consent Form | Clinical Record |
-| Consent Form / Procedure Consent | Clinical Record |
 | Operation Record | Treatment Episode |
-| Operation Record / Procedure Record | Treatment Episode |
 | Procedure Record | Treatment Episode |
 | Pain Intervention Record | Medical Event |
-| Pain Intervention Record / Clinical Procedure Record | Medical Event |
 | Clinical Assessment | Clinical Record |
 | Medical Report | Clinical Record |
 | Discharge Summary | Care Episode |
@@ -32,11 +28,9 @@ the following clinical mappings are added:
 
 Category matching converts the value to a string, removes surrounding
 whitespace, applies case folding, and then performs an exact normalized-key
-lookup. The explicit composite mappings above reflect confirmed values in the
-production Published Document taxonomy. The workflow does not split slash
-values or use substring, fuzzy, or keyword matching. If no mapping exists, it
-preserves the established default and does not display the recommendation
-label.
+lookup. The workflow does not split slash values or use substring, fuzzy, or
+keyword matching. If no mapping exists, it preserves the established default
+and does not display the recommendation label.
 
 ## Administrator Authority
 

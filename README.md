@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 42 — Unified Attachment Governance
+Current release: CDE Platform Stage 44.1 — Composite Category Recommendation Coverage
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -67,6 +67,10 @@ Research artefacts:
 - **GitHub Repository:** https://github.com/nickdebrief/civic-decision-engine
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md`](docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md`](docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md`](docs/releases/CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_42_UNIFIED_ATTACHMENT_GOVERNANCE.md`](docs/releases/CDE_PLATFORM_STAGE_42_UNIFIED_ATTACHMENT_GOVERNANCE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md`](docs/releases/CDE_PLATFORM_STAGE_41_IMAP_ACQUISITION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md`](docs/releases/CDE_PLATFORM_STAGE_40_GMAIL_TAKEOUT.md)
@@ -175,6 +179,9 @@ CDE Platform stage numbers describe implementation milestones within the Civic D
 These are independent sequences and should not be interpreted as a single continuous roadmap.
 
 For the complete stage numbering policy, see [`docs/releases/STAGE_NUMBERING.md`](docs/releases/STAGE_NUMBERING.md).
+
+For the canonical CDE Platform chronology and release index, see
+[`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md).
 
 
 ---
@@ -921,6 +928,36 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 44.1 — Composite Category Recommendation Coverage
+
+CDE Platform Stage 44.1 extends the explicit recommendation mapping with four
+composite Published Document categories already used in production. Exact
+normalized-key matching remains authoritative; no substring, fuzzy, slash, or
+keyword inference is introduced. Unmapped categories retain the existing
+Strike default without a recommendation label.
+
+See the [CDE Platform Stage 44.1 release note](docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md).
+
+### CDE Platform Stage 44 — Canonical Record Type Recommendation
+
+CDE Platform Stage 44 adds an advisory Canonical Record Type recommendation to
+the authenticated **Create Canonical Record from Published Document** workflow.
+Recommendations come only from an explicit centralized category mapping. The
+selector remains editable, no record is created automatically, and the
+administrator's submitted classification remains authoritative.
+
+See the [CDE Platform Stage 44 release note](docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md).
+
+### CDE Platform Stage 43 — Clinical Canonical Record Types
+
+CDE Platform Stage 43 adds Clinical Episode, Medical Event, Treatment Episode,
+Care Episode, and Clinical Record to the controlled Canonical Record Type
+vocabulary. These values are semantic metadata only and do not alter evidence,
+verification, provenance, publication, lifecycle, association, or Public
+Archive behaviour.
+
+See the [CDE Platform Stage 43 release note](docs/releases/CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md).
 
 ### CDE Platform Stage 42 — Unified Attachment Governance
 

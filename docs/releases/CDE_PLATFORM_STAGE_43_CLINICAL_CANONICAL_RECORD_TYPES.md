@@ -1,8 +1,8 @@
-# CDE Platform Stage 40A — Clinical Canonical Record Types
+# CDE Platform Stage 43 — Clinical Canonical Record Types
 
 ## Purpose
 
-CDE Platform Stage 40A extends the controlled Canonical Record Type vocabulary
+CDE Platform Stage 43 extends the controlled Canonical Record Type vocabulary
 so medical and clinical evidence can be classified without relying on the
 generic Strike type.
 
