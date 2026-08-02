@@ -397,7 +397,10 @@ class PublicationEngineStage5Tests(unittest.TestCase):
             data = json.loads(result.manifest.read_text(encoding="utf-8"))
             checksum_lines = result.checksums.read_text(encoding="utf-8")
             expected_checksum = sha256_file(artifact)
+            expected_size = artifact.stat().st_size
         self.assertEqual(data["outputs"][0]["sha256"], expected_checksum)
+        self.assertEqual(data["outputs"][0]["size_bytes"], expected_size)
+        self.assertEqual(result.checksums.name, "book_v1.0_checksums.txt")
         self.assertIn("book_v1.0_build_report.txt", checksum_lines)
 
     def test_sha256_checksum_matches_known_value(self) -> None:
