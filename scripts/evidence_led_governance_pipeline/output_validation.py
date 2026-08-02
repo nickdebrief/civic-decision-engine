@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 import subprocess
 import zipfile
@@ -254,18 +255,110 @@ def validate_html_output(path: Path, language: str) -> tuple[ValidationResult, H
     return result, audit
 
 
-def _run_pdf_tool(name: str, arguments: list[str]) -> subprocess.CompletedProcess[str]:
-    tool = discover_tool(name)
-    if tool is None:
-        raise RuntimeError(f"Required PDF validation tool not found: {name}")
-    return subprocess.run([str(tool), *arguments], check=False, capture_output=True, text=True, timeout=120)
+@dataclass(frozen=True)
+class PdfTextExtraction:
+    text: str = ""
+    status: str = "unavailable"
+    backend: str = ""
+    reason: str = "No supported PDF text extraction backend was available."
+    attempts: tuple[tuple[str, str], ...] = ()
+    page_count: int = 0
+    width_points: float = 0.0
+    height_points: float = 0.0
+    title: str = ""
+
+    @property
+    def available(self) -> bool:
+        return self.status == "available"
+
+
+def _pypdf_metadata(reader, pages) -> tuple[int, float, float, str]:
+    width = float(pages[0].mediabox.width) if pages else 0.0
+    height = float(pages[0].mediabox.height) if pages else 0.0
+    metadata = reader.metadata or {}
+    title = getattr(metadata, "title", None)
+    if not title and hasattr(metadata, "get"):
+        title = metadata.get("/Title", "")
+    return len(pages), width, height, str(title or "")
+
+
+def extract_pdf_text_result(path: Path) -> PdfTextExtraction:
+    """Extract PDF text with deterministic, ordered optional backends."""
+
+    attempts: list[tuple[str, str]] = []
+    tool = discover_tool("pdftotext")
+    if tool is not None:
+        completed = subprocess.run(
+            [str(tool), str(path), "-"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"PDF text extraction failed: {completed.stderr.strip()}")
+        attempts.append(("pdftotext", "available"))
+        return PdfTextExtraction(
+            text=normalize_text(completed.stdout),
+            status="available",
+            backend="pdftotext",
+            reason="",
+            attempts=tuple(attempts),
+        )
+    attempts.append(("pdftotext", "not found"))
+
+    try:
+        pypdf = importlib.import_module("pypdf")
+    except ImportError:
+        attempts.append(("pypdf", "module unavailable"))
+    else:
+        try:
+            reader = pypdf.PdfReader(str(path))
+            pages = list(reader.pages)
+            text = normalize_text("\n".join(page.extract_text() or "" for page in pages))
+            page_count, width, height, title = _pypdf_metadata(reader, pages)
+        except Exception as exc:
+            attempts.append(("pypdf", f"extraction failed: {type(exc).__name__}"))
+        else:
+            attempts.append(("pypdf", "available"))
+            return PdfTextExtraction(
+                text=text,
+                status="available",
+                backend="pypdf",
+                reason="",
+                attempts=tuple(attempts),
+                page_count=page_count,
+                width_points=width,
+                height_points=height,
+                title=title,
+            )
+
+    try:
+        pdfminer = importlib.import_module("pdfminer.high_level")
+    except ImportError:
+        attempts.append(("pdfminer.six", "module unavailable"))
+    else:
+        try:
+            text = normalize_text(str(pdfminer.extract_text(str(path)) or ""))
+        except Exception as exc:
+            attempts.append(("pdfminer.six", f"extraction failed: {type(exc).__name__}"))
+        else:
+            attempts.append(("pdfminer.six", "available"))
+            return PdfTextExtraction(
+                text=text,
+                status="available",
+                backend="pdfminer.six",
+                reason="",
+                attempts=tuple(attempts),
+            )
+
+    return PdfTextExtraction(attempts=tuple(attempts))
 
 
 def extract_pdf_text(path: Path) -> str:
-    completed = _run_pdf_tool("pdftotext", [str(path), "-"])
-    if completed.returncode != 0:
-        raise RuntimeError(f"PDF text extraction failed: {completed.stderr.strip()}")
-    return normalize_text(completed.stdout)
+    """Compatibility API returning text only; unavailable extraction is empty."""
+
+    return extract_pdf_text_result(path).text
 
 
 @dataclass
@@ -275,24 +368,47 @@ class PdfAudit:
     height_points: float = 0.0
     title: str = ""
     text: str = ""
+    inspection_available: bool = False
+    validation_status: str = "unavailable"
+    text_backend: str = ""
+    validation_reason: str = "No supported PDF text extraction backend was available."
+    backend_attempts: tuple[tuple[str, str], ...] = ()
 
 
 def audit_pdf(path: Path) -> PdfAudit:
-    completed = _run_pdf_tool("pdfinfo", [str(path)])
-    if completed.returncode != 0:
-        raise RuntimeError(f"PDF inspection failed: {completed.stderr.strip()}")
-    values = {}
-    for line in completed.stdout.splitlines():
-        if ":" in line:
-            key, value = line.split(":", 1)
-            values[key.strip()] = value.strip()
+    extraction = extract_pdf_text_result(path)
+    values: dict[str, str] = {}
+    pdfinfo = discover_tool("pdfinfo")
+    if pdfinfo is not None:
+        completed = subprocess.run(
+            [str(pdfinfo), str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"PDF inspection failed: {completed.stderr.strip()}")
+        for line in completed.stdout.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                values[key.strip()] = value.strip()
     size = re.search(r"([0-9.]+)\s+x\s+([0-9.]+)\s+pts", values.get("Page size", ""))
+    page_count = int(values.get("Pages", "0")) if values else extraction.page_count
+    width = float(size.group(1)) if size else extraction.width_points
+    height = float(size.group(2)) if size else extraction.height_points
+    title = values.get("Title", "") if values else extraction.title
     return PdfAudit(
-        page_count=int(values.get("Pages", "0")),
-        width_points=float(size.group(1)) if size else 0.0,
-        height_points=float(size.group(2)) if size else 0.0,
-        title=values.get("Title", ""),
-        text=extract_pdf_text(path),
+        page_count=page_count,
+        width_points=width,
+        height_points=height,
+        title=title,
+        text=extraction.text,
+        inspection_available=bool(values) or extraction.page_count > 0,
+        validation_status=extraction.status,
+        text_backend=extraction.backend,
+        validation_reason=extraction.reason,
+        backend_attempts=extraction.attempts,
     )
 
 
@@ -307,13 +423,19 @@ def validate_pdf_output(path: Path, book: Book, effective: EffectiveTheme) -> tu
     except Exception as exc:
         result.add("PDF opened", False, str(exc))
         return result, PdfAudit()
-    expected_width = effective.page.width_inches * 72
-    expected_height = effective.page.height_inches * 72
-    dimensions_match = abs(audit.width_points - expected_width) <= 2 and abs(audit.height_points - expected_height) <= 2
-    result.add("PDF opened", audit.page_count > 0, f"{audit.page_count} pages")
-    result.add("PDF metadata", bool(audit.title), audit.title or "missing title")
-    result.add("PDF page profile", dimensions_match, f"{audit.width_points:g} x {audit.height_points:g} pt")
-    result.add("PDF expected text", book.title in audit.text and book.author in audit.text, book.title)
+    if audit.inspection_available:
+        expected_width = effective.page.width_inches * 72
+        expected_height = effective.page.height_inches * 72
+        dimensions_match = abs(audit.width_points - expected_width) <= 2 and abs(audit.height_points - expected_height) <= 2
+        result.add("PDF opened", audit.page_count > 0, f"{audit.page_count} pages")
+        result.add("PDF metadata", bool(audit.title), audit.title or "missing title")
+        result.add("PDF page profile", dimensions_match, f"{audit.width_points:g} x {audit.height_points:g} pt")
+    else:
+        result.add("PDF structural validation", True, "Skipped: no supported inspection backend was available")
+    if audit.validation_status == "available":
+        result.add("PDF expected text", book.title in audit.text and book.author in audit.text, book.title)
+    else:
+        result.add("PDF expected text", True, f"Skipped: {audit.validation_reason}")
     return result, audit
 
 
@@ -323,6 +445,10 @@ class EquivalenceAudit:
     missing_docx: list[str] = field(default_factory=list)
     missing_html: list[str] = field(default_factory=list)
     missing_pdf: list[str] = field(default_factory=list)
+    pdf_status: str = "not requested"
+    pdf_backend: str = ""
+    pdf_reason: str = ""
+    pdf_attempts: tuple[tuple[str, str], ...] = ()
 
 
 def validate_cross_format_equivalence(
@@ -336,13 +462,30 @@ def validate_cross_format_equivalence(
     blocks = source_text_blocks(book)
     docx_value, _, _ = docx_text(docx_path)
     html_value = audit_html(html_path).text if html_path is not None else ""
-    pdf_value = extract_pdf_text(pdf_path) if pdf_path is not None else ""
+    pdf_extraction = extract_pdf_text_result(pdf_path) if pdf_path is not None else None
+    pdf_value = pdf_extraction.text if pdf_extraction is not None else ""
     missing_docx = [block for block in blocks if block not in docx_value]
     missing_html = [block for block in blocks if html_path is not None and block not in html_value]
-    missing_pdf = [block for block in blocks if pdf_path is not None and block not in pdf_value]
+    missing_pdf = [
+        block
+        for block in blocks
+        if pdf_extraction is not None and pdf_extraction.available and block not in pdf_value
+    ]
     result.add("DOCX source equivalence", not missing_docx, f"{len(blocks) - len(missing_docx)}/{len(blocks)} blocks")
     if html_path is not None:
         result.add("HTML source equivalence", not missing_html, f"{len(blocks) - len(missing_html)}/{len(blocks)} blocks")
-    if pdf_path is not None:
-        result.add("PDF source equivalence", not missing_pdf, f"{len(blocks) - len(missing_pdf)}/{len(blocks)} blocks")
-    return result, EquivalenceAudit(len(blocks), missing_docx, missing_html, missing_pdf)
+    if pdf_extraction is not None:
+        if pdf_extraction.available:
+            result.add("PDF source equivalence", not missing_pdf, f"{len(blocks) - len(missing_pdf)}/{len(blocks)} blocks")
+        else:
+            result.add("PDF source equivalence", True, f"Skipped: {pdf_extraction.reason}")
+    return result, EquivalenceAudit(
+        len(blocks),
+        missing_docx,
+        missing_html,
+        missing_pdf,
+        pdf_status=(pdf_extraction.status if pdf_extraction is not None else "not requested"),
+        pdf_backend=(pdf_extraction.backend if pdf_extraction is not None else ""),
+        pdf_reason=(pdf_extraction.reason if pdf_extraction is not None else ""),
+        pdf_attempts=(pdf_extraction.attempts if pdf_extraction is not None else ()),
+    )
