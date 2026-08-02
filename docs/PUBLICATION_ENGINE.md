@@ -124,13 +124,23 @@ assets.
 ### PDF
 
 PDF is generated from the staged DOCX through LibreOffice in headless mode.
-The build validates the resulting PDF with `pdfinfo` and `pdftotext`, including
-page count, metadata, page dimensions, representative text, and cross-format
-content equivalence.
+Where available, `pdfinfo` validates page count, metadata, and page dimensions.
+For representative text and cross-format content equivalence, the engine uses
+the first available extraction backend:
 
-LibreOffice and Poppler are external release tools and are not Python package
-dependencies. A requested required PDF fails clearly when these tools are not
-available.
+1. `pdftotext` (preferred);
+2. `pypdf`;
+3. `pdfminer.six`.
+
+If none is available, PDF text equivalence is reported as unavailable and
+skipped. DOCX and HTML validation, PDF generation, checksums, the package
+manifest, and the build report continue normally.
+
+LibreOffice remains the external PDF rendering tool. Poppler is preferred for
+PDF inspection and text extraction but is not required for text equivalence.
+`pypdf` and `pdfminer.six` are optional fallback backends, not mandatory Python
+package dependencies. A requested required PDF still fails clearly when the
+configured PDF renderer is unavailable.
 
 ## Validation
 
@@ -187,10 +197,13 @@ Python dependencies are declared in `requirements.txt`. Publication Engine v2
 requires Python 3.11 or later for `tomllib`, plus `python-docx`. The repository
 test workflow uses `pytest`.
 
-The release host must also provide:
+The release host must provide:
 
-- LibreOffice for DOCX-to-PDF rendering;
-- Poppler `pdfinfo` and `pdftotext` for PDF validation.
+- LibreOffice for DOCX-to-PDF rendering.
+
+For PDF text-equivalence validation, the engine selects the first available
+backend: Poppler `pdftotext`, `pypdf`, then `pdfminer.six`. If none is present,
+PDF equivalence is skipped while the remaining publication build completes.
 
 ## Output Retention
 
@@ -208,7 +221,8 @@ temporary render directories, office locks, caches, and editor files.
 
 1. Start from a clean, current `main` branch.
 2. Install the declared Python dependencies in a clean environment.
-3. Confirm LibreOffice, `pdfinfo`, and `pdftotext` are available.
+3. Confirm LibreOffice is available and note which PDF validation backend the
+   build selects (`pdftotext`, `pypdf`, or `pdfminer.six`).
 4. Run compilation and the full test suite.
 5. Run the canonical build command.
 6. Confirm zero validation errors and review warnings.

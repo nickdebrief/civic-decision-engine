@@ -97,6 +97,43 @@ def chapter_files(chapters_dir: Path) -> list[Path]:
     return discover_source_files(chapters_dir)
 
 
+def _pdf_validation_report_lines(
+    formats: tuple[str, ...], pdf: PdfAudit, equivalence: EquivalenceAudit
+) -> list[str]:
+    if "pdf" not in formats:
+        return ["PDF Validation", "", "Status: Not requested"]
+    status = equivalence.pdf_status or pdf.validation_status
+    backend = equivalence.pdf_backend or pdf.text_backend
+    attempts = equivalence.pdf_attempts or pdf.backend_attempts
+    if status == "available":
+        return [
+            "PDF Validation",
+            "",
+            "Status: Available",
+            f"Backend: {backend}",
+            "PDF equivalence: Completed",
+        ]
+    lines = [
+        "PDF Validation",
+        "",
+        "Status: Unavailable",
+        "",
+        f"Reason: {equivalence.pdf_reason or pdf.validation_reason}",
+        "",
+        "Attempted:",
+    ]
+    for name, outcome in attempts:
+        lines.extend((f"✓ {name}", f"✗ {outcome}"))
+    lines.extend(
+        (
+            "",
+            "PDF equivalence: Skipped",
+            "Cross-format validation completed using available formats only.",
+        )
+    )
+    return lines
+
+
 def _build_report(
     *,
     validation: ValidationResult,
@@ -122,7 +159,15 @@ def _build_report(
         "Rendering",
         f"✓ DOCX: {docx.paragraph_count} paragraphs, {docx.table_count} tables",
         f"✓ HTML: {html.anchor_count} anchors, {html.internal_link_count} internal links" if "html" in formats else "- HTML not requested",
-        f"✓ PDF: {pdf.page_count} pages" if "pdf" in formats else "- PDF not requested",
+        (
+            f"✓ PDF: {pdf.page_count} pages"
+            if "pdf" in formats and pdf.inspection_available
+            else "✓ PDF generated; structural inspection unavailable"
+            if "pdf" in formats
+            else "- PDF not requested"
+        ),
+        "",
+        *_pdf_validation_report_lines(formats, pdf, equivalence),
         "",
         "Publication Enrichment",
         f"✓ {enrichment.reference_target_count} reference targets",
@@ -134,7 +179,13 @@ def _build_report(
         f"✓ {equivalence.block_count} source-derived blocks checked",
         f"✓ DOCX missing: {len(equivalence.missing_docx)}",
         f"✓ HTML missing: {len(equivalence.missing_html)}" if "html" in formats else "- HTML not requested",
-        f"✓ PDF missing: {len(equivalence.missing_pdf)}" if "pdf" in formats else "- PDF not requested",
+        (
+            f"✓ PDF missing: {len(equivalence.missing_pdf)}"
+            if "pdf" in formats and equivalence.pdf_status == "available"
+            else "- PDF equivalence skipped"
+            if "pdf" in formats
+            else "- PDF not requested"
+        ),
         "",
         "Packaging",
         "✓ checksums generated",
