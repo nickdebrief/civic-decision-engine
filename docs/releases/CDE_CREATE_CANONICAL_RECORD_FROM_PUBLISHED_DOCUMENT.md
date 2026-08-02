@@ -57,11 +57,15 @@ choice is authoritative.
 | Published Document category | Recommended Canonical Record Type |
 | --- | --- |
 | Hospital Admission | Clinical Episode |
+| Hospital Admission / Administrative Record | Clinical Episode |
 | Admission Form | Clinical Episode |
 | Consent Form | Clinical Record |
+| Consent Form / Procedure Consent | Clinical Record |
 | Operation Record | Treatment Episode |
+| Operation Record / Procedure Record | Treatment Episode |
 | Procedure Record | Treatment Episode |
 | Pain Intervention Record | Medical Event |
+| Pain Intervention Record / Clinical Procedure Record | Medical Event |
 | Clinical Assessment | Clinical Record |
 | Medical Report | Clinical Record |
 | Discharge Summary | Care Episode |
@@ -71,7 +75,9 @@ The pre-existing mappings for Evidence Package, Complaint, Investigation
 Material, Decision, Submission, Proceeding, and Research remain unchanged. An
 unmapped category retains the established default. No filename, body text, OCR,
 machine learning, hidden inference, or background update contributes to the
-recommendation.
+recommendation. Composite values are mapped only when that exact normalized
+category is explicitly registered; slash splitting, substring matching, and
+fuzzy matching are not used.
 
 ## Provenance
 
