@@ -57,11 +57,19 @@ DOCUMENT_CATEGORY_RECORD_TYPE_RECOMMENDATIONS: dict[str, str] = {
     "proceeding": CanonicalRecordType.PROCEEDING.value,
     "research": CanonicalRecordType.RESEARCH_RECORD.value,
     "hospital admission": CanonicalRecordType.CLINICAL_EPISODE.value,
+    "hospital admission / administrative record": (
+        CanonicalRecordType.CLINICAL_EPISODE.value
+    ),
     "admission form": CanonicalRecordType.CLINICAL_EPISODE.value,
     "consent form": CanonicalRecordType.CLINICAL_RECORD.value,
+    "consent form / procedure consent": CanonicalRecordType.CLINICAL_RECORD.value,
     "operation record": CanonicalRecordType.TREATMENT_EPISODE.value,
+    "operation record / procedure record": CanonicalRecordType.TREATMENT_EPISODE.value,
     "procedure record": CanonicalRecordType.TREATMENT_EPISODE.value,
     "pain intervention record": CanonicalRecordType.MEDICAL_EVENT.value,
+    "pain intervention record / clinical procedure record": (
+        CanonicalRecordType.MEDICAL_EVENT.value
+    ),
     "clinical assessment": CanonicalRecordType.CLINICAL_RECORD.value,
     "medical report": CanonicalRecordType.CLINICAL_RECORD.value,
     "discharge summary": CanonicalRecordType.CARE_EPISODE.value,

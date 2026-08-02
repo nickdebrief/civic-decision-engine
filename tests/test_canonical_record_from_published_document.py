@@ -178,7 +178,7 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
 
     def test_clinical_category_recommendation_prefills_without_locking_selector(self):
         item = load_pending_document(self.document_id, root=self.root)
-        item["category"] = "Hospital Admission"
+        item["category"] = "Hospital Admission / Administrative Record"
         conn = self._conn()
         try:
             proposal = admin_session._canonical_record_proposal(item, conn)

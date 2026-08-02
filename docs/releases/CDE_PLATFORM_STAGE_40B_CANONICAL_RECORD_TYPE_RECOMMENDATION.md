@@ -16,18 +16,27 @@ the following clinical mappings are added:
 | Published Document category | Recommended Canonical Record Type |
 | --- | --- |
 | Hospital Admission | Clinical Episode |
+| Hospital Admission / Administrative Record | Clinical Episode |
 | Admission Form | Clinical Episode |
 | Consent Form | Clinical Record |
+| Consent Form / Procedure Consent | Clinical Record |
 | Operation Record | Treatment Episode |
+| Operation Record / Procedure Record | Treatment Episode |
 | Procedure Record | Treatment Episode |
 | Pain Intervention Record | Medical Event |
+| Pain Intervention Record / Clinical Procedure Record | Medical Event |
 | Clinical Assessment | Clinical Record |
 | Medical Report | Clinical Record |
 | Discharge Summary | Care Episode |
 | Post-Operative Instructions | Care Episode |
 
-Category matching is case-insensitive and ignores surrounding whitespace. If no
-mapping exists, the workflow preserves its established default.
+Category matching converts the value to a string, removes surrounding
+whitespace, applies case folding, and then performs an exact normalized-key
+lookup. The explicit composite mappings above reflect confirmed values in the
+production Published Document taxonomy. The workflow does not split slash
+values or use substring, fuzzy, or keyword matching. If no mapping exists, it
+preserves the established default and does not display the recommendation
+label.
 
 ## Administrator Authority
 

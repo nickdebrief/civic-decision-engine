@@ -308,11 +308,15 @@ class CanonicalRecordTypesTests(unittest.TestCase):
     def test_document_category_record_type_recommendations_are_explicit(self):
         expected = {
             "Hospital Admission": "clinical_episode",
+            "Hospital Admission / Administrative Record": "clinical_episode",
             "Admission Form": "clinical_episode",
             "Consent Form": "clinical_record",
+            "Consent Form / Procedure Consent": "clinical_record",
             "Operation Record": "treatment_episode",
+            "Operation Record / Procedure Record": "treatment_episode",
             "Procedure Record": "treatment_episode",
             "Pain Intervention Record": "medical_event",
+            "Pain Intervention Record / Clinical Procedure Record": "medical_event",
             "Clinical Assessment": "clinical_record",
             "Medical Report": "clinical_record",
             "Discharge Summary": "care_episode",
