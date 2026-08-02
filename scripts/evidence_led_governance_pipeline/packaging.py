@@ -77,7 +77,7 @@ def create_package(
         checksum_targets.append((report_path.name, report_path))
     checksums = {label: sha256_file(path) for label, path in sorted(checksum_targets)}
 
-    checksum_path = package_dir / f"{stem}_checksums.sha256" if manifest.output.package.include_checksums else None
+    checksum_path = package_dir / f"{stem}_checksums.txt" if manifest.output.package.include_checksums else None
     if checksum_path is not None:
         lines = [f"{digest}  {label}" for label, digest in sorted(checksums.items())]
         checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
@@ -86,7 +86,14 @@ def create_package(
     for format_name, artifact in sorted(artifacts.items()):
         for path in artifact_files(artifact):
             label = path.name if artifact.is_file() else f"{artifact.name}/{path.relative_to(artifact)}"
-            output_files.append({"format": format_name, "path": label, "sha256": checksums[label]})
+            output_files.append(
+                {
+                    "format": format_name,
+                    "path": label,
+                    "size_bytes": path.stat().st_size,
+                    "sha256": checksums[label],
+                }
+            )
     package_manifest = {
         "build": {
             "git_commit": git_commit(repository),

@@ -194,7 +194,15 @@ def validate_book(book: Book) -> ValidationResult:
     result.add("Governance Architectures", bool(governance_architectures), f"{len(governance_architectures)} detected")
     result.add("Flow Diagrams", bool(flow_diagrams), f"{len(flow_diagrams)} detected")
     result.add("Parser Diagnostics", parser_ok, parser_detail)
-    result.add("Volume I Chapter Membership", [c.number for c in volume_one_chapters] == [1, 2, 3, 4, 5], "Chapters 1-5")
+    volume_one_numbers = [c.number for c in volume_one_chapters]
+    expected_volume_one_numbers = (
+        list(range(1, max(volume_one_numbers) + 1)) if volume_one_numbers else []
+    )
+    result.add(
+        "Volume I Chapter Membership",
+        bool(volume_one_numbers) and volume_one_numbers == expected_volume_one_numbers,
+        f"Chapters 1-{volume_one_numbers[-1]}" if volume_one_numbers else "No chapters",
+    )
     result.add("Chapter 5 Synthesis", chapter_five_synthesis, "plain-English Chapter Synthesis heading")
     result.add("RF-5 Research Finding", rf5_recognised, "legacy Research Finding / RF-5 structure")
     result.add("Duplicate Chapter Numbers", not duplicate_chapters, ", ".join(duplicate_chapters))

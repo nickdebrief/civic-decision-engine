@@ -78,6 +78,20 @@ class PublicationEngineStage2Tests(unittest.TestCase):
         self.assertEqual(chapters[0].number, 5)
         self.assertEqual(chapters[0].title, "Canonical Definitions")
 
+    def test_single_line_legacy_chapter_heading_parses_into_chapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = write_source(
+                Path(temp),
+                "chapter6.txt",
+                "Chapter 6 — Research Findings\n\n6.1 Introduction\n\nBody.",
+            )
+            book = parse_sources([path])
+
+        chapters = [block for block in walk_blocks(book) if isinstance(block, Chapter)]
+        self.assertEqual(len(chapters), 1)
+        self.assertEqual(chapters[0].number, 6)
+        self.assertEqual(chapters[0].title, "Research Findings")
+
     def test_front_matter_does_not_count_as_numbered_chapter(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

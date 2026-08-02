@@ -254,7 +254,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
             )
             self.assertTrue(path.exists())
             self.assertEqual(version, "1.0")
-            self.assertEqual(len(files), 8)
+            self.assertEqual(len(files), 9)
 
 
 def walk_paragraphs(book):

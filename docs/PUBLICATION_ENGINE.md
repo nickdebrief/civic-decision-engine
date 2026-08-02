@@ -183,11 +183,11 @@ When packaging is enabled, one version produces:
 <basename>_v<version>.html
 <basename>_v<version>.pdf
 <basename>_v<version>_build_report.txt
-<basename>_v<version>_checksums.sha256
+<basename>_v<version>_checksums.txt
 <basename>_v<version>_manifest.json
 ```
 
-The JSON manifest records source files and checksums, output checksums,
+The JSON manifest records source files and checksums, output sizes and checksums,
 renderers, theme, publication profile, page profile, Git commit available at
 build time, timestamp, and validation status.
 

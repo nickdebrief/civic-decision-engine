@@ -183,6 +183,14 @@ def normalise_structure(lines: Sequence[str]) -> list[str]:
                 index += 1
                 continue
 
+        combined_chapter = re.fullmatch(
+            r"Chapter\s+(\d+)\s*[—-]\s*(.+)", stripped, flags=re.IGNORECASE
+        )
+        if combined_chapter:
+            output.append(f"# {stripped}")
+            index += 1
+            continue
+
         chapter_match = re.fullmatch(r"Chapter\s+(\d+)", stripped, flags=re.IGNORECASE)
         if chapter_match:
             title_index = _next_nonempty_index(lines, index + 1)
@@ -441,6 +449,23 @@ class Parser:
                 ):
                     index += 1
                     continue
+
+            combined_chapter = re.fullmatch(
+                r"Chapter\s+(\d+)\s*[—-]\s*(.+)", stripped, flags=re.IGNORECASE
+            )
+            if combined_chapter:
+                flush_body()
+                number, title = parse_chapter_heading(stripped)
+                append_block(
+                    Chapter(
+                        title=title,
+                        number=number,
+                        source_path=filepath,
+                        **_provenance_kwargs(filepath, line_no),
+                    )
+                )
+                index += 1
+                continue
 
             chapter_match = re.fullmatch(r"Chapter\s+(\d+)", stripped, flags=re.IGNORECASE)
             if chapter_match:

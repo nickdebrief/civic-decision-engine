@@ -136,6 +136,7 @@ def _pdf_validation_report_lines(
 
 def _build_report(
     *,
+    version: str,
     validation: ValidationResult,
     formats: tuple[str, ...],
     source_count: int,
@@ -150,6 +151,8 @@ def _build_report(
         validation.render(),
         "",
         "Build Report",
+        "",
+        f"Publication version: v{version}",
         "",
         "Manifest",
         "✓ schema version 1",
@@ -194,6 +197,7 @@ def _build_report(
         "",
         f"Warnings: {warning_count}",
         "Errors: 0",
+        "Overall build status: PASS",
         "",
         "PASS",
     ]
@@ -354,6 +358,7 @@ def build_publication(
 
         warning_count = len([item for item in book.diagnostics + enrichment.diagnostics if item.severity == "WARNING"])
         report_text = _build_report(
+            version=version,
             validation=validation,
             formats=formats,
             source_count=len(files),

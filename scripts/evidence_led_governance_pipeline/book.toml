@@ -9,6 +9,7 @@ sources = [
   "chapters/05_volume1_chapter3.txt",
   "chapters/06_volume1_chapter4.txt",
   "chapters/07_volume1_chapter5.txt",
+  "chapters/08_volume1_chapter6.txt",
 ]
 
 [publication]
