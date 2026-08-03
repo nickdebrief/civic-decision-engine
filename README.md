@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 46 — Publication Provenance Value Contrast
+Current release: CDE Platform Stage 47 — Governed Source Relationship Selection
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -732,6 +732,14 @@ or POST access to the protected creation route cannot create a duplicate.
 Secondary Record–Document Associations remain distinct and do not suppress the
 creation action.
 
+When source provenance is already recorded on a Canonical Record, the governed
+association workflow identifies that authoritative Published Document and does
+not permit another document to be assigned the `Source document` relationship.
+Supporting, Related, Publication context, Preserved visual record, Methodology
+reference, Procedural record, and Evidence audit relationships remain available.
+Records without persisted source provenance retain the existing Source document
+option.
+
 ### Governed Document Keywords
 
 Admin Document Intake now includes a governed **KEYWORDS** field for
@@ -936,6 +944,21 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 47 — Governed Source Relationship Selection
+
+CDE Platform Stage 47 makes the one-source governance rule visible in the
+Record–Document Association workflow. When a Canonical Record already names an
+authoritative source Published Document through persisted source provenance,
+the form displays that document and prevents a second Source document
+relationship. Supporting and related relationships remain available, and
+records without a source retain the established behavior.
+
+The rule is enforced in both the administrative interface and association
+service. Existing associations and provenance remain unchanged, and no public,
+schema, lifecycle, hashing, verification, or evidence-boundary behavior changes.
+
+See the [CDE Platform Stage 47 release note](docs/releases/CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md).
 
 ### CDE Platform Stage 46 — Publication Provenance Value Contrast
 

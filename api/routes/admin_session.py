@@ -44823,12 +44823,30 @@ def _association_visibility_label(value: Any) -> str:
     return _association_bool_label(value, "Public", "Private")
 
 
-def _association_options(selected: str | None = None) -> str:
+def _association_options(
+    selected: str | None = None,
+    *,
+    authoritative_source_assigned: bool = False,
+) -> str:
     selected_value = str(selected or "")
-    return "".join(
-        f'<option value="{escape(value)}"{" selected" if selected_value == value else ""}>{escape(label)}</option>'
-        for value, label in rda.RELATIONSHIP_TYPES.items()
-    )
+    rendered = []
+    for value, label in rda.RELATIONSHIP_TYPES.items():
+        source_locked = (
+            value == "source_document"
+            and authoritative_source_assigned
+            and selected_value != "source_document"
+        )
+        option_label = (
+            "Authoritative source document (already established)"
+            if source_locked
+            else label
+        )
+        rendered.append(
+            f'<option value="{escape(value)}"'
+            f'{" selected" if selected_value == value else ""}'
+            f'{" disabled" if source_locked else ""}>{escape(option_label)}</option>'
+        )
+    return "".join(rendered)
 
 
 def _association_record_institution_label(reference: Any) -> str:
@@ -45349,8 +45367,31 @@ def _association_selected_record_contexts(records: list[dict[str, Any]]) -> str:
             if value
         )
         link = f'<p><a href="/verify/{escape(reference)}">Open public record</a></p>' if reference else ""
+        source = item.get("authoritative_source_document")
+        source_context = ""
+        if isinstance(source, Mapping):
+            source_id = str(source.get("intake_id") or "").strip()
+            source_title = str(source.get("title") or "Authoritative source document").strip()
+            source_identifier = str(
+                source.get("document_identifier")
+                or source.get("reference_identifier")
+                or source_id
+                or "—"
+            ).strip()
+            source_link = (
+                f'<a href="/documents/{escape(source_id)}">Open Published Document →</a>'
+                if source_id and source.get("source_document_available")
+                else ""
+            )
+            source_context = (
+                '<section class="authoritative-source-context">'
+                '<h3>Authoritative source</h3>'
+                f'<p class="authoritative-source-title">{escape(source_title)}</p>'
+                f'<p class="authoritative-source-identifier">{escape(source_identifier)}</p>'
+                f"{source_link}</section>"
+            )
         cards.append(
-            f"""<article class="selected-record-card" data-record-context data-context-index="{index}" hidden><h3>{escape(reference)}</h3><table>{rows}</table>{link}</article>"""
+            f"""<article class="selected-record-card" data-record-context data-context-index="{index}" hidden><h3>{escape(reference)}</h3><table>{rows}</table>{source_context}{link}</article>"""
         )
     return "".join(cards)
 
@@ -45364,6 +45405,9 @@ def _association_record_options(records: list[dict[str, Any]]) -> str:
         type_label = _association_record_type_label(record_type_value)
         trajectory = str(item.get("trajectory") or "").strip()
         system_state = str(item.get("system_state") or "").strip()
+        has_authoritative_source = isinstance(
+            item.get("authoritative_source_document"), Mapping
+        )
         options.append(
             '<option '
             f'value="{escape(reference)}" '
@@ -45372,6 +45416,7 @@ def _association_record_options(records: list[dict[str, Any]]) -> str:
             f'data-institution="{escape(institution)}" '
             f'data-trajectory="{escape(trajectory)}" '
             f'data-system-state="{escape(system_state)}" '
+            f'data-has-authoritative-source="{str(has_authoritative_source).lower()}" '
             f'data-context-index="{index}" '
             f'data-search="{escape(_association_record_search_text(item))}">'
             f"{escape(build_record_selector_label(item))}</option>"
@@ -45518,6 +45563,7 @@ def _render_association_form_page(
     document_items = documents or []
     document_options = _association_document_options(document_items)
     document_count = len(document_items)
+    relationship_options = _association_options()
     record_control = (
         f"""<section class="record-selection-control"><label for="record-search">Search public CDE records</label><input id="record-search" type="search" autocomplete="off" placeholder="Search by reference, title, institution, trajectory, finding, system state, conditions, signals, or tags"><span class="field-help">Search covers public record reference, title where present, institution, trajectory, finding, system state, conditions, signals, tags, and public summary fields.</span><div id="record-search-status" class="record-search-status" aria-live="polite">{record_count} eligible records</div><button type="button" id="record-search-clear" class="secondary-button">Clear search</button><label for="record-reference">Public CDE record<select id="record-reference" name="record_reference" required>{record_options}</select><span class="field-help">Search and select the public CDE record that the published document will support. The canonical record reference is preserved as the association value.</span></label><section id="selected-record-context" class="selected-record-context" aria-live="polite"><h2>Selected record</h2><p class="field-help" data-empty-record-context>Select a record to view public record context. This panel is informational only and does not alter form submission.</p>{record_contexts}</section><p id="record-search-empty" class="empty-state" hidden>No eligible public CDE records match this search.</p></section>"""
         if record_items
@@ -45549,6 +45595,9 @@ def _render_association_form_page(
   const documentSelect = document.getElementById("document-id");
   const documentStatus = document.getElementById("document-search-status");
   const documentEmpty = document.getElementById("document-search-empty");
+  const relationshipSelect = document.getElementById("relationship-type");
+  const sourceOption = relationshipSelect ? relationshipSelect.querySelector('option[value="source_document"]') : null;
+  const sourceGuidance = document.getElementById("source-relationship-guidance");
   const emptyContext = document.querySelector("[data-empty-record-context]");
   const contexts = Array.from(document.querySelectorAll("[data-record-context]"));
   if (!search || !select || !status) return;
@@ -45557,6 +45606,7 @@ def _render_association_form_page(
   const updateContext = () => {
     const selected = select.selectedOptions[0];
     const selectedIndex = selected ? selected.dataset.contextIndex : "";
+    const hasAuthoritativeSource = selected && selected.dataset.hasAuthoritativeSource === "true";
     let shown = false;
     contexts.forEach((context) => {
       const match = context.dataset.contextIndex === selectedIndex;
@@ -45564,6 +45614,16 @@ def _render_association_form_page(
       shown = shown || match;
     });
     if (emptyContext) emptyContext.hidden = shown;
+    if (sourceOption) {
+      sourceOption.disabled = Boolean(hasAuthoritativeSource);
+      sourceOption.textContent = hasAuthoritativeSource
+        ? "Authoritative source document (already established)"
+        : "Source document";
+    }
+    if (relationshipSelect && hasAuthoritativeSource && relationshipSelect.value === "source_document") {
+      relationshipSelect.value = "supporting_document";
+    }
+    if (sourceGuidance) sourceGuidance.hidden = !hasAuthoritativeSource;
   };
   const applyFilter = () => {
     const term = search.value.trim();
@@ -45619,7 +45679,7 @@ def _render_association_form_page(
   }
 })();
 </script>"""
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label>Relationship type<select name="relationship_type" required>{_association_options()}</select></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}.authoritative-source-context{{margin:12px 0;padding:12px;border-left:4px solid #2e8b9a;background:#fff}}.authoritative-source-context h3,.authoritative-source-context p{{margin:0 0 7px}}.authoritative-source-identifier{{font-family:ui-monospace,monospace}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label for="relationship-type">Relationship type<select id="relationship-type" name="relationship_type" required>{relationship_options}</select><span id="source-relationship-guidance" class="field-help" hidden>This Canonical Record already has its authoritative source Published Document. Additional Published Documents should normally be associated as Supporting documents, Related documents, or another governed relationship.</span></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
 
 
 def _render_association_detail(
@@ -45666,7 +45726,20 @@ def _render_association_detail(
         if int(association.get("is_active") or 0) == 1
         else f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate association</button></form>"""
     )
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{_association_options(str(association.get('relationship_type') or ''))}</select></label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    source_locked = bool(
+        association.get("record_has_authoritative_source")
+        and association.get("relationship_type") != "source_document"
+    )
+    relationship_options = _association_options(
+        str(association.get("relationship_type") or ""),
+        authoritative_source_assigned=source_locked,
+    )
+    source_guidance = (
+        '<span class="field-help">This Canonical Record already has its authoritative source Published Document. Additional Published Documents should normally be associated as Supporting documents, Related documents, or another governed relationship.</span>'
+        if source_locked
+        else ""
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{relationship_options}</select>{source_guidance}</label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
 def _collection_display(value: Any) -> str:
@@ -47876,6 +47949,14 @@ def admin_association_new_page(request: Request):
     conn = get_db()
     try:
         record_options = rda.list_public_record_options(conn)
+        for record in record_options:
+            record["authoritative_source_document"] = (
+                rda.authoritative_source_document_context(
+                    record,
+                    conn=conn,
+                    root=intake_root(),
+                )
+            )
     finally:
         conn.close()
     return HTMLResponse(

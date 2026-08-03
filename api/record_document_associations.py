@@ -222,6 +222,8 @@ def record_context(conn: sqlite3.Connection, reference: str) -> dict[str, Any] |
             "system_state",
             "version",
             "language",
+            "source_document_id",
+            "source_document_reference",
         )
         selected_columns = [column for column in preferred_columns if column in available_columns]
         if "reference" not in selected_columns:
@@ -247,6 +249,86 @@ def record_exists(conn: sqlite3.Connection, reference: str) -> bool:
 
 def public_record_context(conn: sqlite3.Connection, reference: str) -> dict[str, Any] | None:
     return record_context(conn, reference)
+
+
+def record_has_authoritative_source(
+    record: dict[str, Any] | None,
+    *,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
+    if not record:
+        return False
+    has_persisted_source = bool(
+        str(record.get("source_document_id") or "").strip()
+        or str(record.get("source_document_reference") or "").strip()
+    )
+    if has_persisted_source or conn is None:
+        return has_persisted_source
+    reference = str(record.get("reference") or "").strip()
+    if not reference:
+        return False
+    ensure_association_tables(conn)
+    return (
+        conn.execute(
+            """
+            SELECT 1
+            FROM record_document_associations
+            WHERE record_reference = ?
+              AND relationship_type = 'source_document'
+              AND is_active = 1
+            LIMIT 1
+            """,
+            (reference,),
+        ).fetchone()
+        is not None
+    )
+
+
+def authoritative_source_document_context(
+    record: dict[str, Any],
+    *,
+    conn: sqlite3.Connection | None = None,
+    root: Path | None = None,
+) -> dict[str, Any] | None:
+    source_id = str(record.get("source_document_id") or "").strip()
+    source_reference = str(record.get("source_document_reference") or "").strip()
+    if not source_id and not source_reference and conn is not None:
+        reference = str(record.get("reference") or "").strip()
+        ensure_association_tables(conn)
+        association = conn.execute(
+            """
+            SELECT document_id, document_reference_identifier
+            FROM record_document_associations
+            WHERE record_reference = ?
+              AND relationship_type = 'source_document'
+              AND is_active = 1
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (reference,),
+        ).fetchone()
+        if association is not None:
+            source_id = str(association["document_id"] or "").strip()
+            source_reference = str(
+                association["document_reference_identifier"] or ""
+            ).strip()
+    if not source_id and not source_reference:
+        return None
+
+    document = published_document_context(source_id, root=root) if source_id else None
+    if document is None and source_reference:
+        document = find_document_by_reference(
+            source_reference,
+            root=root or intake_root(),
+            published_only=True,
+        )
+    if document is not None:
+        return {**document, "source_document_available": True}
+    return {
+        "intake_id": source_id,
+        "reference_identifier": source_reference,
+        "source_document_available": False,
+    }
 
 
 def source_created_records_for_document(
@@ -359,6 +441,8 @@ def list_public_record_options(conn: sqlite3.Connection) -> list[dict[str, Any]]
         "generated_at",
         "exported_at",
         "version",
+        "source_document_id",
+        "source_document_reference",
     )
     try:
         available_columns = {
@@ -540,6 +624,11 @@ def create_association(
     if document is None:
         raise ValueError("association_document_not_published")
     rel_type = validate_relationship_type(relationship_type)
+    record = public_record_context(conn, reference)
+    if rel_type == "source_document" and record_has_authoritative_source(
+        record, conn=conn
+    ):
+        raise ValueError("association_authoritative_source_already_assigned")
     existing = conn.execute(
         """
         SELECT id, is_active FROM record_document_associations
@@ -614,6 +703,15 @@ def update_association(
         raise ValueError("association_actor_required")
     previous = get_association(conn, association_id)
     rel_type = validate_relationship_type(relationship_type)
+    if (
+        rel_type == "source_document"
+        and previous.get("relationship_type") != "source_document"
+        and record_has_authoritative_source(
+            public_record_context(conn, str(previous.get("record_reference") or "")),
+            conn=conn,
+        )
+    ):
+        raise ValueError("association_authoritative_source_already_assigned")
     label = relationship_label(rel_type, public_label)
     public_flag = 1 if normalize_bool(is_public, default=True) else 0
     timestamp = updated_at or utc_now()
@@ -823,6 +921,9 @@ def enrich_association(
     row["record_exported_at"] = (record or {}).get("exported_at")
     row["record_trajectory"] = (record or {}).get("trajectory")
     row["record_version"] = (record or {}).get("version")
+    row["record_has_authoritative_source"] = record_has_authoritative_source(
+        record, conn=conn
+    )
     row["record_publicly_eligible"] = record is not None
     row["document_title"] = (document or {}).get("title") or row.get("document_id")
     row["document_identifier"] = (document or {}).get("document_identifier")
