@@ -22,7 +22,10 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         self.assertEqual(validate_repository(), [])
 
     def test_duplicate_stage_identifier_fails(self):
-        duplicate = replace(self.entries[-3], title="Duplicate")
+        duplicate = replace(
+            next(entry for entry in self.entries if entry.stage == "44"),
+            title="Duplicate",
+        )
         errors = validate_entries([*self.entries, duplicate])
         self.assertTrue(
             any(error.startswith("stage_identifier_duplicate") for error in errors)
@@ -47,10 +50,15 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         )
 
     def test_suffix_with_unrelated_parent_capability_fails(self):
-        unrelated = replace(
-            self.entries[-2], capability="unrelated-capability"
+        suffix_index = next(
+            index for index, entry in enumerate(self.entries) if entry.stage == "44.1"
         )
-        errors = validate_entries([*self.entries[:-2], unrelated, self.entries[-1]])
+        unrelated = replace(
+            self.entries[suffix_index], capability="unrelated-capability"
+        )
+        entries = list(self.entries)
+        entries[suffix_index] = unrelated
+        errors = validate_entries(entries)
         self.assertTrue(
             any(
                 error.startswith("suffix_parent_capability_mismatch")
@@ -61,13 +69,13 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
     def test_canonical_sequence_uses_corrected_stage_numbers(self):
         self.assertEqual(
             [entry.stage for entry in self.entries],
-            ["40", "41", "42", "43", "44", "44.1", "45"],
+            ["40", "41", "42", "43", "44", "44.1", "45", "46"],
         )
 
     def test_pending_stage_must_be_terminal(self):
         pending = self.entries[-1]
         errors = validate_entries([*self.entries, replace(pending, stage="46")])
-        self.assertIn("pending_stage_not_terminal: 45", errors)
+        self.assertIn("pending_stage_not_terminal: 46", errors)
 
 
 if __name__ == "__main__":
