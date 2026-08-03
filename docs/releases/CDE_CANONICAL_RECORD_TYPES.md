@@ -153,6 +153,13 @@ documents should use an appropriate governed relationship such as Supporting
 document or Related document. A record without persisted source provenance may
 still receive a Source document association through the existing workflow.
 
+The selected-record context presents that governing source in a visually
+distinct Authoritative source Published Document panel. A Primary evidence
+badge, document icon, source title, monospace Document Identifier, and direct
+link establish a clear hierarchy in both light and dark colour schemes. These
+presentation cues do not change the source relationship or its governance
+meaning.
+
 The workflow continues to preserve:
 
 - one selected public record per association;

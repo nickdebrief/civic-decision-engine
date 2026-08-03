@@ -19,7 +19,8 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 44.1 | Composite Category Recommendation Coverage | canonical-record-type-recommendation | 44 | 2026-08-02 | `c097bcaef467010491a0380ebc20977e5629e3d0` | [#305](https://github.com/nickdebrief/civic-decision-engine/pull/305) | [Stage 44.1](CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md) | Implemented · merged · deployed |
 | 45 | Canonical Record Creation State on Published Documents | canonical-record-source-state | — | 2026-08-03 | `22991d661cbff7d492af758e7feae9cc4a85ae6e` | [#307](https://github.com/nickdebrief/civic-decision-engine/pull/307) | [Stage 45](CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md) | Implemented · merged · deployed |
 | 46 | Publication Provenance Value Contrast | publication-provenance-presentation | — | 2026-08-03 | `578b5d5f9b96e667e9d46ed2d9d987dcd7c05119` | [#308](https://github.com/nickdebrief/civic-decision-engine/pull/308) | [Stage 46](CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md) | Implemented · merged · deployed |
-| 47 | Governed Source Relationship Selection | record-document-association-governance | — | — | `—` | — | [Stage 47](CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md) | Implemented · pending merge · pending deployment |
+| 47 | Governed Source Relationship Selection | record-document-association-governance | — | 2026-08-03 | `ed91da9e225d5a3874b02d2bb21406fc1acfe2d5` | [#309](https://github.com/nickdebrief/civic-decision-engine/pull/309) | [Stage 47](CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md) | Implemented · merged · deployed |
+| 47.1 | Authoritative Source Visual Emphasis | record-document-association-governance | 47 | — | `—` | — | [Stage 47.1](CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

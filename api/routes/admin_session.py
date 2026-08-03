@@ -45384,11 +45384,15 @@ def _association_selected_record_contexts(records: list[dict[str, Any]]) -> str:
                 else ""
             )
             source_context = (
-                '<section class="authoritative-source-context">'
-                '<h3>Authoritative source</h3>'
+                '<section class="authoritative-source-context" '
+                f'aria-labelledby="authoritative-source-heading-{index}">'
+                '<span class="authoritative-source-badge">Primary evidence</span>'
+                f'<h3 id="authoritative-source-heading-{index}">'
+                '<span class="authoritative-source-icon" aria-hidden="true">&#128196;</span>'
+                'Authoritative source Published Document</h3>'
                 f'<p class="authoritative-source-title">{escape(source_title)}</p>'
                 f'<p class="authoritative-source-identifier">{escape(source_identifier)}</p>'
-                f"{source_link}</section>"
+                f'<p class="authoritative-source-action">{source_link}</p></section>'
             )
         cards.append(
             f"""<article class="selected-record-card" data-record-context data-context-index="{index}" hidden><h3>{escape(reference)}</h3><table>{rows}</table>{source_context}{link}</article>"""
@@ -45460,6 +45464,78 @@ def _association_query_string(filters: dict[str, Any], *, page: int | None = Non
     if page_size is not None:
         pairs.append(("page_size", str(page_size)))
     return urlencode(pairs)
+
+
+ASSOCIATION_AUTHORITATIVE_SOURCE_STYLES = """
+.record-selection-control .authoritative-source-context {
+  margin: 16px 0;
+  padding: 16px 18px;
+  border-left: 4px solid #2e8b9a;
+  border-radius: 4px;
+  background: #edf7f6;
+  color: #173f42;
+}
+.record-selection-control .authoritative-source-badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 3px 7px;
+  border: 1px solid #2e8b9a;
+  border-radius: 999px;
+  color: #245d61;
+  font: 700 .72rem ui-monospace, monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.record-selection-control .authoritative-source-context h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: #143a52;
+}
+.record-selection-control .authoritative-source-icon {
+  color: #245d61;
+  font-size: 1rem;
+  line-height: 1;
+}
+.record-selection-control .authoritative-source-title {
+  margin: 0 0 9px;
+  color: #173f42;
+  font-weight: 650;
+}
+.record-selection-control .authoritative-source-identifier {
+  margin: 0 0 12px;
+  color: #245d61;
+  font-family: ui-monospace, monospace;
+}
+.record-selection-control .authoritative-source-action {
+  margin: 0;
+}
+.record-selection-control .authoritative-source-action a {
+  color: #245d61;
+  font-weight: 650;
+}
+@media (prefers-color-scheme: dark) {
+  .record-selection-control .authoritative-source-context {
+    border-left-color: #76cfca;
+    background: #173f42;
+    color: #eefaf8;
+  }
+  .record-selection-control .authoritative-source-badge {
+    border-color: #76cfca;
+    color: #b9ebe7;
+  }
+  .record-selection-control .authoritative-source-context h3,
+  .record-selection-control .authoritative-source-title {
+    color: #f2fbfa;
+  }
+  .record-selection-control .authoritative-source-icon,
+  .record-selection-control .authoritative-source-identifier,
+  .record-selection-control .authoritative-source-action a {
+    color: #b9ebe7;
+  }
+}
+"""
 
 
 def _association_filter_summary(filters: dict[str, Any]) -> str:
@@ -45565,7 +45641,7 @@ def _render_association_form_page(
     document_count = len(document_items)
     relationship_options = _association_options()
     record_control = (
-        f"""<section class="record-selection-control"><label for="record-search">Search public CDE records</label><input id="record-search" type="search" autocomplete="off" placeholder="Search by reference, title, institution, trajectory, finding, system state, conditions, signals, or tags"><span class="field-help">Search covers public record reference, title where present, institution, trajectory, finding, system state, conditions, signals, tags, and public summary fields.</span><div id="record-search-status" class="record-search-status" aria-live="polite">{record_count} eligible records</div><button type="button" id="record-search-clear" class="secondary-button">Clear search</button><label for="record-reference">Public CDE record<select id="record-reference" name="record_reference" required>{record_options}</select><span class="field-help">Search and select the public CDE record that the published document will support. The canonical record reference is preserved as the association value.</span></label><section id="selected-record-context" class="selected-record-context" aria-live="polite"><h2>Selected record</h2><p class="field-help" data-empty-record-context>Select a record to view public record context. This panel is informational only and does not alter form submission.</p>{record_contexts}</section><p id="record-search-empty" class="empty-state" hidden>No eligible public CDE records match this search.</p></section>"""
+        f"""<style>{ASSOCIATION_AUTHORITATIVE_SOURCE_STYLES}</style><section class="record-selection-control"><label for="record-search">Search public CDE records</label><input id="record-search" type="search" autocomplete="off" placeholder="Search by reference, title, institution, trajectory, finding, system state, conditions, signals, or tags"><span class="field-help">Search covers public record reference, title where present, institution, trajectory, finding, system state, conditions, signals, tags, and public summary fields.</span><div id="record-search-status" class="record-search-status" aria-live="polite">{record_count} eligible records</div><button type="button" id="record-search-clear" class="secondary-button">Clear search</button><label for="record-reference">Public CDE record<select id="record-reference" name="record_reference" required>{record_options}</select><span class="field-help">Search and select the public CDE record that the published document will support. The canonical record reference is preserved as the association value.</span></label><section id="selected-record-context" class="selected-record-context" aria-live="polite"><h2>Selected record</h2><p class="field-help" data-empty-record-context>Select a record to view public record context. This panel is informational only and does not alter form submission.</p>{record_contexts}</section><p id="record-search-empty" class="empty-state" hidden>No eligible public CDE records match this search.</p></section>"""
         if record_items
         else """<p class="empty-state">No eligible public CDE records are currently available for association.</p>"""
     )

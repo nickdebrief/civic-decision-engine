@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 47 — Governed Source Relationship Selection
+Current release: CDE Platform Stage 47.1 — Authoritative Source Visual Emphasis
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -944,6 +944,19 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 47.1 — Authoritative Source Visual Emphasis
+
+CDE Platform Stage 47.1 gives the Authoritative source panel a clearer visual
+hierarchy. A restrained Primary evidence badge, document icon, light CDE teal
+surface, teal accent border, improved spacing, and dedicated dark-mode colours
+make the unique governing source immediately recognizable to administrators.
+
+This stage changes presentation only. Stage 47 relationship locking,
+server-side enforcement, provenance, lifecycle, routes, association behavior,
+and public interfaces remain unchanged.
+
+See the [CDE Platform Stage 47.1 release note](docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md).
 
 ### CDE Platform Stage 47 — Governed Source Relationship Selection
 
