@@ -249,6 +249,72 @@ def public_record_context(conn: sqlite3.Connection, reference: str) -> dict[str,
     return record_context(conn, reference)
 
 
+def source_created_records_for_document(
+    conn: sqlite3.Connection,
+    document: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Return current records whose persisted provenance names this source document."""
+    document_id = str(document.get("intake_id") or "").strip()
+    document_reference = str(document.get("reference_identifier") or "").strip()
+    if not document_id and not document_reference:
+        return []
+
+    try:
+        available_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(records)").fetchall()
+        }
+        required_columns = {
+            "reference",
+            "source_document_id",
+            "source_document_reference",
+        }
+        if not required_columns.issubset(available_columns):
+            return []
+
+        preferred_columns = (
+            "reference",
+            "record_type",
+            "record_title",
+            "institution",
+            "event_date",
+            "trajectory",
+            "system_state",
+            "source_document_id",
+            "source_document_reference",
+            "exported_at",
+        )
+        selected_columns = [
+            column for column in preferred_columns if column in available_columns
+        ]
+        conditions: list[str] = []
+        parameters: list[str] = []
+        if document_id:
+            conditions.append("source_document_id = ?")
+            parameters.append(document_id)
+        if document_reference:
+            conditions.append(
+                "(source_document_reference IS NOT NULL "
+                "AND source_document_reference != '' "
+                "AND source_document_reference = ?)"
+            )
+            parameters.append(document_reference)
+        latest_clause = "is_latest = 1 AND " if "is_latest" in available_columns else ""
+        order_column = "exported_at" if "exported_at" in available_columns else "reference"
+        rows = conn.execute(
+            f"""
+            SELECT {", ".join(selected_columns)}
+            FROM records
+            WHERE {latest_clause}({" OR ".join(conditions)})
+            ORDER BY {order_column} DESC, reference ASC
+            """,
+            parameters,
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(row) for row in rows]
+
+
 def _record_reference_exists_any_version(conn: sqlite3.Connection, reference: str) -> bool:
     try:
         row = conn.execute(

@@ -95,6 +95,28 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
         associations.ensure_association_tables(conn)
         return conn
 
+    def _clone_source_record(self, reference="CMP-MC-20191202-LEGACY"):
+        conn = self._conn()
+        try:
+            row = conn.execute(
+                "SELECT * FROM records WHERE reference = ?",
+                ("CMP-MC-20191202-001",),
+            ).fetchone()
+            columns = [column for column in row.keys() if column != "id"]
+            values = [row[column] for column in columns]
+            values[columns.index("reference")] = reference
+            values[columns.index("verification_hash")] = hashlib.sha256(
+                reference.encode("utf-8")
+            ).hexdigest()
+            conn.execute(
+                f"INSERT INTO records ({', '.join(columns)}) VALUES "
+                f"({', '.join('?' for _ in columns)})",
+                values,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
     def _create_record(
         self,
         *,
@@ -134,7 +156,7 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
         ).content
 
         self.assertIn("Canonical record", content)
-        self.assertIn("No canonical record linked", content)
+        self.assertIn("No source-created Canonical Record exists", content)
         self.assertIn("Create canonical record from this document", content)
         self.assertIn(
             f"/admin/document-intake/{self.document_id}/canonical-record/new",
@@ -290,13 +312,137 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
         self.assertEqual(row["public_label"], "Initial Complaint Evidence Package")
         self.assertEqual(row["created_by"], "admin-user")
 
-    def test_duplicate_exact_source_link_displays_warning(self):
+    def test_existing_source_record_replaces_admin_creation_action_with_panel(self):
         self._create_record(create_association=None)
-        content = admin_session.admin_canonical_record_from_document_page(
+        content = admin_session.admin_document_intake_preview_page(
             self.document_id, self.request
         ).content
-        self.assertIn("A canonical record may already exist for this Published document", content)
+
+        self.assertIn("Canonical Record Created", content)
+        self.assertIn(
+            "This Published Document has already been used to create a Canonical Record",
+            content,
+        )
         self.assertIn("CMP-MC-20191202-001", content)
+        self.assertIn("Complaint", content)
+        self.assertIn("Initial Complaint to the Medical Council of Ireland", content)
+        self.assertIn('href="/verify/CMP-MC-20191202-001"', content)
+        self.assertIn("Open Canonical Record", content)
+        self.assertIn("Manage Record–Document Associations", content)
+        self.assertNotIn("Create canonical record from this document", content)
+
+    def test_existing_source_record_replaces_public_detail_creation_action(self):
+        self._create_record(create_association=None)
+        content = documents.public_document_page(self.document_id).content
+
+        self.assertIn("Canonical Record Created", content)
+        self.assertIn("CMP-MC-20191202-001", content)
+        self.assertIn("Complaint", content)
+        self.assertNotIn("Create canonical record from this document", content)
+
+    def test_direct_get_returns_existing_record_state_instead_of_creation_form(self):
+        self._create_record(create_association=None)
+        response = admin_session.admin_canonical_record_from_document_page(
+            self.document_id, self.request
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Canonical Record Created", response.content)
+        self.assertIn("Open Canonical Record", response.content)
+        self.assertNotIn("<form", response.content)
+        self.assertNotIn("Create canonical record", response.content)
+
+    def test_direct_post_cannot_create_second_source_record(self):
+        self._create_record(create_association=None)
+        response = self._create_record(
+            create_association=None,
+            reference="CMP-MC-20191202-002",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Canonical Record Created", response.content)
+        self.assertIn("CMP-MC-20191202-001", response.content)
+        conn = self._conn()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM records WHERE source_document_id = ?",
+                (self.document_id,),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(count, 1)
+
+    def test_secondary_association_does_not_suppress_creation_action(self):
+        self._create_record(create_association=None)
+        conn = self._conn()
+        try:
+            conn.execute(
+                """
+                UPDATE records
+                SET source_document_id = NULL, source_document_reference = NULL
+                WHERE reference = ?
+                """,
+                ("CMP-MC-20191202-001",),
+            )
+            associations.create_association(
+                conn,
+                record_reference="CMP-MC-20191202-001",
+                document_id=self.document_id,
+                relationship_type="supporting_document",
+                public_label="Secondary association",
+                public_note="Association only.",
+                admin_note="Not the source-creation pathway.",
+                is_public="1",
+                actor="admin-user",
+                root=self.root,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        admin_content = admin_session.admin_document_intake_preview_page(
+            self.document_id, self.request
+        ).content
+        public_content = documents.public_document_page(self.document_id).content
+        self.assertIn("Create canonical record from this document", admin_content)
+        self.assertIn("Create canonical record from this document", public_content)
+        self.assertNotIn("Canonical Record Created", admin_content)
+
+    def test_legacy_multiple_source_records_warn_and_block_further_creation(self):
+        self._create_record(create_association=None)
+        self._clone_source_record()
+
+        detail = admin_session.admin_document_intake_preview_page(
+            self.document_id, self.request
+        ).content
+        get_page = admin_session.admin_canonical_record_from_document_page(
+            self.document_id, self.request
+        )
+        post_page = self._create_record(reference="CMP-MC-20191202-003")
+
+        for content in (detail, get_page.content, post_page.content):
+            self.assertIn("Multiple Source-Created Canonical Records", content)
+            self.assertIn("CMP-MC-20191202-001", content)
+            self.assertIn("CMP-MC-20191202-LEGACY", content)
+            self.assertNotIn("Create canonical record from this document", content)
+        self.assertEqual(post_page.status_code, 409)
+        conn = self._conn()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM records WHERE source_document_id = ?",
+                (self.document_id,),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(count, 2)
+
+    def test_unauthenticated_creation_route_remains_protected(self):
+        with self.assertRaises(Exception) as raised:
+            admin_session.admin_canonical_record_from_document_page(
+                self.document_id,
+                FakeRequest(),
+            )
+        self.assertEqual(getattr(raised.exception, "status_code", None), 401)
 
     def test_created_complaint_is_publicly_searchable_and_selectable(self):
         self._create_record(create_association=None)

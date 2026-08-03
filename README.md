@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 44.1 — Composite Category Recommendation Coverage
+Current release: CDE Platform Stage 45 — Canonical Record Creation State on Published Documents
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md`](docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md`](docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md`](docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md`](docs/releases/CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md)
@@ -724,6 +725,12 @@ Published Document category through a centralized explicit mapping. The
 selector remains editable, and an administrator's submitted choice is
 authoritative.
 
+After creation, the Published Document displays the resulting source-created
+Canonical Record instead of continuing to offer the creation action. Direct GET
+or POST access to the protected creation route cannot create a duplicate.
+Secondary Record–Document Associations remain distinct and do not suppress the
+creation action.
+
 ### Governed Document Keywords
 
 Admin Document Intake now includes a governed **KEYWORDS** field for
@@ -928,6 +935,22 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 45 — Canonical Record Creation State on Published Documents
+
+CDE Platform Stage 45 makes Published Document detail pages aware of the
+Canonical Record created directly from their persisted source context. Before
+creation, the established action remains available. After creation, an
+actionable status panel identifies the record and links to it and to governed
+association management.
+
+The protected GET and POST routes use the same exact source-provenance lookup
+and block repeat creation. Legacy multiple-record conditions are displayed
+without deleting or reconciling records. Ordinary secondary associations do not
+count as source creation. No schema, lifecycle, hashing, verification,
+provenance, public URL, or evidence-boundary change is introduced.
+
+See the [CDE Platform Stage 45 release note](docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md).
 
 ### CDE Platform Stage 44.1 — Composite Category Recommendation Coverage
 
