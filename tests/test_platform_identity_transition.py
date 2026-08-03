@@ -84,7 +84,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 44.1 — Composite Category Recommendation Coverage",
+            "Current release: CDE Platform Stage 45 — Canonical Record Creation State on Published Documents",
             readme,
         )
         self.assertIn("## Stage Numbering", readme)

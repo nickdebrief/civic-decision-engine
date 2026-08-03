@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse
 
 from api import record_document_associations as rda
+from api.canonical_record_types import RECORD_TYPE_LABELS
 from api.document_intake import (
     STATUS_LABELS,
     document_keywords_display,
@@ -1634,6 +1635,65 @@ def _render_imap_acquisition_document(item: dict) -> str:
 <section class="public-email-boundary"><h2>IMAP Acquisition Governance Boundary</h2><p class="provenance-boundary">{escape(boundary)}</p></section>"""
 
 
+def _render_canonical_record_creation_state(item: dict) -> str:
+    conn = rda.get_db()
+    try:
+        source_records = rda.source_created_records_for_document(conn, item)
+    finally:
+        conn.close()
+
+    if not source_records:
+        return f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
+
+    multiple = len(source_records) > 1
+    heading = (
+        "Multiple Source-Created Canonical Records"
+        if multiple
+        else "Canonical Record Created"
+    )
+    notice = (
+        "Multiple Canonical Records were created directly from this Published Document. "
+        "No record has been changed, and further creation is blocked pending administrative review."
+        if multiple
+        else "This Published Document has already been used to create a Canonical Record."
+    )
+    cards: list[str] = []
+    for record in source_records:
+        reference = str(record.get("reference") or "")
+        details = (
+            ("Canonical Record reference", reference),
+            (
+                "Record Type",
+                RECORD_TYPE_LABELS.get(
+                    str(record.get("record_type") or ""),
+                    str(record.get("record_type") or "—"),
+                ),
+            ),
+            ("Title", record.get("record_title")),
+            ("Institution", record.get("institution")),
+            ("Event date", record.get("event_date")),
+            ("Trajectory", record.get("trajectory")),
+            ("System state", record.get("system_state")),
+        )
+        rows = "".join(
+            f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
+            for label, value in details
+            if str(value or "").strip()
+        )
+        cards.append(
+            '<article class="source-created-record">'
+            f"<h3>{escape(reference)}</h3><table>{rows}</table>"
+            '<p class="source-record-actions">'
+            f'<a class="admin-action-link" href="/verify/{escape(reference)}">Open Canonical Record</a>'
+            "</p></article>"
+        )
+    return (
+        '<section class="public-document-admin-actions source-created-records" '
+        f'aria-label="Administrative actions"><h2>{escape(heading)}</h2>'
+        f'<p class="source-record-state">{escape(notice)}</p>{"".join(cards)}</section>'
+    )
+
+
 def _render_document(item: dict, return_to: object | None = None, message: object | None = None, page: object | None = None) -> str:
     publication_timestamp = _publication_timestamp(item)
     archive_return = sanitize_archive_return(return_to)
@@ -1684,7 +1744,7 @@ def _render_document(item: dict, return_to: object | None = None, message: objec
     associated_records_section = _render_associated_records(item)
     provenance_section = _render_publication_provenance(item)
     pathway_section = _render_publication_pathway(item)
-    admin_actions = f"""<section class="public-document-admin-actions" aria-label="Administrative actions"><h2>Administrative Actions</h2><p>This protected administrative action opens the existing authenticated workflow for creating a distinct canonical CDE record from this Published document.</p><a class="admin-action-link" href="/admin/document-intake/{escape(item['intake_id'])}/canonical-record/new">Create canonical record from this document</a></section>"""
+    admin_actions = _render_canonical_record_creation_state(item)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-outlook-archive-summary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.mailbox-tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}}.mailbox-tabs a{{padding:8px 10px;border:1px solid #d8d2c4;background:#fff;text-decoration:none}}.mailbox-graph-theme-toggle{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0;padding:10px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-theme-toggle legend{{font-weight:800;color:#143a52}}.mailbox-graph-theme-toggle label{{display:flex;gap:6px;align-items:center}}.mailbox-graph-filters{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}}.mailbox-graph-filters label{{display:grid;gap:4px;font-weight:700;color:#555}}.mailbox-graph-filters input{{width:100%;padding:8px;border:1px solid #c9c2b5;background:#fff;color:#1f2933}}.mailbox-graph-filters button{{padding:9px 10px;border:0;background:#245d61;color:#fff;align-self:end}}.mailbox-graph-cluster-toggle{{align-self:end;display:flex!important;gap:7px;align-items:center;padding:8px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-workspace{{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.34fr);gap:12px;align-items:stretch}}.mailbox-graph-shell{{height:560px;overflow:hidden;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-info-panel{{min-height:560px;padding:12px;border:1px solid #d8d2c4;background:#faf9f5;overflow:auto}}.mailbox-graph-info-panel h3{{margin-top:0}}.mailbox-graph-info-panel dl{{display:grid;grid-template-columns:115px minmax(0,1fr);gap:6px 10px}}.mailbox-graph-info-panel dt{{font-weight:800;color:#555}}.mailbox-graph-info-panel dd{{margin:0;overflow-wrap:anywhere}}.mailbox-graph-actions{{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}}.mailbox-graph-action{{padding:7px 9px;border:1px solid #245d61;background:#fff;color:#245d61;text-decoration:none;font:inherit;cursor:pointer}}.mailbox-graph-legend{{display:flex;flex-wrap:wrap;gap:8px 14px;margin:12px 0;color:#555}}.mailbox-graph-legend span{{display:inline-flex;align-items:center;gap:5px}}.legend-icon{{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:.72rem;color:#fff}}.legend-person{{background:#0F766E}}.legend-institution{{background:#7C3AED}}.legend-email{{background:#475569}}.legend-case{{background:#B45309}}.legend-reference{{background:#2563EB}}.legend-attachment{{background:#16A34A}}.legend-intake{{background:#DC2626}}.mailbox-relationship-graph-canvas{{display:block;width:100%;height:100%;touch-action:none}}.mailbox-relationship-graph-canvas text{{font:12px system-ui,sans-serif;fill:#1f2933;paint-order:stroke;stroke:#faf9f5;stroke-width:3px;stroke-linejoin:round}}.mailbox-graph-label{{transition:opacity .18s ease}}.mailbox-graph-node:focus circle{{stroke:#111827;stroke-width:3px}}.mailbox-graph-hover-glow{{filter:drop-shadow(0 0 7px rgba(45,212,191,.65))}}.mailbox-graph-node-icon{{font-size:10px;fill:#fff;stroke:none;pointer-events:none}}.mailbox-graph-edge{{transition:opacity .16s ease,stroke-width .16s ease}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"]{{background:#111827;border-color:#334155;color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .provenance-boundary,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-info-panel,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-theme-toggle,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-cluster-toggle{{background:#111827;border-color:#334155;color:#94A3B8}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-shell{{background:#0F172A;border-color:#334155}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h2,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h3,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] legend,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] dt{{color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-relationship-graph-canvas text{{fill:#E5E7EB;stroke:#0F172A}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-filters input{{background:#0F172A;border-color:#334155;color:#E5E7EB}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}.mailbox-graph-workspace{{grid-template-columns:1fr}}.mailbox-graph-shell{{height:420px}}.mailbox-graph-info-panel{{min-height:auto}}}}@media(prefers-color-scheme:dark){{body{{background:#111827;color:#E5E7EB}}h1,h2{{color:#8DD5DD}}.governance,.provenance-boundary,.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-outlook-archive-summary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder,.mailbox-tabs a{{background:#1F2937;border-color:#374151}}table{{background:#1F2937}}th{{background:#111827;color:#D1D5DB}}th,td{{border-color:#374151}}.mailbox-graph-shell,.email-plain-text,.email-html-view{{background:#111827;border-color:#374151}}.mailbox-relationship-graph-canvas text{{fill:#F9FAFB;stroke:#111827}}.mailbox-graph-filters input{{background:#111827;color:#F9FAFB;border-color:#4B5563}}}}</style></head>

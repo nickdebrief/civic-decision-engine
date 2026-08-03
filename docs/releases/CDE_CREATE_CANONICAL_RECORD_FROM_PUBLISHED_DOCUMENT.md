@@ -23,6 +23,11 @@ section. When no source-linked canonical record exists, administrators can open:
 The form is prefilled from safe Published document metadata and remains fully
 editable before submission.
 
+After creation, the document detail page replaces that action with **Canonical
+Record Created**. The panel identifies the source-created record and provides
+**Open Canonical Record** and **Manage Record–Document Associations** actions.
+It does not infer source creation from an ordinary association.
+
 ## Metadata Mapping
 
 Where available, the workflow proposes:
@@ -111,11 +116,16 @@ If the option is not selected, the record and document remain unassociated.
 
 ## Duplicate Safeguards
 
-The form checks for exact source-linked records using stored source document
-metadata. If a record may already exist for the Published document, the form
-displays a warning. Fuzzy similarity does not block creation. Exact reference
-reuse is blocked to avoid accidental superseding/versioning through this
-workflow.
+The detail page and both protected creation routes check exact source linkage
+using stored source document metadata. If a source-created record already
+exists, the form is not rendered and POST submission cannot create another
+record. The administrator is returned to an actionable existing-record panel.
+
+If legacy data contains multiple directly source-created records, all are
+listed with a warning and further creation is blocked. No record is deleted,
+modified, or reconciled automatically. Fuzzy similarity and secondary
+Record–Document Associations do not block creation. Exact reference reuse
+remains independently blocked to avoid accidental superseding or versioning.
 
 ## Preserved Boundaries
 

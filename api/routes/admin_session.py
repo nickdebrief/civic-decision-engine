@@ -44950,41 +44950,79 @@ def _next_record_reference(
 def _source_document_record_links(
     conn: sqlite3.Connection, item: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
-    try:
-        columns = _record_table_columns(conn)
-        required = {
-            "source_document_id",
-            "source_document_reference",
-            "record_type",
-            "record_title",
-            "institution",
-            "event_date",
-        }
-        if not required.issubset(columns):
-            return []
-        rows = conn.execute(
-            """
-            SELECT reference, record_type, record_title, institution, event_date
-            FROM records
-            WHERE is_latest = 1
-              AND (
-                source_document_id = ?
-                OR (
-                  source_document_reference IS NOT NULL
-                  AND source_document_reference != ''
-                  AND source_document_reference = ?
-                )
-              )
-            ORDER BY exported_at DESC
-            """,
-            (
-                str(item.get("intake_id") or ""),
-                str(item.get("reference_identifier") or ""),
-            ),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return []
-    return [dict(row) for row in rows]
+    return rda.source_created_records_for_document(conn, dict(item))
+
+
+def _source_created_record_panel(
+    item: Mapping[str, Any],
+    linked_records: list[dict[str, Any]],
+) -> str:
+    from urllib.parse import urlencode
+
+    multiple = len(linked_records) > 1
+    if multiple:
+        summary = (
+            '<p class="notice source-record-warning"><strong>Multiple source-created '
+            "Canonical Records exist for this Published Document.</strong> No records have "
+            "been changed. Further creation is blocked pending administrative review.</p>"
+        )
+        heading = "Multiple Source-Created Canonical Records"
+    else:
+        summary = (
+            '<p class="notice"><strong>Canonical Record Created</strong><br>'
+            "This Published Document has already been used to create a Canonical Record."
+            "</p>"
+        )
+        heading = "Canonical Record Created"
+
+    document_filter = str(
+        item.get("document_identifier") or item.get("intake_id") or ""
+    )
+    cards: list[str] = []
+    for row in linked_records:
+        reference = str(row.get("reference") or "")
+        fields = (
+            ("Canonical Record reference", reference),
+            ("Record Type", _association_record_type_label(row.get("record_type"))),
+            ("Title", row.get("record_title")),
+            ("Institution", row.get("institution")),
+            ("Event date", row.get("event_date")),
+            ("Trajectory", row.get("trajectory")),
+            ("System state", row.get("system_state")),
+        )
+        detail_rows = "".join(
+            f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
+            for label, value in fields
+            if str(value or "").strip()
+        )
+        association_query = urlencode(
+            {
+                "record_reference": reference,
+                "document_reference": document_filter,
+            }
+        )
+        cards.append(
+            '<article class="source-created-record">'
+            f"<h3>{escape(reference)}</h3>"
+            f'<table class="metadata">{detail_rows}</table>'
+            '<p class="source-record-actions">'
+            f'<a class="button-link" href="/verify/{escape(reference)}">Open Canonical Record</a> '
+            f'<a href="/admin/associations?{escape(association_query)}">Manage Record–Document Associations</a>'
+            "</p></article>"
+        )
+    return (
+        f'<section class="source-created-records"><h2>{escape(heading)}</h2>'
+        f'{summary}{"".join(cards)}</section>'
+    )
+
+
+def _render_existing_source_records_page(
+    item: Mapping[str, Any],
+    linked_records: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Canonical Record Already Created</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.source-record-warning{{border-left-color:#a16207}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 18px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}.source-created-record{{margin:18px 0}}.source-record-actions{{display:flex;gap:12px;flex-wrap:wrap;align-items:center}}.button-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake/{escape(str(item.get('intake_id') or ''))}">Back to Published Document</a></p>{_source_created_record_panel(item, linked_records)}</main></body></html>"""
 
 
 def _canonical_record_proposal(item: Mapping[str, Any], conn: sqlite3.Connection) -> dict[str, str]:
@@ -46771,25 +46809,13 @@ def _canonical_record_section_for_document(item: Mapping[str, Any]) -> str:
         conn.close()
 
     if linked_records:
-        rows = "".join(
-            "<tr>"
-            f'<td><a href="/verify/{escape(str(row.get("reference") or ""))}">{escape(str(row.get("reference") or ""))}</a></td>'
-            f'<td>{escape(_association_record_type_label(row.get("record_type")))}</td>'
-            f'<td>{escape(str(row.get("record_title") or "—"))}</td>'
-            f'<td><a href="/admin/associations/new">Create association</a></td>'
-            "</tr>"
-            for row in linked_records
-        )
-        body = (
-            '<p class="notice">Canonical record linked from this Published document.</p>'
-            f'<table class="metadata"><thead><tr><th>Reference</th><th>Type</th><th>Title</th><th>Actions</th></tr></thead><tbody>{rows}</tbody></table>'
-        )
-    else:
-        body = (
-            '<p class="notice">No canonical record linked.</p>'
-            f'<p><a class="button-link" href="/admin/document-intake/{escape(str(item.get("intake_id") or ""))}/canonical-record/new">Create canonical record from this document</a></p>'
-        )
-    return f"<section><h2>Canonical record</h2>{body}</section>"
+        return _source_created_record_panel(item, linked_records)
+    return (
+        "<section><h2>Canonical record</h2>"
+        '<p class="notice">No source-created Canonical Record exists.</p>'
+        f'<p><a class="button-link" href="/admin/document-intake/{escape(str(item.get("intake_id") or ""))}/canonical-record/new">Create canonical record from this document</a></p>'
+        "</section>"
+    )
 
 
 def _render_canonical_record_from_document_form(
@@ -49168,15 +49194,23 @@ def admin_canonical_record_from_document_page(intake_id: str, request: Request):
     conn = get_db()
     try:
         record_routes.ensure_record_metadata_columns(conn)
-        proposal = _canonical_record_proposal(item, conn)
         duplicates = _source_document_record_links(conn, item)
+        proposal = _canonical_record_proposal(item, conn) if not duplicates else None
     finally:
         conn.close()
+    if duplicates:
+        return HTMLResponse(
+            content=_render_existing_source_records_page(
+                item,
+                duplicates,
+                admin_session=session,
+            )
+        )
     return HTMLResponse(
         content=_render_canonical_record_from_document_form(
             item,
-            proposal=proposal,
-            duplicate_links=duplicates,
+            proposal=proposal or {},
+            duplicate_links=[],
             admin_session=session,
         )
     )
@@ -49570,6 +49604,22 @@ def admin_canonical_record_from_document_create(
         raise _http_error(404, "document_intake_not_found") from exc
     if str(item.get("status") or "").lower() != "published":
         raise _http_error(400, "source_document_not_published")
+
+    conn = get_db()
+    try:
+        record_routes.ensure_record_metadata_columns(conn)
+        source_created_records = _source_document_record_links(conn, item)
+    finally:
+        conn.close()
+    if source_created_records:
+        return HTMLResponse(
+            content=_render_existing_source_records_page(
+                item,
+                source_created_records,
+                admin_session=session,
+            ),
+            status_code=409,
+        )
 
     normalized_reference = str(reference or "").strip()
     if not normalized_reference:

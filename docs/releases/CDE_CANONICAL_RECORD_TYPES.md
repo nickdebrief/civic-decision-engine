@@ -88,6 +88,12 @@ mapping exists. Unmapped categories preserve the established default. The
 recommendation does not inspect document bytes, OCR, filenames, free text, or
 relationships, and it does not save or create a record automatically.
 
+Once the administrator creates the record, the source Published Document shows
+the resulting Canonical Record instead of continuing to offer the creation
+action. This state uses persisted source-document provenance only. Secondary
+Record–Document Associations remain separate and do not imply that the record
+was created from the document.
+
 ## Handbook Alignment
 
 For **Volume II — Platform Operations**, the administrator workflow should

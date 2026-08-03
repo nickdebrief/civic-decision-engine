@@ -17,6 +17,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 43 | Clinical Canonical Record Types | canonical-record-classification | — | 2026-08-02 | `1765151fab6ba4f6f4d3a7676cd771297f0f2454` | [#303](https://github.com/nickdebrief/civic-decision-engine/pull/303) | [Stage 43](CDE_PLATFORM_STAGE_43_CLINICAL_CANONICAL_RECORD_TYPES.md) | Implemented · merged · deployed |
 | 44 | Canonical Record Type Recommendation | canonical-record-type-recommendation | — | 2026-08-02 | `27c5b1942a99e79b972885204b8a676c3da390d1` | [#304](https://github.com/nickdebrief/civic-decision-engine/pull/304) | [Stage 44](CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md) | Implemented · merged · deployed |
 | 44.1 | Composite Category Recommendation Coverage | canonical-record-type-recommendation | 44 | 2026-08-02 | `c097bcaef467010491a0380ebc20977e5629e3d0` | [#305](https://github.com/nickdebrief/civic-decision-engine/pull/305) | [Stage 44.1](CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md) | Implemented · merged · deployed |
+| 45 | Canonical Record Creation State on Published Documents | canonical-record-source-state | — | — | `—` | — | [Stage 45](CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 
@@ -36,5 +37,8 @@ requests, branches, deployment records, and release history remain unchanged.
 - A decimal suffix must identify its parent stage and use the same capability.
 - Every ledger entry must link to one release note whose heading uses the same
   canonical stage number and title.
+- One terminal implemented stage may carry pending merge and deployment fields
+  while its feature branch is under review; completed entries require immutable
+  merge metadata.
 - Historical Git subjects may retain superseded numbering because Git history
   is immutable; canonical repository documentation must use this ledger.

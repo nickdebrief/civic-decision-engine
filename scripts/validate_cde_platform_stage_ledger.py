@@ -95,7 +95,7 @@ def validate_entries(entries: list[StageEntry]) -> list[str]:
     if not entries:
         return ["stage_ledger_empty"]
 
-    for entry in entries:
+    for index, entry in enumerate(entries):
         if not STAGE_PATTERN.fullmatch(entry.stage):
             errors.append(f"stage_identifier_invalid: {entry.stage}")
             continue
@@ -135,12 +135,26 @@ def validate_entries(entries: list[StageEntry]) -> list[str]:
                     f"{expected_parent}={parent.capability}"
                 )
 
-        if not re.fullmatch(r"[0-9a-f]{40}", entry.merge_commit):
-            errors.append(f"merge_commit_invalid: {entry.stage}")
-        required_statuses = ("implemented", "merged", "deployed")
         normalized_status = entry.status.casefold()
-        if not all(value in normalized_status for value in required_statuses):
-            errors.append(f"stage_status_incomplete: {entry.stage}")
+        pending = (
+            "implemented" in normalized_status
+            and "pending merge" in normalized_status
+            and "pending deployment" in normalized_status
+        )
+        if pending:
+            if index != len(entries) - 1:
+                errors.append(f"pending_stage_not_terminal: {entry.stage}")
+            if any(
+                value not in {"", "—", "-"}
+                for value in (entry.merged, entry.merge_commit, entry.pull_request)
+            ):
+                errors.append(f"pending_stage_has_merge_metadata: {entry.stage}")
+        else:
+            if not re.fullmatch(r"[0-9a-f]{40}", entry.merge_commit):
+                errors.append(f"merge_commit_invalid: {entry.stage}")
+            required_statuses = ("implemented", "merged", "deployed")
+            if not all(value in normalized_status for value in required_statuses):
+                errors.append(f"stage_status_incomplete: {entry.stage}")
         seen[entry.stage] = entry
 
     return errors
