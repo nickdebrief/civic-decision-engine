@@ -591,7 +591,9 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             'class="publication-provenance"',
             'class="publication-provenance-grid"',
             'class="publication-provenance-label"',
-            'class="publication-provenance-value"',
+            'class="publication-provenance-value ',
+            "publication-provenance-value--empty",
+            "publication-provenance-value--technical",
             'class="publication-pathway-wrapper"',
             'class="publication-pathway-table"',
             'class="publication-pathway-timestamp"',
@@ -607,6 +609,36 @@ class PublicDocumentLibraryTests(unittest.TestCase):
         self.assertNotIn('name="new_status"', content)
         self.assertNotIn("Declare published", content)
         self.assertNotIn("Update private notes", content)
+
+    def test_publication_provenance_value_contrast_is_scoped_and_accessible(self):
+        content = self.content(documents.public_document_page(self.jpeg_id))
+        self.assertIn(
+            'class="publication-provenance-value">JPEG</dd>',
+            content,
+        )
+        self.assertIn(
+            'class="publication-provenance-value publication-provenance-value--empty">—</dd>',
+            content,
+        )
+        self.assertIn(
+            'class="publication-provenance-value publication-provenance-value--technical">2026-07-09T13:00:00Z</dd>',
+            content,
+        )
+        self.assertIn(
+            ".publication-provenance-value{min-width:0;color:var(--publication-provenance-recorded-value);font-weight:600}",
+            content,
+        )
+        self.assertIn(
+            ".publication-provenance-value--empty{color:var(--publication-provenance-empty-value);font-weight:400}",
+            content,
+        )
+        self.assertIn(
+            ".publication-provenance-value--technical{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}",
+            content,
+        )
+        self.assertIn("--publication-provenance-recorded-value:#245d61", content)
+        self.assertIn("--publication-provenance-recorded-value:#8DD5DD", content)
+        self.assertNotIn("table{color:var(--publication-provenance", content)
 
     def test_public_provenance_does_not_add_public_audit_endpoint(self):
         self.assertFalse(hasattr(documents, "public_audit_page"))

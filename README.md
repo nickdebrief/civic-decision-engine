@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 45 — Canonical Record Creation State on Published Documents
+Current release: CDE Platform Stage 46 — Publication Provenance Value Contrast
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md`](docs/releases/CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md`](docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md`](docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md`](docs/releases/CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md)
@@ -935,6 +936,17 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 46 — Publication Provenance Value Contrast
+
+CDE Platform Stage 46 improves the scanability and accessibility of Publication
+Provenance without changing its data. Recorded values use the established CDE
+teal, unavailable values remain visibly subordinate in muted grey, and
+technical identifiers and timestamps retain monospace presentation. The styles
+are scoped to the provenance key-value view, including its dark-mode treatment,
+so unrelated tables and public interfaces are unchanged.
+
+See the [CDE Platform Stage 46 release note](docs/releases/CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md).
 
 ### CDE Platform Stage 45 — Canonical Record Creation State on Published Documents
 
