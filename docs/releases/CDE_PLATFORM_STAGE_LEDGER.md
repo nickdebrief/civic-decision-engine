@@ -18,7 +18,8 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 44 | Canonical Record Type Recommendation | canonical-record-type-recommendation | — | 2026-08-02 | `27c5b1942a99e79b972885204b8a676c3da390d1` | [#304](https://github.com/nickdebrief/civic-decision-engine/pull/304) | [Stage 44](CDE_PLATFORM_STAGE_44_CANONICAL_RECORD_TYPE_RECOMMENDATION.md) | Implemented · merged · deployed |
 | 44.1 | Composite Category Recommendation Coverage | canonical-record-type-recommendation | 44 | 2026-08-02 | `c097bcaef467010491a0380ebc20977e5629e3d0` | [#305](https://github.com/nickdebrief/civic-decision-engine/pull/305) | [Stage 44.1](CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md) | Implemented · merged · deployed |
 | 45 | Canonical Record Creation State on Published Documents | canonical-record-source-state | — | 2026-08-03 | `22991d661cbff7d492af758e7feae9cc4a85ae6e` | [#307](https://github.com/nickdebrief/civic-decision-engine/pull/307) | [Stage 45](CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md) | Implemented · merged · deployed |
-| 46 | Publication Provenance Value Contrast | publication-provenance-presentation | — | — | `—` | — | [Stage 46](CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md) | Implemented · pending merge · pending deployment |
+| 46 | Publication Provenance Value Contrast | publication-provenance-presentation | — | 2026-08-03 | `578b5d5f9b96e667e9d46ed2d9d987dcd7c05119` | [#308](https://github.com/nickdebrief/civic-decision-engine/pull/308) | [Stage 46](CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md) | Implemented · merged · deployed |
+| 47 | Governed Source Relationship Selection | record-document-association-governance | — | — | `—` | — | [Stage 47](CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

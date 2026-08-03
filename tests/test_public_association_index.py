@@ -225,7 +225,11 @@ class PublicAssociationIndexTests(unittest.TestCase):
         self.assertIn("Relationship type: supporting_document", self._index(relationship_type="supporting_document"))
 
     def test_pagination_preserves_filters_and_ordering(self):
-        relationship_types = list(rda.RELATIONSHIP_TYPES)
+        relationship_types = [
+            relationship_type
+            for relationship_type in rda.RELATIONSHIP_TYPES
+            if relationship_type != "source_document"
+        ]
         document_ids = [self.document_id, self.image_id, self.png_id]
         record_refs = ["REC-INDEX-001", "REC-INDEX-002"]
         references = []

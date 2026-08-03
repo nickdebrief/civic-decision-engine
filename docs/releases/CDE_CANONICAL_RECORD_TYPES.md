@@ -145,6 +145,14 @@ metadata into the public CDE record selector. Complaint and other non-Strike
 records can be selected as parent records when they are public and eligible.
 The submitted association value remains the exact canonical record reference.
 
+A Canonical Record created from a Published Document retains that document as
+its authoritative source through the record's persisted source provenance. The
+association workflow displays the source and prevents a different Published
+Document from being assigned a second `Source document` relationship. Further
+documents should use an appropriate governed relationship such as Supporting
+document or Related document. A record without persisted source provenance may
+still receive a Source document association through the existing workflow.
+
 The workflow continues to preserve:
 
 - one selected public record per association;
@@ -153,6 +161,7 @@ The workflow continues to preserve:
 - relationship type controls;
 - public and administrative notes;
 - duplicate-association protection;
+- one authoritative source Published Document where source provenance exists;
 - record verification hashes;
 - document SHA-256 values.
 

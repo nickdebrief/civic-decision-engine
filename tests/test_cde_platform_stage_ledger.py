@@ -69,13 +69,13 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
     def test_canonical_sequence_uses_corrected_stage_numbers(self):
         self.assertEqual(
             [entry.stage for entry in self.entries],
-            ["40", "41", "42", "43", "44", "44.1", "45", "46"],
+            ["40", "41", "42", "43", "44", "44.1", "45", "46", "47"],
         )
 
     def test_pending_stage_must_be_terminal(self):
         pending = self.entries[-1]
-        errors = validate_entries([*self.entries, replace(pending, stage="46")])
-        self.assertIn("pending_stage_not_terminal: 46", errors)
+        errors = validate_entries([*self.entries, replace(pending, stage="47")])
+        self.assertIn("pending_stage_not_terminal: 47", errors)
 
 
 if __name__ == "__main__":
