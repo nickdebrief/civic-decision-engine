@@ -84,7 +84,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 47.1 — Authoritative Source Visual Emphasis",
+            "Current release: CDE Platform Stage 48 — Association Card Visual Refinement and Scalable Relationship Presentation",
             readme,
         )
         self.assertIn("## Stage Numbering", readme)

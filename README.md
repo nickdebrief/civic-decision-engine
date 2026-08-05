@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 47.1 — Authoritative Source Visual Emphasis
+Current release: CDE Platform Stage 48 — Association Card Visual Refinement and Scalable Relationship Presentation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,9 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md`](docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md`](docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md`](docs/releases/CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md`](docs/releases/CDE_PLATFORM_STAGE_46_PUBLICATION_PROVENANCE_VALUE_CONTRAST.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md`](docs/releases/CDE_PLATFORM_STAGE_45_CANONICAL_RECORD_CREATION_STATE.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md`](docs/releases/CDE_PLATFORM_STAGE_44_1_COMPOSITE_CATEGORY_RECOMMENDATION_COVERAGE.md)
@@ -944,6 +947,24 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 48 — Association Card Visual Refinement and Scalable Relationship Presentation
+
+CDE Platform Stage 48 gives Published Document association cards an explicit,
+accessible reading hierarchy: Canonical Record label and identifier,
+relationship badge, association summary, compact metadata, and button-style
+actions. The explanatory notice reuses the Publication Provenance notice
+treatment, while responsive and dark-mode styles keep long values and repeated
+cards readable across desktop, tablet, and mobile layouts.
+
+Each backend-supplied association now renders through one reusable card helper,
+so zero, one, or multiple associations remain structurally consistent without
+new sorting, filtering, client state, or data behaviour. Stage 47.1 was already
+deployed before this work. Stage 48 changes presentation only: association
+semantics, persistence, ordering, routes, permissions, lifecycle, provenance,
+hashes, APIs, schema, and persisted values remain unchanged.
+
+See the [CDE Platform Stage 48 release note](docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md).
 
 ### CDE Platform Stage 47.1 — Authoritative Source Visual Emphasis
 

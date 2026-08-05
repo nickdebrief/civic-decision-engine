@@ -58,6 +58,181 @@ GOVERNANCE_STATEMENT = (
     "external validation."
 )
 
+ASSOCIATION_CARD_STYLES = """
+.associated-records {
+  --association-accent: #245d61;
+  --association-border: #d8d4ca;
+  --association-surface: #ffffff;
+  --association-muted-surface: #faf9f5;
+  --association-muted-text: #555555;
+  margin-top: 28px;
+}
+.association-boundary.provenance-boundary {
+  color: #1f2933;
+  line-height: 1.55;
+}
+.associated-records .associated-records-list {
+  display: grid;
+  gap: 16px;
+}
+.association-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--association-border);
+  border-radius: 4px;
+  background: var(--association-surface);
+  overflow-wrap: anywhere;
+}
+.association-card__label {
+  margin: 0 0 4px;
+  color: var(--association-muted-text);
+  font-size: .78rem;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.association-card__identifier {
+  margin: 0;
+  font: 700 1.1rem/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.association-card__identifier a {
+  color: var(--association-accent);
+}
+.association-card__relationship {
+  margin: 10px 0 0;
+}
+.association-card__badge {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 4px 9px;
+  border: 1px solid var(--association-accent);
+  border-radius: 999px;
+  background: var(--association-accent);
+  color: #ffffff;
+  font-size: .82rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.association-card__summary {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--association-border);
+}
+.association-card__summary-label {
+  margin: 0 0 5px;
+  color: var(--association-muted-text);
+  font-size: .78rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+.association-card__summary-text {
+  margin: 0;
+  line-height: 1.5;
+}
+.association-card__metadata {
+  display: grid;
+  gap: 0;
+  margin: 14px 0 0;
+  border: 1px solid var(--association-border);
+  background: var(--association-muted-surface);
+}
+.association-card__metadata-row {
+  display: grid;
+  grid-template-columns: minmax(120px, .36fr) minmax(0, 1fr);
+}
+.association-card__metadata-row + .association-card__metadata-row {
+  border-top: 1px solid var(--association-border);
+}
+.association-card__metadata dt,
+.association-card__metadata dd {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+.association-card__metadata dt {
+  color: var(--association-muted-text);
+  font-weight: 700;
+}
+.association-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+.association-card .button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--association-accent);
+  border-radius: 3px;
+  background: var(--association-accent);
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+.association-card .button-link--secondary {
+  background: transparent;
+  color: var(--association-accent);
+}
+.association-card .button-link:hover {
+  text-decoration: underline;
+}
+.association-card a:focus-visible {
+  outline: 3px solid #2e8b9a;
+  outline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .association-card {
+    padding: 14px;
+  }
+  .association-card__metadata-row {
+    grid-template-columns: 1fr;
+  }
+  .association-card__metadata dd {
+    padding-top: 0;
+  }
+  .association-card__actions .button-link {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  .associated-records {
+    --association-accent: #8dd5dd;
+    --association-border: #374151;
+    --association-surface: #1f2937;
+    --association-muted-surface: #111827;
+    --association-muted-text: #d1d5db;
+  }
+  .association-boundary.provenance-boundary {
+    color: #e5e7eb;
+  }
+  .association-card__badge {
+    background: #173f42;
+    color: #b9ebe7;
+  }
+  .association-card .button-link {
+    background: #8dd5dd;
+    color: #111827;
+  }
+  .association-card .button-link--secondary {
+    background: transparent;
+    color: #8dd5dd;
+  }
+  .association-card a:focus-visible {
+    outline-color: #8dd5dd;
+  }
+}
+"""
+
 
 def _not_found(exc: Exception):
     raise HTTPException(status_code=404, detail="public_document_not_found") from exc
@@ -336,6 +511,43 @@ def _render_publication_provenance(item: dict) -> str:
 
 
 
+def _render_associated_record_card(association: dict) -> str:
+    record_reference = str(association.get("record_reference") or "")
+    relationship_label = str(association.get("public_label") or "Related record")
+    metadata_fields = (
+        (
+            "Generated date",
+            _date(association.get("record_generated_at"))
+            if association.get("record_generated_at")
+            else None,
+        ),
+        (
+            "Trajectory",
+            str(association.get("record_trajectory"))
+            if association.get("record_trajectory")
+            else None,
+        ),
+    )
+    metadata_rows = "".join(
+        f'<div class="association-card__metadata-row"><dt>{escape(label)}</dt><dd>{escape(value)}</dd></div>'
+        for label, value in metadata_fields
+        if value
+    )
+    metadata = (
+        f'<dl class="association-card__metadata">{metadata_rows}</dl>'
+        if metadata_rows
+        else ""
+    )
+    return f"""<article class="association-card" aria-label="Canonical Record {escape(record_reference)}">
+      <p class="association-card__label">Canonical Record</p>
+      <h3 class="association-card__identifier"><a href="/verify/{escape(record_reference)}">{escape(record_reference)}</a></h3>
+      <p class="association-card__relationship"><span class="association-card__badge">{escape(relationship_label)}</span></p>
+      <div class="association-card__summary"><p class="association-card__summary-label">Association summary</p><p class="association-card__summary-text">{escape(_display_value(association.get('record_title')))}</p></div>
+      {metadata}
+      <nav class="association-card__actions" aria-label="Actions for Canonical Record {escape(record_reference)}"><a class="button-link association-card__action association-card__action--primary" href="/verify/{escape(record_reference)}">Open Canonical Record</a><a class="button-link button-link--secondary association-card__action association-card__action--secondary" href="/associations/{escape(str(association.get('public_reference') or ''))}">View association</a></nav>
+    </article>"""
+
+
 def _render_associated_records(item: dict) -> str:
     conn = rda.get_db()
     try:
@@ -348,17 +560,8 @@ def _render_associated_records(item: dict) -> str:
         conn.close()
     if not associations:
         return ""
-    cards = "".join(
-        f"""<article class="associated-record-card">
-          <h3><a href="/verify/{escape(str(association.get('record_reference') or ''))}">{escape(str(association.get('record_reference') or ''))}</a></h3>
-          <p><strong>{escape(str(association.get('public_label') or 'Related record'))}</strong></p>
-          <p><a href="/associations/{escape(str(association.get('public_reference') or ''))}">View association</a> · <a href="/verify/{escape(str(association.get('record_reference') or ''))}">View linked record</a></p>
-          <p>{escape(_display_value(association.get('record_title')))}</p>
-          <dl><dt>Generated date</dt><dd>{escape(_date(association.get('record_generated_at')))}</dd><dt>Trajectory</dt><dd>{escape(_display_value(association.get('record_trajectory')))}</dd></dl>
-        </article>"""
-        for association in associations
-    )
-    return f"""<section id="associated-records" class="associated-records"><h2>Associated Civic Records</h2><p class="association-boundary">Association records a declared relationship between independently preserved objects. It does not by itself establish proof, sufficiency, factual truth, legal status, or external validation.</p><div class="associated-records-list">{cards}</div></section>"""
+    cards = "".join(_render_associated_record_card(association) for association in associations)
+    return f"""<section id="associated-records" class="associated-records"><h2>Associated Civic Records</h2><p class="association-boundary provenance-boundary">Association records a declared relationship between independently preserved objects. It does not by itself establish proof, sufficiency, factual truth, legal status, or external validation.</p><div class="associated-records-list">{cards}</div></section>"""
 
 
 def _render_workbook_metadata(item: dict) -> str:
@@ -1771,6 +1974,7 @@ def _render_document(item: dict, return_to: object | None = None, message: objec
     admin_actions = _render_canonical_record_creation_state(item)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{escape(item['title'])}</title>
+<style>{ASSOCIATION_CARD_STYLES}</style>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}{PUBLIC_NAVIGATION_CSS}.governance,.provenance-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-outlook-archive-summary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:18px 0}}.public-spreadsheet-summary table{{margin-top:12px}}.public-document-image{{display:block;max-width:100%;width:auto;height:auto}}.public-document-audio{{display:block;width:100%;max-width:720px}}.email-plain-text{{white-space:pre-wrap;overflow-wrap:break-word;margin:0;padding:12px;background:#faf9f5;border:1px solid #e1dfd8;font:0.95rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.email-html-details{{margin-top:14px}}.email-html-view{{padding:12px;margin-top:8px;background:#faf9f5;border:1px solid #e1dfd8;overflow-wrap:break-word}}.email-attachments-wrapper{{overflow-x:auto}}.email-attachments-wrapper table{{min-width:860px}}.public-mbox-message-index{{min-width:980px;table-layout:auto}}.public-mbox-message-index th,.public-mbox-message-index td{{overflow-wrap:normal;word-break:normal}}.mbox-index-cell,.mbox-date-cell,.mbox-attachment-cell,.mbox-status-cell,.mbox-warning-cell{{white-space:nowrap}}.mbox-subject-cell,.mbox-from-cell,.mbox-to-cell{{overflow-wrap:break-word}}.mailbox-tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}}.mailbox-tabs a{{padding:8px 10px;border:1px solid #d8d2c4;background:#fff;text-decoration:none}}.mailbox-graph-theme-toggle{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0;padding:10px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-theme-toggle legend{{font-weight:800;color:#143a52}}.mailbox-graph-theme-toggle label{{display:flex;gap:6px;align-items:center}}.mailbox-graph-filters{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}}.mailbox-graph-filters label{{display:grid;gap:4px;font-weight:700;color:#555}}.mailbox-graph-filters input{{width:100%;padding:8px;border:1px solid #c9c2b5;background:#fff;color:#1f2933}}.mailbox-graph-filters button{{padding:9px 10px;border:0;background:#245d61;color:#fff;align-self:end}}.mailbox-graph-cluster-toggle{{align-self:end;display:flex!important;gap:7px;align-items:center;padding:8px;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-workspace{{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.34fr);gap:12px;align-items:stretch}}.mailbox-graph-shell{{height:560px;overflow:hidden;border:1px solid #d8d2c4;background:#faf9f5}}.mailbox-graph-info-panel{{min-height:560px;padding:12px;border:1px solid #d8d2c4;background:#faf9f5;overflow:auto}}.mailbox-graph-info-panel h3{{margin-top:0}}.mailbox-graph-info-panel dl{{display:grid;grid-template-columns:115px minmax(0,1fr);gap:6px 10px}}.mailbox-graph-info-panel dt{{font-weight:800;color:#555}}.mailbox-graph-info-panel dd{{margin:0;overflow-wrap:anywhere}}.mailbox-graph-actions{{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}}.mailbox-graph-action{{padding:7px 9px;border:1px solid #245d61;background:#fff;color:#245d61;text-decoration:none;font:inherit;cursor:pointer}}.mailbox-graph-legend{{display:flex;flex-wrap:wrap;gap:8px 14px;margin:12px 0;color:#555}}.mailbox-graph-legend span{{display:inline-flex;align-items:center;gap:5px}}.legend-icon{{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:.72rem;color:#fff}}.legend-person{{background:#0F766E}}.legend-institution{{background:#7C3AED}}.legend-email{{background:#475569}}.legend-case{{background:#B45309}}.legend-reference{{background:#2563EB}}.legend-attachment{{background:#16A34A}}.legend-intake{{background:#DC2626}}.mailbox-relationship-graph-canvas{{display:block;width:100%;height:100%;touch-action:none}}.mailbox-relationship-graph-canvas text{{font:12px system-ui,sans-serif;fill:#1f2933;paint-order:stroke;stroke:#faf9f5;stroke-width:3px;stroke-linejoin:round}}.mailbox-graph-label{{transition:opacity .18s ease}}.mailbox-graph-node:focus circle{{stroke:#111827;stroke-width:3px}}.mailbox-graph-hover-glow{{filter:drop-shadow(0 0 7px rgba(45,212,191,.65))}}.mailbox-graph-node-icon{{font-size:10px;fill:#fff;stroke:none;pointer-events:none}}.mailbox-graph-edge{{transition:opacity .16s ease,stroke-width .16s ease}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"]{{background:#111827;border-color:#334155;color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .provenance-boundary,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-info-panel,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-theme-toggle,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-cluster-toggle{{background:#111827;border-color:#334155;color:#94A3B8}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-shell{{background:#0F172A;border-color:#334155}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h2,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] h3,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] legend,.public-mbox-relationship-graph[data-graph-theme="high-contrast"] dt{{color:#E5E7EB}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-relationship-graph-canvas text{{fill:#E5E7EB;stroke:#0F172A}}.public-mbox-relationship-graph[data-graph-theme="high-contrast"] .mailbox-graph-filters input{{background:#0F172A;border-color:#334155;color:#E5E7EB}}.download{{display:inline-block;margin:18px 0;padding:10px 14px;background:#245d61;color:#fff;text-decoration:none}}.public-document-admin-actions{{margin:24px 0;padding:14px 16px;border-left:4px solid #143a52;background:#fff}}.public-document-admin-actions h2{{margin-top:0;font-size:1.05rem}}.public-document-admin-actions p{{color:#555;line-height:1.5}}.admin-action-link{{display:inline-block;padding:9px 12px;background:#245d61;color:#fff;text-decoration:none}}.publication-provenance{{--publication-provenance-recorded-value:#245d61;--publication-provenance-empty-value:#6B7280;margin-top:28px}}.publication-provenance-grid{{display:grid;grid-template-columns:minmax(190px,0.42fr) minmax(0,1fr);background:#fff;border:1px solid #e1dfd8}}.publication-provenance-row{{display:contents}}.publication-provenance-label,.publication-provenance-value{{padding:10px;border-bottom:1px solid #e1dfd8;overflow-wrap:anywhere}}.publication-provenance-label{{font-weight:700;color:#555;background:#faf9f5}}.publication-provenance-value{{min-width:0;color:var(--publication-provenance-recorded-value);font-weight:600}}.publication-provenance-value--empty{{color:var(--publication-provenance-empty-value);font-weight:400}}.publication-provenance-value--technical{{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}.publication-pathway-wrapper{{overflow-x:auto}}.publication-pathway-table{{min-width:820px;table-layout:auto}}.publication-pathway-timestamp{{min-width:180px;white-space:nowrap}}.publication-pathway-previous-status,.publication-pathway-new-status{{min-width:145px;overflow-wrap:normal}}.publication-pathway-actor{{min-width:120px;overflow-wrap:anywhere}}.publication-pathway-note{{min-width:260px;width:100%}}.associated-records,.associated-documents{{margin-top:28px}}.association-boundary{{padding:14px;border-left:4px solid #2e8b9a;background:#fff}}.associated-records-list,.associated-documents-list{{display:grid;gap:12px}}.associated-record-card,.associated-document-card{{background:#fff;border:1px solid #e1dfd8;padding:14px;overflow-wrap:anywhere}}.associated-record-card h3,.associated-document-card h3{{margin:0 0 8px}}.associated-record-card dl,.associated-document-card dl{{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 12px;margin:10px 0 0}}.associated-record-card dt,.associated-document-card dt{{font-weight:700;color:#555}}.associated-record-card dd,.associated-document-card dd{{margin:0}}@media(max-width:720px){{.publication-provenance-grid{{grid-template-columns:1fr}}.publication-provenance-label,.publication-provenance-value{{display:block}}.publication-pathway-table{{min-width:760px}}.mailbox-graph-workspace{{grid-template-columns:1fr}}.mailbox-graph-shell{{height:420px}}.mailbox-graph-info-panel{{min-height:auto}}}}@media(prefers-color-scheme:dark){{body{{background:#111827;color:#E5E7EB}}h1,h2{{color:#8DD5DD}}.governance,.provenance-boundary,.public-document-image-wrap,.public-audio-wrap,.public-spreadsheet-summary,.public-rich-text-summary,.public-email-summary,.public-email-apple-metadata,.public-email-body,.public-email-attachments,.public-email-boundary,.public-outlook-archive-summary,.public-mbox-summary,.public-mbox-index,.public-mbox-message-detail,.public-mbox-relationship-graph,.public-mbox-placeholder,.mailbox-tabs a{{background:#1F2937;border-color:#374151}}table{{background:#1F2937}}th{{background:#111827;color:#D1D5DB}}th,td{{border-color:#374151}}.publication-provenance{{--publication-provenance-recorded-value:#8DD5DD;--publication-provenance-empty-value:#94A3B8}}.publication-provenance-grid{{background:#1F2937;border-color:#374151}}.publication-provenance-label{{background:#111827;color:#D1D5DB}}.publication-provenance-label,.publication-provenance-value{{border-color:#374151}}.mailbox-graph-shell,.email-plain-text,.email-html-view{{background:#111827;border-color:#374151}}.mailbox-relationship-graph-canvas text{{fill:#F9FAFB;stroke:#111827}}.mailbox-graph-filters input{{background:#111827;color:#F9FAFB;border-color:#4B5563}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", archive_return), ("Published Documents", "/archive?type=published_document"), (str(item["title"]), None)])}{archive_back_link(archive_return)}<p>{object_type_badge("published_document")}</p><h1>{escape(item['title'])}</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p><nav aria-label="Document sections"><a href="#document-metadata">Document metadata</a> · <a href="#publication-provenance">Publication provenance</a> · <a href="#publication-pathway">Publication pathway</a> · <a href="#document-content">Document content</a></nav>{admin_actions}<section id="document-metadata"><h2>Document Metadata</h2><table>{rows}</table></section>{content_block}{associated_records_section}{provenance_section}{pathway_section}</main></body></html>"""
 
