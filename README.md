@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 48 — Association Card Visual Refinement and Scalable Relationship Presentation
+Current release: CDE Platform Stage 49 — Independent Email Attachment Preservation and Governed Relationships
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md`](docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md`](docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md`](docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md`](docs/releases/CDE_PLATFORM_STAGE_47_GOVERNED_SOURCE_RELATIONSHIP_SELECTION.md)
@@ -938,8 +939,10 @@ Body, Attachments, Email Governance Boundary, Publication Provenance,
 Publication Pathway, Document Identifier, SHA-256 digest, and exact original
 `.emlx` download.
 
-Apple Mail attachments remain metadata-only components of the preserved source
-message unless separately admitted through Document Intake. Apple-specific
+Apple Mail attachment metadata remains part of the preserved source message.
+Where an existing source pathway exposes exact attachment bytes, Stage 49 can
+preserve those bytes as an independent Published Document intake object without
+altering the source message. Apple-specific
 metadata is classified conservatively: safe flags and state fields may be shown
 publicly, while local mailbox paths, account identifiers, hidden plist values,
 BCC, parser diagnostics containing content, and attachment contents are excluded
@@ -947,6 +950,34 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 49 — Independent Email Attachment Preservation and Governed Relationships
+
+CDE Platform Stage 49 preserves each successfully extracted email attachment as
+an independent Published Document intake object. The original byte stream is
+stored unchanged, SHA-256 and SHA-512 are calculated from those exact bytes,
+and source-reported attachment metadata remains distinguishable from
+CDE-calculated preservation metadata. Every attachment starts in the existing
+Published Document lifecycle; it is not published automatically and no
+Canonical Record is created.
+
+The dedicated `Email attachment` relationship records the transmission event
+between an email preservation object and the attachment document. It is not a
+Record–Document Association and does not imply that the attachment is
+supporting, authoritative, clinical, investigative, or otherwise semantically
+classified. Deterministic source-occurrence identities make retries idempotent
+while preserving distinct transmission events even when byte hashes match.
+
+RFC 5322 intake performs bounded MIME extraction immediately. Outlook, Gmail,
+and IMAP projection paths reuse the same preservation service when their
+existing adapters expose exact attachment bytes. Failed occurrences remain
+visible in governed metadata without creating false Published Document links.
+Public links appear only after the attachment independently completes the
+existing publication lifecycle; administrative metadata endpoints remain
+authenticated and never return raw attachment bytes.
+
+See the [Stage 49 architecture and operator guidance](docs/EMAIL_ATTACHMENT_PRESERVATION.md)
+and [CDE Platform Stage 49 release note](docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md).
 
 ### CDE Platform Stage 48 — Association Card Visual Refinement and Scalable Relationship Presentation
 

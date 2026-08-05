@@ -253,6 +253,10 @@ def govern_attachment_bytes(
     filename: str,
     mime_type: str,
     source_attachment_id: str,
+    attachment_index: int | None = None,
+    content_id: str | None = None,
+    inline_status: bool = False,
+    source_metadata: dict[str, Any] | None = None,
     acquisition_source: str = "outlook_archive",
     extracted_at: str | None = None,
     root: Path | None = None,
@@ -357,7 +361,83 @@ def govern_attachment_bytes(
         "extraction_timestamp": extracted,
         "filename": safe_filename,
         "mime_type": normalized_mime,
+        "content_id": str(content_id or "") or None,
+        "inline_status": bool(inline_status),
     }
+    normalized_attachment_index = int(attachment_index or 1)
+    try:
+        from api.email_attachment_preservation import (
+            preserve_attachment_bytes,
+            record_attachment_failure,
+        )
+
+        source_object_id = f"{archive_id}:message:{projection_id}"
+        try:
+            published_relationship = preserve_attachment_bytes(
+                source_document=context.document,
+                source_email_object_id=source_object_id,
+                source_email_kind="projected_message",
+                attachment_index=normalized_attachment_index,
+                data=data,
+                original_filename=safe_filename,
+                display_title=safe_filename,
+                mime_type=normalized_mime,
+                source_attachment_identifier=safe_source_id,
+                source_message_identifier=message.get("message_id"),
+                source_archive_identifier=archive_id,
+                source_folder_path=message.get("folder_path"),
+                source_pathway=str(acquisition_source or "archive"),
+                content_id=content_id,
+                inline_status=inline_status,
+                source_metadata={
+                    "governed_attachment_id": attachment_id,
+                    "folder_projection_id": folder_id,
+                    "thread_projection_id": message.get("thread_id") or message.get("conversation_id"),
+                    "message_projection_id": projection_id,
+                    "extraction_job": context.job.get("job_id"),
+                    "parser_version": message_provenance.get("parser_version"),
+                    "projection_version": context.projection.get("projection_version"),
+                    "source_message_identifier": message.get("source_identifier"),
+                    "source_uid": message.get("source_uid"),
+                    "uidvalidity": message.get("uidvalidity"),
+                    "source_mailbox": message.get("source_mailbox"),
+                    "outlook_entry_id": message.get("entry_id") or message.get("store_entry_id"),
+                    **dict(source_metadata or {}),
+                },
+                extracted_at=extracted,
+                root=root,
+            )
+        except Exception as exc:
+            published_relationship = record_attachment_failure(
+                source_document=context.document,
+                source_email_object_id=source_object_id,
+                source_email_kind="projected_message",
+                attachment_index=normalized_attachment_index,
+                display_title=safe_filename,
+                source_pathway=str(acquisition_source or "archive"),
+                failure_reason=str(exc),
+                original_filename=safe_filename,
+                mime_type=normalized_mime,
+                source_attachment_identifier=safe_source_id,
+                source_message_identifier=message.get("message_id"),
+                source_archive_identifier=archive_id,
+                source_folder_path=message.get("folder_path"),
+                content_id=content_id,
+                inline_status=inline_status,
+                source_metadata={
+                    "governed_attachment_id": attachment_id,
+                    **dict(source_metadata or {}),
+                },
+                sha256_hash=sha256_hash,
+                created_at=extracted,
+                root=root,
+            )
+        occurrence["published_document_relationship_id"] = published_relationship.get("relationship_id")
+        occurrence["attachment_document_id"] = published_relationship.get("attachment_document_id")
+        occurrence["published_document_preservation_status"] = published_relationship.get("extraction_status")
+    except Exception as exc:
+        occurrence["published_document_preservation_status"] = "failed"
+        occurrence["published_document_preservation_failure"] = str(exc)
     occurrence["occurrence_id"] = _occurrence_id(occurrence)
     occurrence_path = (
         _archive_occurrence_root(archive_id, root)

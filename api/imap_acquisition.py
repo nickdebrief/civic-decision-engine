@@ -16,8 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Iterator
 
 from api.email_documents import (
-    MAX_ATTACHMENT_COUNT,
-    MAX_DECODED_ATTACHMENT_BYTES,
+    extract_email_attachment_payloads,
     parse_email_metadata,
 )
 
@@ -541,25 +540,23 @@ class ImapAcquisitionParser:
             )
             thread_id = _thread_id(email, message_id, projection_id)
             attachment_descriptors: list[dict[str, Any]] = []
-            attachment_index = 0
-            for part_index, part in enumerate(email.walk(), start=1):
-                filename = str(part.get_filename() or "").strip()
-                disposition = str(part.get_content_disposition() or "").strip()
-                if not filename and disposition != "attachment":
-                    continue
-                attachment_index += 1
-                if attachment_index > MAX_ATTACHMENT_COUNT:
-                    raise ImapAcquisitionError("imap_acquisition_attachment_limit_exceeded")
-                payload = part.get_payload(decode=True) or b""
-                if len(payload) > MAX_DECODED_ATTACHMENT_BYTES:
-                    raise ImapAcquisitionError("imap_acquisition_attachment_too_large")
+            for extracted_attachment in extract_email_attachment_payloads(raw):
+                payload = extracted_attachment["payload"]
+                attachment_index = int(extracted_attachment["attachment_index"])
+                part_index = int(extracted_attachment["mime_part_index"])
                 source_attachment_id = f"{source['folder_id']}:{source['uid']}:part-{part_index}"
                 descriptor = {
                     "source_attachment_identifier": source_attachment_id,
-                    "filename": filename or f"attachment-{attachment_index}",
-                    "mime_type": part.get_content_type() or "application/octet-stream",
+                    "attachment_index": attachment_index,
+                    "filename": extracted_attachment.get("original_filename") or f"attachment-{attachment_index}",
+                    "mime_type": extracted_attachment.get("mime_type") or "application/octet-stream",
                     "file_size_bytes": len(payload),
                     "sha256_hash": hashlib.sha256(payload).hexdigest(),
+                    "content_id": extracted_attachment.get("content_id"),
+                    "inline_status": extracted_attachment.get("inline_status"),
+                    "mime_part_index": part_index,
+                    "transfer_encoding": extracted_attachment.get("transfer_encoding"),
+                    "is_attached_message": extracted_attachment.get("is_attached_message"),
                 }
                 attachment_descriptors.append(descriptor)
                 self._attachments.append(
@@ -808,6 +805,14 @@ def project_imap_acquisition_document(
                 filename=attachment["filename"],
                 mime_type=attachment["mime_type"],
                 source_attachment_id=attachment["source_attachment_identifier"],
+                attachment_index=attachment.get("attachment_index"),
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata={
+                    "imap_mime_part_path": attachment.get("mime_part_index"),
+                    "transfer_encoding": attachment.get("transfer_encoding"),
+                    "embedded_message_status": attachment.get("is_attached_message"),
+                },
                 acquisition_source=IMAP_SOURCE_FORMAT,
                 extracted_at=projection["projection_timestamp"],
                 root=root,

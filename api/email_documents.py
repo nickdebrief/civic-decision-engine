@@ -284,6 +284,12 @@ def _payload_bytes(part: Any) -> bytes:
         if isinstance(raw, str):
             charset = part.get_content_charset() or "utf-8"
             return raw.encode(charset, errors="replace")
+        if part.get_content_type() == "message/rfc822" and isinstance(raw, list):
+            return b"\n".join(
+                child.as_bytes(policy=policy.default)
+                for child in raw
+                if hasattr(child, "as_bytes")
+            )
         return b""
     return bytes(payload)
 
@@ -1272,14 +1278,14 @@ def parse_email_metadata(data: bytes) -> dict[str, Any]:
     for part in parts:
         defects = [defect.__class__.__name__ for defect in getattr(part, "defects", [])]
         warnings.extend(defects)
-        if part.is_multipart():
+        content_type = str(part.get_content_type() or "application/octet-stream")
+        if part.is_multipart() and content_type != "message/rfc822":
             continue
         payload = _payload_bytes(part)
         total_decoded += len(payload)
         if total_decoded > MAX_TOTAL_DECODED_BYTES:
             raise ValueError("document_intake_email_decoded_content_too_large")
         disposition = str(part.get_content_disposition() or "").lower()
-        content_type = str(part.get_content_type() or "application/octet-stream")
         filename = part.get_filename()
         decoded_filename = _decode_header_value(filename) if filename else ""
         is_attached_message = content_type == "message/rfc822"
@@ -1344,6 +1350,59 @@ def parse_email_metadata(data: bytes) -> dict[str, Any]:
         "attachment_count": len(attachments),
         "parser_warnings": sorted(set(warnings)),
     }
+
+
+def extract_email_attachment_payloads(data: bytes) -> list[dict[str, Any]]:
+    """Return bounded MIME attachment payloads in source order.
+
+    Source interpretation remains here rather than in the preservation layer.  The
+    returned bytes are the MIME-decoded attachment bytes and are never transformed.
+    """
+
+    # Reuse the public parser's validation and resource-limit checks first.
+    parse_email_metadata(data)
+    try:
+        message = BytesParser(policy=policy.default).parsebytes(data)
+    except Exception as exc:
+        raise ValueError("document_intake_invalid_email") from exc
+
+    attachments: list[dict[str, Any]] = []
+    for mime_part_index, part in enumerate(_walk_message(message), start=1):
+        content_type = str(part.get_content_type() or "application/octet-stream")
+        if part.is_multipart() and content_type != "message/rfc822":
+            continue
+        disposition = str(part.get_content_disposition() or "").lower()
+        filename = part.get_filename()
+        decoded_filename = _decode_header_value(filename) if filename else ""
+        is_attached_message = content_type == "message/rfc822"
+        if not (disposition == "attachment" or decoded_filename or is_attached_message):
+            continue
+        payload = _payload_bytes(part)
+        if len(payload) > MAX_DECODED_ATTACHMENT_BYTES:
+            raise ValueError("document_intake_email_attachment_too_large")
+        attachment_index = len(attachments) + 1
+        attachments.append(
+            {
+                "attachment_index": attachment_index,
+                "mime_part_index": mime_part_index,
+                "payload": payload,
+                "original_filename": decoded_filename or None,
+                "display_title": decoded_filename or f"Attachment {attachment_index}",
+                "filename_generated": not bool(decoded_filename),
+                "mime_type": content_type,
+                "content_disposition": disposition or "inline",
+                "content_id": str(part.get("Content-ID") or "").strip() or None,
+                "inline_status": disposition != "attachment",
+                "is_attached_message": is_attached_message,
+                "transfer_encoding": str(part.get("Content-Transfer-Encoding") or "").strip() or None,
+                "content_type_header": str(part.get("Content-Type") or "").strip() or None,
+                "source_reported_size": len(payload),
+                "parser_warnings": sorted(
+                    {defect.__class__.__name__ for defect in getattr(part, "defects", [])}
+                ),
+            }
+        )
+    return attachments
 
 
 

@@ -68,6 +68,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "ost": ".ost",
     "gmail_takeout": ".zip",
     "imap_acquisition": ".zip",
+    "email_attachment": ".bin",
 }
 DOCUMENT_TYPE_MEDIA_TYPES = {
     "pdf": "application/pdf",
@@ -87,6 +88,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "ost": "application/vnd.ms-outlook-ost",
     "gmail_takeout": "application/zip",
     "imap_acquisition": "application/vnd.cde.imap-acquisition+zip",
+    "email_attachment": "application/octet-stream",
 }
 DOCUMENT_TYPE_LABELS = {
     "pdf": "PDF",
@@ -106,6 +108,7 @@ DOCUMENT_TYPE_LABELS = {
     "ost": "Microsoft Outlook Offline Storage Archive",
     "gmail_takeout": "Google Takeout Gmail Export",
     "imap_acquisition": "Governed IMAP Acquisition",
+    "email_attachment": "Email Attachment",
 }
 DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "pdf": "document",
@@ -125,6 +128,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "ost": "mailbox",
     "gmail_takeout": "mailbox",
     "imap_acquisition": "mailbox",
+    "email_attachment": "attachment",
 }
 EXTENSION_DOCUMENT_TYPES = {
     ".pdf": "pdf",
@@ -1146,10 +1150,15 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
 
 
 def document_media_type(metadata: dict[str, Any]) -> str:
+    if normalized_document_type(metadata) == "email_attachment":
+        return str(metadata.get("content_type") or "application/octet-stream")
     return DOCUMENT_TYPE_MEDIA_TYPES[normalized_document_type(metadata)]
 
 
 def document_storage_extension(metadata: dict[str, Any]) -> str:
+    if normalized_document_type(metadata) == "email_attachment":
+        suffix = Path(str(metadata.get("stored_filename") or metadata.get("original_filename") or "")).suffix
+        return suffix if suffix and len(suffix) <= 16 else ".bin"
     return DOCUMENT_TYPE_EXTENSIONS[normalized_document_type(metadata)]
 
 
@@ -1727,10 +1736,184 @@ def store_pending_document(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         os.chmod(metadata_path, 0o600)
+        if document_type == "eml" and int((email_metadata or {}).get("attachment_count") or 0):
+            from api.email_attachment_preservation import preserve_rfc5322_attachments
+
+            try:
+                relationships = preserve_rfc5322_attachments(
+                    metadata, data, root=destination_root
+                )
+                metadata["email_attachment_preservation"] = [
+                    {
+                        "relationship_id": relationship.get("relationship_id"),
+                        "attachment_index": relationship.get("attachment_index"),
+                        "attachment_document_id": relationship.get("attachment_document_id"),
+                        "relationship_type": relationship.get("relationship_type"),
+                        "extraction_status": relationship.get("extraction_status"),
+                        "extraction_failure_reason": relationship.get("extraction_failure_reason"),
+                    }
+                    for relationship in relationships
+                ]
+            except Exception as exc:
+                metadata["email_attachment_preservation"] = [
+                    {
+                        "relationship_type": "Email attachment",
+                        "extraction_status": "failed",
+                        "extraction_failure_reason": str(exc),
+                    }
+                ]
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            os.chmod(metadata_path, 0o600)
     except Exception:
         file_path.unlink(missing_ok=True)
         metadata_path.unlink(missing_ok=True)
         item_dir.rmdir()
+        raise
+    return metadata
+
+
+def store_email_attachment_document(
+    *,
+    source_identity: str,
+    data: bytes,
+    original_filename: str | None,
+    display_title: str,
+    content_type: str | None,
+    institution_source: str,
+    document_date: str,
+    visibility: str,
+    provenance: dict[str, Any],
+    actor: str = "system:email-attachment-preservation",
+    preserved_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Preserve one source attachment occurrence in the normal document lifecycle."""
+
+    normalized_source_identity = str(source_identity or "").strip().lower()
+    if not re.fullmatch(r"[a-f0-9]{64}", normalized_source_identity):
+        raise ValueError("email_attachment_source_identity_invalid")
+    if not isinstance(data, bytes):
+        raise ValueError("email_attachment_bytes_invalid")
+    if len(data) > DEFAULT_MAX_BYTES:
+        raise ValueError("document_intake_file_too_large")
+
+    intake_id = hashlib.sha256(
+        f"email-attachment-document\0{normalized_source_identity}".encode("utf-8")
+    ).hexdigest()
+    sha256_digest = hashlib.sha256(data).hexdigest()
+    sha512_digest = hashlib.sha512(data).hexdigest()
+    filename_value = str(original_filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    filename_value = "".join(
+        character for character in filename_value if ord(character) >= 32 and character != "\x7f"
+    ).strip()
+    safe_title = str(display_title or "").strip() or "Email attachment"
+    suffix = Path(filename_value).suffix.lower()
+    if not re.fullmatch(r"\.[a-z0-9]{1,15}", suffix):
+        suffix = ".eml" if str(content_type or "").split(";", 1)[0].lower() == "message/rfc822" else ".bin"
+    stored_filename = f"pending-{intake_id}{suffix}"
+    timestamp = preserved_at or _utc_timestamp()
+    normalized_visibility = str(visibility or "private").strip().lower()
+    if normalized_visibility not in VALID_VISIBILITY:
+        normalized_visibility = "private"
+
+    destination_root = (root or intake_root()).resolve(strict=False)
+    destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    item_dir = destination_root / intake_id
+    metadata_path = item_dir / "metadata.json"
+    file_path = item_dir / stored_filename
+    if metadata_path.is_file():
+        existing = load_pending_document(intake_id, root=destination_root)
+        existing_path, _ = intake_document_file(intake_id, metadata=existing, root=destination_root)
+        if (
+            existing.get("sha256_hash") != sha256_digest
+            or existing.get("sha512_hash") != sha512_digest
+            or (existing.get("attachment_preservation_metadata") or {}).get("source_identity")
+            != normalized_source_identity
+            or Path(existing_path).read_bytes() != data
+        ):
+            raise ValueError("email_attachment_identity_collision")
+        return existing
+    if item_dir.exists():
+        raise ValueError("email_attachment_identity_collision")
+
+    item_dir.mkdir(mode=0o700)
+    document_identifier = assign_document_identifier(
+        intake_id, assigned_at=timestamp, root=destination_root
+    )
+    normalized_content_type = (
+        str(content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+        or "application/octet-stream"
+    )
+    attachment_metadata = dict(provenance)
+    attachment_metadata.update(
+        {
+            "source_identity": normalized_source_identity,
+            "original_filename": filename_value or None,
+            "display_title": safe_title,
+            "filename_generated": not bool(filename_value),
+            "mime_type": normalized_content_type,
+            "file_size_bytes": len(data),
+            "sha256_hash": sha256_digest,
+            "sha512_hash": sha512_digest,
+            "preservation_timestamp": timestamp,
+            "preservation_status": "preserved",
+        }
+    )
+    metadata = {
+        "intake_id": intake_id,
+        "document_identifier": document_identifier,
+        "status": "pending",
+        "original_filename": filename_value or f"attachment-{normalized_source_identity[:12]}{suffix}",
+        "stored_filename": stored_filename,
+        "content_type": normalized_content_type,
+        "document_type": "email_attachment",
+        "document_format": DOCUMENT_TYPE_LABELS["email_attachment"],
+        "media_family": DOCUMENT_TYPE_MEDIA_FAMILIES["email_attachment"],
+        "file_size_bytes": len(data),
+        "sha256_hash": sha256_digest,
+        "sha512_hash": sha512_digest,
+        "title": safe_title,
+        "institution_source": str(institution_source or "Source email").strip(),
+        "document_date": str(document_date or timestamp[:10]).strip(),
+        "upload_date": timestamp,
+        "category": "Email Attachment",
+        "description": "Attachment preserved independently from its source email.",
+        "visibility": normalized_visibility,
+        "notes": "Created through governed email attachment preservation. No Canonical Record was created.",
+        "reference_identifier": None,
+        "keywords": [],
+        "tags": [],
+        "proposed_storage_location": str(file_path),
+        "public_record_mutation": False,
+        "status_updated_at": timestamp,
+        "status_history": [
+            {
+                "previous_status": None,
+                "new_status": "pending",
+                "timestamp": timestamp,
+                "actor": str(actor or "system:email-attachment-preservation"),
+                "note": "Attachment preserved as an independent Published Document intake object.",
+                "document_identifier": document_identifier,
+            }
+        ],
+        "attachment_preservation_metadata": attachment_metadata,
+    }
+    try:
+        file_path.write_bytes(data)
+        os.chmod(file_path, 0o600)
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.chmod(metadata_path, 0o600)
+    except Exception:
+        file_path.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
+        try:
+            item_dir.rmdir()
+        except OSError:
+            pass
         raise
     return metadata
 
