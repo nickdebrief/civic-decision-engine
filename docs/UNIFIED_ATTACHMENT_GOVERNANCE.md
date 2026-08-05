@@ -1,5 +1,22 @@
 # Unified Attachment Governance
 
+## Independent Published Document Preservation
+
+CDE Platform Stage 42 remains the source-neutral private attachment evidence
+layer used by Outlook, Gmail, and IMAP projections. CDE Platform Stage 49 adds a
+separate concern: when exact attachment bytes are available, each source
+occurrence is also admitted as an independent Published Document intake object.
+
+The two objects are not interchangeable. The Stage 42 `ATT-*` identity supports
+cross-source byte-level duplicate governance and governed promotion. The Stage
+49 Published Document identity preserves one transmission occurrence and its
+own document lifecycle. Identical bytes in different messages may share a Stage
+42 content identity while retaining different Stage 49 Published Documents and
+different `Email attachment` relationships.
+
+Neither layer automatically creates a Canonical Record or publishes content.
+See [Email Attachment Preservation](EMAIL_ATTACHMENT_PRESERVATION.md).
+
 ## Purpose
 
 CDE Platform Stage 42 provides one private attachment-governance layer for

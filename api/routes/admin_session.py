@@ -104,6 +104,11 @@ from api.email_documents import (
     MAX_MBOX_MESSAGE_IN_MEMORY_BYTES,
     MAX_MBOX_MESSAGE_INDEX_BYTES,
 )
+from api.email_attachment_preservation import (
+    get_relationship as get_email_attachment_relationship,
+    list_attachment_sources as list_email_attachment_sources,
+    list_source_attachments as list_email_source_attachments,
+)
 from api.outlook_archive_jobs import (
     archive_job_status,
     cancel_archive_job,
@@ -47079,6 +47084,11 @@ def _render_document_intake_preview(
             ("Acquisition progress", f"{archive_metadata.get('acquisition_progress', 0)}%"),
             ("Projection state", archive_metadata.get("projection_state")),
         ]
+    elif item.get("document_type") == "email_attachment":
+        fields[5:5] = [
+            ("SHA-512", item.get("sha512_hash") or "Not available"),
+            ("Preservation source", "Email attachment"),
+        ]
     rows = "".join(
         f"<tr><th>{escape(label)}</th><td>{escape(str(value))}</td></tr>"
         for label, value in fields
@@ -47149,11 +47159,31 @@ def _render_document_intake_preview(
             email_notice = '<p class="notice">MBOX mailbox archives are preserved as original bytes. Contained RFC 5322 messages are parsed as bounded projections for inspection and discovery without rewriting the mailbox, removing duplicates, changing message order, or automatically creating independent governed documents.</p>'
         else:
             email_notice = '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
+    attachment_relationships = ""
+    relationships = (
+        list_email_attachment_sources(str(item.get("intake_id") or ""), root=intake_root())
+        if item.get("document_type") == "email_attachment"
+        else list_email_source_attachments(str(item.get("intake_id") or ""), root=intake_root())
+    )
+    if relationships:
+        relationship_rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
+            f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
+            f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
+            f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
+            f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
+            f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
+            f'<td><a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a></td>'
+            "</tr>"
+            for relationship in relationships
+        )
+        attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead><tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr></thead><tbody>{relationship_rows}</tbody></table></div></section>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
-{image_preview}{audio_notice}{email_notice}
+{image_preview}{audio_notice}{email_notice}{attachment_relationships}
 {canonical_record_section}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
@@ -49087,10 +49117,10 @@ def admin_outlook_archive_attachments_page(document_id: str, request: Request):
     session = require_admin_session(request)
     attachments = list_outlook_attachments(document_id, root=intake_root())
     rows = "".join(
-        f'<tr><td><a href="/admin/archive/{escape(document_id)}/attachments/{escape(str(item.get("attachment_id") or ""))}">{escape(str(item.get("attachment_id") or ""))}</a></td><td>{escape(str(item.get("filename") or ""))}</td><td>{escape(str(item.get("mime_type") or ""))}</td><td>{escape(str(item.get("file_size_bytes") or ""))}</td><td>{escape(str(item.get("promotion_status") or "eligible"))}</td></tr>'
+        f'<tr><td><a href="/admin/archive/{escape(document_id)}/attachments/{escape(str(item.get("attachment_id") or ""))}">{escape(str(item.get("attachment_id") or ""))}</a></td><td>{escape(str(item.get("filename") or ""))}</td><td>{escape(str(item.get("mime_type") or ""))}</td><td>{escape(str(item.get("file_size_bytes") or ""))}</td><td>{escape(str(item.get("promotion_status") or "eligible"))}</td><td>{escape(str((item.get("provenance") or {}).get("published_document_preservation_status") or "Not processed"))}</td></tr>'
         for item in attachments
-    ) or '<tr><td colspan="5">No governed attachments are available.</td></tr>'
-    content = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Unified Attachment Governance</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1100px,calc(100% - 32px));margin:32px auto}}h1{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>CDE Platform Stage 42 — Unified Attachment Governance</h1><p>Attachments from every acquisition source share one private governed evidence layer. Content-identical attachments reuse one immutable identity while every source occurrence retains its provenance. No attachment is published or promoted automatically.</p><p><a href="/api/admin/session/archive/{escape(document_id)}/attachment-graph">View graph data</a></p><table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Bytes</th><th>Promotion</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>'''
+    ) or '<tr><td colspan="6">No governed attachments are available.</td></tr>'
+    content = f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Unified Attachment Governance</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1100px,calc(100% - 32px));margin:32px auto}}h1{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>CDE Platform Stage 42 — Unified Attachment Governance</h1><p>Attachments from every acquisition source share one private governed evidence layer. Content-identical attachments reuse one immutable identity while every source occurrence retains its provenance. No attachment is published or promoted automatically.</p><p>CDE Platform Stage 49 additionally preserves each exact source occurrence as an independent Published Document intake object where bytes are available. That lifecycle remains separate from Stage 42 promotion governance.</p><p><a href="/api/admin/session/archive/{escape(document_id)}/attachment-graph">View graph data</a></p><table><thead><tr><th>Attachment ID</th><th>Filename</th><th>MIME type</th><th>Bytes</th><th>Promotion</th><th>Published Document preservation</th></tr></thead><tbody>{rows}</tbody></table></main></body></html>'''
     return HTMLResponse(content=content)
 
 
@@ -49139,7 +49169,14 @@ def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, 
             ("Duplicate references", len(duplicate_references)),
             ("Promotion status", "promoted" if existing else attachment.get("promotion_status")),
             ("Existing Canonical Record", existing.get("reference") if existing else None),
+            ("Attachment Published Document", provenance.get("attachment_document_id")),
+            ("Published Document preservation", provenance.get("published_document_preservation_status")),
         )
+    )
+    attachment_document_link = (
+        f'<p><a href="/admin/document-intake/{escape(str(provenance.get("attachment_document_id")))}">Open attachment Published Document intake</a></p>'
+        if provenance.get("attachment_document_id")
+        else ""
     )
     chain = " &rarr; ".join(
         escape(str(value))
@@ -49157,7 +49194,7 @@ def admin_outlook_archive_attachment_page(document_id: str, attachment_id: str, 
         f'<li>{escape(str(item.get("acquisition_source") or "archive"))}: {escape(str(item.get("archive_id") or ""))} / {escape(str(item.get("message_projection_id") or ""))}</li>'
         for item in duplicate_references
     ) or "<li>No duplicate occurrence is recorded.</li>"
-    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Governed Attachment</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}th{{width:230px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/attachments">Back to governed attachments</a></p><h1>Attachment Inspector</h1><table>{rows}</table><h2>Provenance chain</h2><p>{chain}</p><h2>Duplicate references</h2><ul>{duplicates}</ul><h2>Governance</h2><p>The original bytes remain private evidence. No attachment download, rendering, or automatic Canonical Record creation is provided.</p>{promotion}</main></body></html>''')
+    return HTMLResponse(content=f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Governed Attachment</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1000px,calc(100% - 32px));margin:32px auto}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #ddd;text-align:left}}th{{width:230px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<p><a href="/admin/archive/{escape(document_id)}/attachments">Back to governed attachments</a></p><h1>Attachment Inspector</h1><table>{rows}</table>{attachment_document_link}<h2>Provenance chain</h2><p>{chain}</p><h2>Duplicate references</h2><ul>{duplicates}</ul><h2>Governance</h2><p>The original bytes remain private evidence. No attachment download or rendering is provided here, and no attachment is published or promoted automatically.</p>{promotion}</main></body></html>''')
 
 
 @router.get("/admin/archive/{document_id}/attachments/{attachment_id}/promote", response_class=HTMLResponse)
@@ -49195,6 +49232,29 @@ def admin_outlook_archive_attachment_api(document_id: str, attachment_id: str, r
         return load_outlook_attachment(document_id, attachment_id, root=intake_root())
     except OutlookAttachmentGovernanceError as exc:
         raise _http_error(404, exc.code) from exc
+
+
+@router.get("/api/admin/session/documents/{document_id}/email-attachments")
+def admin_email_attachment_relationships_api(document_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        load_pending_document(document_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    return {
+        "source_document_id": document_id,
+        "relationship_type": "Email attachment",
+        "relationships": list_email_source_attachments(document_id, root=intake_root()),
+    }
+
+
+@router.get("/api/admin/session/email-attachment-relationships/{relationship_id}")
+def admin_email_attachment_relationship_api(relationship_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        return get_email_attachment_relationship(relationship_id, root=intake_root())
+    except ValueError as exc:
+        raise _http_error(404, str(exc)) from exc
 
 
 @router.get("/api/admin/session/archive/{document_id}/attachment-graph")
