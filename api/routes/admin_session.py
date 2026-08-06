@@ -47160,25 +47160,38 @@ def _render_document_intake_preview(
         else:
             email_notice = '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
     attachment_relationships = ""
+    is_attachment_document = item.get("document_type") == "email_attachment"
     relationships = (
         list_email_attachment_sources(str(item.get("intake_id") or ""), root=intake_root())
-        if item.get("document_type") == "email_attachment"
+        if is_attachment_document
         else list_email_source_attachments(str(item.get("intake_id") or ""), root=intake_root())
     )
     if relationships:
-        relationship_rows = "".join(
-            "<tr>"
-            f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
-            f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
-            f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
-            f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
-            f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
-            f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
-            f'<td><a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a></td>'
-            "</tr>"
-            for relationship in relationships
-        )
-        attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead><tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr></thead><tbody>{relationship_rows}</tbody></table></div></section>'
+        if is_attachment_document:
+            # Attachment-document admin pages retain their pre-Stage-50 source
+            # relationship presentation. Stage 50 navigation applies only to the
+            # source-email direction, where the attachment Published Document is
+            # the related object and is eagerly loaded by list_source_attachments.
+            relationship_rows = "".join(
+                "<tr>"
+                f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
+                f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
+                f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
+                f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
+                f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
+                f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
+                f'<td><a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a></td>'
+                "</tr>"
+                for relationship in relationships
+            )
+            header = "<tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr>"
+        else:
+            relationship_rows = "".join(
+                _render_admin_attachment_relationship_row(relationship)
+                for relationship in relationships
+            )
+            header = "<tr><th>Original filename</th><th>Relationship</th><th>Published Document</th><th>Lifecycle status</th><th>Action</th><th>Relationship ID</th><th>Index</th><th>Extraction status</th><th>Attachment document ID</th></tr>"
+        attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table></div></section>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
 <style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
@@ -48788,6 +48801,76 @@ def admin_document_intake_page(request: Request):
             list_intake_documents(),
             admin_session=session,
         )
+    )
+
+
+def _render_admin_attachment_relationship_row(relationship: dict) -> str:
+    """Render one Stage 50 administrative evidence-relationship row.
+
+    Serves the source-email direction only, where ``list_source_attachments``
+    eagerly loads the attachment Published Document. Surfaces the navigable
+    evidence fields (original filename, governed relationship label, Published
+    Document identifier, lifecycle status, and a primary action to the
+    attachment's administrative intake page) alongside the existing technical
+    preservation metadata (relationship ID, attachment index, extraction status,
+    raw attachment document intake ID, and the existing relationship metadata
+    inspector). Failed preservation rows render ``Not created`` for the document
+    identifier and lifecycle status and omit the administrative document action
+    without dropping the technical metadata.
+    """
+
+    relationship_id = str(relationship.get("relationship_id") or "")
+    relationship_label = str(relationship.get("relationship_type") or "")
+    original_filename = str(
+        relationship.get("original_filename")
+        or relationship.get("display_title")
+        or "Attachment"
+    )
+    attachment_document = relationship.get("attachment_document")
+    attachment_document_id = str(relationship.get("attachment_document_id") or "")
+    extraction_status = str(relationship.get("extraction_status") or "")
+    raw_attachment_document_id = attachment_document_id or "Not created"
+
+    if attachment_document_id and isinstance(attachment_document, dict) and attachment_document:
+        # Source-side lookup (``list_source_attachments``) eagerly loads the
+        # attachment Published Document, so the navigable Stage 50 fields are
+        # available directly.
+        document_identifier = str(
+            attachment_document.get("document_identifier") or "Not available"
+        )
+        lifecycle_status = (
+            STATUS_LABELS.get(
+                str(attachment_document.get("status") or ""),
+                str(attachment_document.get("status") or "Not available"),
+            )
+            if attachment_document.get("status")
+            else "Not available"
+        )
+        primary_action = (
+            f'<a href="/admin/document-intake/{escape(attachment_document_id)}">Open Published Document</a>'
+        )
+    else:
+        # Failed preservation: no attachment Published Document was created.
+        document_identifier = "Not created"
+        lifecycle_status = "Not created"
+        primary_action = '<span class="notice">No attachment Published Document</span>'
+
+    secondary_action = (
+        f'<a href="/api/admin/session/email-attachment-relationships/{escape(relationship_id)}">Inspect metadata</a>'
+    )
+
+    return (
+        "<tr>"
+        f"<td>{escape(original_filename)}</td>"
+        f"<td>{escape(relationship_label)}</td>"
+        f"<td>{escape(document_identifier)}</td>"
+        f"<td>{escape(lifecycle_status)}</td>"
+        f'<td class="admin-attachment-actions">{primary_action} · {secondary_action}</td>'
+        f"<td>{escape(relationship_id)}</td>"
+        f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
+        f"<td>{escape(extraction_status)}</td>"
+        f"<td>{escape(raw_attachment_document_id)}</td>"
+        "</tr>"
     )
 
 

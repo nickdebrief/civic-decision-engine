@@ -305,6 +305,91 @@ class Stage49EmailAttachmentPreservationTests(unittest.TestCase):
         ).content
         self.assertIn("Governed Email Attachment Relationships", preview)
 
+    def _admin_session_request(self):
+        return FakeRequest(
+            cookies={
+                admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session(
+                    "stage49-admin"
+                )
+            }
+        )
+
+    def test_admin_attachment_table_shows_stage50_navigation_fields(self):
+        source = self._store()
+        request = self._admin_session_request()
+        relationships = list_source_attachments(source["intake_id"], root=self.root)
+        first = relationships[0]
+        attachment = first["attachment_document"]
+
+        preview = admin_session.admin_document_intake_preview_page(
+            source["intake_id"], request
+        ).content
+
+        # Stage 50 navigable evidence fields.
+        self.assertIn("<th>Original filename</th>", preview)
+        self.assertIn("<th>Relationship</th>", preview)
+        self.assertIn("<th>Published Document</th>", preview)
+        self.assertIn("<th>Lifecycle status</th>", preview)
+        self.assertIn("<th>Action</th>", preview)
+        self.assertIn("Email attachment", preview)
+        self.assertIn(first["original_filename"], preview)
+        self.assertIn(attachment["document_identifier"], preview)
+        self.assertIn(
+            f"/admin/document-intake/{attachment['intake_id']}", preview
+        )
+        self.assertIn("Open Published Document", preview)
+        # Current lifecycle status is sourced from STATUS_LABELS.
+        self.assertIn("Pending Intake", preview)
+
+    def test_admin_attachment_table_failed_rows_show_not_created_without_doc_link(self):
+        with patch(
+            "api.email_attachment_preservation.store_email_attachment_document",
+            side_effect=ValueError("governed storage unavailable"),
+        ):
+            source = self._store()
+        request = self._admin_session_request()
+        preview = admin_session.admin_document_intake_preview_page(
+            source["intake_id"], request
+        ).content
+
+        # Failed rows must not advertise a Published Document.
+        self.assertIn("Not created", preview)
+        self.assertIn("No attachment Published Document", preview)
+        # No administrative document action is rendered for failed rows. The
+        # admin chrome contains other ``/admin/document-intake`` navigation
+        # links, so the assertion targets the Stage 50 action label itself.
+        self.assertNotIn("Open Published Document", preview)
+        # Technical preservation metadata remains visible.
+        self.assertIn("failed", preview)
+        self.assertIn("<th>Relationship ID</th>", preview)
+        self.assertIn("<th>Index</th>", preview)
+        self.assertIn("<th>Extraction status</th>", preview)
+        self.assertIn("<th>Attachment document ID</th>", preview)
+
+    def test_admin_attachment_table_preserves_technical_metadata_columns(self):
+        source = self._store()
+        request = self._admin_session_request()
+        relationships = list_source_attachments(source["intake_id"], root=self.root)
+        first = relationships[0]
+        attachment = first["attachment_document"]
+
+        preview = admin_session.admin_document_intake_preview_page(
+            source["intake_id"], request
+        ).content
+
+        # Technical preservation metadata columns are retained as secondary
+        # columns even after the Stage 50 navigable fields are added.
+        self.assertIn(first["relationship_id"], preview)
+        self.assertIn(str(first["attachment_index"]), preview)
+        self.assertIn(first["extraction_status"], preview)
+        self.assertIn(attachment["intake_id"], preview)
+        # The existing relationship metadata inspector action is retained.
+        self.assertIn(
+            f"/api/admin/session/email-attachment-relationships/{first['relationship_id']}",
+            preview,
+        )
+        self.assertIn("Inspect metadata", preview)
+
     def test_archive_attachment_bytes_create_projected_message_relationship(self):
         source = {
             "intake_id": "a" * 64,
