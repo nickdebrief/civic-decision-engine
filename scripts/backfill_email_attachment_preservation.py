@@ -18,12 +18,13 @@ from api.document_intake import intake_document_file, list_intake_documents, loa
 from api.email_attachment_preservation import (
     REGISTRY_FILENAME,
     list_source_attachments,
+    preserve_apple_emlx_attachments,
     preserve_outlook_msg_attachments,
     preserve_rfc5322_attachments,
 )
 
 
-SUPPORTED_TARGET_TYPES = {"eml", "msg"}
+SUPPORTED_TARGET_TYPES = {"eml", "msg", "emlx"}
 
 
 def _empty_counts() -> dict[str, int]:
@@ -81,11 +82,10 @@ def _process_document(document: dict, *, root: Path, dry_run: bool, counts: dict
         file_path, _ = intake_document_file(
             str(document.get("intake_id") or ""), metadata=document, root=root
         )
-        preserve_attachments = (
-            preserve_outlook_msg_attachments
-            if document.get("document_type") == "msg"
-            else preserve_rfc5322_attachments
-        )
+        preserve_attachments = {
+            "msg": preserve_outlook_msg_attachments,
+            "emlx": preserve_apple_emlx_attachments,
+        }.get(document.get("document_type"), preserve_rfc5322_attachments)
         relationships = preserve_attachments(
             document, Path(file_path).read_bytes(), root=root
         )

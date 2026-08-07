@@ -1615,6 +1615,54 @@ def validate_apple_emlx_document(data: bytes) -> dict[str, Any]:
     return parse_apple_emlx_metadata(data)
 
 
+def extract_apple_emlx_attachment_payloads(data: bytes) -> list[dict[str, Any]]:
+    """Return bounded standalone Apple Mail .emlx attachment payloads.
+
+    CDE Platform Stage 52 recovers the authoritative RFC 5322 message bytes from
+    the ``.emlx`` wrapper and delegates to the existing RFC 5322 extractor
+    (``extract_email_attachment_payloads``). No second MIME parser is
+    introduced: the ``.emlx`` length-prefix and trailing-plist handling is
+    reused from Stage 35B, and attachment-byte extraction reuses the existing
+    RFC 5322 MIME-part walk.
+
+    The ``.emlx`` is parsed twice on purpose: the first pass
+    (``parse_apple_emlx_metadata``) enforces every Stage 35B validation and
+    resource limit (total size, length-prefix line, declared message length,
+    trailing plist) without changing the published metadata shape; the second
+    pass re-derives the RFC 5322 message region so the exact bytes can be fed to
+    the existing extractor. This mirrors the deliberate two-pass design used for
+    standalone Outlook MSG in Stage 51.
+    """
+
+    # First pass: full Stage 35B validation and bounded parsing. Any malformed
+    # .emlx or resource-limit breach raises here, before any bytes are returned.
+    parse_apple_emlx_metadata(data)
+
+    # Second pass: re-derive the RFC 5322 message region. The length-prefix
+    # validation mirrors parse_apple_emlx_metadata exactly; this is bounded
+    # wrapper handling, not MIME parsing.
+    if not data:
+        raise ValueError("document_intake_file_required")
+    if len(data) > MAX_EMLX_BYTES:
+        raise ValueError("document_intake_file_too_large")
+    line_end = data.find(b"\n", 0, min(len(data), MAX_EMLX_FIRST_LINE_BYTES + 1))
+    if line_end < 0 or line_end > MAX_EMLX_FIRST_LINE_BYTES:
+        raise ValueError("document_intake_emlx_first_line_too_large")
+    length_line = data[:line_end].strip().rstrip(b"\r")
+    if not length_line or not length_line.isdigit():
+        raise ValueError("document_intake_invalid_emlx")
+    declared_length = int(length_line.decode("ascii"))
+    if declared_length <= 0 or declared_length > MAX_EMLX_MESSAGE_BYTES:
+        raise ValueError("document_intake_emlx_message_too_large")
+    message_start = line_end + 1
+    message_end = message_start + declared_length
+    if message_end > len(data):
+        raise ValueError("document_intake_emlx_truncated_message")
+    message_bytes = data[message_start:message_end]
+
+    return extract_email_attachment_payloads(message_bytes)
+
+
 def validate_email_document(data: bytes) -> dict[str, Any]:
     return parse_email_metadata(data)
 

@@ -13,6 +13,7 @@ from api.document_intake import (
     store_email_attachment_document,
 )
 from api.email_documents import (
+    extract_apple_emlx_attachment_payloads,
     extract_email_attachment_payloads,
     extract_outlook_msg_attachment_payloads,
 )
@@ -481,6 +482,100 @@ def preserve_outlook_msg_attachments(
                 source_attachment_identifier=source_part,
                 source_message_identifier=message_metadata.get("internet_message_id")
                 or message_metadata.get("message_id"),
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                created_at=timestamp,
+                root=root,
+            )
+        relationships.append(relationship)
+    return relationships
+
+
+def preserve_apple_emlx_attachments(
+    source_document: dict[str, Any], data: bytes, *, root: Path | None = None
+) -> list[dict[str, Any]]:
+    """Preserve standalone Apple Mail .emlx attachments (CDE Platform Stage 52).
+
+    Recovers the authoritative RFC 5322 message bytes from the ``.emlx``
+    wrapper and delegates attachment extraction to the existing RFC 5322
+    extractor, then reuses the unchanged Stage 49 preservation service. Each
+    source-reported attachment occurrence remains governably represented:
+
+    * a non-empty payload is preserved as an independent Published Document with
+      an ``Email attachment`` relationship (embedded messages are preserved
+      opaquely and are never recursively expanded);
+    * a zero-byte occurrence cannot be admitted as a Published Document and is
+      instead recorded as a failed relationship row with reason
+      ``email_attachment_empty_payload`` so the occurrence is never silently
+      lost.
+
+    ``source_pathway`` is ``"apple_emlx"``. The source-occurrence identifier
+    reuses the RFC 5322 ``mime-part:<index>`` convention so identity stays
+    deterministic and stable.
+    """
+
+    message_metadata = source_document.get("email_metadata") or {}
+    source_object_id = str(source_document.get("intake_id") or "")
+    relationships: list[dict[str, Any]] = []
+    for attachment in extract_apple_emlx_attachment_payloads(data):
+        payload = attachment.pop("payload")
+        index = int(attachment["attachment_index"])
+        source_part = f"mime-part:{attachment.get('mime_part_index')}"
+        timestamp = str(source_document.get("upload_date") or _utc_now())
+        if not payload:
+            relationship = record_attachment_failure(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="published_document",
+                attachment_index=index,
+                display_title=str(attachment.get("display_title")),
+                source_pathway="apple_emlx",
+                failure_reason="email_attachment_empty_payload",
+                original_filename=attachment.get("original_filename"),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                created_at=timestamp,
+                root=root,
+            )
+            relationships.append(relationship)
+            continue
+        try:
+            relationship = preserve_attachment_bytes(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="published_document",
+                attachment_index=index,
+                data=payload,
+                original_filename=attachment.get("original_filename"),
+                display_title=str(attachment.get("display_title")),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
+                source_pathway="apple_emlx",
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                extracted_at=timestamp,
+                root=root,
+            )
+        except Exception as exc:
+            relationship = record_attachment_failure(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="published_document",
+                attachment_index=index,
+                display_title=str(attachment.get("display_title")),
+                source_pathway="apple_emlx",
+                failure_reason=str(exc),
+                original_filename=attachment.get("original_filename"),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
                 content_id=attachment.get("content_id"),
                 inline_status=bool(attachment.get("inline_status")),
                 source_metadata=attachment,
