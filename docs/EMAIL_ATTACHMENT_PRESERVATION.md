@@ -55,6 +55,28 @@ governably represented:
   instead recorded as a failed relationship row with reason
   `email_attachment_empty_payload` so the occurrence is never silently lost.
 
+## Standalone Apple Mail EMLX Messages
+
+CDE Platform Stage 52 extends the same preservation model to standalone `.emlx`
+intake documents. A bounded Apple Mail extractor
+(`extract_apple_emlx_attachment_payloads`) recovers the authoritative RFC 5322
+message bytes from the `.emlx` wrapper (reusing the existing Stage 35B
+length-prefix, message-length, and trailing-plist validation) and delegates
+attachment-byte extraction to the existing RFC 5322 extractor
+(`extract_email_attachment_payloads`). No second MIME parser is introduced.
+
+The `.emlx` is parsed twice on purpose: the first pass (`parse_apple_emlx_metadata`)
+enforces Stage 35B validation and resource limits without changing the published
+metadata shape; the second pass re-derives the RFC 5322 message region so the
+exact bytes can be fed to the existing extractor. This mirrors the deliberate
+two-pass design used for standalone MSG in Stage 51.
+
+The resulting occurrences are preserved through the unchanged Stage 49 service
+with `source_pathway = "apple_emlx"` and the same `mime-part:<index>` source
+occurrence identifier convention as RFC 5322 `.eml`. Every source-reported
+occurrence remains governably represented under the same zero-byte, embedded
+message, and inline policies documented above.
+
 ## Storage and Metadata
 
 Attachment Published Documents use the existing intake directory, immutable
@@ -82,8 +104,9 @@ occurrence rather than creating a duplicate relationship.
 
 ## Existing Data Backfill
 
-The bounded maintenance command supports authoritative RFC 5322 intake records
-and standalone Outlook `.msg` intake records:
+The bounded maintenance command supports authoritative RFC 5322 intake records,
+standalone Outlook `.msg` intake records, and standalone Apple Mail `.emlx`
+intake records. A single document can be targeted with `--intake-id`:
 
 ```bash
 python scripts/backfill_email_attachment_preservation.py \

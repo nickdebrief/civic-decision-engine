@@ -1736,19 +1736,25 @@ def store_pending_document(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         os.chmod(metadata_path, 0o600)
-        if document_type in {"eml", "msg"} and int(
+        if document_type in {"eml", "msg", "emlx"} and int(
             (email_metadata or {}).get("attachment_count") or 0
         ):
             if document_type == "eml":
                 from api.email_attachment_preservation import preserve_rfc5322_attachments
 
                 preserve_attachments = preserve_rfc5322_attachments
-            else:
+            elif document_type == "msg":
                 from api.email_attachment_preservation import (
                     preserve_outlook_msg_attachments,
                 )
 
                 preserve_attachments = preserve_outlook_msg_attachments
+            else:
+                from api.email_attachment_preservation import (
+                    preserve_apple_emlx_attachments,
+                )
+
+                preserve_attachments = preserve_apple_emlx_attachments
             try:
                 relationships = preserve_attachments(
                     metadata, data, root=destination_root
