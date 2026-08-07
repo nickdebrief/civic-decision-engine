@@ -31,10 +31,29 @@ parts remain explicitly marked inline. Outlook, Gmail, and IMAP adapters invoke
 the same service only where their existing extraction pathway already supplies
 the exact attachment bytes.
 
-Document identity and content hash are deliberately separate. Reprocessing the
-same authoritative source occurrence resolves idempotently. Identical bytes in
-two different emails retain two Published Document occurrences and two
-relationships because they represent distinct transmission events.
+## Standalone Outlook MSG Messages
+
+CDE Platform Stage 51 extends the same preservation model to standalone
+`.msg` intake documents. A bounded MSG extractor
+(`extract_outlook_msg_attachment_payloads`) reuses the existing Stage 35B
+compound-file helpers to surface each attachment's exact `__substg1.0_3701`
+stream bytes alongside its source-reported filename, MIME type, Content-ID, and
+attachment index. The MSG is parsed twice on purpose: the first pass enforces
+Stage 35B validation and resource limits without changing the published metadata
+shape; the second pass re-derives the attachment groups so the exact bytes can be
+preserved. This is a deliberate scope boundary, not redundant work.
+
+The resulting occurrences are preserved through the unchanged Stage 49 service
+with `source_pathway = "outlook_msg"`. Every source-reported occurrence remains
+governably represented:
+
+* a non-empty attachment payload is preserved as an independent Published
+  Document with an `Email attachment` relationship;
+* an embedded message (`attach_method == 5`) is preserved opaquely as its
+  attachment bytes and is never recursively expanded;
+* a zero-byte occurrence cannot be admitted as a Published Document and is
+  instead recorded as a failed relationship row with reason
+  `email_attachment_empty_payload` so the occurrence is never silently lost.
 
 ## Storage and Metadata
 
@@ -63,7 +82,8 @@ occurrence rather than creating a duplicate relationship.
 
 ## Existing Data Backfill
 
-The bounded maintenance command supports authoritative RFC 5322 intake records:
+The bounded maintenance command supports authoritative RFC 5322 intake records
+and standalone Outlook `.msg` intake records:
 
 ```bash
 python scripts/backfill_email_attachment_preservation.py \
@@ -74,8 +94,10 @@ python scripts/backfill_email_attachment_preservation.py \
 
 Remove `--dry-run` only after reviewing counts. The command reports processed,
 created, linked, already-present, skipped, ambiguous, and failed totals. It uses
-the preserved `.eml` bytes and existing parser metadata; it never infers an
-attachment from body text, upload proximity, filename, or hash alone.
+the preserved `.eml`/`.msg` bytes and existing parser metadata; it never infers
+an attachment from body text, upload proximity, filename, or hash alone. Dry-run
+is strictly write-free: it creates no intake directories, no relationship rows,
+no document identifiers, and mutates no source metadata or registry.
 
 Historical PST/OST, Gmail, and IMAP backfill is intentionally not speculative.
 New projections preserve Published Document occurrences whenever exact bytes are

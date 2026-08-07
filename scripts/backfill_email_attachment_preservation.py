@@ -11,6 +11,7 @@ from api.document_intake import intake_document_file, list_intake_documents
 from api.email_attachment_preservation import (
     REGISTRY_FILENAME,
     list_source_attachments,
+    preserve_outlook_msg_attachments,
     preserve_rfc5322_attachments,
 )
 
@@ -28,7 +29,7 @@ def run(*, root: Path, limit: int, dry_run: bool) -> dict[str, int]:
     candidates = [
         item
         for item in list_intake_documents(root=root)
-        if item.get("document_type") == "eml"
+        if item.get("document_type") in {"eml", "msg"}
         and int((item.get("email_metadata") or {}).get("attachment_count") or 0) > 0
     ][:limit]
     for document in candidates:
@@ -50,7 +51,12 @@ def run(*, root: Path, limit: int, dry_run: bool) -> dict[str, int]:
             file_path, _ = intake_document_file(
                 str(document.get("intake_id") or ""), metadata=document, root=root
             )
-            relationships = preserve_rfc5322_attachments(
+            preserve_attachments = (
+                preserve_outlook_msg_attachments
+                if document.get("document_type") == "msg"
+                else preserve_rfc5322_attachments
+            )
+            relationships = preserve_attachments(
                 document, Path(file_path).read_bytes(), root=root
             )
         except Exception:

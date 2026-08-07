@@ -1231,6 +1231,79 @@ def validate_outlook_msg_document(data: bytes) -> dict[str, Any]:
     return parse_outlook_msg_metadata(data)
 
 
+def extract_outlook_msg_attachment_payloads(data: bytes) -> list[dict[str, Any]]:
+    """Return bounded standalone Outlook MSG attachment payloads in source order.
+
+    CDE Platform Stage 51 mirrors ``extract_email_attachment_payloads`` for
+    standalone ``.msg`` intake. Source interpretation remains here rather than in
+    the preservation layer. The returned ``payload`` bytes are the raw
+    ``__substg1.0_3701`` attachment stream bytes and are never transformed.
+
+    Bounded parsing reuses the existing Stage 35B compound-file helpers
+    (``_CompoundFile``, ``streams``, ``_msg_property_streams``, ``_msg_binary``,
+    ``_msg_text``, ``_msg_int``). The MSG is parsed twice on purpose: the first
+    pass (``parse_outlook_msg_metadata``) enforces every Stage 35B validation and
+    resource limit and leaves the published metadata shape untouched; the second
+    pass re-derives the attachment groups so the exact attachment bytes can be
+    surfaced without altering Stage 35B behaviour. This is a deliberate scope
+    boundary, not redundant work.
+    """
+
+    # First pass: full Stage 35B validation and bounded parsing. Any malformed
+    # MSG or resource-limit breach raises here, before any bytes are returned.
+    parse_outlook_msg_metadata(data)
+
+    cfb = _CompoundFile(data)
+    streams = cfb.streams()
+    grouped = _msg_property_streams(streams)
+
+    attachment_groups = [
+        (path, properties)
+        for path, properties in grouped.items()
+        if any(part.startswith("__attach_version1.0_") for part in path)
+    ]
+    if len(attachment_groups) > MAX_MSG_ATTACHMENT_COUNT:
+        raise ValueError("document_intake_msg_too_many_attachments")
+
+    attachments: list[dict[str, Any]] = []
+    total_attachment_bytes = 0
+    for index, (path, properties) in enumerate(
+        sorted(attachment_groups, key=lambda pair: pair[0]), start=1
+    ):
+        payload = _msg_binary(properties, "3701")
+        total_attachment_bytes += len(payload)
+        if (
+            len(payload) > MAX_MSG_DECODED_ATTACHMENT_BYTES
+            or total_attachment_bytes > MAX_MSG_TOTAL_DECODED_BYTES
+        ):
+            raise ValueError("document_intake_msg_attachment_too_large")
+        filename = _msg_text(properties, "3704")
+        long_filename = _msg_text(properties, "3707")
+        attach_method = _msg_int(properties, "3705")
+        is_embedded_message = attach_method == 5 or any(
+            "__substg1.0_3701000D" == stream.name for stream in streams if stream.path == path
+        )
+        original_filename = long_filename or filename or None
+        attachments.append(
+            {
+                "attachment_index": index,
+                "msg_attach_path": "/".join(part for part in path if part),
+                "payload": payload,
+                "original_filename": original_filename,
+                "display_title": original_filename or f"Attachment {index}",
+                "filename_generated": not bool(long_filename or filename),
+                "mime_type": _msg_text(properties, "370E") or "application/octet-stream",
+                "content_id": _msg_text(properties, "3712") or None,
+                "inline_status": False,
+                "is_attached_message": is_embedded_message,
+                "attachment_method": attach_method,
+                "source_reported_size": len(payload),
+                "parser_warnings": [],
+            }
+        )
+    return attachments
+
+
 def _walk_message(message: Any, *, depth: int = 0) -> list[Any]:
     if depth > MAX_MIME_DEPTH:
         raise ValueError("document_intake_email_mime_too_deep")
