@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 49 — Independent Email Attachment Preservation and Governed Relationships
+Current release: CDE Platform Stage 51 — Standalone Outlook MSG Attachment Preservation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md`](docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md`](docs/releases/CDE_PLATFORM_STAGE_48_ASSOCIATION_CARD_VISUAL_REFINEMENT_AND_SCALABLE_RELATIONSHIP_PRESENTATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md`](docs/releases/CDE_PLATFORM_STAGE_47_1_AUTHORITATIVE_SOURCE_VISUAL_EMPHASIS.md)
