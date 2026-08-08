@@ -66,7 +66,7 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 52 — Standalone Apple Mail EMLX Attachment Preservation",
+            "Current release: CDE Platform Stage 53 — Apple Mail Mailbox (.mbox) Authoritative Mailbox Preservation",
             readme,
         )
         self.assertIn("### CDE v13.0.1 — Public Transmission UX Refinements", readme)

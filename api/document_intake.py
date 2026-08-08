@@ -1736,7 +1736,7 @@ def store_pending_document(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         os.chmod(metadata_path, 0o600)
-        if document_type in {"eml", "msg", "emlx"} and int(
+        if document_type in {"eml", "msg", "emlx", "mbox"} and int(
             (email_metadata or {}).get("attachment_count") or 0
         ):
             if document_type == "eml":
@@ -1749,35 +1749,89 @@ def store_pending_document(
                 )
 
                 preserve_attachments = preserve_outlook_msg_attachments
-            else:
+            elif document_type == "emlx":
                 from api.email_attachment_preservation import (
                     preserve_apple_emlx_attachments,
                 )
 
                 preserve_attachments = preserve_apple_emlx_attachments
-            try:
-                relationships = preserve_attachments(
-                    metadata, data, root=destination_root
+            if document_type != "mbox":
+                try:
+                    relationships = preserve_attachments(
+                        metadata, data, root=destination_root
+                    )
+                    metadata["email_attachment_preservation"] = [
+                        {
+                            "relationship_id": relationship.get("relationship_id"),
+                            "attachment_index": relationship.get("attachment_index"),
+                            "attachment_document_id": relationship.get("attachment_document_id"),
+                            "relationship_type": relationship.get("relationship_type"),
+                            "extraction_status": relationship.get("extraction_status"),
+                            "extraction_failure_reason": relationship.get("extraction_failure_reason"),
+                        }
+                        for relationship in relationships
+                    ]
+                except Exception as exc:
+                    metadata["email_attachment_preservation"] = [
+                        {
+                            "relationship_type": "Email attachment",
+                            "extraction_status": "failed",
+                            "extraction_failure_reason": str(exc),
+                        }
+                    ]
+            else:
+                # mbox: the authoritative mailbox bytes are already stored.
+                # Iterate contained messages, recover each message's exact RFC
+                # 5322 byte range from the preserved .mbox file, and preserve
+                # attachments per message. Per-message failures are isolated so
+                # one malformed message cannot discard sibling successes.
+                from api.email_attachment_preservation import (
+                    preserve_mbox_message_attachments,
                 )
-                metadata["email_attachment_preservation"] = [
-                    {
-                        "relationship_id": relationship.get("relationship_id"),
-                        "attachment_index": relationship.get("attachment_index"),
-                        "attachment_document_id": relationship.get("attachment_document_id"),
-                        "relationship_type": relationship.get("relationship_type"),
-                        "extraction_status": relationship.get("extraction_status"),
-                        "extraction_failure_reason": relationship.get("extraction_failure_reason"),
-                    }
-                    for relationship in relationships
-                ]
-            except Exception as exc:
-                metadata["email_attachment_preservation"] = [
-                    {
-                        "relationship_type": "Email attachment",
-                        "extraction_status": "failed",
-                        "extraction_failure_reason": str(exc),
-                    }
-                ]
+
+                preservation_summary: list[dict[str, Any]] = []
+                for message in (email_metadata or {}).get("messages") or []:
+                    if not message.get("parsed") or int(
+                        message.get("attachment_count") or 0
+                    ) <= 0:
+                        continue
+                    byte_start = int(message.get("byte_start") or 0)
+                    byte_end = int(message.get("byte_end") or 0)
+                    if byte_end <= byte_start:
+                        continue
+                    try:
+                        with file_path.open("rb") as mbox_handle:
+                            mbox_handle.seek(byte_start)
+                            message_bytes = mbox_handle.read(byte_end - byte_start)
+                        relationships = preserve_mbox_message_attachments(
+                            metadata,
+                            message_bytes,
+                            message_index=int(message.get("message_index") or 0),
+                            root=destination_root,
+                        )
+                    except Exception as exc:
+                        preservation_summary.append(
+                            {
+                                "message_index": message.get("message_index"),
+                                "relationship_type": "Email attachment",
+                                "extraction_status": "failed",
+                                "extraction_failure_reason": str(exc),
+                            }
+                        )
+                        continue
+                    preservation_summary.extend(
+                        {
+                            "message_index": message.get("message_index"),
+                            "relationship_id": relationship.get("relationship_id"),
+                            "attachment_index": relationship.get("attachment_index"),
+                            "attachment_document_id": relationship.get("attachment_document_id"),
+                            "relationship_type": relationship.get("relationship_type"),
+                            "extraction_status": relationship.get("extraction_status"),
+                            "extraction_failure_reason": relationship.get("extraction_failure_reason"),
+                        }
+                        for relationship in relationships
+                    )
+                metadata["email_attachment_preservation"] = preservation_summary
             metadata_path.write_text(
                 json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
