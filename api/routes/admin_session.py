@@ -92,6 +92,7 @@ from api.document_intake import (
     list_published_documents,
     load_published_document,
     load_pending_document,
+    load_pending_document_read_only,
     store_streaming_mbox_pending_document,
     store_pending_document,
     streaming_mbox_chunk_bytes,
@@ -47188,18 +47189,27 @@ def _render_document_intake_preview(
             # relationship presentation. Stage 50 navigation applies only to the
             # source-email direction, where the attachment Published Document is
             # the related object and is eagerly loaded by list_source_attachments.
-            relationship_rows = "".join(
-                "<tr>"
-                f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
-                f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
-                f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
-                f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
-                f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
-                f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
-                f'<td><a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a></td>'
-                "</tr>"
-                for relationship in relationships
-            )
+            source_rows: list[str] = []
+            for relationship in relationships:
+                inspect_link = f'<a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a>'
+                projection_href = _mailbox_message_projection_href(relationship)
+                projection_link = (
+                    f' · <a href="{escape(projection_href)}">Open message projection</a>'
+                    if projection_href
+                    else ""
+                )
+                source_rows.append(
+                    "<tr>"
+                    f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
+                    f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
+                    f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
+                    f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
+                    f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
+                    f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
+                    f"<td>{inspect_link}{projection_link}</td>"
+                    "</tr>"
+                )
+            relationship_rows = "".join(source_rows)
             header = "<tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr>"
         elif is_mailbox_document(item):
             attachment_relationships = _render_admin_mailbox_attachment_relationship_navigation(
@@ -48841,6 +48851,50 @@ def _mailbox_attachment_message_index(
     return int(suffix)
 
 
+def _mailbox_message_projection(
+    item: dict[str, Any], message_index_value: Any
+) -> dict[str, Any]:
+    value = str(message_index_value or "")
+    if not re.fullmatch(r"[1-9][0-9]*", value):
+        raise ValueError("mbox_message_projection_not_found")
+    message_index = int(value)
+    email_metadata = item.get("email_metadata")
+    messages = email_metadata.get("messages") if isinstance(email_metadata, dict) else []
+    matches = []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        try:
+            candidate = int(message.get("message_index"))
+        except (TypeError, ValueError):
+            continue
+        if candidate == message_index:
+            matches.append(message)
+    if len(matches) != 1:
+        raise ValueError("mbox_message_projection_not_found")
+    return matches[0]
+
+
+def _mailbox_message_projection_href(relationship: dict[str, Any]) -> str | None:
+    if relationship.get("source_email_kind") != "mailbox_message":
+        return None
+    archive_id = str(relationship.get("source_email_document_id") or "")
+    source_document = relationship.get("source_document")
+    if (
+        not archive_id
+        or not isinstance(source_document, dict)
+        or not is_mailbox_document(source_document)
+        or str(source_document.get("intake_id") or "") != archive_id
+    ):
+        return None
+    message_index = _mailbox_attachment_message_index(
+        archive_id, relationship.get("source_email_object_id")
+    )
+    if message_index is None:
+        return None
+    return f"/admin/archive/{archive_id}/messages/{message_index}"
+
+
 def _mailbox_attachment_relationship_groups(
     item: dict[str, Any], relationships: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -48980,12 +49034,16 @@ def _render_admin_mailbox_attachment_relationship_navigation(
               <span class="summary-meta">From: {escape(sender)}</span>
               <span class="summary-meta">Date: {escape(message_date)} · Attachment relationships: {len(hydrated_relationships)}</span>"""
             note = "Attachment relationships are grouped from the existing mailbox message projection and governed relationship provenance."
+            projection_action = f'<p><a href="/admin/archive/{escape(str(item.get("intake_id") or ""))}/messages/{escape(str(group["message_index"]))}">Open message projection</a></p>'
+        if group["unresolved"]:
+            projection_action = ""
         rendered_groups.append(
             f"""
         <details class="mailbox-attachment-group">
           <summary>{summary}</summary>
           <div class="mailbox-attachment-group-body">
             <p class="mailbox-attachment-group-note">{escape(note)}</p>
+            {projection_action}
             <div class="admin-table-scroll" role="region" aria-label="Attachment relationships for {escape('unresolved message' if group['unresolved'] else f'message {group["message_index"]}')}">
               <table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table>
             </div>
@@ -49101,6 +49159,70 @@ def _render_admin_attachment_relationship_row(relationship: dict) -> str:
         f"<td>{escape(raw_attachment_document_id)}</td>"
         "</tr>"
     )
+
+
+def _render_admin_mbox_message_projection_page(
+    item: dict[str, Any],
+    message: dict[str, Any],
+    relationships: list[dict[str, Any]],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    archive_id = str(item.get("intake_id") or "")
+    message_index = int(message.get("message_index"))
+    projection_identity = f"{archive_id}:message:{message_index}"
+    parsed = bool(message.get("parsed"))
+    warnings = message.get("parser_warnings") or []
+    warning_text = "; ".join(str(value) for value in warnings) if warnings else "—"
+    byte_start = message.get("byte_start")
+    byte_end = message.get("byte_end")
+    byte_range = (
+        f"{byte_start}–{byte_end}"
+        if byte_start is not None and byte_end is not None
+        else "—"
+    )
+    fields: list[tuple[str, Any]] = [
+        ("Authoritative mailbox Document Identifier", item.get("document_identifier")),
+        ("Projection identity", projection_identity),
+        ("Message index", message_index),
+    ]
+    if parsed:
+        fields.extend(
+            [
+                ("Subject", message.get("subject_decoded")),
+                ("Sender / From", message.get("sender_raw") or message.get("from_raw")),
+                ("To", message.get("to_raw")),
+                ("CC", message.get("cc_raw")),
+                ("Reply-To", message.get("reply_to_raw")),
+                ("Date", message.get("date_header_parsed") or message.get("date_header_raw")),
+                ("Message-ID (provenance only)", message.get("message_id")),
+            ]
+        )
+    fields.extend(
+        [
+            ("Parsed", "Yes" if parsed else "No"),
+            ("Parse status", message.get("parse_status")),
+            ("Parser warnings", warning_text),
+            ("Message size", message.get("message_byte_size")),
+            ("Message digest (SHA-256)", message.get("message_digest")),
+            ("Attachment count", message.get("attachment_count")),
+            ("Source byte range", byte_range),
+        ]
+    )
+    metadata_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{escape(str(value if value not in (None, '') else '—'))}</td></tr>"
+        for label, value in fields
+    )
+    relationship_rows = "".join(
+        _render_admin_attachment_relationship_row(relationship)
+        for relationship in relationships
+    )
+    if relationship_rows:
+        relationship_table = f'''<div class="admin-table-scroll" role="region" aria-label="Governed attachment relationships for message {message_index}"><table class="admin-data-table"><thead><tr><th>Original filename</th><th>Relationship</th><th>Published Document</th><th>Lifecycle status</th><th>Action</th><th>Relationship ID</th><th>Index</th><th>Extraction status</th><th>Attachment document ID</th></tr></thead><tbody>{relationship_rows}</tbody></table></div>'''
+    else:
+        relationship_table = "<p>No governed attachment relationships are recorded for this message projection.</p>"
+    back = f"/admin/document-intake/{escape(archive_id)}#governed-email-attachment-relationships"
+    return f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Contained Message Projection</title><style>*{{box-sizing:border-box}}body{{margin:0;font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}.metadata th{{width:250px;background:#faf9f5;color:#555}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}{ADMIN_TABLE_READABILITY_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="{back}">Back to authoritative mailbox</a></p><h1>Contained Message Projection</h1><p class="notice">This is a read-only deterministic projection of the authoritative MBOX Published Document. Message-ID is provenance only; the administrative projection identity is the archive intake identifier plus message index. No Published Document or Canonical Record is created for this message.</p><section><h2>Message metadata and provenance</h2><table class="metadata">{metadata_rows}</table></section><section><h2>Governed Email Attachment Relationships</h2>{relationship_table}</section></main></body></html>'''
 
 
 @router.get("/admin/document-intake/{intake_id}", response_class=HTMLResponse)
@@ -49334,6 +49456,33 @@ def admin_outlook_archive_message_projection_page(
     request: Request,
 ):
     session = require_admin_session(request)
+    try:
+        mbox_document = load_pending_document_read_only(
+            document_id, root=intake_root()
+        )
+    except ValueError:
+        mbox_document = None
+    if isinstance(mbox_document, dict) and is_mailbox_document(mbox_document):
+        try:
+            message = _mailbox_message_projection(mbox_document, message_id)
+            message_index = int(message.get("message_index"))
+            source_identity = f"{document_id}:message:{message_index}"
+            lightweight = list_email_source_attachments(
+                source_identity, root=intake_root(), load_documents=False
+            )
+            relationships = hydrate_email_attachment_documents(
+                lightweight, root=intake_root(), read_only=True
+            )
+        except ValueError as exc:
+            raise _http_error(404, "mbox_message_projection_not_found") from exc
+        return HTMLResponse(
+            content=_render_admin_mbox_message_projection_page(
+                mbox_document,
+                message,
+                relationships,
+                admin_session=session,
+            )
+        )
     try:
         message = get_projection_message(document_id, message_id, root=intake_root())
     except ValueError as exc:
