@@ -73,9 +73,19 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         )
 
     def test_pending_stage_must_be_terminal(self):
-        pending = self.entries[-1]
-        errors = validate_entries([pending, *self.entries[:-1]])
-        self.assertIn("pending_stage_not_terminal: 54", errors)
+        pending = StageEntry(
+            stage="53.2",
+            title="Synthetic pending stage",
+            capability="email-attachment-preservation",
+            parent="53",
+            merged="—",
+            merge_commit="—",
+            pull_request="—",
+            release_note="CDE_PLATFORM_STAGE_53_2_SYNTHETIC_PENDING.md",
+            status="Implemented · pending merge · pending deployment",
+        )
+        errors = validate_entries([*self.entries[:-1], pending, self.entries[-1]])
+        self.assertIn("pending_stage_not_terminal: 53.2", errors)
 
 
 if __name__ == "__main__":
