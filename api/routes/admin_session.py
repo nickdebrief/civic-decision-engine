@@ -106,6 +106,7 @@ from api.email_documents import (
 )
 from api.email_attachment_preservation import (
     get_relationship as get_email_attachment_relationship,
+    hydrate_attachment_documents as hydrate_email_attachment_documents,
     list_archive_attachments as list_email_archive_attachments,
     list_attachment_sources as list_email_attachment_sources,
     list_source_attachments as list_email_source_attachments,
@@ -47021,6 +47022,8 @@ def _render_document_intake_preview(
     item: dict[str, Any],
     *,
     admin_session: dict[str, Any] | None = None,
+    attachment_page: int | str | None = 1,
+    attachment_page_size: int | str | None = 25,
 ) -> str:
     correction_notice = _render_intake_correction_notice(item)
     canonical_record_section = _canonical_record_section_for_document(item)
@@ -47171,7 +47174,9 @@ def _render_document_intake_preview(
         # archive-level query (source_archive_identifier) is required to
         # enumerate all attachment relationships across contained messages.
         relationships = list_email_archive_attachments(
-            str(item.get("intake_id") or ""), root=intake_root()
+            str(item.get("intake_id") or ""),
+            root=intake_root(),
+            load_documents=False,
         )
     else:
         relationships = list_email_source_attachments(
@@ -47196,16 +47201,24 @@ def _render_document_intake_preview(
                 for relationship in relationships
             )
             header = "<tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr>"
+        elif is_mailbox_document(item):
+            attachment_relationships = _render_admin_mailbox_attachment_relationship_navigation(
+                item,
+                relationships,
+                attachment_page=attachment_page,
+                attachment_page_size=attachment_page_size,
+            )
         else:
             relationship_rows = "".join(
                 _render_admin_attachment_relationship_row(relationship)
                 for relationship in relationships
             )
             header = "<tr><th>Original filename</th><th>Relationship</th><th>Published Document</th><th>Lifecycle status</th><th>Action</th><th>Relationship ID</th><th>Index</th><th>Extraction status</th><th>Attachment document ID</th></tr>"
-        attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table></div></section>'
+        if not attachment_relationships:
+            attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table></div></section>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.mailbox-attachment-summary{{padding:12px 14px;border:1px solid #d8d4ca;background:#faf9f5;margin:16px 0}}.mailbox-attachment-summary p{{margin:0}}.mailbox-attachment-group{{border:1px solid #d8d4ca;background:#fff;margin:12px 0}}.mailbox-attachment-group>summary{{display:grid;gap:4px;padding:12px 14px;background:#f3f1eb;cursor:pointer}}.mailbox-attachment-group>summary:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-group .summary-title{{font-weight:700;color:#143a52}}.mailbox-attachment-group .summary-subject{{font-weight:650;overflow-wrap:anywhere}}.mailbox-attachment-group .summary-meta{{color:#555;font-size:.88rem;overflow-wrap:anywhere}}.mailbox-attachment-group-body{{padding:12px}}.mailbox-attachment-group-note{{margin:0 0 12px;color:#555}}.mailbox-attachment-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}.mailbox-attachment-group>summary{{padding:11px}}.mailbox-attachment-group-body{{padding:8px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
 {image_preview}{audio_notice}{email_notice}{attachment_relationships}
 {canonical_record_section}
@@ -48815,6 +48828,211 @@ def admin_document_intake_page(request: Request):
     )
 
 
+def _mailbox_attachment_message_index(
+    archive_id: str, source_email_object_id: Any
+) -> int | None:
+    prefix = f"{archive_id}:message:"
+    value = str(source_email_object_id or "")
+    if not value.startswith(prefix):
+        return None
+    suffix = value[len(prefix) :]
+    if not re.fullmatch(r"[1-9][0-9]*", suffix):
+        return None
+    return int(suffix)
+
+
+def _mailbox_attachment_relationship_groups(
+    item: dict[str, Any], relationships: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Project existing Stage 53 provenance into deterministic message groups."""
+
+    archive_id = str(item.get("intake_id") or "")
+    message_candidates: dict[int, list[dict[str, Any]]] = {}
+    email_metadata = item.get("email_metadata")
+    messages = email_metadata.get("messages") if isinstance(email_metadata, dict) else []
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        try:
+            message_index = int(message.get("message_index"))
+        except (TypeError, ValueError):
+            continue
+        if message_index > 0:
+            message_candidates.setdefault(message_index, []).append(message)
+    message_map = {
+        message_index: candidates[0]
+        for message_index, candidates in message_candidates.items()
+        if len(candidates) == 1
+    }
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    unresolved: list[dict[str, Any]] = []
+    for relationship in relationships:
+        message_index = _mailbox_attachment_message_index(
+            archive_id, relationship.get("source_email_object_id")
+        )
+        if message_index is None or message_index not in message_map:
+            unresolved.append(relationship)
+            continue
+        grouped.setdefault(message_index, []).append(relationship)
+
+    def attachment_order(relationship: dict[str, Any]) -> tuple[int, str]:
+        try:
+            attachment_index = int(relationship.get("attachment_index"))
+        except (TypeError, ValueError):
+            attachment_index = 2**63 - 1
+        return attachment_index, str(relationship.get("relationship_id") or "")
+
+    groups = [
+        {
+            "message_index": message_index,
+            "message": message_map[message_index],
+            "relationships": sorted(grouped[message_index], key=attachment_order),
+            "unresolved": False,
+        }
+        for message_index in sorted(grouped)
+    ]
+    if unresolved:
+        groups.append(
+            {
+                "message_index": None,
+                "message": None,
+                "relationships": sorted(
+                    unresolved,
+                    key=lambda relationship: (
+                        str(relationship.get("source_email_object_id") or ""),
+                        *attachment_order(relationship),
+                    ),
+                ),
+                "unresolved": True,
+            }
+        )
+    return groups
+
+
+def _mailbox_attachment_pagination_query(
+    *, attachment_page: int, attachment_page_size: int
+) -> str:
+    from urllib.parse import urlencode
+
+    return urlencode(
+        (
+            ("attachment_page", str(attachment_page)),
+            ("attachment_page_size", str(attachment_page_size)),
+        )
+    )
+
+
+def _render_admin_mailbox_attachment_relationship_navigation(
+    item: dict[str, Any],
+    relationships: list[dict[str, Any]],
+    *,
+    attachment_page: int | str | None = 1,
+    attachment_page_size: int | str | None = 25,
+) -> str:
+    groups = _mailbox_attachment_relationship_groups(item, relationships)
+    normalized_page_size = _parse_positive_int(
+        attachment_page_size, 25, maximum=100
+    )
+    page_count = max(1, (len(groups) + normalized_page_size - 1) // normalized_page_size)
+    normalized_page = min(_parse_positive_int(attachment_page, 1), page_count)
+    start = (normalized_page - 1) * normalized_page_size
+    visible_groups = groups[start : start + normalized_page_size]
+    represented_messages = sum(1 for group in groups if not group["unresolved"])
+    unresolved_relationships = sum(
+        len(group["relationships"]) for group in groups if group["unresolved"]
+    )
+    header = "<tr><th>Original filename</th><th>Relationship</th><th>Published Document</th><th>Lifecycle status</th><th>Action</th><th>Relationship ID</th><th>Index</th><th>Extraction status</th><th>Attachment document ID</th></tr>"
+
+    rendered_groups: list[str] = []
+    for group in visible_groups:
+        hydrated_relationships = hydrate_email_attachment_documents(
+            group["relationships"], root=intake_root(), read_only=True
+        )
+        relationship_rows = "".join(
+            _render_admin_attachment_relationship_row(relationship)
+            for relationship in hydrated_relationships
+        )
+        if group["unresolved"]:
+            summary = """
+              <span class="summary-title">Unresolved message relationship</span>
+              <span class="summary-subject">Message projection matching was unavailable.</span>
+              <span class="summary-meta">Attachment relationships: {count}</span>""".format(
+                count=len(hydrated_relationships)
+            )
+            note = "These governed relationships could not be matched safely from their source email object identifiers. No heuristic match has been attempted."
+        else:
+            message = group["message"] or {}
+            subject = str(message.get("subject_decoded") or "No subject recorded")
+            sender = str(
+                message.get("sender_raw")
+                or message.get("from_raw")
+                or "Not recorded"
+            )
+            message_date = str(
+                message.get("date_header_parsed")
+                or message.get("date_header_raw")
+                or "Not recorded"
+            )
+            summary = f"""
+              <span class="summary-title">Message {escape(str(group['message_index']))}</span>
+              <span class="summary-subject">{escape(subject)}</span>
+              <span class="summary-meta">From: {escape(sender)}</span>
+              <span class="summary-meta">Date: {escape(message_date)} · Attachment relationships: {len(hydrated_relationships)}</span>"""
+            note = "Attachment relationships are grouped from the existing mailbox message projection and governed relationship provenance."
+        rendered_groups.append(
+            f"""
+        <details class="mailbox-attachment-group">
+          <summary>{summary}</summary>
+          <div class="mailbox-attachment-group-body">
+            <p class="mailbox-attachment-group-note">{escape(note)}</p>
+            <div class="admin-table-scroll" role="region" aria-label="Attachment relationships for {escape('unresolved message' if group['unresolved'] else f'message {group["message_index"]}')}">
+              <table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table>
+            </div>
+          </div>
+        </details>"""
+        )
+
+    previous_link = ""
+    next_link = ""
+    base_path = f"/admin/document-intake/{escape(str(item.get('intake_id') or ''))}"
+    if normalized_page > 1:
+        query = _mailbox_attachment_pagination_query(
+            attachment_page=normalized_page - 1,
+            attachment_page_size=normalized_page_size,
+        )
+        previous_link = f'<a href="{base_path}?{escape(query)}#governed-email-attachment-relationships">Previous page</a>'
+    if normalized_page < page_count:
+        query = _mailbox_attachment_pagination_query(
+            attachment_page=normalized_page + 1,
+            attachment_page_size=normalized_page_size,
+        )
+        next_link = f'<a href="{base_path}?{escape(query)}#governed-email-attachment-relationships">Next page</a>'
+    pagination = (
+        f'<nav class="mailbox-attachment-pagination" aria-label="Mailbox attachment relationship pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</nav>'
+        if page_count > 1
+        else ""
+    )
+    unresolved_summary = (
+        f"<p><strong>Unresolved relationships:</strong> {unresolved_relationships}</p>"
+        if unresolved_relationships
+        else ""
+    )
+    message_label = "message" if represented_messages == 1 else "messages"
+    return f"""
+    <section id="governed-email-attachment-relationships">
+      <h2>Governed Email Attachment Relationships</h2>
+      <p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p>
+      <div class="mailbox-attachment-summary" aria-label="Mailbox attachment relationship summary">
+        <p><strong>{len(relationships)} attachment relationships across {represented_messages} {message_label}</strong></p>
+        {unresolved_summary}
+      </div>
+      {pagination}
+      {''.join(rendered_groups)}
+      {pagination}
+    </section>"""
+
+
 def _render_admin_attachment_relationship_row(relationship: dict) -> str:
     """Render one Stage 50 administrative evidence-relationship row.
 
@@ -48886,13 +49104,25 @@ def _render_admin_attachment_relationship_row(relationship: dict) -> str:
 
 
 @router.get("/admin/document-intake/{intake_id}", response_class=HTMLResponse)
-def admin_document_intake_preview_page(intake_id: str, request: Request):
+def admin_document_intake_preview_page(
+    intake_id: str,
+    request: Request,
+    attachment_page: int | str | None = Query(1),
+    attachment_page_size: int | str | None = Query(25),
+):
     session = require_admin_session(request)
     try:
         item = load_pending_document(intake_id)
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
-    return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
+    return HTMLResponse(
+        content=_render_document_intake_preview(
+            item,
+            admin_session=session,
+            attachment_page=attachment_page,
+            attachment_page_size=attachment_page_size,
+        )
+    )
 
 
 @router.get("/admin/archive/jobs", response_class=HTMLResponse)

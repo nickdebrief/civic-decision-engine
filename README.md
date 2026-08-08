@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 53 — Apple Mail Mailbox (.mbox) Authoritative Mailbox Preservation
+Current release: CDE Platform Stage 53.1 — Mailbox Attachment Relationship Navigation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md)
@@ -953,6 +954,37 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 53.1 — Mailbox Attachment Relationship Navigation
+
+CDE Platform Stage 53.1 replaces the archive-wide flat attachment relationship
+table on authenticated MBOX intake pages with deterministic, message-grouped
+navigation. Each collapsed message group uses existing mailbox projection
+metadata for a compact subject, sender, date, and relationship-count summary;
+expanding it reveals the unchanged governed Stage 50 relationship rows.
+
+Groups are ordered by numeric message index and paginated in complete message
+units, 25 by default. Only attachment documents in the visible groups are
+loaded. Failed relationships remain visible, and relationships that cannot be
+matched safely remain in an explicit unresolved group. Standalone `.eml`,
+`.msg`, and `.emlx` presentation is unchanged.
+
+This is a presentation/navigation refinement only. It does not change MBOX
+bytes, preservation, relationship identity, hashing, provenance, verification,
+lifecycle, Canonical Records, publication, or public routes.
+
+See the [CDE Platform Stage 53.1 release note](docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md).
+
+### CDE Platform Stage 53 — Apple Mail Mailbox (.mbox) Authoritative Mailbox Preservation
+
+CDE Platform Stage 53 preserves Apple Mail `.mbox` files as authoritative
+mailbox evidence and derives bounded message projections from the unchanged
+source bytes. Attachments from contained messages reuse the existing governed
+Stage 49 preservation service and relationship model, preserving deterministic
+per-message provenance without creating Canonical Records or publishing
+contained evidence automatically.
+
+See the [CDE Platform Stage 53 release note](docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md).
 
 ### CDE Platform Stage 49 — Independent Email Attachment Preservation and Governed Relationships
 

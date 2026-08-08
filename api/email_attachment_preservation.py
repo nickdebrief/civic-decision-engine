@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,6 +88,16 @@ def _connect(root: Path | None = None) -> sqlite3.Connection:
             ON email_attachment_relationships (relationship_type);
         """
     )
+    return conn
+
+
+def _connect_read_only(root: Path | None = None) -> sqlite3.Connection | None:
+    registry_path = (root or intake_root()).resolve(strict=False) / REGISTRY_FILENAME
+    if not registry_path.is_file():
+        return None
+    conn = sqlite3.connect(f"{registry_path.as_uri()}?mode=ro", uri=True, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -746,17 +757,24 @@ def list_attachment_sources(
 
 
 def list_archive_attachments(
-    archive_id: str, *, root: Path | None = None
+    archive_id: str,
+    *,
+    root: Path | None = None,
+    load_documents: bool = True,
 ) -> list[dict[str, Any]]:
     """Return all attachment relationships for one archive/container (Stage 53).
 
     Query helper only — no schema change. Uses the existing
     ``source_archive_identifier`` index to enumerate every attachment
-    relationship across all contained messages of one mbox archive. Each result
-    eagerly loads its ``attachment_document`` where one exists.
+    relationship across all contained messages of one mbox archive. By default,
+    each result eagerly loads its ``attachment_document`` where one exists.
+    Administrative navigation may disable eager loading so it can paginate
+    message groups before hydrating visible attachment documents.
     """
 
-    conn = _connect(root)
+    conn = _connect(root) if load_documents else _connect_read_only(root)
+    if conn is None:
+        return []
     try:
         rows = conn.execute(
             """
@@ -769,13 +787,43 @@ def list_archive_attachments(
     finally:
         conn.close()
     results = [_row(row) for row in rows]
-    for result in results:
+    if load_documents:
+        return hydrate_attachment_documents(results, root=root)
+    return results
+
+
+def hydrate_attachment_documents(
+    relationships: list[dict[str, Any]],
+    *,
+    root: Path | None = None,
+    read_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Return relationship copies with available attachment documents loaded."""
+
+    destination_root = (root or intake_root()).resolve(strict=False)
+    results: list[dict[str, Any]] = []
+    for relationship in relationships:
+        result = dict(relationship)
         document_id = result.get("attachment_document_id")
         if document_id:
-            try:
-                result["attachment_document"] = load_pending_document(document_id, root=root)
-            except ValueError:
-                result["attachment_document"] = None
+            if read_only:
+                try:
+                    if not re.fullmatch(r"[0-9a-f]{64}", str(document_id)):
+                        raise ValueError("document_intake_not_found")
+                    metadata_path = destination_root / str(document_id) / "metadata.json"
+                    result["attachment_document"] = json.loads(
+                        metadata_path.read_text(encoding="utf-8")
+                    )
+                except (OSError, ValueError, json.JSONDecodeError):
+                    result["attachment_document"] = None
+            else:
+                try:
+                    result["attachment_document"] = load_pending_document(
+                        document_id, root=destination_root
+                    )
+                except ValueError:
+                    result["attachment_document"] = None
+        results.append(result)
     return results
 
 
