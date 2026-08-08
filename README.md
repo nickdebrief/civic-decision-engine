@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 54 — Apple Mail Mailbox Relationship Projection and Navigation
+Current release: CDE Platform Stage 55 — Attachment Published Document Source Context and Navigation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md`](docs/releases/CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md)
