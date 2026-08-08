@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 52 — Standalone Apple Mail EMLX Attachment Preservation
+Current release: CDE Platform Stage 53 — Apple Mail Mailbox (.mbox) Authoritative Mailbox Preservation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_52_STANDALONE_APPLE_EMLX_ATTACHMENT_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_51_STANDALONE_OUTLOOK_MSG_ATTACHMENT_PRESERVATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md`](docs/releases/CDE_PLATFORM_STAGE_49_INDEPENDENT_EMAIL_ATTACHMENT_PRESERVATION_AND_GOVERNED_RELATIONSHIPS.md)

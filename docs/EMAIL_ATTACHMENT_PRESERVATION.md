@@ -77,6 +77,34 @@ occurrence identifier convention as RFC 5322 `.eml`. Every source-reported
 occurrence remains governably represented under the same zero-byte, embedded
 message, and inline policies documented above.
 
+## Apple Mail Mailbox (.mbox) Authoritative Preservation
+
+CDE Platform Stage 53 treats the mailbox archive as the authoritative preserved
+source and contained messages as governed projections derived from that
+preserved mailbox. The mailbox is already preserved byte-for-byte as a Published
+Document; Stage 53 extends governed attachment preservation to the attachments
+of contained messages.
+
+For each parsed message with attachments, the exact RFC 5322 message byte range
+is recovered from the preserved `.mbox` file (the mbox `"From "` separator is
+excluded — `byte_start`/`byte_end` point to the actual RFC 5322 message). The
+existing `extract_email_attachment_payloads` extractor is reused unchanged (no
+second MIME parser). Each attachment occurrence is preserved through the
+unchanged Stage 49 service with:
+
+- `source_email_object_id = f"{archive_intake_id}:message:{message_index}"`;
+- `source_email_kind = "mailbox_message"`;
+- `source_pathway = "mbox_message"`;
+- `source_archive_identifier = archive_intake_id`;
+- `source_attachment_identifier = f"mime-part:{mime_part_index}"`.
+
+The same attachment bytes in two different mailbox messages remain distinct
+source occurrences because the identity seed incorporates the per-message
+`source_email_object_id`. One malformed message does not discard sibling
+messages (the existing mbox parser isolates per-message parsing failures). The
+bounded `--intake-id` backfill supports `.mbox` containers via an archive-level
+query (`source_archive_identifier`) and per-message preservation.
+
 ## Storage and Metadata
 
 Attachment Published Documents use the existing intake directory, immutable
@@ -105,8 +133,9 @@ occurrence rather than creating a duplicate relationship.
 ## Existing Data Backfill
 
 The bounded maintenance command supports authoritative RFC 5322 intake records,
-standalone Outlook `.msg` intake records, and standalone Apple Mail `.emlx`
-intake records. A single document can be targeted with `--intake-id`:
+standalone Outlook `.msg` intake records, standalone Apple Mail `.emlx` intake
+records, and Apple Mail mailbox (`.mbox`) container records. A single document
+can be targeted with `--intake-id`:
 
 ```bash
 python scripts/backfill_email_attachment_preservation.py \

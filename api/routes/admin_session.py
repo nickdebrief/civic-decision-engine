@@ -106,6 +106,7 @@ from api.email_documents import (
 )
 from api.email_attachment_preservation import (
     get_relationship as get_email_attachment_relationship,
+    list_archive_attachments as list_email_archive_attachments,
     list_attachment_sources as list_email_attachment_sources,
     list_source_attachments as list_email_source_attachments,
 )
@@ -47161,11 +47162,21 @@ def _render_document_intake_preview(
             email_notice = '<p class="notice">RFC 5322 email artefacts are preserved as original bytes. Parsed headers, message body text, MIME structure, and attachment metadata support inspection without replacing or rewriting the source message.</p>'
     attachment_relationships = ""
     is_attachment_document = item.get("document_type") == "email_attachment"
-    relationships = (
-        list_email_attachment_sources(str(item.get("intake_id") or ""), root=intake_root())
-        if is_attachment_document
-        else list_email_source_attachments(str(item.get("intake_id") or ""), root=intake_root())
-    )
+    if is_attachment_document:
+        relationships = list_email_attachment_sources(
+            str(item.get("intake_id") or ""), root=intake_root()
+        )
+    elif is_mailbox_document(item):
+        # mbox containers use per-message source_email_object_id values, so the
+        # archive-level query (source_archive_identifier) is required to
+        # enumerate all attachment relationships across contained messages.
+        relationships = list_email_archive_attachments(
+            str(item.get("intake_id") or ""), root=intake_root()
+        )
+    else:
+        relationships = list_email_source_attachments(
+            str(item.get("intake_id") or ""), root=intake_root()
+        )
     if relationships:
         if is_attachment_document:
             # Attachment-document admin pages retain their pre-Stage-50 source

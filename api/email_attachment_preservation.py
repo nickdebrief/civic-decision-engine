@@ -16,6 +16,7 @@ from api.email_documents import (
     extract_apple_emlx_attachment_payloads,
     extract_email_attachment_payloads,
     extract_outlook_msg_attachment_payloads,
+    parse_email_metadata,
 )
 
 
@@ -586,6 +587,113 @@ def preserve_apple_emlx_attachments(
     return relationships
 
 
+def preserve_mbox_message_attachments(
+    source_document: dict[str, Any],
+    message_bytes: bytes,
+    *,
+    message_index: int,
+    root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Preserve attachments from one contained mbox message (CDE Platform Stage 53).
+
+    The mailbox archive is the authoritative preserved source; contained
+    messages are governed projections. This function recovers attachment
+    payloads from one message's exact RFC 5322 bytes and preserves each through
+    the unchanged Stage 49 preservation service. ``message_bytes`` must be the
+    exact RFC 5322 message bytes recovered from the preserved mailbox (excluding
+    the mbox ``"From "`` separator).
+
+    Provenance hierarchy:
+    * ``source_archive_identifier`` = the archive (mailbox) intake_id;
+    * ``source_email_object_id`` = ``f"{intake_id}:message:{message_index}"``;
+    * ``source_email_kind`` = ``"mailbox_message"``;
+    * ``source_pathway`` = ``"mbox_message"``.
+
+    Zero-byte occurrences are recorded as failed relationship rows (reason
+    ``email_attachment_empty_payload``); embedded messages are preserved
+    opaquely via the reused RFC 5322 extractor and are never recursively
+    expanded.
+    """
+
+    archive_id = str(source_document.get("intake_id") or "")
+    source_object_id = f"{archive_id}:message:{message_index}"
+    message_metadata = {}
+    try:
+        message_metadata = parse_email_metadata(message_bytes) or {}
+    except Exception:
+        message_metadata = {}
+    relationships: list[dict[str, Any]] = []
+    for attachment in extract_email_attachment_payloads(message_bytes):
+        payload = attachment.pop("payload")
+        index = int(attachment["attachment_index"])
+        source_part = f"mime-part:{attachment.get('mime_part_index')}"
+        timestamp = str(source_document.get("upload_date") or _utc_now())
+        if not payload:
+            relationship = record_attachment_failure(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="mailbox_message",
+                attachment_index=index,
+                display_title=str(attachment.get("display_title")),
+                source_pathway="mbox_message",
+                failure_reason="email_attachment_empty_payload",
+                original_filename=attachment.get("original_filename"),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
+                source_archive_identifier=archive_id,
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                created_at=timestamp,
+                root=root,
+            )
+            relationships.append(relationship)
+            continue
+        try:
+            relationship = preserve_attachment_bytes(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="mailbox_message",
+                attachment_index=index,
+                data=payload,
+                original_filename=attachment.get("original_filename"),
+                display_title=str(attachment.get("display_title")),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
+                source_archive_identifier=archive_id,
+                source_pathway="mbox_message",
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                extracted_at=timestamp,
+                root=root,
+            )
+        except Exception as exc:
+            relationship = record_attachment_failure(
+                source_document=source_document,
+                source_email_object_id=source_object_id,
+                source_email_kind="mailbox_message",
+                attachment_index=index,
+                display_title=str(attachment.get("display_title")),
+                source_pathway="mbox_message",
+                failure_reason=str(exc),
+                original_filename=attachment.get("original_filename"),
+                mime_type=attachment.get("mime_type"),
+                source_attachment_identifier=source_part,
+                source_message_identifier=message_metadata.get("message_id"),
+                source_archive_identifier=archive_id,
+                content_id=attachment.get("content_id"),
+                inline_status=bool(attachment.get("inline_status")),
+                source_metadata=attachment,
+                created_at=timestamp,
+                root=root,
+            )
+        relationships.append(relationship)
+    return relationships
+
+
 def list_source_attachments(
     source_email_object_id: str, *, root: Path | None = None
 ) -> list[dict[str, Any]]:
@@ -634,6 +742,40 @@ def list_attachment_sources(
             result["source_document"] = load_pending_document(source_id, root=root)
         except ValueError:
             result["source_document"] = None
+    return results
+
+
+def list_archive_attachments(
+    archive_id: str, *, root: Path | None = None
+) -> list[dict[str, Any]]:
+    """Return all attachment relationships for one archive/container (Stage 53).
+
+    Query helper only — no schema change. Uses the existing
+    ``source_archive_identifier`` index to enumerate every attachment
+    relationship across all contained messages of one mbox archive. Each result
+    eagerly loads its ``attachment_document`` where one exists.
+    """
+
+    conn = _connect(root)
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM email_attachment_relationships
+            WHERE source_archive_identifier = ?
+            ORDER BY source_email_object_id, attachment_index, relationship_id
+            """,
+            (str(archive_id),),
+        ).fetchall()
+    finally:
+        conn.close()
+    results = [_row(row) for row in rows]
+    for result in results:
+        document_id = result.get("attachment_document_id")
+        if document_id:
+            try:
+                result["attachment_document"] = load_pending_document(document_id, root=root)
+            except ValueError:
+                result["attachment_document"] = None
     return results
 
 
