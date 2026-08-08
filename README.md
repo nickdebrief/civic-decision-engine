@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 53.1 — Mailbox Attachment Relationship Navigation
+Current release: CDE Platform Stage 54 — Apple Mail Mailbox Relationship Projection and Navigation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -954,6 +954,27 @@ from public search and presentation. Parsed Apple Mail and RFC 5322 metadata
 supports inspection and discovery without verifying sender identity, delivery,
 receipt, authorship, authenticity, factual accuracy, legal status, evidential
 sufficiency, or external validation.
+
+### CDE Platform Stage 54 — Apple Mail Mailbox Relationship Projection and Navigation
+
+CDE Platform Stage 54 connects the authoritative Apple Mail MBOX, its existing
+contained-message projections, governed Email attachment relationships, and
+independently preserved attachment Published Documents through authenticated
+administrative navigation. It reuses the existing archive-plus-message-index
+identity and the Stage 50 attachment relationship presentation.
+
+The existing archive-message route now resolves MBOX message projections from
+stored metadata without reopening or reparsing the authoritative mailbox.
+Attachment lookup is scoped to the selected message and hydrates only that
+message's attachment documents. Unparsed projections remain visible through
+their structural provenance, while message bodies, BCC, and promotion controls
+are not rendered.
+
+Stage 54 creates no message Published Documents, Canonical Records,
+relationships, schema, migration, or public route. It changes neither MBOX
+preservation nor Stage 53.1 grouping and pagination.
+
+See the [CDE Platform Stage 54 release note](docs/releases/CDE_PLATFORM_STAGE_54_APPLE_MAIL_MAILBOX_RELATIONSHIP_PROJECTION_AND_NAVIGATION.md).
 
 ### CDE Platform Stage 53.1 — Mailbox Attachment Relationship Navigation
 

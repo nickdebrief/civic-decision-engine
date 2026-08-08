@@ -1988,6 +1988,40 @@ def store_email_attachment_document(
     return metadata
 
 
+def _apply_loaded_document_defaults(metadata: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        raise ValueError("document_intake_not_found")
+    metadata.setdefault("document_type", normalized_document_type(metadata))
+    metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
+    metadata.setdefault("content_type", document_media_type(metadata))
+    metadata.setdefault("media_family", document_media_family(metadata))
+    metadata.setdefault(
+        "keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags"))
+    )
+    metadata.setdefault("tags", metadata["keywords"])
+    return metadata
+
+
+def load_pending_document_read_only(
+    intake_id: str, *, root: Path | None = None
+) -> dict[str, Any]:
+    """Load existing intake metadata without assigning identifiers or persisting defaults."""
+
+    if not _SAFE_ID_RE.fullmatch(str(intake_id or "")):
+        raise ValueError("document_intake_not_found")
+    destination_root = (root or intake_root()).resolve(strict=False)
+    metadata_path = destination_root / intake_id / "metadata.json"
+    if not metadata_path.is_file():
+        raise ValueError("document_intake_not_found")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("document_intake_not_found") from exc
+    if str(metadata.get("intake_id") or "") != str(intake_id):
+        raise ValueError("document_intake_not_found")
+    return _apply_loaded_document_defaults(metadata)
+
+
 def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[str, Any]:
     if not _SAFE_ID_RE.fullmatch(str(intake_id or "")):
         raise ValueError("document_intake_not_found")
@@ -1995,13 +2029,9 @@ def load_pending_document(intake_id: str, *, root: Path | None = None) -> dict[s
     metadata_path = destination_root / intake_id / "metadata.json"
     if not metadata_path.is_file():
         raise ValueError("document_intake_not_found")
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    metadata.setdefault("document_type", normalized_document_type(metadata))
-    metadata.setdefault("document_format", document_type_label(metadata["document_type"]))
-    metadata.setdefault("content_type", document_media_type(metadata))
-    metadata.setdefault("media_family", document_media_family(metadata))
-    metadata.setdefault("keywords", normalize_document_keywords(metadata.get("keywords") or metadata.get("tags")))
-    metadata.setdefault("tags", metadata["keywords"])
+    metadata = _apply_loaded_document_defaults(
+        json.loads(metadata_path.read_text(encoding="utf-8"))
+    )
     _ensure_document_identifier(metadata, root=destination_root, persist=True)
     return metadata
 

@@ -11,6 +11,7 @@ from typing import Any
 from api.document_intake import (
     intake_root,
     load_pending_document,
+    load_pending_document_read_only,
     store_email_attachment_document,
 )
 from api.email_documents import (
@@ -706,9 +707,16 @@ def preserve_mbox_message_attachments(
 
 
 def list_source_attachments(
-    source_email_object_id: str, *, root: Path | None = None
+    source_email_object_id: str,
+    *,
+    root: Path | None = None,
+    load_documents: bool = True,
 ) -> list[dict[str, Any]]:
-    conn = _connect(root)
+    """Return one source object's relationships with optional document hydration."""
+
+    conn = _connect(root) if load_documents else _connect_read_only(root)
+    if conn is None:
+        return []
     try:
         rows = conn.execute(
             """
@@ -721,13 +729,8 @@ def list_source_attachments(
     finally:
         conn.close()
     results = [_row(row) for row in rows]
-    for result in results:
-        document_id = result.get("attachment_document_id")
-        if document_id:
-            try:
-                result["attachment_document"] = load_pending_document(document_id, root=root)
-            except ValueError:
-                result["attachment_document"] = None
+    if load_documents:
+        return hydrate_attachment_documents(results, root=root)
     return results
 
 
@@ -808,13 +811,10 @@ def hydrate_attachment_documents(
         if document_id:
             if read_only:
                 try:
-                    if not re.fullmatch(r"[0-9a-f]{64}", str(document_id)):
-                        raise ValueError("document_intake_not_found")
-                    metadata_path = destination_root / str(document_id) / "metadata.json"
-                    result["attachment_document"] = json.loads(
-                        metadata_path.read_text(encoding="utf-8")
+                    result["attachment_document"] = load_pending_document_read_only(
+                        document_id, root=destination_root
                     )
-                except (OSError, ValueError, json.JSONDecodeError):
+                except ValueError:
                     result["attachment_document"] = None
             else:
                 try:
