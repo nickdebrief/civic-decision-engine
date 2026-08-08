@@ -28,6 +28,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 53 | Apple Mail Mailbox (.mbox) Authoritative Mailbox Preservation | email-attachment-preservation | — | 2026-08-08 | `78ac4e14258017eff811376bdb23e00dd13e1689` | [#317](https://github.com/nickdebrief/civic-decision-engine/pull/317) | [Stage 53](CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md) | Implemented · merged · deployed |
 | 53.1 | Mailbox Attachment Relationship Navigation | email-attachment-preservation | 53 | 2026-08-08 | `9970d0aa5b442eeac0a02c3150f63bc84973a197` | [#318](https://github.com/nickdebrief/civic-decision-engine/pull/318) | [Stage 53.1](CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md) | Implemented · merged · deployed |
 | 54 | Apple Mail Mailbox Relationship Projection and Navigation | mailbox-relationship-navigation | — | 2026-08-08 | `74769f4b071a87159f6e1bb44e79f557a0594993` | [#319](https://github.com/nickdebrief/civic-decision-engine/pull/319) | [Stage 54](CDE_PLATFORM_STAGE_54_APPLE_MAIL_MAILBOX_RELATIONSHIP_PROJECTION_AND_NAVIGATION.md) | Implemented · merged · deployed |
+| 55 | Attachment Published Document Source Context and Navigation | attachment-source-context-navigation | — | — | `—` | — | [Stage 55](CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

@@ -735,7 +735,11 @@ def list_source_attachments(
 
 
 def list_attachment_sources(
-    attachment_document_id: str, *, root: Path | None = None
+    attachment_document_id: str,
+    *,
+    root: Path | None = None,
+    load_documents: bool = True,
+    read_only: bool = False,
 ) -> list[dict[str, Any]]:
     conn = _connect(root)
     try:
@@ -750,12 +754,18 @@ def list_attachment_sources(
     finally:
         conn.close()
     results = [_row(row) for row in rows]
-    for result in results:
-        source_id = result.get("source_email_document_id")
-        try:
-            result["source_document"] = load_pending_document(source_id, root=root)
-        except ValueError:
-            result["source_document"] = None
+    if load_documents:
+        for result in results:
+            source_id = result.get("source_email_document_id")
+            try:
+                if read_only:
+                    result["source_document"] = load_pending_document_read_only(
+                        source_id, root=root
+                    )
+                else:
+                    result["source_document"] = load_pending_document(source_id, root=root)
+            except ValueError:
+                result["source_document"] = None
     return results
 
 

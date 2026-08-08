@@ -47168,7 +47168,9 @@ def _render_document_intake_preview(
     is_attachment_document = item.get("document_type") == "email_attachment"
     if is_attachment_document:
         relationships = list_email_attachment_sources(
-            str(item.get("intake_id") or ""), root=intake_root()
+            str(item.get("intake_id") or ""),
+            root=intake_root(),
+            read_only=True,
         )
     elif is_mailbox_document(item):
         # mbox containers use per-message source_email_object_id values, so the
@@ -47185,32 +47187,9 @@ def _render_document_intake_preview(
         )
     if relationships:
         if is_attachment_document:
-            # Attachment-document admin pages retain their pre-Stage-50 source
-            # relationship presentation. Stage 50 navigation applies only to the
-            # source-email direction, where the attachment Published Document is
-            # the related object and is eagerly loaded by list_source_attachments.
-            source_rows: list[str] = []
-            for relationship in relationships:
-                inspect_link = f'<a href="/api/admin/session/email-attachment-relationships/{escape(str(relationship.get("relationship_id") or ""))}">Inspect metadata</a>'
-                projection_href = _mailbox_message_projection_href(relationship)
-                projection_link = (
-                    f' · <a href="{escape(projection_href)}">Open message projection</a>'
-                    if projection_href
-                    else ""
-                )
-                source_rows.append(
-                    "<tr>"
-                    f"<td>{escape(str(relationship.get('relationship_id') or ''))}</td>"
-                    f"<td>{escape(str(relationship.get('relationship_type') or ''))}</td>"
-                    f"<td>{escape(str(relationship.get('attachment_index') or ''))}</td>"
-                    f"<td>{escape(str(relationship.get('display_title') or ''))}</td>"
-                    f"<td>{escape(str(relationship.get('extraction_status') or ''))}</td>"
-                    f"<td>{escape(str(relationship.get('attachment_document_id') or 'Not created'))}</td>"
-                    f"<td>{inspect_link}{projection_link}</td>"
-                    "</tr>"
-                )
-            relationship_rows = "".join(source_rows)
-            header = "<tr><th>Relationship</th><th>Type</th><th>Index</th><th>Attachment</th><th>Status</th><th>Attachment document</th><th>Action</th></tr>"
+            # Stage 55: render source-context cards instead of the pre-Stage-50
+            # raw relationship table. Source documents are hydrated read-only.
+            attachment_relationships = _render_admin_attachment_source_context(relationships)
         elif is_mailbox_document(item):
             attachment_relationships = _render_admin_mailbox_attachment_relationship_navigation(
                 item,
@@ -47228,7 +47207,7 @@ def _render_document_intake_preview(
             attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table></div></section>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.mailbox-attachment-summary{{padding:12px 14px;border:1px solid #d8d4ca;background:#faf9f5;margin:16px 0}}.mailbox-attachment-summary p{{margin:0}}.mailbox-attachment-group{{border:1px solid #d8d4ca;background:#fff;margin:12px 0}}.mailbox-attachment-group>summary{{display:grid;gap:4px;padding:12px 14px;background:#f3f1eb;cursor:pointer}}.mailbox-attachment-group>summary:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-group .summary-title{{font-weight:700;color:#143a52}}.mailbox-attachment-group .summary-subject{{font-weight:650;overflow-wrap:anywhere}}.mailbox-attachment-group .summary-meta{{color:#555;font-size:.88rem;overflow-wrap:anywhere}}.mailbox-attachment-group-body{{padding:12px}}.mailbox-attachment-group-note{{margin:0 0 12px;color:#555}}.mailbox-attachment-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}.mailbox-attachment-group>summary{{padding:11px}}.mailbox-attachment-group-body{{padding:8px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.mailbox-attachment-summary{{padding:12px 14px;border:1px solid #d8d4ca;background:#faf9f5;margin:16px 0}}.mailbox-attachment-summary p{{margin:0}}.mailbox-attachment-group{{border:1px solid #d8d4ca;background:#fff;margin:12px 0}}.mailbox-attachment-group>summary{{display:grid;gap:4px;padding:12px 14px;background:#f3f1eb;cursor:pointer}}.mailbox-attachment-group>summary:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-group .summary-title{{font-weight:700;color:#143a52}}.mailbox-attachment-group .summary-subject{{font-weight:650;overflow-wrap:anywhere}}.mailbox-attachment-group .summary-meta{{color:#555;font-size:.88rem;overflow-wrap:anywhere}}.mailbox-attachment-group-body{{padding:12px}}.mailbox-attachment-group-note{{margin:0 0 12px;color:#555}}.mailbox-attachment-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}}.source-context-list{{display:grid;gap:14px;margin:14px 0}}.source-context-card{{border:1px solid #d8d4ca;background:#fff;padding:14px}}.source-context-card__type{{margin:0 0 8px;color:#143a52;font-weight:700}}.source-context-card__metadata{{display:grid;grid-template-columns:minmax(140px,max-content) minmax(0,1fr);gap:4px 12px;margin:0}}.source-context-card__metadata dt{{font-weight:650;color:#555}}.source-context-card__metadata dd{{margin:0;overflow-wrap:anywhere}}.source-context-card__actions{{margin:10px 0 0}}.source-context-card__actions a{{color:#245d61}}@media(max-width:560px){{.source-context-card__metadata{{grid-template-columns:1fr}}}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}.mailbox-attachment-group>summary{{padding:11px}}.mailbox-attachment-group-body{{padding:8px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
 {image_preview}{audio_notice}{email_notice}{attachment_relationships}
 {canonical_record_section}
@@ -48893,6 +48872,175 @@ def _mailbox_message_projection_href(relationship: dict[str, Any]) -> str | None
     if message_index is None:
         return None
     return f"/admin/archive/{archive_id}/messages/{message_index}"
+
+
+def _projected_message_projection_href(relationship: dict[str, Any]) -> str | None:
+    """Build an admin message-projection link for a projected_message source.
+
+    Reuses the same ``{archive_id}:message:{projection_id}`` format as the
+    Outlook/Gmail/IMAP archive message-projection route. Does NOT apply the
+    MBOX numeric validation — ``projection_id`` may be a non-integer string.
+    Returns ``None`` if the format does not match safely.
+    """
+
+    if relationship.get("source_email_kind") != "projected_message":
+        return None
+    archive_id = str(relationship.get("source_email_document_id") or "")
+    source_object_id = str(relationship.get("source_email_object_id") or "")
+    prefix = f"{archive_id}:message:"
+    if not archive_id or not source_object_id.startswith(prefix):
+        return None
+    projection_id = source_object_id[len(prefix) :]
+    if not projection_id or "/" in projection_id or " " in projection_id:
+        return None
+    return f"/admin/archive/{archive_id}/messages/{projection_id}"
+
+
+_SOURCE_PATHWAY_LABELS = {
+    "rfc5322_eml": "RFC 5322 EML",
+    "outlook_msg": "Outlook MSG",
+    "apple_emlx": "Apple Mail EMLX",
+    "mbox_message": "MBOX contained message",
+}
+
+
+def _source_context_type_label(relationship: dict[str, Any]) -> str:
+    """Derive a human-readable source type label from verified provenance."""
+
+    kind = str(relationship.get("source_email_kind") or "")
+    pathway = str(relationship.get("source_pathway") or "")
+    if pathway in _SOURCE_PATHWAY_LABELS:
+        return _SOURCE_PATHWAY_LABELS[pathway]
+    if kind == "projected_message":
+        return "Archive projected message"
+    if kind == "published_document":
+        return "Published Document"
+    return kind or pathway or "Unknown source"
+
+
+def _render_admin_attachment_source_context_card(relationship: dict[str, Any]) -> str:
+    """Render one source-context card for an attachment Published Document.
+
+    Stage 55 admin-only presentation. Surfaces verified source provenance from
+    the governed relationship and provides navigation derived strictly from
+    exact governed identifiers (never heuristics).
+    """
+
+    relationship_id = str(relationship.get("relationship_id") or "")
+    relationship_type = str(relationship.get("relationship_type") or "")
+    source_kind = str(relationship.get("source_email_kind") or "")
+    source_pathway = str(relationship.get("source_pathway") or "")
+    source_doc_id = str(relationship.get("source_email_document_id") or "")
+    archive_id = str(relationship.get("source_archive_identifier") or "")
+    attachment_index = str(relationship.get("attachment_index") or "")
+    extraction_status = str(relationship.get("extraction_status") or "")
+    source_document = relationship.get("source_document")
+    source_type_label = _source_context_type_label(relationship)
+
+    # Source document identifier (from eagerly-loaded source_document)
+    source_doc_identifier = "Source unavailable"
+    source_title = ""
+    message_index_label = ""
+    if isinstance(source_document, dict) and source_document:
+        source_doc_identifier = str(
+            source_document.get("document_identifier") or "Identifier not assigned"
+        )
+        email_meta = source_document.get("email_metadata") or {}
+        source_title = str(
+            email_meta.get("subject_decoded") or source_document.get("title") or ""
+        )
+        # For mailbox_message, extract contained message subject from the projection
+        if source_kind == "mailbox_message" and archive_id:
+            msg_index = _mailbox_attachment_message_index(
+                archive_id, relationship.get("source_email_object_id")
+            )
+            if msg_index is not None:
+                message_index_label = str(msg_index)
+                for msg in email_meta.get("messages") or []:
+                    if isinstance(msg, dict) and int(msg.get("message_index") or 0) == msg_index:
+                        source_title = str(
+                            msg.get("subject_decoded") or source_title
+                        )
+                        break
+
+    # Navigation actions — derived ONLY from exact governed identifiers
+    actions: list[str] = []
+    # Inspect relationship metadata (always available)
+    actions.append(
+        f'<a href="/api/admin/session/email-attachment-relationships/{escape(relationship_id)}">Inspect relationship</a>'
+    )
+    # Standalone published_document source → link to source document admin page
+    if source_kind == "published_document" and source_doc_id:
+        actions.append(
+            f'<a href="/admin/document-intake/{escape(source_doc_id)}">Open source document</a>'
+        )
+    # mailbox_message → reuse Stage 54 message projection link + authoritative mailbox
+    projection_href = _mailbox_message_projection_href(relationship)
+    if projection_href:
+        actions.append(f'<a href="{escape(projection_href)}">Open message projection</a>')
+    if source_kind == "mailbox_message" and archive_id:
+        actions.append(
+            f'<a href="/admin/document-intake/{escape(archive_id)}">Open authoritative mailbox</a>'
+        )
+    # projected_message (Gmail/IMAP/PST/OST) → reuse archive message projection route
+    projected_href = _projected_message_projection_href(relationship)
+    if projected_href:
+        actions.append(f'<a href="{escape(projected_href)}">Open message projection</a>')
+    if source_kind == "projected_message" and source_doc_id:
+        actions.append(
+            f'<a href="/admin/document-intake/{escape(source_doc_id)}">Open source archive</a>'
+        )
+
+    # Metadata rows (compact, verified provenance only)
+    metadata_items: list[tuple[str, str]] = [
+        ("Relationship type", relationship_type),
+        ("Source type", source_type_label),
+        ("Source pathway", source_pathway),
+        ("Source document", source_doc_identifier),
+        ("Attachment index", attachment_index),
+        ("Extraction status", extraction_status),
+    ]
+    if message_index_label:
+        metadata_items.append(("Contained message index", message_index_label))
+    if source_title:
+        metadata_items.append(("Message subject", source_title))
+    source_message_id = str(relationship.get("source_message_identifier") or "")
+    if source_message_id:
+        metadata_items.append(("Message-ID (provenance)", source_message_id))
+    metadata_items.append(("Relationship ID", relationship_id))
+
+    metadata_rows = "".join(
+        f"<dt>{escape(label)}</dt><dd>{escape(value)}</dd>"
+        for label, value in metadata_items
+        if value not in ("", None)
+    )
+    actions_html = " · ".join(actions)
+
+    return (
+        '<div class="source-context-card">'
+        f"<p class=\"source-context-card__type\">{escape(source_type_label)}</p>"
+        f'<dl class="source-context-card__metadata">{metadata_rows}</dl>'
+        f'<p class="source-context-card__actions">{actions_html}</p>'
+        "</div>"
+    )
+
+
+def _render_admin_attachment_source_context(relationships: list[dict[str, Any]]) -> str:
+    """Render the Stage 55 Source Context section for an attachment document."""
+
+    cards = "".join(
+        _render_admin_attachment_source_context_card(relationship)
+        for relationship in relationships
+    )
+    return (
+        '<section id="source-context" aria-labelledby="source-context-heading">'
+        "<h2>Source Context</h2>"
+        '<p class="notice">This attachment Published Document is independently preserved. '
+        "The governed Email attachment relationship below records where this occurrence came from. "
+        "The relationship and the document are conceptually distinct.</p>"
+        f'<div class="source-context-list">{cards}</div>'
+        "</section>"
+    )
 
 
 def _mailbox_attachment_relationship_groups(
