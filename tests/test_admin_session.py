@@ -11,6 +11,7 @@ import sys
 import tempfile
 import types
 import unittest
+from html import unescape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,6 +97,36 @@ class FakeRedirectResponse(FakeResponse):
         merged_headers["Location"] = url
         super().__init__(content=None, status_code=status_code, headers=merged_headers, **kwargs)
         self.url = url
+
+
+def lifecycle_confirmation_token(response) -> str:
+    match = re.search(
+        r'name="confirmation_token" value="([^"]+)"', str(response.content or "")
+    )
+    if not match:
+        raise AssertionError("lifecycle confirmation token not rendered")
+    return unescape(match.group(1))
+
+
+def confirm_document_intake_transition(
+    admin_session_module,
+    intake_id: str,
+    request,
+    *,
+    new_status: str,
+    admin_note: str | None = None,
+):
+    preview = admin_session_module.admin_document_intake_status_update(
+        intake_id,
+        request,
+        new_status=new_status,
+        admin_note=admin_note,
+    )
+    return admin_session_module.admin_document_intake_status_confirm(
+        intake_id,
+        request,
+        confirmation_token=lifecycle_confirmation_token(preview),
+    )
 
 
 def install_fastapi_stubs():

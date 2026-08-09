@@ -2113,6 +2113,80 @@ def list_pending_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
     ]
 
 
+def _prepare_loaded_intake_status_transition(
+    metadata: dict[str, Any],
+    new_status: str,
+    *,
+    actor: str,
+    actor_role: str,
+    note: str | None,
+    root: Path | None,
+) -> dict[str, Any]:
+    current_status = metadata.get("status")
+    normalized_status = str(new_status or "").strip().lower()
+    normalized_actor = str(actor or "").strip() or "admin"
+    normalized_role = str(actor_role or "").strip() or "unavailable"
+    rationale = str(note or "").strip() or None
+    if current_status not in INTAKE_STATUSES:
+        raise ValueError("document_intake_status_invalid")
+    if normalized_status not in INTAKE_STATUSES:
+        raise ValueError("document_intake_status_invalid")
+    if normalized_status not in VALID_STATUS_TRANSITIONS[current_status]:
+        raise ValueError("document_intake_transition_invalid")
+    if rationale is not None and len(rationale) > 500:
+        raise ValueError("document_intake_rationale_too_long")
+    if normalized_status in {"approved", "published", "rejected", "archived"} and not rationale:
+        raise ValueError("document_intake_rationale_required")
+
+    sha256_hash = str(metadata.get("sha256_hash") or "").strip().lower() or None
+    sha512_hash = str(metadata.get("sha512_hash") or "").strip().lower() or None
+    if normalized_status in {"approved", "published"} and not sha256_hash:
+        raise ValueError("document_intake_decision_hash_required")
+    authoritative_identifier = _registered_document_identifier_read_only(
+        str(metadata.get("intake_id") or ""), root=root
+    )
+    if authoritative_identifier:
+        metadata["document_identifier"] = authoritative_identifier
+    else:
+        authoritative_identifier = (
+            str(metadata.get("document_identifier") or "").strip() or None
+        )
+    return {
+        "metadata": metadata,
+        "intake_id": str(metadata.get("intake_id") or ""),
+        "document_identifier": authoritative_identifier,
+        "previous_status": str(current_status),
+        "new_status": normalized_status,
+        "actor": normalized_actor,
+        "actor_role": normalized_role,
+        "rationale": rationale,
+        "sha256_hash": sha256_hash,
+        "sha512_hash": sha512_hash,
+    }
+
+
+def prepare_intake_status_transition(
+    intake_id: str,
+    new_status: str,
+    *,
+    actor: str = "admin",
+    actor_role: str = "unavailable",
+    note: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Validate and capture a proposed lifecycle decision without writing it."""
+
+    metadata = load_pending_document_read_only(intake_id, root=root)
+    return _prepare_loaded_intake_status_transition(
+        metadata,
+        new_status,
+        actor=actor,
+        actor_role=actor_role,
+        note=note,
+        root=root,
+    )
+
+
 def update_intake_status(
     intake_id: str,
     new_status: str,
@@ -2171,12 +2245,15 @@ def update_intake_status(
         ):
             return metadata
         raise ValueError("document_intake_transition_invalid")
-    if normalized_status not in VALID_STATUS_TRANSITIONS[current_status]:
-        raise ValueError("document_intake_transition_invalid")
-    if rationale is not None and len(rationale) > 500:
-        raise ValueError("document_intake_rationale_too_long")
-    if normalized_status in {"approved", "published", "rejected", "archived"} and not rationale:
-        raise ValueError("document_intake_rationale_required")
+    prepared = _prepare_loaded_intake_status_transition(
+        metadata,
+        normalized_status,
+        actor=normalized_actor,
+        actor_role=normalized_role,
+        note=rationale,
+        root=root,
+    )
+    metadata = prepared["metadata"]
 
     history = list(metadata.get("status_history") or [])
     if not history:
@@ -2189,19 +2266,9 @@ def update_intake_status(
                 "note": "Existing intake state recorded.",
             }
         )
-    sha256_hash = str(metadata.get("sha256_hash") or "").strip().lower() or None
-    sha512_hash = str(metadata.get("sha512_hash") or "").strip().lower() or None
-    if normalized_status in {"approved", "published"} and not sha256_hash:
-        raise ValueError("document_intake_decision_hash_required")
-    authoritative_identifier = _registered_document_identifier_read_only(
-        str(metadata.get("intake_id") or intake_id), root=root
-    )
-    if authoritative_identifier:
-        metadata["document_identifier"] = authoritative_identifier
-    else:
-        authoritative_identifier = (
-            str(metadata.get("document_identifier") or "").strip() or None
-        )
+    sha256_hash = prepared["sha256_hash"]
+    sha512_hash = prepared["sha512_hash"]
+    authoritative_identifier = prepared["document_identifier"]
     applied_keys = {
         str(event.get("lifecycle_decision_key") or "").strip()
         for event in history

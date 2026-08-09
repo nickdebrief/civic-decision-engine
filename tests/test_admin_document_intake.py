@@ -17,7 +17,12 @@ from api.document_intake import (
     load_pending_document,
     store_pending_document,
 )
-from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import (
+    FakeHTTPException,
+    FakeRequest,
+    confirm_document_intake_transition,
+    install_fastapi_stubs,
+)
 
 install_fastapi_stubs()
 
@@ -97,7 +102,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
 
     def transition(self, new_status, note=None, request=None):
         intake_id = hashlib.sha256(PDF_BYTES).hexdigest()
-        return admin_session.admin_document_intake_status_update(
+        return confirm_document_intake_transition(
+            admin_session,
             intake_id,
             request or self.request,
             new_status=new_status,
@@ -463,7 +469,8 @@ class AdminDocumentIntakeTests(unittest.TestCase):
             ("approved", "Image approved."),
             ("published", "Image published."),
         ):
-            response = admin_session.admin_document_intake_status_update(
+            response = confirm_document_intake_transition(
+                admin_session,
                 intake_id,
                 self.request,
                 new_status=status,

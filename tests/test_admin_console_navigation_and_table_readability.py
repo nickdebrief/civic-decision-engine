@@ -6,7 +6,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from api.document_intake import load_pending_document, store_pending_document
-from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import (
+    FakeHTTPException,
+    FakeRequest,
+    confirm_document_intake_transition,
+    install_fastapi_stubs,
+)
 
 install_fastapi_stubs()
 
@@ -73,6 +78,15 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
             root=self.root,
         )
 
+    def _transition(self, intake_id, status, note):
+        return confirm_document_intake_transition(
+            admin_session,
+            intake_id,
+            self.request,
+            new_status=status,
+            admin_note=note,
+        )
+
     def _archive_source(self, *, data=CORRECTION_BYTES):
         item = self._store_document(
             title="Source intake with mismatched metadata",
@@ -83,12 +97,7 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
             ("approved", "Approve before correction."),
             ("archived", "Archived for governed correction."),
         ):
-            admin_session.admin_document_intake_status_update(
-                item["intake_id"],
-                self.request,
-                new_status=status,
-                admin_note=note,
-            )
+            self._transition(item["intake_id"], status, note)
         return load_pending_document(item["intake_id"], root=self.root)
 
     def _create_correction(self, *, data=CORRECTION_BYTES):
@@ -224,11 +233,10 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
 
     def test_document_status_history_has_responsive_column_hooks(self):
         item = self._store_document()
-        admin_session.admin_document_intake_status_update(
+        self._transition(
             item["intake_id"],
-            self.request,
-            new_status="under_review",
-            admin_note="Begin review with a long note that should remain fully visible.",
+            "under_review",
+            "Begin review with a long note that should remain fully visible.",
         )
         content = admin_session.admin_document_intake_preview_page(
             item["intake_id"], self.request
@@ -305,12 +313,7 @@ class AdminConsoleNavigationAndTableReadabilityTests(unittest.TestCase):
 
     def test_administrative_audit_keeps_existing_events_with_shared_hooks(self):
         item = self._store_document()
-        admin_session.admin_document_intake_status_update(
-            item["intake_id"],
-            self.request,
-            new_status="under_review",
-            admin_note="Audit table note.",
-        )
+        self._transition(item["intake_id"], "under_review", "Audit table note.")
         content = admin_session.admin_audit_page(self.request).content
         self.assertIn('aria-label="Administrative Audit table"', content)
         self.assertIn('class="audit-table-wrapper"', content)

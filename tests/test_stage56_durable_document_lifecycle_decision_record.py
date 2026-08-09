@@ -15,7 +15,12 @@ from api.document_intake import (
     update_intake_status,
 )
 from api.email_attachment_preservation import list_source_attachments
-from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import (
+    FakeHTTPException,
+    FakeRequest,
+    install_fastapi_stubs,
+    lifecycle_confirmation_token,
+)
 
 install_fastapi_stubs()
 
@@ -255,11 +260,17 @@ class Stage56DurableLifecycleDecisionRecordTests(unittest.TestCase):
         self.assertEqual(self._events()[0]["sha512_hash"], hashlib.sha512(PDF_BYTES).hexdigest())
 
     def test_session_route_uses_verified_actor_and_role_and_rejects_spoof_parameters(self):
-        response = admin_session.admin_document_intake_status_update(
+        preview = admin_session.admin_document_intake_status_update(
             self.item["intake_id"],
             self.request,
             new_status="under_review",
             admin_note="Session-governed review.",
+        )
+        self.assertEqual(self._events(), [])
+        response = admin_session.admin_document_intake_status_confirm(
+            self.item["intake_id"],
+            self.request,
+            confirmation_token=lifecycle_confirmation_token(preview),
         )
         self.assertEqual(response.status_code, 200)
         event = self._events()[0]
