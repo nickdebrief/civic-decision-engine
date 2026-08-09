@@ -59,7 +59,7 @@ from api.attachments import (
 from api import archive_collection_memberships as acm
 from api import archive_collections as ac
 from api import document_intake_corrections as dic
-from api.document_lifecycle_events import list_lifecycle_decisions
+from api.document_lifecycle_events import lifecycle_decision_by_key, list_lifecycle_decisions
 from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.canonical_record_types import (
@@ -95,6 +95,7 @@ from api.document_intake import (
     load_published_document,
     load_pending_document,
     load_pending_document_read_only,
+    prepare_intake_status_transition,
     store_streaming_mbox_pending_document,
     store_pending_document,
     streaming_mbox_chunk_bytes,
@@ -265,6 +266,8 @@ APPLE_MAIL_MBOX_UPLOAD_NOTE = (
 STREAMING_MBOX_FILE_ACCEPT = ".mbox,application/mbox,text/mbox,application/octet-stream"
 SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
+LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS = 600
+LIFECYCLE_CONFIRMATION_PURPOSE = "document_lifecycle_decision_confirmation"
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
 DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 PDF_CONTENT_TYPE = "application/pdf"
@@ -421,6 +424,116 @@ def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]
         raise _http_error(401, "admin_session_unauthorized")
 
     return payload
+
+
+def _create_lifecycle_confirmation_token(
+    prepared: Mapping[str, Any], *, now: int | None = None
+) -> str:
+    secret = _session_secret()
+    if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    issued_at = int(now if now is not None else time.time())
+    payload = {
+        "purpose": LIFECYCLE_CONFIRMATION_PURPOSE,
+        "version": 1,
+        "intake_id": str(prepared.get("intake_id") or ""),
+        "document_identifier": prepared.get("document_identifier"),
+        "previous_status": str(prepared.get("previous_status") or ""),
+        "new_status": str(prepared.get("new_status") or ""),
+        "actor": str(prepared.get("actor") or ""),
+        "actor_role": str(prepared.get("actor_role") or ""),
+        "rationale": prepared.get("rationale"),
+        "sha256_hash": prepared.get("sha256_hash"),
+        "sha512_hash": prepared.get("sha512_hash"),
+        "issued_at": issued_at,
+        "expires_at": issued_at + LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS,
+    }
+    payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    payload_b64 = _b64encode(payload_json.encode("utf-8"))
+    return f"{payload_b64}.{_sign(payload_b64, secret)}"
+
+
+def _verify_lifecycle_confirmation_token(
+    token: str, *, now: int | None = None
+) -> dict[str, Any]:
+    secret = _session_secret()
+    if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    try:
+        payload_b64, signature = str(token or "").split(".", 1)
+    except ValueError as exc:
+        raise ValueError("lifecycle_confirmation_invalid") from exc
+    if not hmac.compare_digest(_sign(payload_b64, secret), signature):
+        raise ValueError("lifecycle_confirmation_invalid")
+    try:
+        payload = json.loads(_b64decode(payload_b64).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("lifecycle_confirmation_invalid") from exc
+    allowed_keys = {
+        "purpose",
+        "version",
+        "intake_id",
+        "document_identifier",
+        "previous_status",
+        "new_status",
+        "actor",
+        "actor_role",
+        "rationale",
+        "sha256_hash",
+        "sha512_hash",
+        "issued_at",
+        "expires_at",
+    }
+    optional_text = {
+        "document_identifier",
+        "rationale",
+        "sha256_hash",
+        "sha512_hash",
+    }
+    required_text = {
+        "intake_id",
+        "previous_status",
+        "new_status",
+        "actor",
+        "actor_role",
+    }
+    if not isinstance(payload, dict) or set(payload) != allowed_keys:
+        raise ValueError("lifecycle_confirmation_invalid")
+    if payload.get("purpose") != LIFECYCLE_CONFIRMATION_PURPOSE or payload.get("version") != 1:
+        raise ValueError("lifecycle_confirmation_invalid")
+    if any(not isinstance(payload.get(key), str) or not payload.get(key) for key in required_text):
+        raise ValueError("lifecycle_confirmation_invalid")
+    if any(payload.get(key) is not None and not isinstance(payload.get(key), str) for key in optional_text):
+        raise ValueError("lifecycle_confirmation_invalid")
+    issued_at = payload.get("issued_at")
+    expires_at = payload.get("expires_at")
+    if not isinstance(issued_at, int) or not isinstance(expires_at, int):
+        raise ValueError("lifecycle_confirmation_invalid")
+    if expires_at - issued_at != LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS:
+        raise ValueError("lifecycle_confirmation_invalid")
+    current_time = int(now if now is not None else time.time())
+    if issued_at > current_time + 60 or expires_at <= current_time:
+        raise ValueError("lifecycle_confirmation_expired")
+    return payload
+
+
+def _lifecycle_confirmation_matches(
+    payload: Mapping[str, Any], prepared: Mapping[str, Any]
+) -> bool:
+    return all(
+        payload.get(key) == prepared.get(key)
+        for key in (
+            "intake_id",
+            "document_identifier",
+            "previous_status",
+            "new_status",
+            "actor",
+            "actor_role",
+            "rationale",
+            "sha256_hash",
+            "sha512_hash",
+        )
+    )
 
 
 def _format_intake_size_limit(value: int) -> str:
@@ -47162,6 +47275,51 @@ Document intake ID: {escape(str(item.get('intake_id') or ''))}
 Document SHA-256 is preserved on the document and is not reused as the record verification hash.</textarea></label><label><input type="checkbox" name="create_association" value="1"> Create association to source document</label><label>Association public label<input name="association_public_label" value="{escape(default_public_label)}"></label><label>Association public note<textarea name="association_public_note">{escape(default_public_note)}</textarea></label><button type="submit">Create canonical record</button></form></main></body></html>"""
 
 
+LIFECYCLE_CONFIRMATION_ACTION_LABELS = {
+    "under_review": "Confirm Under Review",
+    "approved": "Confirm Approval",
+    "published": "Confirm Publication",
+    "rejected": "Confirm Rejection",
+    "archived": "Confirm Archival",
+}
+
+
+def _render_lifecycle_decision_confirmation(
+    prepared: Mapping[str, Any],
+    confirmation_token: str,
+    *,
+    admin_session: dict[str, Any],
+) -> str:
+    item = prepared["metadata"]
+    intake_id = str(prepared.get("intake_id") or "")
+    new_status = str(prepared.get("new_status") or "")
+    previous_status = str(prepared.get("previous_status") or "")
+    rationale = prepared.get("rationale")
+    document_name = str(item.get("title") or item.get("original_filename") or "Untitled document")
+    rows = "".join(
+        f"<tr><th scope=\"row\">{escape(label)}</th><td>{value}</td></tr>"
+        for label, value in (
+            ("Document Identifier", escape(str(prepared.get("document_identifier") or "Not assigned"))),
+            ("Document", escape(document_name)),
+            ("Filename", escape(str(item.get("original_filename") or "Not available"))),
+            ("Current state", escape(STATUS_LABELS.get(previous_status, previous_status))),
+            ("Proposed state", f'<strong class="proposed-state proposed-state--{escape(new_status)}">{escape(STATUS_LABELS.get(new_status, new_status))}</strong>'),
+            ("Actor", escape(str(prepared.get("actor") or ""))),
+            ("Actor role", escape(str(prepared.get("actor_role") or "Unavailable"))),
+            ("Rationale", f'<div class="decision-rationale">{escape(str(rationale)) if rationale is not None else "Not provided"}</div>'),
+            ("Recorded SHA-256", f'<code>{escape(str(prepared.get("sha256_hash") or "Not available"))}</code>'),
+        )
+    )
+    confirm_label = LIFECYCLE_CONFIRMATION_ACTION_LABELS.get(
+        new_status, f"Confirm {STATUS_LABELS.get(new_status, new_status)}"
+    )
+    consequence_class = " destructive" if new_status in {"rejected", "archived"} else ""
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Review Proposed Lifecycle Decision</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(840px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.decision-notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:18px 0}}th,td{{padding:11px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:210px;background:#faf9f5;color:#555}}.proposed-state{{font-size:1.05rem}}.proposed-state--approved,.proposed-state--published{{color:#176b65}}.proposed-state--rejected,.proposed-state--archived{{color:#9b2c2c}}.decision-rationale{{white-space:pre-wrap}}.confirmation-actions{{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:16px;border:1px solid #d8d4ca;background:#fff}}.button-link,button{{display:inline-flex;align-items:center;min-height:42px;padding:10px 14px;border:1px solid #245d61;font:700 1rem system-ui,sans-serif;text-decoration:none;cursor:pointer}}.button-link{{background:#fff;color:#245d61}}button{{background:#176b65;color:#fff}}button.destructive{{background:#9b2c2c;border-color:#9b2c2c}}button:focus-visible,.button-link:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}@media(max-width:560px){{th,td{{display:block;width:100%}}th{{border-bottom:0}}.confirmation-actions{{align-items:stretch}}.button-link,button{{justify-content:center;width:100%}}}}</style></head>
+<body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Proposed lifecycle decision</h1><p class="decision-notice"><strong>Review the lifecycle consequence before committing.</strong> Confirmation will create a durable lifecycle decision record. Durable lifecycle decision records cannot be edited or deleted through the normal application workflow.</p><table><tbody>{rows}</tbody></table><form class="confirmation-actions" method="post" action="/api/admin/session/document-intake/{escape(intake_id)}/status/confirm"><input type="hidden" name="confirmation_token" value="{escape(confirmation_token)}"><a class="button-link" href="/admin/document-intake/{escape(intake_id)}">Cancel</a><button class="confirm-lifecycle-action{consequence_class}" type="submit">{escape(confirm_label)}</button></form></main></body></html>"""
+
+
 def _render_document_intake_preview(
     item: dict[str, Any],
     *,
@@ -47251,10 +47409,10 @@ def _render_document_intake_preview(
         "archived": (),
     }.get(item["status"], ())
     action_forms = "".join(
-        f"""<form method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/status">
+        f"""<form class="lifecycle-action lifecycle-action--{escape(status)}" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/status">
           <input type="hidden" name="new_status" value="{escape(status)}">
           <label>Transition note <input name="admin_note" maxlength="500"{' required' if status in {'approved', 'published', 'rejected', 'archived'} else ''}><span class="field-help">{'Required governance rationale. If this document is Published, this rationale may appear in the public Publication Pathway.' if status in {'approved', 'published', 'rejected', 'archived'} else 'Optional review context. Lifecycle notes may appear in the public Publication Pathway after publication.'}</span></label>
-          <button type="submit">{escape(label)}</button>
+          <button type="submit">Review {escape(label)}</button>
         </form>"""
         for status, label in transitions
     ) or "<p>No further lifecycle actions are available from this state.</p>"
@@ -47393,7 +47551,7 @@ def _render_document_intake_preview(
             attachment_relationships = f'<section><h2>Governed Email Attachment Relationships</h2><p class="notice">Each relationship records transmission context between independent preserved objects. No Canonical Record or semantic evidential classification is created automatically.</p><div class="admin-table-scroll"><table class="admin-data-table"><thead>{header}</thead><tbody>{relationship_rows}</tbody></table></div></section>'
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Pending Document Preview</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.mailbox-attachment-summary{{padding:12px 14px;border:1px solid #d8d4ca;background:#faf9f5;margin:16px 0}}.mailbox-attachment-summary p{{margin:0}}.mailbox-attachment-group{{border:1px solid #d8d4ca;background:#fff;margin:12px 0}}.mailbox-attachment-group>summary{{display:grid;gap:4px;padding:12px 14px;background:#f3f1eb;cursor:pointer}}.mailbox-attachment-group>summary:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-group .summary-title{{font-weight:700;color:#143a52}}.mailbox-attachment-group .summary-subject{{font-weight:650;overflow-wrap:anywhere}}.mailbox-attachment-group .summary-meta{{color:#555;font-size:.88rem;overflow-wrap:anywhere}}.mailbox-attachment-group-body{{padding:12px}}.mailbox-attachment-group-note{{margin:0 0 12px;color:#555}}.mailbox-attachment-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}}.source-context-list{{display:grid;gap:14px;margin:14px 0}}.source-context-card{{border:1px solid #d8d4ca;background:#fff;padding:14px}}.source-context-card__type{{margin:0 0 8px;color:#143a52;font-weight:700}}.source-context-card__metadata{{display:grid;grid-template-columns:minmax(140px,max-content) minmax(0,1fr);gap:4px 12px;margin:0}}.source-context-card__metadata dt{{font-weight:650;color:#555}}.source-context-card__metadata dd{{margin:0;overflow-wrap:anywhere}}.source-context-card__actions{{margin:10px 0 0}}.source-context-card__actions a{{color:#245d61}}@media(max-width:560px){{.source-context-card__metadata{{grid-template-columns:1fr}}}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}.mailbox-attachment-group>summary{{padding:11px}}.mailbox-attachment-group-body{{padding:8px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:210px;background:#faf9f5;color:#555}}.admin-image-preview-wrap{{background:#fff;border:1px solid #e1dfd8;padding:12px;margin:12px 0 18px}}.admin-document-image-preview{{display:block;max-width:100%;width:auto;height:auto}}.status-history-wrapper{{overflow-x:auto}}.status-history{{table-layout:auto;min-width:820px}}.history-timestamp{{min-width:180px;white-space:nowrap}}.history-status{{min-width:145px;overflow-wrap:normal}}.status-history-actor,.history-actor{{min-width:120px;width:120px;overflow-wrap:break-word;word-break:normal}}.status-history-note,.history-note{{width:100%;min-width:240px}}.status{{display:inline-block;padding:3px 7px;border:1px solid currentColor;font-weight:700;text-transform:uppercase}}.actions{{display:flex;flex-wrap:wrap;gap:12px}}.actions form,.notes-form{{display:grid;gap:8px;padding:12px;border:1px solid #d8d4ca;background:#fff}}.lifecycle-action--approved button{{background:#176b65}}.lifecycle-action--rejected button,.lifecycle-action--archived button{{background:#9b2c2c}}input,textarea{{padding:8px;border:1px solid #c9c6bd;font:inherit}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-summary{{padding:12px 14px;border:1px solid #d8d4ca;background:#faf9f5;margin:16px 0}}.mailbox-attachment-summary p{{margin:0}}.mailbox-attachment-group{{border:1px solid #d8d4ca;background:#fff;margin:12px 0}}.mailbox-attachment-group>summary{{display:grid;gap:4px;padding:12px 14px;background:#f3f1eb;cursor:pointer}}.mailbox-attachment-group>summary:focus-visible{{outline:3px solid #2e8b9a;outline-offset:2px}}.mailbox-attachment-group .summary-title{{font-weight:700;color:#143a52}}.mailbox-attachment-group .summary-subject{{font-weight:650;overflow-wrap:anywhere}}.mailbox-attachment-group .summary-meta{{color:#555;font-size:.88rem;overflow-wrap:anywhere}}.mailbox-attachment-group-body{{padding:12px}}.mailbox-attachment-group-note{{margin:0 0 12px;color:#555}}.mailbox-attachment-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}}.source-context-list{{display:grid;gap:14px;margin:14px 0}}.source-context-card{{border:1px solid #d8d4ca;background:#fff;padding:14px}}.source-context-card__type{{margin:0 0 8px;color:#143a52;font-weight:700}}.source-context-card__metadata{{display:grid;grid-template-columns:minmax(140px,max-content) minmax(0,1fr);gap:4px 12px;margin:0}}.source-context-card__metadata dt{{font-weight:650;color:#555}}.source-context-card__metadata dd{{margin:0;overflow-wrap:anywhere}}.source-context-card__actions{{margin:10px 0 0}}.source-context-card__actions a{{color:#245d61}}@media(max-width:560px){{.source-context-card__metadata{{grid-template-columns:1fr}}}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:720px){{.status-history{{min-width:760px}}.history-timestamp{{min-width:160px}}.history-status{{min-width:135px}}.status-history-actor,.history-actor{{min-width:110px;width:auto}}.status-history-note,.history-note{{min-width:220px}}.mailbox-attachment-group>summary{{padding:11px}}.mailbox-attachment-group-body{{padding:8px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/document-intake#intake-management">Back to intake management</a></p><h1>Document Intake Review</h1><p>{_status_badge(item['status'])}</p><p class="notice"><strong>This upload has not created or modified any public record.</strong> Approval does not publish or expose the document. Public availability occurs only after an authenticated administrator explicitly marks the document as Published.</p>{correction_notice}<table class="metadata">{rows}</table>
 {image_preview}{audio_notice}{email_notice}{attachment_relationships}
 {canonical_record_section}
@@ -51024,12 +51182,93 @@ def admin_document_intake_status_update(
 ):
     session = require_admin_session(request)
     try:
-        item = update_intake_status(
+        prepared = prepare_intake_status_transition(
             intake_id,
             new_status,
             actor=_admin_session_actor(session),
             actor_role=_admin_session_role(session),
             note=admin_note,
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 404 if detail == "document_intake_not_found" else 409
+        raise _http_error(status_code, detail) from exc
+    return HTMLResponse(
+        content=_render_lifecycle_decision_confirmation(
+            prepared,
+            _create_lifecycle_confirmation_token(prepared),
+            admin_session=session,
+        )
+    )
+
+
+@router.post(
+    "/api/admin/session/document-intake/{intake_id}/status/confirm",
+    response_class=HTMLResponse,
+)
+def admin_document_intake_status_confirm(
+    intake_id: str,
+    request: Request,
+    confirmation_token: str = Form(...),
+):
+    session = require_admin_session(request)
+    actor = _admin_session_actor(session)
+    actor_role = _admin_session_role(session)
+    try:
+        payload = _verify_lifecycle_confirmation_token(confirmation_token)
+        if payload.get("intake_id") != intake_id:
+            raise ValueError("lifecycle_confirmation_invalid")
+        if payload.get("actor") != actor or payload.get("actor_role") != actor_role:
+            raise ValueError("lifecycle_confirmation_actor_mismatch")
+        metadata = load_pending_document_read_only(intake_id, root=intake_root())
+        current_status = str(metadata.get("status") or "")
+        if current_status == payload.get("previous_status"):
+            prepared = prepare_intake_status_transition(
+                intake_id,
+                str(payload.get("new_status") or ""),
+                actor=actor,
+                actor_role=actor_role,
+                note=payload.get("rationale"),
+                root=intake_root(),
+            )
+            if not _lifecycle_confirmation_matches(payload, prepared):
+                raise ValueError("lifecycle_confirmation_stale")
+        elif current_status != payload.get("new_status"):
+            raise ValueError("lifecycle_confirmation_stale")
+        else:
+            latest_history = (metadata.get("status_history") or [])[-1:]
+            decision_key = (
+                str(latest_history[0].get("lifecycle_decision_key") or "").strip()
+                if latest_history and isinstance(latest_history[0], dict)
+                else ""
+            )
+            durable_decision = (
+                lifecycle_decision_by_key(decision_key, db_path=DB_PATH)
+                if decision_key
+                else None
+            )
+            if not durable_decision or any(
+                durable_decision.get(key) != payload.get(key)
+                for key in (
+                    "intake_id",
+                    "document_identifier",
+                    "previous_status",
+                    "new_status",
+                    "actor",
+                    "actor_role",
+                    "rationale",
+                    "sha256_hash",
+                    "sha512_hash",
+                )
+            ):
+                raise ValueError("lifecycle_confirmation_stale")
+        item = update_intake_status(
+            intake_id,
+            str(payload.get("new_status") or ""),
+            actor=actor,
+            actor_role=actor_role,
+            note=payload.get("rationale"),
             root=intake_root(),
             lifecycle_db_path=DB_PATH,
         )

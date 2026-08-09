@@ -9,7 +9,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.document_intake import load_pending_document, store_pending_document
-from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import (
+    FakeHTTPException,
+    FakeRequest,
+    confirm_document_intake_transition,
+    install_fastapi_stubs,
+)
 
 install_fastapi_stubs()
 
@@ -85,7 +90,8 @@ class GovernedIntakeCorrectionTests(unittest.TestCase):
             ("approved", "Approve before archive."),
             ("archived", "Archived after identifying metadata mismatch."),
         ):
-            admin_session.admin_document_intake_status_update(
+            confirm_document_intake_transition(
+                admin_session,
                 intake_id,
                 self.request,
                 new_status=status,

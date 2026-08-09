@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 56 — Durable Document Lifecycle Decision Record
+Current release: CDE Platform Stage 57 — Governed Lifecycle Decision Confirmation
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
