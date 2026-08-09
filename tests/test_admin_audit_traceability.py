@@ -24,6 +24,7 @@ class AdminAuditTraceabilityTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name) / "pending"
+        self.db_path = Path(self.temp_dir.name) / "records.db"
         self.env = patch.dict(
             os.environ,
             {
@@ -31,10 +32,13 @@ class AdminAuditTraceabilityTests(unittest.TestCase):
                 "ADMIN_PASSWORD": "admin-password",
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_DOCUMENT_INTAKE_ROOT": str(self.root),
+                "RECORDS_DB_PATH": str(self.db_path),
             },
             clear=False,
         )
         self.env.start()
+        self.original_db_path = admin_session.DB_PATH
+        admin_session.DB_PATH = self.db_path
         session = admin_session.create_admin_session("admin-user")
         self.request = FakeRequest(cookies={admin_session.SESSION_COOKIE_NAME: session})
         self.alpha_id = self._store(
@@ -90,6 +94,7 @@ class AdminAuditTraceabilityTests(unittest.TestCase):
         )
 
     def tearDown(self):
+        admin_session.DB_PATH = self.original_db_path
         self.env.stop()
         self.temp_dir.cleanup()
 

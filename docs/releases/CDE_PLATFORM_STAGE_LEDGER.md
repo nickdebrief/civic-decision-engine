@@ -29,6 +29,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 53.1 | Mailbox Attachment Relationship Navigation | email-attachment-preservation | 53 | 2026-08-08 | `9970d0aa5b442eeac0a02c3150f63bc84973a197` | [#318](https://github.com/nickdebrief/civic-decision-engine/pull/318) | [Stage 53.1](CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md) | Implemented · merged · deployed |
 | 54 | Apple Mail Mailbox Relationship Projection and Navigation | mailbox-relationship-navigation | — | 2026-08-08 | `74769f4b071a87159f6e1bb44e79f557a0594993` | [#319](https://github.com/nickdebrief/civic-decision-engine/pull/319) | [Stage 54](CDE_PLATFORM_STAGE_54_APPLE_MAIL_MAILBOX_RELATIONSHIP_PROJECTION_AND_NAVIGATION.md) | Implemented · merged · deployed |
 | 55 | Attachment Published Document Source Context and Navigation | attachment-source-context-navigation | — | 2026-08-08 | `b9e01d81782f2a605fc3bdea88b64af450c1ee5c` | [#321](https://github.com/nickdebrief/civic-decision-engine/pull/321) | [Stage 55](CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md) | Implemented · merged · deployed |
+| 56 | Durable Document Lifecycle Decision Record | document-lifecycle-governance | — | — | — | — | [Stage 56](CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

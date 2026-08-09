@@ -239,7 +239,15 @@ class GmailTakeoutSupportTests(unittest.TestCase):
         published = item
         for status in ("under_review", "approved", "published"):
             published = update_intake_status(
-                item["intake_id"], status, actor="gmail-admin", root=self.root
+                item["intake_id"],
+                status,
+                actor="gmail-admin",
+                note=(
+                    None
+                    if status == "under_review"
+                    else f"Synthetic {status} rationale."
+                ),
+                root=self.root,
             )
         public_page = documents._render_document(published)
         self.assertIn("Google Takeout Archive Overview", public_page)

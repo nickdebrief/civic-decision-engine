@@ -139,6 +139,11 @@ class Stage49EmailAttachmentPreservationTests(unittest.TestCase):
                 item["intake_id"],
                 status,
                 actor="stage49-admin",
+                note=(
+                    None
+                    if status == "under_review"
+                    else f"Synthetic {status.replace('_', ' ')} rationale."
+                ),
                 changed_at=timestamp,
                 root=self.root,
             )
