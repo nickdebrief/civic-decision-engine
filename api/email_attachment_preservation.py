@@ -741,7 +741,9 @@ def list_attachment_sources(
     load_documents: bool = True,
     read_only: bool = False,
 ) -> list[dict[str, Any]]:
-    conn = _connect(root)
+    conn = _connect_read_only(root) if read_only else _connect(root)
+    if conn is None:
+        return []
     try:
         rows = conn.execute(
             """

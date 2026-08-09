@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 55 — Attachment Published Document Source Context and Navigation
+Current release: CDE Platform Stage 56 — Durable Document Lifecycle Decision Record
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
@@ -68,6 +68,7 @@ Research artefacts:
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_LEDGER.md`](docs/releases/CDE_PLATFORM_STAGE_LEDGER.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md`](docs/releases/CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md`](docs/releases/CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_1_MAILBOX_ATTACHMENT_RELATIONSHIP_NAVIGATION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md`](docs/releases/CDE_PLATFORM_STAGE_53_MBOX_AUTHORITATIVE_MAILBOX_PRESERVATION.md)

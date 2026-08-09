@@ -41,6 +41,10 @@ from api.imap_acquisition import (
     is_imap_acquisition_archive,
     validate_imap_acquisition_archive,
 )
+from api.document_lifecycle_events import (
+    lifecycle_decision_by_key,
+    record_lifecycle_decision,
+)
 
 
 DEFAULT_INTAKE_ROOT = Path("/data/attachments/intake/pending")
@@ -312,6 +316,29 @@ def _document_identifier_registry_path(root: Path | None = None) -> Path:
     destination_root = (root or intake_root()).resolve(strict=False)
     destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     return destination_root / _DOCUMENT_IDENTIFIER_REGISTRY_FILENAME
+
+
+def _registered_document_identifier_read_only(
+    intake_id: str, *, root: Path | None = None
+) -> str | None:
+    destination_root = (root or intake_root()).resolve(strict=False)
+    registry_path = destination_root / _DOCUMENT_IDENTIFIER_REGISTRY_FILENAME
+    if not registry_path.is_file():
+        return None
+    conn = sqlite3.connect(f"{registry_path.resolve().as_uri()}?mode=ro", uri=True)
+    try:
+        try:
+            row = conn.execute(
+                "SELECT document_identifier FROM document_identifiers WHERE intake_id = ?",
+                (str(intake_id),),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return None
+            raise
+        return str(row[0]) if row else None
+    finally:
+        conn.close()
 
 
 def _ensure_document_identifier_registry(conn: sqlite3.Connection) -> None:
@@ -2058,6 +2085,28 @@ def list_intake_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
     return sorted(items, key=lambda item: (item.get("upload_date", ""), item["intake_id"]), reverse=True)
 
 
+def list_intake_documents_read_only(*, root: Path | None = None) -> list[dict[str, Any]]:
+    """List intake metadata without identifier assignment or sidecar writes."""
+    destination_root = (root or intake_root()).resolve(strict=False)
+    if not destination_root.is_dir():
+        return []
+    items: list[dict[str, Any]] = []
+    for metadata_path in destination_root.glob("*/metadata.json"):
+        try:
+            metadata = load_pending_document_read_only(
+                metadata_path.parent.name, root=destination_root
+            )
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if metadata.get("status") in INTAKE_STATUSES:
+            items.append(metadata)
+    return sorted(
+        items,
+        key=lambda item: (item.get("upload_date", ""), item["intake_id"]),
+        reverse=True,
+    )
+
+
 def list_pending_documents(*, root: Path | None = None) -> list[dict[str, Any]]:
     return [
         item for item in list_intake_documents(root=root) if item["status"] == "pending"
@@ -2069,42 +2118,118 @@ def update_intake_status(
     new_status: str,
     *,
     actor: str = "admin",
+    actor_role: str = "unavailable",
     note: str | None = None,
     notes: str | None = None,
     changed_at: str | None = None,
     root: Path | None = None,
+    lifecycle_db_path: Path | str | None = None,
 ) -> dict[str, Any]:
-    metadata = load_pending_document(intake_id, root=root)
+    metadata = load_pending_document_read_only(intake_id, root=root)
     current_status = metadata.get("status")
     normalized_status = str(new_status or "").strip().lower()
+    normalized_actor = str(actor or "").strip() or "admin"
+    normalized_role = str(actor_role or "").strip() or "unavailable"
+    rationale = str(note or "").strip() or None
     if current_status not in INTAKE_STATUSES:
         raise ValueError("document_intake_status_invalid")
     if normalized_status not in INTAKE_STATUSES:
         raise ValueError("document_intake_status_invalid")
+    if lifecycle_db_path is not None:
+        resolved_lifecycle_db_path = Path(lifecycle_db_path)
+    elif root is not None:
+        resolved_lifecycle_db_path = Path(root).resolve(strict=False).parent / "records.db"
+    elif os.getenv("RECORDS_DB_PATH"):
+        resolved_lifecycle_db_path = Path(str(os.environ["RECORDS_DB_PATH"]))
+    else:
+        resolved_lifecycle_db_path = Path("records.db")
+
+    # An identical repeated POST after successful projection is idempotent.
+    if normalized_status == current_status:
+        latest_history = (metadata.get("status_history") or [])[-1:]
+        decision_key = (
+            str(latest_history[0].get("lifecycle_decision_key") or "").strip()
+            if latest_history and isinstance(latest_history[0], dict)
+            else ""
+        )
+        existing = (
+            lifecycle_decision_by_key(decision_key, db_path=resolved_lifecycle_db_path)
+            if decision_key
+            else None
+        )
+        if existing and all(
+            (
+                existing.get("new_status") == normalized_status,
+                existing.get("actor") == normalized_actor,
+                existing.get("actor_role") == normalized_role,
+                existing.get("rationale") == rationale,
+                existing.get("sha256_hash")
+                == (str(metadata.get("sha256_hash") or "").strip().lower() or None),
+                existing.get("sha512_hash")
+                == (str(metadata.get("sha512_hash") or "").strip().lower() or None),
+            )
+        ):
+            return metadata
+        raise ValueError("document_intake_transition_invalid")
     if normalized_status not in VALID_STATUS_TRANSITIONS[current_status]:
         raise ValueError("document_intake_transition_invalid")
+    if rationale is not None and len(rationale) > 500:
+        raise ValueError("document_intake_rationale_too_long")
+    if normalized_status in {"approved", "published", "rejected", "archived"} and not rationale:
+        raise ValueError("document_intake_rationale_required")
 
-    timestamp = changed_at or datetime.now(timezone.utc).isoformat().replace(
-        "+00:00", "Z"
-    )
     history = list(metadata.get("status_history") or [])
     if not history:
         history.append(
             {
                 "previous_status": None,
                 "new_status": current_status,
-                "timestamp": metadata.get("upload_date", timestamp),
+                "timestamp": metadata.get("upload_date") or changed_at or _utc_timestamp(),
                 "actor": "admin",
                 "note": "Existing intake state recorded.",
             }
         )
+    sha256_hash = str(metadata.get("sha256_hash") or "").strip().lower() or None
+    sha512_hash = str(metadata.get("sha512_hash") or "").strip().lower() or None
+    if normalized_status in {"approved", "published"} and not sha256_hash:
+        raise ValueError("document_intake_decision_hash_required")
+    authoritative_identifier = _registered_document_identifier_read_only(
+        str(metadata.get("intake_id") or intake_id), root=root
+    )
+    if authoritative_identifier:
+        metadata["document_identifier"] = authoritative_identifier
+    else:
+        authoritative_identifier = (
+            str(metadata.get("document_identifier") or "").strip() or None
+        )
+    applied_keys = {
+        str(event.get("lifecycle_decision_key") or "").strip()
+        for event in history
+        if isinstance(event, dict) and event.get("lifecycle_decision_key")
+    }
+    decision, _is_retry = record_lifecycle_decision(
+        intake_id=str(metadata.get("intake_id") or intake_id),
+        document_identifier=authoritative_identifier,
+        previous_status=str(current_status),
+        new_status=normalized_status,
+        actor=normalized_actor,
+        actor_role=normalized_role,
+        rationale=rationale,
+        sha256_hash=sha256_hash,
+        sha512_hash=sha512_hash,
+        applied_decision_keys=applied_keys,
+        decided_at=changed_at,
+        db_path=resolved_lifecycle_db_path,
+    )
+    timestamp = str(decision["decided_at"])
     history.append(
         {
             "previous_status": current_status,
             "new_status": normalized_status,
             "timestamp": timestamp,
-            "actor": str(actor or "admin"),
-            "note": str(note or "").strip() or None,
+            "actor": normalized_actor,
+            "note": rationale,
+            "lifecycle_decision_key": decision["decision_key"],
         }
     )
     metadata["status"] = normalized_status
@@ -2115,7 +2240,7 @@ def update_intake_status(
         metadata["publication_date"] = timestamp
     if notes is not None:
         metadata["notes"] = str(notes).strip()
-    _write_metadata(intake_id, metadata, root=root)
+    _write_metadata(intake_id, metadata, root=root, assign_identifier=False)
     return metadata
 
 
@@ -2137,7 +2262,11 @@ def update_intake_notes(
 
 
 def _write_metadata(
-    intake_id: str, metadata: dict[str, Any], *, root: Path | None = None
+    intake_id: str,
+    metadata: dict[str, Any],
+    *,
+    root: Path | None = None,
+    assign_identifier: bool = True,
 ) -> None:
     if not _SAFE_ID_RE.fullmatch(str(intake_id or "")):
         raise ValueError("document_intake_not_found")
@@ -2150,31 +2279,38 @@ def _write_metadata(
         current_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         current_metadata = {}
-    current_identifier = str(current_metadata.get("document_identifier") or "").strip()
-    if current_identifier:
-        metadata["document_identifier"] = assign_document_identifier(
-            str(intake_id),
-            assigned_at=str(
-                current_metadata.get("upload_date")
-                or current_metadata.get("status_updated_at")
-                or ""
-            ).strip()
-            or None,
-            root=destination_root,
-            existing_identifier=current_identifier,
-        )
+    if assign_identifier:
+        current_identifier = str(current_metadata.get("document_identifier") or "").strip()
+        if current_identifier:
+            metadata["document_identifier"] = assign_document_identifier(
+                str(intake_id),
+                assigned_at=str(
+                    current_metadata.get("upload_date")
+                    or current_metadata.get("status_updated_at")
+                    or ""
+                ).strip()
+                or None,
+                root=destination_root,
+                existing_identifier=current_identifier,
+            )
+        else:
+            metadata["document_identifier"] = assign_document_identifier(
+                str(intake_id),
+                assigned_at=str(
+                    metadata.get("upload_date")
+                    or metadata.get("status_updated_at")
+                    or ""
+                ).strip()
+                or None,
+                root=destination_root,
+                existing_identifier=str(metadata.get("document_identifier") or "").strip() or None,
+            )
     else:
-        metadata["document_identifier"] = assign_document_identifier(
-            str(intake_id),
-            assigned_at=str(
-                metadata.get("upload_date")
-                or metadata.get("status_updated_at")
-                or ""
-            ).strip()
-            or None,
-            root=destination_root,
-            existing_identifier=str(metadata.get("document_identifier") or "").strip() or None,
+        registered_identifier = _registered_document_identifier_read_only(
+            str(intake_id), root=destination_root
         )
+        if registered_identifier:
+            metadata["document_identifier"] = registered_identifier
     temporary_path = item_dir / "metadata.json.tmp"
     try:
         temporary_path.write_text(

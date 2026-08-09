@@ -48,6 +48,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
                 "CDE_ADMIN_SESSION_SECRET": "session-secret",
                 "CDE_DOCUMENT_INTAKE_ROOT": str(self.root),
                 "CDE_DOCUMENT_INTAKE_MAX_BYTES": "1048576",
+                "RECORDS_DB_PATH": str(self.db_path),
             },
             clear=False,
         )
@@ -576,14 +577,14 @@ class AdminDocumentIntakeTests(unittest.TestCase):
     def test_approved_can_be_archived_without_publication(self):
         self.upload()
         self.transition("under_review")
-        self.transition("approved")
-        self.transition("archived")
+        self.transition("approved", "Approved for governed retention.")
+        self.transition("archived", "Archived without publication.")
         self.assertEqual(list_intake_documents(root=self.root)[0]["status"], "archived")
 
     def test_published_is_declarative_and_can_be_archived(self):
         self.upload()
         self.transition("under_review")
-        self.transition("approved")
+        self.transition("approved", "Approved for publication.")
 
         conn = sqlite3.connect(self.db_path)
         before = conn.execute("SELECT * FROM records").fetchall()
@@ -607,7 +608,7 @@ class AdminDocumentIntakeTests(unittest.TestCase):
         self.assertEqual(after, before)
         self.assertEqual(after_tables, before_tables)
 
-        self.transition("archived")
+        self.transition("archived", "Archived after publication.")
         self.assertEqual(list_intake_documents(root=self.root)[0]["status"], "archived")
 
     def test_invalid_transition_is_rejected_without_metadata_change(self):

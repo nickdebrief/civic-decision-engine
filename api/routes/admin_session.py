@@ -59,6 +59,7 @@ from api.attachments import (
 from api import archive_collection_memberships as acm
 from api import archive_collections as ac
 from api import document_intake_corrections as dic
+from api.document_lifecycle_events import list_lifecycle_decisions
 from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.canonical_record_types import (
@@ -89,6 +90,7 @@ from api.document_intake import (
     is_imap_acquisition_document,
     is_outlook_archive_document,
     list_intake_documents,
+    list_intake_documents_read_only,
     list_published_documents,
     load_published_document,
     load_pending_document,
@@ -355,6 +357,13 @@ def _admin_session_actor(session: dict[str, Any]) -> str:
     return username
 
 
+def _admin_session_role(session: dict[str, Any]) -> str:
+    role = str(session.get("role") or "").strip()
+    if role != "admin":
+        raise _http_error(401, "admin_session_unauthorized")
+    return role
+
+
 def create_admin_session(username: str, now: int | None = None) -> str:
     secret = _session_secret()
     if not secret:
@@ -439,6 +448,14 @@ def require_admin_session(request) -> dict[str, Any]:
 
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _get_db_read_only() -> sqlite3.Connection | None:
+    if not DB_PATH.is_file():
+        return None
+    conn = sqlite3.connect(f"{DB_PATH.resolve().as_uri()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -46377,11 +46394,128 @@ def _parse_positive_int(value: Any, default: int, *, maximum: int | None = None)
     return parsed
 
 
-def _collect_admin_audit_events(intake_documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _lifecycle_projection_matches(
+    history_entry: dict[str, Any], durable_event: dict[str, Any]
+) -> bool:
+    return all(
+        (
+            history_entry.get("previous_status") == durable_event.get("previous_status"),
+            history_entry.get("new_status") == durable_event.get("new_status"),
+            history_entry.get("timestamp") == durable_event.get("decided_at"),
+            history_entry.get("actor") == durable_event.get("actor"),
+            history_entry.get("note") == durable_event.get("rationale"),
+        )
+    )
+
+
+def _latest_projected_lifecycle_decision_key(
+    durable_events: list[dict[str, Any]],
+    projected_by_key: Mapping[str, dict[str, Any]],
+) -> str | None:
+    projected_events = [
+        event
+        for event in durable_events
+        if str(event.get("decision_key") or "") in projected_by_key
+    ]
+    if not projected_events:
+        return None
+    latest = max(
+        projected_events,
+        key=lambda event: (
+            int(event.get("decision_sequence") or 0),
+            int(event.get("id") or 0),
+        ),
+    )
+    return str(latest.get("decision_key") or "") or None
+
+
+def _lifecycle_projection_evidence(
+    item: Mapping[str, Any],
+    durable_event: dict[str, Any],
+    history_entry: dict[str, Any] | None,
+    *,
+    latest_projected_key: str | None,
+) -> str:
+    if history_entry is None:
+        if (
+            item.get("status") != durable_event.get("previous_status")
+            or item.get("status_updated_at") == durable_event.get("decided_at")
+            or (
+                durable_event.get("new_status") == "published"
+                and item.get("publication_date") == durable_event.get("decided_at")
+            )
+        ):
+            return "Decision record / metadata projection inconsistent"
+        return "Decision recorded; metadata projection pending"
+    if not _lifecycle_projection_matches(history_entry, durable_event):
+        return "Decision record / metadata projection inconsistent"
+
+    decision_key = str(durable_event.get("decision_key") or "")
+    decided_at = durable_event.get("decided_at")
+    if durable_event.get("new_status") == "published" and item.get(
+        "publication_date"
+    ) != decided_at:
+        return "Decision record / metadata projection inconsistent"
+    if decision_key == latest_projected_key and (
+        item.get("status") != durable_event.get("new_status")
+        or item.get("status_updated_at") != decided_at
+    ):
+        return "Decision record / metadata projection inconsistent"
+    return "Durable decision record — correctly projected"
+
+
+def _collect_admin_audit_events(
+    intake_documents: list[dict[str, Any]],
+    durable_events: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+    durable_by_intake: dict[str, list[dict[str, Any]]] = {}
+    durable_keys: set[str] = set()
+    for event in durable_events or []:
+        durable_by_intake.setdefault(str(event.get("intake_id") or ""), []).append(event)
+        if event.get("decision_key"):
+            durable_keys.add(str(event["decision_key"]))
     for item in intake_documents:
         history = item.get("status_history") or []
+        projected_by_key = {
+            str(event.get("lifecycle_decision_key")): event
+            for event in history
+            if isinstance(event, dict) and event.get("lifecycle_decision_key")
+        }
+        item_durable_events = durable_by_intake.get(str(item.get("intake_id") or ""), [])
+        latest_projected_key = _latest_projected_lifecycle_decision_key(
+            item_durable_events, projected_by_key
+        )
+        for event in item_durable_events:
+            projection = projected_by_key.get(str(event.get("decision_key") or ""))
+            events.append(
+                {
+                    "event_index": int(event.get("id") or 0),
+                    "intake_id": item.get("intake_id"),
+                    "timestamp": event.get("decided_at"),
+                    "previous_status": event.get("previous_status"),
+                    "new_status": event.get("new_status"),
+                    "actor": event.get("actor"),
+                    "actor_role": event.get("actor_role"),
+                    "note": event.get("rationale"),
+                    "evidence_source": _lifecycle_projection_evidence(
+                        item,
+                        event,
+                        projection,
+                        latest_projected_key=latest_projected_key,
+                    ),
+                    "sha256_hash": event.get("sha256_hash"),
+                    "document_title": item.get("title"),
+                    "reference_identifier": item.get("reference_identifier"),
+                    "filename": item.get("original_filename"),
+                    "institution_source": item.get("institution_source"),
+                    "document_format": item.get("document_type"),
+                    "current_status": item.get("status"),
+                }
+            )
         for index, event in enumerate(history):
+            if str(event.get("lifecycle_decision_key") or "") in durable_keys:
+                continue
             events.append(
                 {
                     "event_index": index,
@@ -46391,6 +46525,9 @@ def _collect_admin_audit_events(intake_documents: list[dict[str, Any]]) -> list[
                     "new_status": event.get("new_status"),
                     "actor": event.get("actor"),
                     "note": event.get("note"),
+                    "actor_role": None,
+                    "evidence_source": "Legacy sidecar history",
+                    "sha256_hash": None,
                     "document_title": item.get("title"),
                     "reference_identifier": item.get("reference_identifier"),
                     "filename": item.get("original_filename"),
@@ -46517,6 +46654,7 @@ def _render_admin_audit_page(
     intake_documents: list[dict[str, Any]],
     *,
     admin_session: dict[str, Any] | None = None,
+    durable_events: list[dict[str, Any]] | None = None,
     q: str | None = None,
     actor: str | None = None,
     previous_status: str | None = None,
@@ -46538,7 +46676,7 @@ def _render_admin_audit_page(
         "date_from": str(date_from or "").strip(),
         "date_to": str(date_to or "").strip(),
     }
-    all_events = _collect_admin_audit_events(intake_documents)
+    all_events = _collect_admin_audit_events(intake_documents, durable_events)
     filtered_events = _filter_admin_audit_events(all_events, **filters)
     normalized_page_size = _parse_positive_int(page_size, 25, maximum=100)
     total_events = len(filtered_events)
@@ -46559,13 +46697,16 @@ def _render_admin_audit_page(
           <td class="audit-previous-status">{escape(_audit_status_label(event.get('previous_status')))}</td>
           <td class="audit-new-status">{escape(_audit_status_label(event.get('new_status')))}</td>
           <td class="audit-actor">{escape(_audit_display_value(event.get('actor')))}</td>
+          <td class="audit-role">{escape(_audit_display_value(event.get('actor_role')))}</td>
           <td class="audit-note">{escape(_audit_display_value(event.get('note')))}</td>
+          <td class="audit-evidence">{escape(_audit_display_value(event.get('evidence_source')))}</td>
+          <td class="audit-digest">{escape(_audit_display_value(event.get('sha256_hash')))}</td>
           <td class="audit-current-status">{escape(STATUS_LABELS.get(str(event.get('current_status') or ''), _audit_display_value(event.get('current_status'))))}</td>
           <td class="audit-actions"><a href="/admin/document-intake/{escape(str(event.get('intake_id') or ''))}">Review document</a></td>
         </tr>
         """
         for event in page_events
-    ) or '<tr><td colspan="10">No administrative audit events match the selected filters.</td></tr>'
+    ) or '<tr><td colspan="13">No administrative audit events match the selected filters.</td></tr>'
     previous_link = ""
     next_link = ""
     if normalized_page > 1:
@@ -46601,7 +46742,7 @@ def _render_admin_audit_page(
         )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Administrative Audit</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.audit-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.audit-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.audit-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.audit-filter-form input,.audit-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.audit-table-wrapper{{overflow-x:auto}}.audit-table{{width:100%;min-width:1280px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.audit-table th{{background:#143a52;color:#fff;text-align:left}}.audit-table th,.audit-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.audit-timestamp{{min-width:180px;white-space:nowrap}}.audit-document{{min-width:210px}}.audit-reference{{min-width:150px}}.audit-filename{{min-width:170px}}.audit-previous-status,.audit-new-status,.audit-current-status{{min-width:145px;overflow-wrap:normal}}.audit-actor{{min-width:120px;overflow-wrap:break-word;word-break:normal}}.audit-note{{min-width:260px;width:100%}}.audit-actions{{min-width:130px;white-space:nowrap}}.audit-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:900px){{.audit-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.audit-filter-form{{grid-template-columns:1fr}}.audit-table{{min-width:1180px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1280px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.audit-summary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.audit-filter-form{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;background:#fff;border:1px solid #d8d4ca;margin:20px 0}}.audit-filter-form label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.audit-filter-form input,.audit-filter-form select{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}.audit-table-wrapper{{overflow-x:auto}}.audit-table{{width:100%;min-width:1500px;border-collapse:collapse;background:#fff;font-size:.86rem;table-layout:auto}}.audit-table th{{background:#143a52;color:#fff;text-align:left}}.audit-table th,.audit-table td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.audit-timestamp{{min-width:180px;white-space:nowrap}}.audit-document{{min-width:210px}}.audit-reference{{min-width:150px}}.audit-filename{{min-width:170px}}.audit-previous-status,.audit-new-status,.audit-current-status{{min-width:145px;overflow-wrap:normal}}.audit-actor,.audit-role{{min-width:120px;overflow-wrap:break-word;word-break:normal}}.audit-note{{min-width:260px;width:100%}}.audit-evidence{{min-width:190px}}.audit-digest{{min-width:260px;font-family:ui-monospace,monospace}}.audit-actions{{min-width:130px;white-space:nowrap}}.audit-pagination{{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:18px 0}}{ADMIN_TABLE_READABILITY_CSS}@media(max-width:900px){{.audit-filter-form{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}@media(max-width:640px){{.audit-filter-form{{grid-template-columns:1fr}}.audit-table{{min-width:1380px}}}}</style></head>
 <body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Administrative Audit</h1><p class="notice">Read-only inspection of stored Document Intake lifecycle history. Audit visibility does not validate evidence, establish legal status, alter public visibility, or change lifecycle state.</p>
 <section class="audit-summary" aria-label="Audit summary"><p><strong>Total matching audit events:</strong> {total_events}</p><p><strong>Total affected documents:</strong> {affected_documents}</p><p><strong>Active filters:</strong> {escape(_audit_filter_summary(filters))}</p></section>
 <form class="audit-filter-form" method="get" action="/admin/audit">
@@ -46617,7 +46758,7 @@ def _render_admin_audit_page(
 <button type="submit">Apply filters</button>
 </form>
 <div class="audit-pagination" aria-label="Audit pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
-<div class="audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Administrative Audit table"><table class="audit-table"><colgroup><col class="col-timestamp"><col class="col-title"><col class="col-reference"><col class="col-filename"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th class="audit-timestamp">Timestamp</th><th class="audit-document">Document title</th><th class="audit-reference">Optional Reference Identifier</th><th class="audit-filename">Filename</th><th class="audit-previous-status">Previous status</th><th class="audit-new-status">New status</th><th class="audit-actor">Actor</th><th class="audit-note">Note</th><th class="audit-current-status">Current document status</th><th class="audit-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></div>
+<div class="audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Administrative Audit table"><table class="audit-table"><colgroup><col class="col-timestamp"><col class="col-title"><col class="col-reference"><col class="col-filename"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-hash"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th class="audit-timestamp">Timestamp</th><th class="audit-document">Document title</th><th class="audit-reference">Optional Reference Identifier</th><th class="audit-filename">Filename</th><th class="audit-previous-status">Previous status</th><th class="audit-new-status">New status</th><th class="audit-actor">Actor</th><th class="audit-role">Actor role</th><th class="audit-note">Note</th><th class="audit-evidence">Evidence source</th><th class="audit-digest">Recorded SHA-256</th><th class="audit-current-status">Current document status</th><th class="audit-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></div>
 <div class="audit-pagination" aria-label="Audit pagination repeated"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
 </main></body></html>"""
 
@@ -46959,11 +47100,13 @@ def _render_document_intake_page(
 def _canonical_record_section_for_document(item: Mapping[str, Any]) -> str:
     if str(item.get("status") or "").lower() != "published":
         return ""
-    conn = get_db()
-    try:
-        linked_records = _source_document_record_links(conn, item)
-    finally:
-        conn.close()
+    conn = _get_db_read_only()
+    linked_records: list[dict[str, Any]] = []
+    if conn is not None:
+        try:
+            linked_records = _source_document_record_links(conn, item)
+        finally:
+            conn.close()
 
     if linked_records:
         return _source_created_record_panel(item, linked_records)
@@ -47023,6 +47166,7 @@ def _render_document_intake_preview(
     item: dict[str, Any],
     *,
     admin_session: dict[str, Any] | None = None,
+    lifecycle_events: list[dict[str, Any]] | None = None,
     attachment_page: int | str | None = 1,
     attachment_page_size: int | str | None = 25,
 ) -> str:
@@ -47109,11 +47253,29 @@ def _render_document_intake_preview(
     action_forms = "".join(
         f"""<form method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/status">
           <input type="hidden" name="new_status" value="{escape(status)}">
-          <label>Transition note <input name="admin_note" maxlength="500"></label>
+          <label>Transition note <input name="admin_note" maxlength="500"{' required' if status in {'approved', 'published', 'rejected', 'archived'} else ''}><span class="field-help">{'Required governance rationale. If this document is Published, this rationale may appear in the public Publication Pathway.' if status in {'approved', 'published', 'rejected', 'archived'} else 'Optional review context. Lifecycle notes may appear in the public Publication Pathway after publication.'}</span></label>
           <button type="submit">{escape(label)}</button>
         </form>"""
         for status, label in transitions
     ) or "<p>No further lifecycle actions are available from this state.</p>"
+    durable_by_key = {
+        str(event.get("decision_key") or ""): event
+        for event in (lifecycle_events or [])
+        if event.get("decision_key")
+    }
+    projected_keys = {
+        str(entry.get("lifecycle_decision_key") or "")
+        for entry in item.get("status_history", [])
+        if isinstance(entry, dict) and entry.get("lifecycle_decision_key")
+    }
+    latest_projected_key = _latest_projected_lifecycle_decision_key(
+        list(lifecycle_events or []),
+        {
+            str(entry.get("lifecycle_decision_key")): entry
+            for entry in item.get("status_history", [])
+            if isinstance(entry, dict) and entry.get("lifecycle_decision_key")
+        },
+    )
     history_rows = "".join(
         "<tr>"
         f'<td class="history-timestamp">{escape(str(entry.get("timestamp", "Not available")))}</td>'
@@ -47121,9 +47283,27 @@ def _render_document_intake_preview(
         f'<td class="history-status history-new-status">{escape(STATUS_LABELS.get(entry.get("new_status"), str(entry.get("new_status", ""))))}</td>'
         f'<td class="status-history-actor history-actor">{escape(str(entry.get("actor", "admin")))}</td>'
         f'<td class="status-history-note history-note">{escape(str(entry.get("note") or ""))}</td>'
+        f'<td class="history-evidence">{escape("Legacy sidecar history" if entry.get("lifecycle_decision_key") not in durable_by_key else _lifecycle_projection_evidence(item, durable_by_key[str(entry.get("lifecycle_decision_key"))], entry, latest_projected_key=latest_projected_key))}</td>'
+        f'<td class="history-role">{escape(str(durable_by_key.get(str(entry.get("lifecycle_decision_key") or ""), {}).get("actor_role") or "—"))}</td>'
+        f'<td class="history-digest">{escape(str(durable_by_key.get(str(entry.get("lifecycle_decision_key") or ""), {}).get("sha256_hash") or "Not recorded"))}</td>'
         "</tr>"
         for entry in item.get("status_history", [])
-    ) or '<tr><td colspan="5">No status history is available.</td></tr>'
+    )
+    history_rows += "".join(
+        "<tr>"
+        f'<td class="history-timestamp">{escape(str(event.get("decided_at") or "Not available"))}</td>'
+        f'<td class="history-status history-previous-status">{escape(STATUS_LABELS.get(str(event.get("previous_status") or ""), str(event.get("previous_status") or "")))}</td>'
+        f'<td class="history-status history-new-status">{escape(STATUS_LABELS.get(str(event.get("new_status") or ""), str(event.get("new_status") or "")))}</td>'
+        f'<td class="status-history-actor history-actor">{escape(str(event.get("actor") or "—"))}</td>'
+        f'<td class="status-history-note history-note">{escape(str(event.get("rationale") or ""))}</td>'
+        '<td class="history-evidence">Decision recorded; metadata projection pending</td>'
+        f'<td class="history-role">{escape(str(event.get("actor_role") or "—"))}</td>'
+        f'<td class="history-digest">{escape(str(event.get("sha256_hash") or "Not recorded"))}</td>'
+        "</tr>"
+        for event in (lifecycle_events or [])
+        if str(event.get("decision_key") or "") not in projected_keys
+    )
+    history_rows = history_rows or '<tr><td colspan="8">No status history is available.</td></tr>'
     image_preview = (
         f"""<h2>Image preview</h2><div class="admin-image-preview-wrap"><img class="admin-document-image-preview" src="/admin/document-intake/{escape(item['intake_id'])}/preview" alt="{escape(str(item['title']))}"></div>"""
         if is_image_document(item)
@@ -47182,8 +47362,14 @@ def _render_document_intake_preview(
             load_documents=False,
         )
     else:
-        relationships = list_email_source_attachments(
-            str(item.get("intake_id") or ""), root=intake_root()
+        relationships = hydrate_email_attachment_documents(
+            list_email_source_attachments(
+                str(item.get("intake_id") or ""),
+                root=intake_root(),
+                load_documents=False,
+            ),
+            root=intake_root(),
+            read_only=True,
         )
     if relationships:
         if is_attachment_document:
@@ -47213,7 +47399,7 @@ def _render_document_intake_preview(
 {canonical_record_section}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
-<h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
+<h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-actor"><col class="col-hash"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th><th class="history-evidence">Evidence source</th><th class="history-role">Actor role</th><th class="history-digest">Recorded SHA-256</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
 </main></body></html>"""
 
 
@@ -48005,8 +48191,9 @@ def admin_audit_page(
     session = require_admin_session(request)
     return HTMLResponse(
         content=_render_admin_audit_page(
-            list_intake_documents(),
+            list_intake_documents_read_only(),
             admin_session=session,
+            durable_events=list_lifecycle_decisions(db_path=DB_PATH),
             q=q,
             actor=actor,
             previous_status=previous_status,
@@ -49382,13 +49569,16 @@ def admin_document_intake_preview_page(
 ):
     session = require_admin_session(request)
     try:
-        item = load_pending_document(intake_id)
+        item = load_pending_document_read_only(intake_id)
     except ValueError as exc:
         raise _http_error(404, "document_intake_not_found") from exc
     return HTMLResponse(
         content=_render_document_intake_preview(
             item,
             admin_session=session,
+            lifecycle_events=list_lifecycle_decisions(
+                intake_id=intake_id, db_path=DB_PATH
+            ),
             attachment_page=attachment_page,
             attachment_page_size=attachment_page_size,
         )
@@ -50838,14 +51028,24 @@ def admin_document_intake_status_update(
             intake_id,
             new_status,
             actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
             note=admin_note,
             root=intake_root(),
+            lifecycle_db_path=DB_PATH,
         )
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if detail == "document_intake_not_found" else 409
         raise _http_error(status_code, detail) from exc
-    return HTMLResponse(content=_render_document_intake_preview(item, admin_session=session))
+    return HTMLResponse(
+        content=_render_document_intake_preview(
+            item,
+            admin_session=session,
+            lifecycle_events=list_lifecycle_decisions(
+                intake_id=intake_id, db_path=DB_PATH
+            ),
+        )
+    )
 
 
 @router.post(

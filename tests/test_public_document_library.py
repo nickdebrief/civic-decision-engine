@@ -105,6 +105,11 @@ class PublicDocumentLibraryTests(unittest.TestCase):
             update_intake_status(
                 intake_id,
                 status,
+                note=(
+                    None
+                    if status == "under_review"
+                    else f"Synthetic {status.replace('_', ' ')} rationale."
+                ),
                 changed_at=changed_at,
                 root=self.root,
             )
@@ -488,6 +493,7 @@ class PublicDocumentLibraryTests(unittest.TestCase):
         update_intake_status(
             document_id,
             "archived",
+            note="Archive published fixture.",
             changed_at="2026-07-08T13:00:00Z",
             root=self.root,
         )
