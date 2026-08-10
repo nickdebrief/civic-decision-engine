@@ -32,7 +32,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 56 | Durable Document Lifecycle Decision Record | document-lifecycle-governance | — | 2026-08-09 | `647c23dd4222cbcf704eaf0a93a4447b74b55c61` | [#323](https://github.com/nickdebrief/civic-decision-engine/pull/323) | [Stage 56](CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md) | Implemented · merged · deployed |
 | 57 | Governed Lifecycle Decision Confirmation | lifecycle-decision-confirmation | — | 2026-08-09 | `e949f3363f3a10d132e7add78717f858d007abd5` | [#325](https://github.com/nickdebrief/civic-decision-engine/pull/325) | [Stage 57](CDE_PLATFORM_STAGE_57_GOVERNED_LIFECYCLE_DECISION_CONFIRMATION.md) | Implemented · merged · deployed |
 | 58 | Governed Document Reconsideration and Lifecycle Episodes | document-lifecycle-episodes | — | 2026-08-10 | `7820418807269f448125cd5019c553a273ff0bea` | [#326](https://github.com/nickdebrief/civic-decision-engine/pull/326), [#327](https://github.com/nickdebrief/civic-decision-engine/pull/327), [#328](https://github.com/nickdebrief/civic-decision-engine/pull/328) | [Stage 58](CDE_PLATFORM_STAGE_58_GOVERNED_DOCUMENT_RECONSIDERATION_AND_LIFECYCLE_EPISODES.md) | Implemented · merged · deployed |
-| 59 | Lifecycle Episode Presentation | lifecycle-episode-presentation | — | — | — | — | [Stage 59](CDE_PLATFORM_STAGE_59_LIFECYCLE_EPISODE_PRESENTATION.md) | Implemented · pending merge · pending deployment |
+| 59 | Lifecycle Episode Presentation | lifecycle-episode-presentation | — | 2026-08-10 | `c9c740c43297d70b6286c0aadd650568c5dd6cce` | [#330](https://github.com/nickdebrief/civic-decision-engine/pull/330), [#331](https://github.com/nickdebrief/civic-decision-engine/pull/331) | [Stage 59](CDE_PLATFORM_STAGE_59_LIFECYCLE_EPISODE_PRESENTATION.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 
@@ -75,6 +75,48 @@ corrective work.
 The Public Document Library and other document-facing views may still flatten
 episode presentation. That is follow-on presentation work and is not a Stage
 58 correctness blocker.
+
+## Stage 59 Closure Evidence
+
+Stage 59 implementation, PR #330, merged as
+`557abd50393944e5844e0f9bec359ba424a1ec31`. The post-merge Public Document
+Library long-title presentation correction, PR #331, merged as
+`c9c740c43297d70b6286c0aadd650568c5dd6cce`.
+
+Stage 59 introduced a read-only lifecycle episode presentation assembler that
+preserves implicit Episode 1 without schema backfill and presents the original
+and subsequent governed lifecycle episodes separately. Current publication
+status is separated from historical lifecycle outcomes, publication
+provenance is associated with the active publishing episode, and administrator
+history and audit presentation include episode context. Public collection
+views expose only public-safe lifecycle summaries and do not expose internal
+`LEP-*` identifiers or private governance evidence. Stage 58 fail-closed public
+eligibility remains authoritative; lifecycle authority, confirmation,
+reconciliation, schema, preservation, relationship, identifier, and
+production-data semantics are unchanged.
+
+The Public Document Library replaced the former wide table presentation with
+responsive structured document rows. Complete Document Identifiers and
+document-opening actions remain available, and the narrow-screen presentation
+does not depend on the former 1040px minimum-width table layout.
+
+Production verification of DOC-2026-000131 established Current status:
+Published and lifecycle summary `Published · Governed reconsideration`.
+Original lifecycle evidence remains separately visible, including Episode 1
+rejection and archival, while `Subsequent governed consideration — Episode 2`
+is separately visible and owns the current publication outcome. No flattened
+`Archived → Pending` transition is presented.
+
+The deployed Public Document Library was also verified with the long filename
+`UN_ESCALATION_PRI_ACCESS_NICK_MOLONEY.pdf`. It wraps within its structured-row
+region without colliding with Institution / Source. The view preserves the
+complete `DOC-2026-000131` Document Identifier, Current status: Published,
+`Published · Governed reconsideration` context, institution/source, category,
+publication date, description, and the document-opening action.
+
+Stage 59 remains presentation-only: no lifecycle, governance, eligibility,
+schema, preservation, relationship, identifier, publication, or production
+data behavior was changed by its implementation or presentation correction.
 
 ## Ledger Rules
 
