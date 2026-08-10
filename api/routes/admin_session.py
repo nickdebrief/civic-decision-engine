@@ -46664,12 +46664,29 @@ def _latest_projected_lifecycle_decision_key(
     return str(latest.get("decision_key") or "") or None
 
 
+def _durable_current_lifecycle_episode_id(intake_id: str) -> str | None:
+    episodes = list_lifecycle_episodes(intake_id=intake_id, db_path=DB_PATH)
+    if not episodes:
+        return None
+    current = max(
+        episodes,
+        key=lambda episode: (
+            int(episode.get("episode_sequence") or 0),
+            str(episode.get("initiated_at") or ""),
+            str(episode.get("episode_id") or ""),
+        ),
+    )
+    return str(current.get("episode_id") or "").strip() or None
+
+
 def _lifecycle_projection_evidence(
     item: Mapping[str, Any],
     durable_event: dict[str, Any],
     history_entry: dict[str, Any] | None,
     *,
     latest_projected_key: str | None,
+    durable_active_episode_id: str | None = None,
+    metadata_active_episode_id: str | None = None,
 ) -> str:
     if history_entry is None:
         if (
@@ -46685,8 +46702,28 @@ def _lifecycle_projection_evidence(
     if not _lifecycle_projection_matches(history_entry, durable_event):
         return "Decision record / metadata projection inconsistent"
 
+    event_episode_id = str(durable_event.get("episode_id") or "").strip() or None
+    normalized_durable_active_episode_id = (
+        str(durable_active_episode_id or "").strip() or None
+    )
+    normalized_metadata_active_episode_id = (
+        str(metadata_active_episode_id or "").strip() or None
+    )
+    if (
+        normalized_durable_active_episode_id
+        and event_episode_id != normalized_durable_active_episode_id
+    ):
+        return "Durable decision record — historical episode"
+
     decision_key = str(durable_event.get("decision_key") or "")
     decided_at = durable_event.get("decided_at")
+    if (
+        normalized_durable_active_episode_id
+        and event_episode_id == normalized_durable_active_episode_id
+        and normalized_metadata_active_episode_id
+        != normalized_durable_active_episode_id
+    ):
+        return "Decision record / metadata projection inconsistent"
     if durable_event.get("new_status") == "published" and item.get(
         "publication_date"
     ) != decided_at:
@@ -46718,6 +46755,9 @@ def _collect_admin_audit_events(
             if isinstance(event, dict) and event.get("lifecycle_decision_key")
         }
         item_durable_events = durable_by_intake.get(str(item.get("intake_id") or ""), [])
+        durable_active_episode_id = _durable_current_lifecycle_episode_id(
+            str(item.get("intake_id") or "")
+        )
         latest_projected_key = _latest_projected_lifecycle_decision_key(
             item_durable_events, projected_by_key
         )
@@ -46738,6 +46778,8 @@ def _collect_admin_audit_events(
                         event,
                         projection,
                         latest_projected_key=latest_projected_key,
+                        durable_active_episode_id=durable_active_episode_id,
+                        metadata_active_episode_id=item.get("active_episode_id"),
                     ),
                     "sha256_hash": event.get("sha256_hash"),
                     "document_title": item.get("title"),
@@ -47561,6 +47603,9 @@ def _render_document_intake_preview(
             if isinstance(entry, dict) and entry.get("lifecycle_decision_key")
         },
     )
+    durable_active_episode_id = _durable_current_lifecycle_episode_id(
+        str(item.get("intake_id") or "")
+    )
     history_rows = "".join(
         "<tr>"
         f'<td class="history-timestamp">{escape(str(entry.get("timestamp", "Not available")))}</td>'
@@ -47568,7 +47613,7 @@ def _render_document_intake_preview(
         f'<td class="history-status history-new-status">{escape(STATUS_LABELS.get(entry.get("new_status"), str(entry.get("new_status", ""))))}</td>'
         f'<td class="status-history-actor history-actor">{escape(str(entry.get("actor", "admin")))}</td>'
         f'<td class="status-history-note history-note">{escape(str(entry.get("note") or ""))}</td>'
-        f'<td class="history-evidence">{escape("Legacy sidecar history" if entry.get("lifecycle_decision_key") not in durable_by_key else _lifecycle_projection_evidence(item, durable_by_key[str(entry.get("lifecycle_decision_key"))], entry, latest_projected_key=latest_projected_key))}</td>'
+        f'<td class="history-evidence">{escape("Legacy sidecar history" if entry.get("lifecycle_decision_key") not in durable_by_key else _lifecycle_projection_evidence(item, durable_by_key[str(entry.get("lifecycle_decision_key"))], entry, latest_projected_key=latest_projected_key, durable_active_episode_id=durable_active_episode_id, metadata_active_episode_id=item.get("active_episode_id")))}</td>'
         f'<td class="history-role">{escape(str(durable_by_key.get(str(entry.get("lifecycle_decision_key") or ""), {}).get("actor_role") or "—"))}</td>'
         f'<td class="history-digest">{escape(str(durable_by_key.get(str(entry.get("lifecycle_decision_key") or ""), {}).get("sha256_hash") or "Not recorded"))}</td>'
         "</tr>"

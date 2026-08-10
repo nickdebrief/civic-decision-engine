@@ -207,6 +207,136 @@ class Stage58GovernedDocumentReconsiderationTests(unittest.TestCase):
             )
         )
 
+    def test_historical_episode_archive_is_not_classified_against_episode_two_projection(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        metadata = json.loads(
+            (self.root / item["intake_id"] / "metadata.json").read_bytes()
+        )
+        events = self._events(item["intake_id"])
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=events
+        )
+        note_offset = detail.index("Original archival decision.")
+        archive_row = detail[detail.rfind("<tr>", 0, note_offset) :].split(
+            "</tr>", 1
+        )[0]
+        self.assertIn("Rejected", archive_row)
+        self.assertIn("Archived", archive_row)
+        self.assertIn("Durable decision record — historical episode", archive_row)
+        self.assertNotIn(
+            "Decision record / metadata projection inconsistent", archive_row
+        )
+        self.assertIn("Current durable state", detail)
+        self.assertIn("Pending Intake", detail)
+        self.assertEqual(metadata["status"], "pending")
+        self.assertEqual(list_published_documents(root=self.root), [])
+
+    def test_active_episode_projection_tampering_remains_inconsistent(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        episode = lifecycle_episodes.list_lifecycle_episodes(
+            intake_id=item["intake_id"], db_path=self.db_path
+        )[0]
+        update_intake_status(
+            item["intake_id"], "under_review", actor="admin-user", actor_role="admin",
+            note="Episode review started.", root=self.root,
+            lifecycle_db_path=self.db_path, episode_id=episode["episode_id"],
+        )
+        metadata_path = self.root / item["intake_id"] / "metadata.json"
+        metadata = json.loads(metadata_path.read_bytes())
+        metadata["status"] = "published"
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=self._events(item["intake_id"])
+        )
+        active_row = detail.split("Episode review started.", 1)[1].split(
+            "</tr>", 1
+        )[0]
+        self.assertIn(
+            "Decision record / metadata projection inconsistent", active_row
+        )
+        self.assertEqual(metadata["status"], "published")
+        self.assertEqual(list_published_documents(root=self.root), [])
+
+    def test_tampered_active_episode_id_does_not_hide_active_event(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        episode = lifecycle_episodes.list_lifecycle_episodes(
+            intake_id=item["intake_id"], db_path=self.db_path
+        )[0]
+        update_intake_status(
+            item["intake_id"], "under_review", actor="admin-user", actor_role="admin",
+            note="Episode review started.", root=self.root,
+            lifecycle_db_path=self.db_path, episode_id=episode["episode_id"],
+        )
+        metadata = json.loads(
+            (self.root / item["intake_id"] / "metadata.json").read_bytes()
+        )
+        metadata["active_episode_id"] = "LEP-" + "b" * 64
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=self._events(item["intake_id"])
+        )
+        active_row = detail.split("Episode review started.", 1)[1].split(
+            "</tr>", 1
+        )[0]
+        self.assertIn(
+            "Decision record / metadata projection inconsistent", active_row
+        )
+        self.assertNotIn("Durable decision record — historical episode", active_row)
+
+    def test_missing_active_episode_id_fails_closed_for_active_event(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        episode = lifecycle_episodes.list_lifecycle_episodes(
+            intake_id=item["intake_id"], db_path=self.db_path
+        )[0]
+        update_intake_status(
+            item["intake_id"], "under_review", actor="admin-user", actor_role="admin",
+            note="Episode review started.", root=self.root,
+            lifecycle_db_path=self.db_path, episode_id=episode["episode_id"],
+        )
+        metadata = json.loads(
+            (self.root / item["intake_id"] / "metadata.json").read_bytes()
+        )
+        metadata.pop("active_episode_id", None)
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=self._events(item["intake_id"])
+        )
+        active_row = detail.split("Episode review started.", 1)[1].split(
+            "</tr>", 1
+        )[0]
+        self.assertIn(
+            "Decision record / metadata projection inconsistent", active_row
+        )
+
+    def test_historical_status_history_tampering_remains_inconsistent(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        metadata = json.loads(
+            (self.root / item["intake_id"] / "metadata.json").read_bytes()
+        )
+        archive_entry = next(
+            entry
+            for entry in metadata["status_history"]
+            if entry.get("note") == "Original archival decision."
+        )
+        archive_entry["actor"] = "tampered-account"
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=self._events(item["intake_id"])
+        )
+        archive_row = detail.split("Original archival decision.", 1)[1].split(
+            "</tr>", 1
+        )[0]
+        self.assertIn(
+            "Decision record / metadata projection inconsistent", archive_row
+        )
+        self.assertNotIn("Durable decision record — historical episode", archive_row)
+
     def test_episode_transition_uses_episode_id_and_continues_global_sequence(self):
         item = self._store()
         self._archive(item)
