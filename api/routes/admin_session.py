@@ -67,6 +67,10 @@ from api.document_lifecycle_episodes import (
     lifecycle_episode_by_id,
     list_lifecycle_episodes,
 )
+from api.document_lifecycle_presentation import (
+    build_lifecycle_presentation,
+    episode_context_for_decision,
+)
 from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.canonical_record_types import (
@@ -46755,6 +46759,14 @@ def _collect_admin_audit_events(
             if isinstance(event, dict) and event.get("lifecycle_decision_key")
         }
         item_durable_events = durable_by_intake.get(str(item.get("intake_id") or ""), [])
+        item_episodes = list_lifecycle_episodes(
+            intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
+        )
+        item_presentation = build_lifecycle_presentation(
+            item=item,
+            decisions=item_durable_events,
+            episodes=item_episodes,
+        )
         durable_active_episode_id = _durable_current_lifecycle_episode_id(
             str(item.get("intake_id") or "")
         )
@@ -46788,6 +46800,9 @@ def _collect_admin_audit_events(
                     "institution_source": item.get("institution_source"),
                     "document_format": item.get("document_type"),
                     "current_status": item.get("status"),
+                    "episode_sequence": episode_context_for_decision(event, item_presentation).get("sequence"),
+                    "episode_label": episode_context_for_decision(event, item_presentation).get("label"),
+                    "episode_type": episode_context_for_decision(event, item_presentation).get("episode_type"),
                 }
             )
         for index, event in enumerate(history):
@@ -46811,6 +46826,9 @@ def _collect_admin_audit_events(
                     "institution_source": item.get("institution_source"),
                     "document_format": item.get("document_type"),
                     "current_status": item.get("status"),
+                    "episode_sequence": None,
+                    "episode_label": "Legacy sidecar history",
+                    "episode_type": "legacy",
                 }
             )
     return sorted(
@@ -46973,6 +46991,7 @@ def _render_admin_audit_page(
           <td class="audit-filename">{escape(_audit_display_value(event.get('filename')))}</td>
           <td class="audit-previous-status">{escape(_audit_status_label(event.get('previous_status')))}</td>
           <td class="audit-new-status">{escape(_audit_status_label(event.get('new_status')))}</td>
+          <td class="audit-episode">{escape(_audit_display_value(event.get('episode_label')))}</td>
           <td class="audit-actor">{escape(_audit_display_value(event.get('actor')))}</td>
           <td class="audit-role">{escape(_audit_display_value(event.get('actor_role')))}</td>
           <td class="audit-note">{escape(_audit_display_value(event.get('note')))}</td>
@@ -47035,7 +47054,7 @@ def _render_admin_audit_page(
 <button type="submit">Apply filters</button>
 </form>
 <div class="audit-pagination" aria-label="Audit pagination"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
-<div class="audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Administrative Audit table"><table class="audit-table"><colgroup><col class="col-timestamp"><col class="col-title"><col class="col-reference"><col class="col-filename"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-hash"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th class="audit-timestamp">Timestamp</th><th class="audit-document">Document title</th><th class="audit-reference">Optional Reference Identifier</th><th class="audit-filename">Filename</th><th class="audit-previous-status">Previous status</th><th class="audit-new-status">New status</th><th class="audit-actor">Actor</th><th class="audit-role">Actor role</th><th class="audit-note">Note</th><th class="audit-evidence">Evidence source</th><th class="audit-digest">Recorded SHA-256</th><th class="audit-current-status">Current document status</th><th class="audit-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></div>
+<div class="audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Administrative Audit table"><table class="audit-table"><colgroup><col class="col-timestamp"><col class="col-title"><col class="col-reference"><col class="col-filename"><col class="col-status"><col class="col-status"><col class="col-state"><col class="col-actor"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-hash"><col class="col-status"><col class="col-actions"></colgroup><thead><tr><th class="audit-timestamp">Timestamp</th><th class="audit-document">Document title</th><th class="audit-reference">Optional Reference Identifier</th><th class="audit-filename">Filename</th><th class="audit-previous-status">Previous status</th><th class="audit-new-status">New status</th><th class="audit-episode">Lifecycle episode</th><th class="audit-actor">Actor</th><th class="audit-role">Actor role</th><th class="audit-note">Note</th><th class="audit-evidence">Evidence source</th><th class="audit-digest">Recorded SHA-256</th><th class="audit-current-status">Current document status</th><th class="audit-actions">Actions</th></tr></thead><tbody>{rows}</tbody></table></div></div>
 <div class="audit-pagination" aria-label="Audit pagination repeated"><span>Page {normalized_page} of {page_count}</span>{previous_link}{next_link}</div>
 </main></body></html>"""
 
@@ -47606,11 +47625,21 @@ def _render_document_intake_preview(
     durable_active_episode_id = _durable_current_lifecycle_episode_id(
         str(item.get("intake_id") or "")
     )
+    episodes = list_lifecycle_episodes(
+        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
+    )
+    episode_decisions = list_lifecycle_decisions(
+        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
+    )
+    lifecycle_presentation = build_lifecycle_presentation(
+        item=item, decisions=episode_decisions, episodes=episodes
+    )
     history_rows = "".join(
         "<tr>"
         f'<td class="history-timestamp">{escape(str(entry.get("timestamp", "Not available")))}</td>'
         f'<td class="history-status history-previous-status">{escape(STATUS_LABELS.get(entry.get("previous_status"), "Initial state") if entry.get("previous_status") else "Initial state")}</td>'
         f'<td class="history-status history-new-status">{escape(STATUS_LABELS.get(entry.get("new_status"), str(entry.get("new_status", ""))))}</td>'
+        f'<td class="status-history-episode">{escape(str(episode_context_for_decision(durable_by_key.get(str(entry.get("lifecycle_decision_key") or ""), {}), lifecycle_presentation).get("label") if entry.get("lifecycle_decision_key") in durable_by_key else "Legacy sidecar history"))}</td>'
         f'<td class="status-history-actor history-actor">{escape(str(entry.get("actor", "admin")))}</td>'
         f'<td class="status-history-note history-note">{escape(str(entry.get("note") or ""))}</td>'
         f'<td class="history-evidence">{escape("Legacy sidecar history" if entry.get("lifecycle_decision_key") not in durable_by_key else _lifecycle_projection_evidence(item, durable_by_key[str(entry.get("lifecycle_decision_key"))], entry, latest_projected_key=latest_projected_key, durable_active_episode_id=durable_active_episode_id, metadata_active_episode_id=item.get("active_episode_id")))}</td>'
@@ -47624,6 +47653,7 @@ def _render_document_intake_preview(
         f'<td class="history-timestamp">{escape(str(event.get("decided_at") or "Not available"))}</td>'
         f'<td class="history-status history-previous-status">{escape(STATUS_LABELS.get(str(event.get("previous_status") or ""), str(event.get("previous_status") or "")))}</td>'
         f'<td class="history-status history-new-status">{escape(STATUS_LABELS.get(str(event.get("new_status") or ""), str(event.get("new_status") or "")))}</td>'
+        f'<td class="status-history-episode">{escape(str(episode_context_for_decision(event, lifecycle_presentation).get("label") or ""))}</td>'
         f'<td class="status-history-actor history-actor">{escape(str(event.get("actor") or "—"))}</td>'
         f'<td class="status-history-note history-note">{escape(str(event.get("rationale") or ""))}</td>'
         '<td class="history-evidence">Decision recorded; metadata projection pending</td>'
@@ -47633,14 +47663,8 @@ def _render_document_intake_preview(
         for event in (lifecycle_events or [])
         if str(event.get("decision_key") or "") not in projected_keys
     )
-    history_rows = history_rows or '<tr><td colspan="8">No status history is available.</td></tr>'
+    history_rows = history_rows or '<tr><td colspan="9">No status history is available.</td></tr>'
     episode_rows = ""
-    episodes = list_lifecycle_episodes(
-        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
-    )
-    episode_decisions = list_lifecycle_decisions(
-        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
-    )
     for episode in episodes:
         episode_rows += (
             "<tr>"
@@ -47752,7 +47776,7 @@ def _render_document_intake_preview(
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
 {episode_section}
-<h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-actor"><col class="col-hash"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th><th class="history-evidence">Evidence source</th><th class="history-role">Actor role</th><th class="history-digest">Recorded SHA-256</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
+<h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-state"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-actor"><col class="col-hash"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-episode">Lifecycle episode</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th><th class="history-evidence">Evidence source</th><th class="history-role">Actor role</th><th class="history-digest">Recorded SHA-256</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
 </main></body></html>"""
 
 

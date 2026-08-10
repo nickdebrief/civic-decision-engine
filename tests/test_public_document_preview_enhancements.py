@@ -153,8 +153,8 @@ class PublicDocumentPreviewEnhancementTests(unittest.TestCase):
 
     def test_library_renders_preview_column_without_losing_reference_or_title_link(self):
         content = self.content(documents.public_document_library())
-        self.assertIn("<th>Preview</th>", content)
-        self.assertIn("<th>Optional Reference Identifier</th>", content)
+        self.assertIn('class="library-document-row"', content)
+        self.assertIn("<dt>Optional Reference Identifier</dt>", content)
         self.assertIn(f'<a href="/documents/{self.pdf_id}">Preview PDF Document</a>', content)
         self.assertIn("6 published documents.", content)
         self.assertIn("PREVIEW-PDF-001", content)
@@ -231,9 +231,9 @@ class PublicDocumentPreviewEnhancementTests(unittest.TestCase):
 
     def test_responsive_accessible_table_markup_is_present(self):
         content = self.content(documents.public_document_library())
-        self.assertIn('role="region" aria-label="Published documents table"', content)
-        self.assertIn("document-preview-cell", content)
-        self.assertIn("@media(max-width:800px)", content)
+        self.assertIn('aria-label="Published documents"', content)
+        self.assertIn("library-document-action", content)
+        self.assertIn("@media(max-width:600px)", content)
         self.assertIn("preview-action", content)
         self.assertIn("outline:3px solid #2e8b9a", content)
 
