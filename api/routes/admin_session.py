@@ -51590,6 +51590,27 @@ def admin_document_intake_status_confirm(
             raise ValueError("lifecycle_confirmation_actor_mismatch")
         metadata = load_pending_document_read_only(intake_id, root=intake_root())
         current_status = str(metadata.get("status") or "")
+        durable_active_episode_id = _durable_current_lifecycle_episode_id(intake_id)
+        metadata_active_episode_id = str(
+            metadata.get("active_episode_id") or ""
+        ).strip() or None
+        if durable_active_episode_id:
+            if metadata_active_episode_id != durable_active_episode_id:
+                raise ValueError("lifecycle_confirmation_stale")
+            durable_active_episode = lifecycle_episode_by_id(
+                durable_active_episode_id, db_path=DB_PATH
+            )
+            episode_decisions = list_lifecycle_decisions(
+                intake_id=intake_id, db_path=DB_PATH
+            )
+            if (
+                not durable_active_episode
+                or episode_current_status(durable_active_episode, episode_decisions)
+                != current_status
+            ):
+                raise ValueError("lifecycle_confirmation_stale")
+        elif metadata_active_episode_id:
+            raise ValueError("lifecycle_confirmation_stale")
         if current_status == payload.get("previous_status"):
             prepared = prepare_intake_status_transition(
                 intake_id,
@@ -51599,6 +51620,8 @@ def admin_document_intake_status_confirm(
                 note=payload.get("rationale"),
                 root=intake_root(),
             )
+            if durable_active_episode_id:
+                prepared["episode_id"] = durable_active_episode_id
             if not _lifecycle_confirmation_matches(payload, prepared):
                 raise ValueError("lifecycle_confirmation_stale")
         elif current_status != payload.get("new_status"):

@@ -35,6 +35,10 @@ def token_from(response) -> str:
     return unescape(match.group(1))
 
 
+def status_token_from(response) -> str:
+    return token_from(response)
+
+
 class Stage58GovernedDocumentReconsiderationTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -112,6 +116,23 @@ class Stage58GovernedDocumentReconsiderationTests(unittest.TestCase):
         return admin_session.admin_document_intake_reconsideration_confirm(
             item["intake_id"], self.request, confirmation_token=token_from(response)
         )
+
+    def _status_preview(self, item, new_status="under_review", note="Begin review."):
+        return admin_session.admin_document_intake_status_update(
+            item["intake_id"], self.request, new_status=new_status, admin_note=note
+        )
+
+    def _status_confirm(self, item, response):
+        return admin_session.admin_document_intake_status_confirm(
+            item["intake_id"], self.request,
+            confirmation_token=status_token_from(response),
+        )
+
+    def _signed_status_token_variant(self, token, **changes):
+        payload_b64, _signature = token.split(".", 1)
+        payload = json.loads(admin_session._b64decode(payload_b64).decode("utf-8"))
+        payload.update(changes)
+        return admin_session._create_lifecycle_confirmation_token(payload)
 
     def test_schema_is_idempotent_and_has_no_historical_episode_rows(self):
         conn = sqlite3.connect(self.db_path)
@@ -336,6 +357,110 @@ class Stage58GovernedDocumentReconsiderationTests(unittest.TestCase):
             "Decision record / metadata projection inconsistent", archive_row
         )
         self.assertNotIn("Durable decision record — historical episode", archive_row)
+
+    def test_episode_two_pending_to_under_review_confirmation_is_episode_aware(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        episode = lifecycle_episodes.list_lifecycle_episodes(
+            intake_id=item["intake_id"], db_path=self.db_path
+        )[0]
+        preview = self._status_preview(item)
+        payload = admin_session._verify_lifecycle_confirmation_token(
+            status_token_from(preview)
+        )
+        self.assertEqual(payload["episode_id"], episode["episode_id"])
+        before = self._events(item["intake_id"])
+        self._status_confirm(item, preview)
+        events = self._events(item["intake_id"])
+        self.assertEqual(len(events), len(before) + 1)
+        self.assertEqual(events[-1]["episode_id"], episode["episode_id"])
+        self.assertEqual(events[-1]["previous_status"], "pending")
+        self.assertEqual(events[-1]["new_status"], "under_review")
+        metadata = json.loads(
+            (self.root / item["intake_id"] / "metadata.json").read_bytes()
+        )
+        self.assertEqual(metadata["status"], "under_review")
+        self.assertEqual(metadata["active_episode_id"], episode["episode_id"])
+        detail = admin_session._render_document_intake_preview(
+            metadata, lifecycle_events=events
+        )
+        self.assertIn("Durable decision record — historical episode", detail)
+        self.assertIn("Durable decision record — correctly projected", detail)
+        self.assertEqual(list_published_documents(root=self.root), [])
+
+    def test_episode_two_confirmation_rejects_missing_or_tampered_metadata_identity(self):
+        for replacement in (None, "LEP-" + "b" * 64):
+            with self.subTest(replacement=replacement):
+                item = self._store(str(replacement))
+                self._archive(item)
+                self._confirm(item, self._prepare(item))
+                preview = self._status_preview(item)
+                metadata_path = self.root / item["intake_id"] / "metadata.json"
+                metadata = json.loads(metadata_path.read_bytes())
+                if replacement is None:
+                    metadata.pop("active_episode_id", None)
+                else:
+                    metadata["active_episode_id"] = replacement
+                metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+                before_metadata = metadata_path.read_bytes()
+                before_events = self._events(item["intake_id"])
+                with self.assertRaises(FakeHTTPException):
+                    self._status_confirm(item, preview)
+                self.assertEqual(metadata_path.read_bytes(), before_metadata)
+                self.assertEqual(self._events(item["intake_id"]), before_events)
+
+    def test_episode_two_confirmation_rejects_stale_durable_state(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        preview = self._status_preview(item)
+        episode = lifecycle_episodes.list_lifecycle_episodes(
+            intake_id=item["intake_id"], db_path=self.db_path
+        )[0]
+        update_intake_status(
+            item["intake_id"], "under_review", actor="admin-user", actor_role="admin",
+            note="Competing review.", root=self.root,
+            lifecycle_db_path=self.db_path, episode_id=episode["episode_id"],
+        )
+        before = self._events(item["intake_id"])
+        with self.assertRaises(FakeHTTPException):
+            self._status_confirm(item, preview)
+        self.assertEqual(self._events(item["intake_id"]), before)
+
+    def test_episode_two_confirmation_rejects_wrong_episode_token_and_replay_is_idempotent(self):
+        item = self._store()
+        self._archive(item)
+        self._confirm(item, self._prepare(item))
+        preview = self._status_preview(item)
+        token = status_token_from(preview)
+        wrong_episode_token = self._signed_status_token_variant(
+            token, episode_id="LEP-" + "c" * 64
+        )
+        before = self._events(item["intake_id"])
+        with self.assertRaises(FakeHTTPException):
+            admin_session.admin_document_intake_status_confirm(
+                item["intake_id"], self.request,
+                confirmation_token=wrong_episode_token,
+            )
+        self.assertEqual(self._events(item["intake_id"]), before)
+        self._status_confirm(item, preview)
+        after_first = self._events(item["intake_id"])
+        self._status_confirm(item, preview)
+        self.assertEqual(self._events(item["intake_id"]), after_first)
+
+    def test_stage56_confirmation_without_episode_remains_compatible(self):
+        item = self._store("-stage56")
+        preview = self._status_preview(item)
+        self.assertIsNone(
+            admin_session._verify_lifecycle_confirmation_token(
+                status_token_from(preview)
+            )["episode_id"]
+        )
+        self._status_confirm(item, preview)
+        events = self._events(item["intake_id"])
+        self.assertEqual(len(events), 1)
+        self.assertIsNone(events[0]["episode_id"])
 
     def test_episode_transition_uses_episode_id_and_continues_global_sequence(self):
         item = self._store()
