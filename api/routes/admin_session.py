@@ -60,6 +60,13 @@ from api import archive_collection_memberships as acm
 from api import archive_collections as ac
 from api import document_intake_corrections as dic
 from api.document_lifecycle_events import lifecycle_decision_by_key, list_lifecycle_decisions
+from api.document_lifecycle_episodes import (
+    create_reconsideration_episode,
+    episode_id_for_reconsideration,
+    episode_current_status,
+    lifecycle_episode_by_id,
+    list_lifecycle_episodes,
+)
 from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api.canonical_record_types import (
@@ -96,6 +103,8 @@ from api.document_intake import (
     load_pending_document,
     load_pending_document_read_only,
     prepare_intake_status_transition,
+    project_reconsideration_episode,
+    resolve_document_identifier_read_only,
     store_streaming_mbox_pending_document,
     store_pending_document,
     streaming_mbox_chunk_bytes,
@@ -206,6 +215,7 @@ ADMIN_USERNAME_ENV = "ADMIN_USERNAME"
 ADMIN_PASSWORD_ENV = "ADMIN_PASSWORD"
 ADMIN_SESSION_SECRET_ENV = "CDE_ADMIN_SESSION_SECRET"
 ADMIN_TEMP_UPLOAD_ENABLED_ENV = "ADMIN_TEMP_UPLOAD_ENABLED"
+STAGE58_RECONSIDERATION_ENABLED_ENV = "CDE_STAGE58_RECONSIDERATION_ENABLED"
 
 DOCUMENT_INTAKE_FILE_ACCEPT = ",".join(
     (
@@ -268,6 +278,7 @@ SESSION_COOKIE_NAME = "cde_admin_session"
 SESSION_MAX_AGE_SECONDS = 3600
 LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS = 600
 LIFECYCLE_CONFIRMATION_PURPOSE = "document_lifecycle_decision_confirmation"
+RECONSIDERATION_CONFIRMATION_PURPOSE = "document_reconsideration_confirmation"
 ATTACHMENT_MAX_BYTES_ENV = "CDE_ATTACHMENT_MAX_BYTES"
 DEFAULT_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024
 PDF_CONTENT_TYPE = "application/pdf"
@@ -445,6 +456,7 @@ def _create_lifecycle_confirmation_token(
         "rationale": prepared.get("rationale"),
         "sha256_hash": prepared.get("sha256_hash"),
         "sha512_hash": prepared.get("sha512_hash"),
+        "episode_id": prepared.get("episode_id"),
         "issued_at": issued_at,
         "expires_at": issued_at + LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS,
     }
@@ -481,6 +493,7 @@ def _verify_lifecycle_confirmation_token(
         "rationale",
         "sha256_hash",
         "sha512_hash",
+        "episode_id",
         "issued_at",
         "expires_at",
     }
@@ -489,6 +502,7 @@ def _verify_lifecycle_confirmation_token(
         "rationale",
         "sha256_hash",
         "sha512_hash",
+        "episode_id",
     }
     required_text = {
         "intake_id",
@@ -532,8 +546,105 @@ def _lifecycle_confirmation_matches(
             "rationale",
             "sha256_hash",
             "sha512_hash",
+            "episode_id",
         )
     )
+
+
+def _create_reconsideration_confirmation_token(
+    prepared: Mapping[str, Any], *, now: int | None = None
+) -> str:
+    secret = _session_secret()
+    if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    issued_at = int(now if now is not None else time.time())
+    payload = {
+        "purpose": RECONSIDERATION_CONFIRMATION_PURPOSE,
+        "version": 1,
+        "intake_id": str(prepared["intake_id"]),
+        "document_identifier": prepared["document_identifier"],
+        "episode_id": prepared["episode_id"],
+        "prior_terminal_decision_key": prepared["prior_terminal_decision_key"],
+        "prior_terminal_status": "archived",
+        "actor": prepared["actor"],
+        "actor_role": prepared["actor_role"],
+        "rationale": prepared["rationale"],
+        "sha256_hash": prepared["sha256_hash"],
+        "sha512_hash": prepared.get("sha512_hash"),
+        "issued_at": issued_at,
+        "expires_at": issued_at + LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS,
+    }
+    payload_b64 = _b64encode(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    )
+    return f"{payload_b64}.{_sign(payload_b64, secret)}"
+
+
+def _verify_reconsideration_confirmation_token(
+    token: str, *, now: int | None = None
+) -> dict[str, Any]:
+    secret = _session_secret()
+    if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    try:
+        payload_b64, signature = str(token or "").split(".", 1)
+    except ValueError as exc:
+        raise ValueError("reconsideration_confirmation_invalid") from exc
+    if not hmac.compare_digest(_sign(payload_b64, secret), signature):
+        raise ValueError("reconsideration_confirmation_invalid")
+    try:
+        payload = json.loads(_b64decode(payload_b64).decode("utf-8"))
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("reconsideration_confirmation_invalid") from exc
+    allowed = {
+        "purpose", "version", "intake_id", "document_identifier", "episode_id",
+        "prior_terminal_decision_key", "prior_terminal_status", "actor", "actor_role",
+        "rationale", "sha256_hash", "sha512_hash", "issued_at", "expires_at",
+    }
+    if not isinstance(payload, dict) or set(payload) != allowed:
+        raise ValueError("reconsideration_confirmation_invalid")
+    if payload.get("purpose") != RECONSIDERATION_CONFIRMATION_PURPOSE or payload.get("version") != 1:
+        raise ValueError("reconsideration_confirmation_invalid")
+    for key in (
+        "intake_id", "document_identifier", "episode_id", "prior_terminal_decision_key",
+        "prior_terminal_status", "actor", "actor_role", "rationale", "sha256_hash",
+    ):
+        if not isinstance(payload.get(key), str) or not payload[key].strip():
+            raise ValueError("reconsideration_confirmation_invalid")
+    if payload.get("sha512_hash") is not None and not isinstance(payload["sha512_hash"], str):
+        raise ValueError("reconsideration_confirmation_invalid")
+    issued_at = payload.get("issued_at")
+    expires_at = payload.get("expires_at")
+    if not isinstance(issued_at, int) or not isinstance(expires_at, int):
+        raise ValueError("reconsideration_confirmation_invalid")
+    if expires_at - issued_at != LIFECYCLE_CONFIRMATION_MAX_AGE_SECONDS:
+        raise ValueError("reconsideration_confirmation_invalid")
+    current_time = int(now if now is not None else time.time())
+    if issued_at > current_time + 60 or expires_at <= current_time:
+        raise ValueError("reconsideration_confirmation_expired")
+    return payload
+
+
+def _render_reconsideration_confirmation(
+    prepared: Mapping[str, Any], token: str, *, admin_session: Mapping[str, Any]
+) -> str:
+    item = prepared["metadata"]
+    document_name = str(item.get("title") or item.get("original_filename") or "Untitled document")
+    rows = "".join(
+        f"<tr><th>{escape(label)}</th><td>{value}</td></tr>"
+        for label, value in (
+            ("Document Identifier", escape(str(prepared["document_identifier"]))),
+            ("Document", escape(document_name)),
+            ("Original lifecycle", "Pending Intake → Under Review → Rejected → Archived"),
+            ("Prior terminal decision", escape(str(prepared["prior_terminal_decision_key"]))),
+            ("Proposed episode", f"Episode {int(prepared.get('episode_sequence') or 2)} · Pending Intake"),
+            ("Actor", escape(str(prepared["actor"]))),
+            ("Actor role", escape(str(prepared["actor_role"]))),
+            ("Rationale", f'<div class="decision-rationale">{escape(str(prepared["rationale"]))}</div>'),
+            ("Recorded SHA-256", f'<code>{escape(str(prepared["sha256_hash"]))}</code>'),
+        )
+    )
+    return f'''<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Review Proposed Reconsideration</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(840px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.55}}table{{width:100%;border-collapse:collapse;background:#fff;margin:18px 0}}th,td{{padding:11px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}.decision-rationale{{white-space:pre-wrap}}.actions{{display:flex;gap:12px;flex-wrap:wrap;padding:16px;background:#fff;border:1px solid #d8d4ca}}button,.button-link{{display:inline-flex;align-items:center;min-height:42px;padding:10px 14px;border:1px solid #245d61;font:700 1rem system-ui,sans-serif;text-decoration:none;cursor:pointer}}button{{background:#176b65;color:#fff}}.button-link{{background:#fff;color:#245d61}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>Proposed governed reconsideration</h1><p class="notice"><strong>This does not reverse the archived lifecycle.</strong> The original rejection and archival remain durable historical evidence. Confirmation creates a new lifecycle episode for the same preserved document and does not publish it.</p><table><tbody>{rows}</tbody></table><form class="actions" method="post" action="/api/admin/session/document-intake/{escape(str(prepared["intake_id"]))}/reconsideration/confirm"><input type="hidden" name="confirmation_token" value="{escape(token)}"><a class="button-link" href="/admin/document-intake/{escape(str(prepared["intake_id"]))}">Cancel</a><button type="submit">Confirm Reconsideration</button></form></main></body></html>'''
 
 
 def _format_intake_size_limit(value: int) -> str:
@@ -588,6 +699,17 @@ def attachment_max_upload_bytes() -> int:
 
 def admin_temp_upload_enabled() -> bool:
     return str(os.getenv(ADMIN_TEMP_UPLOAD_ENABLED_ENV, "false")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def stage58_reconsideration_enabled() -> bool:
+    """Gate new reconsideration writes while keeping episode reads available."""
+
+    return str(os.getenv(STAGE58_RECONSIDERATION_ENABLED_ENV, "false")).strip().lower() in {
         "1",
         "true",
         "yes",
@@ -47416,6 +47538,11 @@ def _render_document_intake_preview(
         </form>"""
         for status, label in transitions
     ) or "<p>No further lifecycle actions are available from this state.</p>"
+    if item.get("status") == "archived" and stage58_reconsideration_enabled():
+        action_forms += f'''<form class="lifecycle-action lifecycle-action--reconsideration" method="post" action="/api/admin/session/document-intake/{escape(str(item['intake_id']))}/reconsideration">
+          <label>Reconsideration rationale <textarea name="reconsideration_rationale" maxlength="500" required></textarea><span class="field-help">This creates a new governed lifecycle episode for the same preserved document. It does not reverse the archived lifecycle, change preserved bytes, allocate a new Document Identifier, or publish the document.</span></label>
+          <button type="submit">Review Reconsideration</button>
+        </form>'''
     durable_by_key = {
         str(event.get("decision_key") or ""): event
         for event in (lifecycle_events or [])
@@ -47462,6 +47589,28 @@ def _render_document_intake_preview(
         if str(event.get("decision_key") or "") not in projected_keys
     )
     history_rows = history_rows or '<tr><td colspan="8">No status history is available.</td></tr>'
+    episode_rows = ""
+    episodes = list_lifecycle_episodes(
+        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
+    )
+    episode_decisions = list_lifecycle_decisions(
+        intake_id=str(item.get("intake_id") or ""), db_path=DB_PATH
+    )
+    for episode in episodes:
+        episode_rows += (
+            "<tr>"
+            f"<td>{escape(str(episode.get('episode_sequence') or ''))}</td>"
+            f"<td>{escape(str(episode.get('episode_id') or ''))}</td>"
+            f"<td>Governed reconsideration initiated</td>"
+            f"<td>{escape(STATUS_LABELS.get(episode_current_status(episode, episode_decisions), episode_current_status(episode, episode_decisions)))}</td>"
+            f"<td>{escape(str(episode.get('initiated_at') or ''))}</td>"
+            f"<td>{escape(str(episode.get('rationale') or ''))}</td>"
+            "</tr>"
+        )
+    episode_section = (
+        f'<section><h2>Lifecycle Episodes</h2><p class="notice">Episode initiation creates a subsequent governed consideration. The original lifecycle remains unchanged and Archived remains terminal within that episode.</p><div class="admin-table-scroll"><table class="status-history"><thead><tr><th>Episode</th><th>Episode ID</th><th>Evidence</th><th>Current durable state</th><th>Initiated</th><th>Rationale</th></tr></thead><tbody>{episode_rows}</tbody></table></div></section>'
+        if episode_rows else ""
+    )
     image_preview = (
         f"""<h2>Image preview</h2><div class="admin-image-preview-wrap"><img class="admin-document-image-preview" src="/admin/document-intake/{escape(item['intake_id'])}/preview" alt="{escape(str(item['title']))}"></div>"""
         if is_image_document(item)
@@ -47557,6 +47706,7 @@ def _render_document_intake_preview(
 {canonical_record_section}
 <h2>Internal notes</h2><form class="notes-form" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/notes"><textarea name="notes" required>{escape(str(item.get('notes') or ''))}</textarea><button type="submit">Update private notes</button></form>
 <h2>Available admin actions</h2><div class="actions">{action_forms}</div>
+{episode_section}
 <h2>Status history</h2><div class="status-history-wrapper audit-table-wrapper"><div class="admin-table-scroll" role="region" aria-label="Status history table"><table class="status-history audit-history-table"><colgroup><col class="col-timestamp"><col class="col-status"><col class="col-status"><col class="col-actor"><col class="col-note"><col class="col-state"><col class="col-actor"><col class="col-hash"></colgroup><thead><tr><th class="history-timestamp">Timestamp</th><th class="history-status history-previous-status">Previous status</th><th class="history-status history-new-status">New status</th><th class="status-history-actor history-actor">Actor</th><th class="status-history-note history-note">Note</th><th class="history-evidence">Evidence source</th><th class="history-role">Actor role</th><th class="history-digest">Recorded SHA-256</th></tr></thead><tbody>{history_rows}</tbody></table></div></div>
 </main></body></html>"""
 
@@ -51171,6 +51321,173 @@ def admin_outlook_archive_attachment_promotion_create(
 
 
 @router.post(
+    "/api/admin/session/document-intake/{intake_id}/reconsideration",
+    response_class=HTMLResponse,
+)
+def admin_document_intake_reconsideration_prepare(
+    intake_id: str,
+    request: Request,
+    reconsideration_rationale: str = Form(...),
+):
+    session = require_admin_session(request)
+    if not stage58_reconsideration_enabled():
+        raise _http_error(409, "lifecycle_episode_reconsideration_disabled")
+    try:
+        metadata = load_pending_document_read_only(intake_id, root=intake_root())
+        if metadata.get("status") != "archived":
+            raise ValueError("lifecycle_episode_source_not_archived")
+        document_identifier = resolve_document_identifier_read_only(
+            metadata, root=intake_root()
+        )
+        if not document_identifier:
+            raise ValueError("lifecycle_episode_document_identifier_unavailable")
+        decisions = list_lifecycle_decisions(intake_id=intake_id, db_path=DB_PATH)
+        prior = max(decisions, key=lambda row: int(row.get("decision_sequence") or 0), default=None)
+        if not prior or prior.get("new_status") != "archived":
+            raise ValueError("lifecycle_episode_prior_decision_required")
+        if prior.get("document_identifier") != document_identifier:
+            raise ValueError("lifecycle_episode_document_identifier_mismatch")
+        sha256 = str(metadata.get("sha256_hash") or "").strip().lower()
+        sha512 = str(metadata.get("sha512_hash") or "").strip().lower() or None
+        if not sha256 or prior.get("sha256_hash") != sha256:
+            raise ValueError("lifecycle_episode_sha256_mismatch")
+        if prior.get("sha512_hash") != sha512:
+            raise ValueError("lifecycle_episode_sha512_mismatch")
+        episodes = list_lifecycle_episodes(intake_id=intake_id, db_path=DB_PATH)
+        if episodes:
+            decisions_by_episode = decisions
+            if any(
+                episode_current_status(episode, decisions_by_episode) != "archived"
+                for episode in episodes
+            ):
+                raise ValueError("lifecycle_episode_active_exists")
+        rationale = str(reconsideration_rationale or "").strip()
+        if not rationale:
+            raise ValueError("lifecycle_episode_rationale_required")
+        if len(rationale) > 500:
+            raise ValueError("lifecycle_episode_rationale_too_long")
+        episode_id = episode_id_for_reconsideration(
+            intake_id=intake_id,
+            prior_terminal_decision_key=str(prior["decision_key"]),
+        )
+        prepared = {
+            "metadata": metadata,
+            "intake_id": intake_id,
+            "document_identifier": document_identifier,
+            "episode_id": episode_id,
+            "episode_sequence": len(episodes) + 2,
+            "prior_terminal_decision_key": str(prior["decision_key"]),
+            "actor": _admin_session_actor(session),
+            "actor_role": _admin_session_role(session),
+            "rationale": rationale,
+            "sha256_hash": sha256,
+            "sha512_hash": sha512,
+        }
+        return HTMLResponse(
+            content=_render_reconsideration_confirmation(
+                prepared,
+                _create_reconsideration_confirmation_token(prepared),
+                admin_session=session,
+            )
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        raise _http_error(404 if detail.endswith("not_found") else 409, detail) from exc
+
+
+@router.post(
+    "/api/admin/session/document-intake/{intake_id}/reconsideration/confirm",
+    response_class=HTMLResponse,
+)
+def admin_document_intake_reconsideration_confirm(
+    intake_id: str,
+    request: Request,
+    confirmation_token: str = Form(...),
+):
+    session = require_admin_session(request)
+    if not stage58_reconsideration_enabled():
+        raise _http_error(409, "lifecycle_episode_reconsideration_disabled")
+    actor = _admin_session_actor(session)
+    actor_role = _admin_session_role(session)
+    try:
+        payload = _verify_reconsideration_confirmation_token(confirmation_token)
+        if payload.get("intake_id") != intake_id:
+            raise ValueError("reconsideration_confirmation_invalid")
+        if payload.get("actor") != actor or payload.get("actor_role") != actor_role:
+            raise ValueError("reconsideration_confirmation_actor_mismatch")
+        metadata = load_pending_document_read_only(intake_id, root=intake_root())
+        identifier = resolve_document_identifier_read_only(metadata, root=intake_root())
+        if identifier != payload.get("document_identifier"):
+            raise ValueError("reconsideration_confirmation_stale")
+        if str(metadata.get("sha256_hash") or "").strip().lower() != payload.get("sha256_hash"):
+            raise ValueError("reconsideration_confirmation_stale")
+        if (str(metadata.get("sha512_hash") or "").strip().lower() or None) != payload.get("sha512_hash"):
+            raise ValueError("reconsideration_confirmation_stale")
+        prior = max(
+            list_lifecycle_decisions(intake_id=intake_id, db_path=DB_PATH),
+            key=lambda row: int(row.get("decision_sequence") or 0),
+            default=None,
+        )
+        if not prior or prior.get("decision_key") != payload.get("prior_terminal_decision_key") or prior.get("new_status") != "archived":
+            raise ValueError("reconsideration_confirmation_stale")
+        existing = lifecycle_episode_by_id(str(payload.get("episode_id") or ""), db_path=DB_PATH)
+        if existing:
+            if any(
+                existing.get(key) != value
+                for key, value in (
+                    ("intake_id", intake_id),
+                    ("document_identifier", identifier),
+                    ("prior_terminal_decision_key", prior["decision_key"]),
+                    ("sha256_hash", payload["sha256_hash"]),
+                    ("sha512_hash", payload.get("sha512_hash")),
+                    ("initiating_actor", actor),
+                    ("initiating_actor_role", actor_role),
+                    ("rationale", payload["rationale"]),
+                )
+            ):
+                raise ValueError("reconsideration_confirmation_conflict")
+            if metadata.get("active_episode_id") != existing["episode_id"]:
+                metadata = project_reconsideration_episode(
+                    intake_id,
+                    str(existing["episode_id"]),
+                    initiated_at=str(existing["initiated_at"]),
+                    root=intake_root(),
+                )
+            elif metadata.get("status") != "pending":
+                raise ValueError("reconsideration_confirmation_stale")
+        else:
+            if metadata.get("status") != "archived" or metadata.get("active_episode_id"):
+                raise ValueError("reconsideration_confirmation_stale")
+            existing, _is_retry = create_reconsideration_episode(
+                intake_id=intake_id,
+                document_identifier=identifier,
+                sha256_hash=str(payload["sha256_hash"]),
+                sha512_hash=payload.get("sha512_hash"),
+                prior_terminal_decision_key=str(prior["decision_key"]),
+                actor=actor,
+                actor_role=actor_role,
+                rationale=str(payload["rationale"]),
+                db_path=DB_PATH,
+            )
+            metadata = project_reconsideration_episode(
+                intake_id,
+                str(existing["episode_id"]),
+                initiated_at=str(existing["initiated_at"]),
+                root=intake_root(),
+            )
+        return HTMLResponse(
+            content=_render_document_intake_preview(
+                metadata,
+                admin_session=session,
+                lifecycle_events=list_lifecycle_decisions(intake_id=intake_id, db_path=DB_PATH),
+            )
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        raise _http_error(404 if detail.endswith("not_found") else 409, detail) from exc
+
+
+@router.post(
     "/api/admin/session/document-intake/{intake_id}/status",
     response_class=HTMLResponse,
 )
@@ -51190,6 +51507,11 @@ def admin_document_intake_status_update(
             note=admin_note,
             root=intake_root(),
         )
+        active_episode_id = str(prepared["metadata"].get("active_episode_id") or "").strip()
+        if active_episode_id:
+            if not lifecycle_episode_by_id(active_episode_id, db_path=DB_PATH):
+                raise ValueError("lifecycle_confirmation_episode_invalid")
+            prepared["episode_id"] = active_episode_id
     except ValueError as exc:
         detail = str(exc)
         status_code = 404 if detail == "document_intake_not_found" else 409
@@ -51271,6 +51593,7 @@ def admin_document_intake_status_confirm(
             note=payload.get("rationale"),
             root=intake_root(),
             lifecycle_db_path=DB_PATH,
+            episode_id=str(payload.get("episode_id") or "").strip() or None,
         )
     except ValueError as exc:
         detail = str(exc)

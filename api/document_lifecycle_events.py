@@ -62,6 +62,7 @@ def ensure_lifecycle_event_table(conn: sqlite3.Connection) -> None:
             sha256_hash TEXT,
             sha512_hash TEXT,
             digest_status TEXT NOT NULL CHECK (digest_status IN ('recorded', 'unavailable')),
+            episode_id TEXT,
             UNIQUE (intake_id, decision_sequence),
             CHECK (sha256_hash IS NULL OR length(sha256_hash) = 64),
             CHECK (sha512_hash IS NULL OR length(sha512_hash) = 128),
@@ -87,6 +88,21 @@ def ensure_lifecycle_event_table(conn: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_lifecycle_events_global_audit
         ON document_lifecycle_decision_events (decided_at, id)
+        """
+    )
+    columns = {
+        str(row[1]) for row in conn.execute(
+            "PRAGMA table_info(document_lifecycle_decision_events)"
+        ).fetchall()
+    }
+    if "episode_id" not in columns:
+        conn.execute(
+            "ALTER TABLE document_lifecycle_decision_events ADD COLUMN episode_id TEXT"
+        )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_lifecycle_events_episode
+        ON document_lifecycle_decision_events (intake_id, episode_id, decision_sequence)
         """
     )
     conn.execute(
@@ -119,6 +135,7 @@ def _normalized_decision(
     rationale: str | None,
     sha256_hash: str | None,
     sha512_hash: str | None,
+    episode_id: str | None = None,
 ) -> dict[str, Any]:
     decision = {
         "intake_id": str(intake_id or "").strip(),
@@ -130,6 +147,7 @@ def _normalized_decision(
         "rationale": _clean_optional(rationale),
         "sha256_hash": _clean_optional(sha256_hash),
         "sha512_hash": _clean_optional(sha512_hash),
+        "episode_id": _clean_optional(episode_id),
     }
     if not decision["intake_id"]:
         raise ValueError("lifecycle_decision_intake_id_required")
@@ -162,7 +180,8 @@ def _normalized_decision(
 
 
 def _decision_key(decision: dict[str, Any], sequence: int) -> str:
-    payload = {**decision, "decision_sequence": sequence}
+    payload = {key: value for key, value in decision.items() if key != "episode_id" or value}
+    payload["decision_sequence"] = sequence
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -183,6 +202,7 @@ def record_lifecycle_decision(
     rationale: str | None,
     sha256_hash: str | None,
     sha512_hash: str | None,
+    episode_id: str | None = None,
     applied_decision_keys: Iterable[str] = (),
     decided_at: str | None = None,
     db_path: Path | str | None = None,
@@ -198,6 +218,7 @@ def record_lifecycle_decision(
         rationale=rationale,
         sha256_hash=sha256_hash,
         sha512_hash=sha512_hash,
+        episode_id=episode_id,
     )
     applied = {str(value) for value in applied_decision_keys if value}
     conn = get_db(db_path)
@@ -223,8 +244,8 @@ def record_lifecycle_decision(
             INSERT INTO document_lifecycle_decision_events (
                 decision_key, intake_id, decision_sequence, document_identifier,
                 previous_status, new_status, decided_at, actor, actor_role,
-                rationale, sha256_hash, sha512_hash, digest_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                rationale, sha256_hash, sha512_hash, digest_status, episode_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 key,
@@ -240,6 +261,7 @@ def record_lifecycle_decision(
                 decision["sha256_hash"],
                 decision["sha512_hash"],
                 decision["digest_status"],
+                decision["episode_id"],
             ),
         )
         row = conn.execute(
@@ -298,12 +320,21 @@ def list_lifecycle_decisions(
 def lifecycle_decision_by_key(
     decision_key: str, *, db_path: Path | str | None = None
 ) -> dict[str, Any] | None:
-    conn = get_db(db_path)
+    path = Path(db_path or DEFAULT_DB_PATH)
+    if not path.is_file():
+        return None
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
     try:
-        row = conn.execute(
-            "SELECT * FROM document_lifecycle_decision_events WHERE decision_key = ?",
-            (str(decision_key or "").strip(),),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                "SELECT * FROM document_lifecycle_decision_events WHERE decision_key = ?",
+                (str(decision_key or "").strip(),),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return None
+            raise
         return dict(row) if row else None
     finally:
         conn.close()

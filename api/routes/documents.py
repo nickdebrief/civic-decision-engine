@@ -30,6 +30,8 @@ from api.document_intake import (
     load_published_document,
     published_document_file,
 )
+from api.document_lifecycle_events import list_lifecycle_decisions
+from api.document_lifecycle_episodes import episode_current_status, list_lifecycle_episodes
 from api.email_documents import APPLE_MAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import EMAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import MBOX_GOVERNANCE_BOUNDARY
@@ -437,6 +439,17 @@ def _media_family_label(item: dict) -> str:
 
 
 def _render_publication_pathway(item: dict) -> str:
+    db_path = intake_root().resolve(strict=False).parent / "records.db"
+    episodes = list_lifecycle_episodes(
+        intake_id=str(item.get("intake_id") or ""), db_path=db_path
+    )
+    pathway_events = _pathway_events(item)
+    if episodes:
+        pathway_events = [
+            (index, event)
+            for index, event in pathway_events
+            if not event.get("episode_id")
+        ]
     rows = "".join(
         f"""<tr>
           <td class="publication-pathway-timestamp">{escape(_display_value(event.get('timestamp')))}</td>
@@ -445,9 +458,29 @@ def _render_publication_pathway(item: dict) -> str:
           <td class="publication-pathway-actor">{escape(_display_value(event.get('actor')))}</td>
           <td class="publication-pathway-note">{escape(_display_value(event.get('note')))}</td>
         </tr>"""
-        for _index, event in _pathway_events(item)
+        for _index, event in pathway_events
     ) or '<tr><td colspan="5">No lifecycle pathway entries are available.</td></tr>'
-    return f"""<section id="publication-pathway" class="publication-pathway"><h2>Publication Pathway</h2><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th class="publication-pathway-timestamp">Timestamp</th><th class="publication-pathway-previous-status">Previous status</th><th class="publication-pathway-new-status">New status</th><th class="publication-pathway-actor">Actor</th><th class="publication-pathway-note">Note</th></tr></thead><tbody>{rows}</tbody></table></div><p class="provenance-boundary">Actor identifies the administrative identity recorded for the lifecycle action. It does not by itself establish authorship, factual verification, or legal responsibility for the document contents.</p></section>"""
+    episode_sections = ""
+    if episodes:
+        decisions = list_lifecycle_decisions(
+            intake_id=str(item.get("intake_id") or ""), db_path=db_path
+        )
+        sections = []
+        for episode in episodes:
+            episode_id = str(episode.get("episode_id") or "")
+            episode_events = [
+                event for event in decisions
+                if str(event.get("episode_id") or "") == episode_id
+            ]
+            event_rows = "".join(
+                f"<tr><td>{escape(_display_value(event.get('decided_at')))}</td><td>{escape(_status_label(event.get('previous_status')))}</td><td>{escape(_status_label(event.get('new_status')))}</td><td>{escape(_display_value(event.get('actor')))}</td><td>{escape(_display_value(event.get('rationale')))}</td></tr>"
+                for event in episode_events
+            ) or '<tr><td colspan="5">No lifecycle decisions recorded in this episode.</td></tr>'
+            sections.append(
+                f'<section class="publication-episode"><h3>Subsequent governed consideration — Episode {escape(str(episode.get("episode_sequence") or ""))}</h3><p class="provenance-boundary">Initiated {escape(_display_value(episode.get("initiated_at")))}. The original lifecycle remains preserved; reconsideration did not reverse or erase earlier decisions. Initial state: Pending Intake.</p><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{event_rows}</tbody></table></div></section>'
+            )
+        episode_sections = "".join(sections)
+    return f"""<section id="publication-pathway" class="publication-pathway"><h2>Publication Pathway</h2><h3>Original lifecycle</h3><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th class="publication-pathway-timestamp">Timestamp</th><th class="publication-pathway-previous-status">Previous status</th><th class="publication-pathway-new-status">New status</th><th class="publication-pathway-actor">Actor</th><th class="publication-pathway-note">Note</th></tr></thead><tbody>{rows}</tbody></table></div>{episode_sections}<p class="provenance-boundary">Actor identifies the administrative identity recorded for the lifecycle action. It does not by itself establish authorship, factual verification, or legal responsibility for the document contents.</p></section>"""
 
 
 def _render_publication_provenance(item: dict) -> str:

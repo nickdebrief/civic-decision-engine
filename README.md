@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 57 — Governed Lifecycle Decision Confirmation
+Current release: CDE Platform Stage 58 — Governed Document Reconsideration and Lifecycle Episodes
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**

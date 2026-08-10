@@ -43,7 +43,12 @@ from api.imap_acquisition import (
 )
 from api.document_lifecycle_events import (
     lifecycle_decision_by_key,
+    list_lifecycle_decisions,
     record_lifecycle_decision,
+)
+from api.document_lifecycle_episodes import (
+    episode_current_status,
+    list_lifecycle_episodes,
 )
 
 
@@ -339,6 +344,18 @@ def _registered_document_identifier_read_only(
         return str(row[0]) if row else None
     finally:
         conn.close()
+
+
+def resolve_document_identifier_read_only(
+    metadata: dict[str, Any], *, root: Path | None = None
+) -> str | None:
+    """Resolve an already-assigned identifier without allocating or persisting."""
+
+    intake_id = str(metadata.get("intake_id") or "").strip()
+    registered = _registered_document_identifier_read_only(intake_id, root=root)
+    if registered:
+        return registered
+    return None
 
 
 def _ensure_document_identifier_registry(conn: sqlite3.Connection) -> None:
@@ -2198,6 +2215,7 @@ def update_intake_status(
     changed_at: str | None = None,
     root: Path | None = None,
     lifecycle_db_path: Path | str | None = None,
+    episode_id: str | None = None,
 ) -> dict[str, Any]:
     metadata = load_pending_document_read_only(intake_id, root=root)
     current_status = metadata.get("status")
@@ -2205,6 +2223,9 @@ def update_intake_status(
     normalized_actor = str(actor or "").strip() or "admin"
     normalized_role = str(actor_role or "").strip() or "unavailable"
     rationale = str(note or "").strip() or None
+    normalized_episode_id = str(episode_id or "").strip() or None
+    if normalized_episode_id and str(metadata.get("active_episode_id") or "") != normalized_episode_id:
+        raise ValueError("document_intake_episode_stale")
     if current_status not in INTAKE_STATUSES:
         raise ValueError("document_intake_status_invalid")
     if normalized_status not in INTAKE_STATUSES:
@@ -2217,6 +2238,24 @@ def update_intake_status(
         resolved_lifecycle_db_path = Path(str(os.environ["RECORDS_DB_PATH"]))
     else:
         resolved_lifecycle_db_path = Path("records.db")
+
+    if normalized_episode_id:
+        episode = next(
+            (
+                row for row in list_lifecycle_episodes(
+                    intake_id=intake_id, db_path=resolved_lifecycle_db_path
+                )
+                if str(row.get("episode_id") or "") == normalized_episode_id
+            ),
+            None,
+        )
+        if not episode:
+            raise ValueError("document_intake_episode_stale")
+        episode_decisions = list_lifecycle_decisions(
+            intake_id=intake_id, db_path=resolved_lifecycle_db_path
+        )
+        if episode_current_status(episode, episode_decisions) != str(current_status):
+            raise ValueError("document_intake_episode_stale")
 
     # An identical repeated POST after successful projection is idempotent.
     if normalized_status == current_status:
@@ -2233,6 +2272,10 @@ def update_intake_status(
         )
         if existing and all(
             (
+                existing.get("intake_id") == str(metadata.get("intake_id") or intake_id),
+                existing.get("document_identifier")
+                == resolve_document_identifier_read_only(metadata, root=root),
+                existing.get("episode_id") == normalized_episode_id,
                 existing.get("new_status") == normalized_status,
                 existing.get("actor") == normalized_actor,
                 existing.get("actor_role") == normalized_role,
@@ -2284,6 +2327,7 @@ def update_intake_status(
         rationale=rationale,
         sha256_hash=sha256_hash,
         sha512_hash=sha512_hash,
+        episode_id=normalized_episode_id,
         applied_decision_keys=applied_keys,
         decided_at=changed_at,
         db_path=resolved_lifecycle_db_path,
@@ -2297,16 +2341,49 @@ def update_intake_status(
             "actor": normalized_actor,
             "note": rationale,
             "lifecycle_decision_key": decision["decision_key"],
+            **({"episode_id": normalized_episode_id} if normalized_episode_id else {}),
         }
     )
     metadata["status"] = normalized_status
     metadata["status_updated_at"] = timestamp
     metadata["status_history"] = history
     metadata["public_record_mutation"] = False
+    if normalized_episode_id:
+        metadata["active_episode_id"] = normalized_episode_id
     if normalized_status == "published":
         metadata["publication_date"] = timestamp
     if notes is not None:
         metadata["notes"] = str(notes).strip()
+    _write_metadata(intake_id, metadata, root=root, assign_identifier=False)
+    return metadata
+
+
+def project_reconsideration_episode(
+    intake_id: str,
+    episode_id: str,
+    *,
+    initiated_at: str,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Project a committed episode's initial pending state into metadata."""
+
+    metadata = load_pending_document_read_only(intake_id, root=root)
+    active = str(metadata.get("active_episode_id") or "")
+    if active and active != str(episode_id):
+        raise ValueError("document_intake_episode_projection_conflict")
+    if active == str(episode_id) and metadata.get("status") == "pending":
+        return metadata
+    if metadata.get("status") != "archived" or active:
+        raise ValueError("document_intake_episode_projection_stale")
+    registry_identifier = _registered_document_identifier_read_only(
+        intake_id, root=root
+    )
+    if registry_identifier:
+        metadata["document_identifier"] = registry_identifier
+    metadata["active_episode_id"] = str(episode_id)
+    metadata["status"] = "pending"
+    metadata["status_updated_at"] = str(initiated_at)
+    metadata["public_record_mutation"] = False
     _write_metadata(intake_id, metadata, root=root, assign_identifier=False)
     return metadata
 
@@ -2481,7 +2558,7 @@ def document_matches_search(document: dict[str, Any], query: str | None) -> bool
 
 def document_search_index_failures(*, root: Path | None = None) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
-    for item in list_intake_documents(root=root):
+    for item in list_intake_documents_read_only(root=root):
         if item.get("status") != "published":
             continue
         try:
@@ -2526,6 +2603,57 @@ def reindex_published_document_search(*, root: Path | None = None) -> dict[str, 
     return {"indexed": indexed, "failures": failures}
 
 
+def _episode_public_projection_is_consistent(
+    metadata: dict[str, Any],
+    episode: dict[str, Any],
+    decisions: list[dict[str, Any]],
+) -> bool:
+    """Require the compatibility projection to agree before public exposure."""
+
+    episode_id = str(episode.get("episode_id") or "")
+    if str(metadata.get("active_episode_id") or "") != episode_id:
+        return False
+    scoped = [
+        event for event in decisions
+        if str(event.get("episode_id") or "") == episode_id
+    ]
+    if not scoped:
+        return (
+            episode_current_status(episode, decisions) == "pending"
+            and metadata.get("status") == "pending"
+            and metadata.get("status_updated_at") == episode.get("initiated_at")
+        )
+    event = max(scoped, key=lambda row: int(row.get("decision_sequence") or 0))
+    if metadata.get("status") != event.get("new_status"):
+        return False
+    if metadata.get("status_updated_at") != event.get("decided_at"):
+        return False
+    matching_history = next(
+        (
+            entry for entry in metadata.get("status_history", [])
+            if isinstance(entry, dict)
+            and entry.get("lifecycle_decision_key") == event.get("decision_key")
+        ),
+        None,
+    )
+    if not matching_history:
+        return False
+    if any(
+        (
+            matching_history.get("episode_id") != episode_id,
+            matching_history.get("previous_status") != event.get("previous_status"),
+            matching_history.get("new_status") != event.get("new_status"),
+            matching_history.get("timestamp") != event.get("decided_at"),
+            matching_history.get("actor") != event.get("actor"),
+            matching_history.get("note") != event.get("rationale"),
+        )
+    ):
+        return False
+    if event.get("new_status") == "published":
+        return metadata.get("publication_date") == event.get("decided_at")
+    return True
+
+
 def list_published_documents(
     *,
     query: str | None = None,
@@ -2535,8 +2663,36 @@ def list_published_documents(
     root: Path | None = None,
 ) -> list[dict[str, Any]]:
     documents = []
-    for item in list_intake_documents(root=root):
-        if item["status"] != "published":
+    for item in list_intake_documents_read_only(root=root):
+        lifecycle_db_path = (
+            Path(root).resolve(strict=False).parent / "records.db" if root else None
+        )
+        episodes = list_lifecycle_episodes(
+            intake_id=str(item.get("intake_id") or ""),
+            db_path=lifecycle_db_path,
+        )
+        durable_status = item.get("status")
+        if episodes:
+            decisions = list_lifecycle_decisions(
+                intake_id=str(item.get("intake_id") or ""),
+                db_path=lifecycle_db_path,
+            )
+            active = next(
+                (
+                    episode for episode in reversed(episodes)
+                    if episode_current_status(episode, decisions) != "archived"
+                ),
+                None,
+            )
+            if not active:
+                continue
+            durable_status = episode_current_status(active, decisions)
+            if (
+                durable_status != "published"
+                or not _episode_public_projection_is_consistent(item, active, decisions)
+            ):
+                continue
+        if durable_status != "published":
             continue
         normalized_item = dict(item)
         normalized_item["publication_date"] = _publication_date(item)
@@ -2577,7 +2733,7 @@ def load_published_document(
     document_id: str, *, root: Path | None = None
 ) -> dict[str, Any]:
     try:
-        metadata = load_pending_document(document_id, root=root)
+        metadata = load_pending_document_read_only(document_id, root=root)
     except ValueError:
         metadata = find_document_by_reference(
             document_id,
@@ -2586,6 +2742,26 @@ def load_published_document(
         )
         if metadata is None:
             raise ValueError("public_document_not_found") from None
+    episodes = list_lifecycle_episodes(
+        intake_id=str(metadata.get("intake_id") or document_id),
+        db_path=Path(root).resolve(strict=False).parent / "records.db" if root else None,
+    )
+    if episodes:
+        decisions = list_lifecycle_decisions(
+            intake_id=str(metadata.get("intake_id") or document_id),
+            db_path=Path(root).resolve(strict=False).parent / "records.db" if root else None,
+        )
+        active = next(
+            (
+                episode for episode in reversed(episodes)
+                if episode_current_status(episode, decisions) != "archived"
+            ),
+            None,
+        )
+        if not active or episode_current_status(active, decisions) != "published":
+            raise ValueError("public_document_not_found")
+        if not _episode_public_projection_is_consistent(metadata, active, decisions):
+            raise ValueError("public_document_not_found")
     if metadata.get("status") != "published":
         raise ValueError("public_document_not_found")
     metadata["publication_date"] = _publication_date(metadata)
