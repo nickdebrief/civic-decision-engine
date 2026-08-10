@@ -23,6 +23,7 @@ from api.document_intake import (
     list_published_documents,
     load_published_document,
 )
+from api.document_lifecycle_presentation import lifecycle_presentation_for_item
 from api.public_navigation import (
     PUBLIC_NAVIGATION_CSS,
     append_archive_return,
@@ -95,6 +96,7 @@ class ArchiveResult:
     record_type: str = ""
     collection_references: tuple[str, ...] = ()
     search_text: str = ""
+    lifecycle_summary: str = ""
 
 
 def _display(value: object) -> str:
@@ -256,6 +258,10 @@ def _document_results() -> list[ArchiveResult]:
                 keywords=document_keywords_display(item.get("keywords") or item.get("tags")),
                 media_type=media,
                 search_text=search_text,
+                lifecycle_summary=(
+                    lifecycle_presentation_for_item(item).get("public_lifecycle_summary")
+                    or ""
+                ),
             )
         )
     return results
@@ -700,6 +706,7 @@ def _render_result_cards(rows: list[ArchiveResult], archive_return: str, *, has_
             ("Relevant date", _date(item.publication_date)),
             ("Institution / source", item.institution),
             ("Category", item.category),
+            ("Lifecycle", item.lifecycle_summary),
             ("Media type", media),
             ("Record type", records.record_type_label(item.record_type) if item.record_type else ""),
             ("Keywords", item.keywords),

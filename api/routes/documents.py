@@ -30,8 +30,10 @@ from api.document_intake import (
     load_published_document,
     published_document_file,
 )
-from api.document_lifecycle_events import list_lifecycle_decisions
-from api.document_lifecycle_episodes import episode_current_status, list_lifecycle_episodes
+from api.document_lifecycle_presentation import (
+    active_episode_decision,
+    lifecycle_presentation_for_item,
+)
 from api.email_documents import APPLE_MAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import EMAIL_GOVERNANCE_BOUNDARY
 from api.email_documents import MBOX_GOVERNANCE_BOUNDARY
@@ -251,6 +253,10 @@ def _date(value: object) -> str:
     return str(value or "Not available").split("T", 1)[0]
 
 
+def _public_lifecycle_presentation(item: dict) -> dict:
+    return lifecycle_presentation_for_item(item)
+
+
 def _render_library(
     documents: list[dict],
     all_documents: list[dict],
@@ -280,18 +286,24 @@ def _render_library(
         )
 
     rows = "".join(
-        f"""<tr>
-          <td><a href="/documents/{escape(item['intake_id'])}">{escape(item['title'])}</a></td>
-          <td>{escape(item['institution_source'])}</td>
-          <td>{escape(item['category'])}</td>
-          <td>{escape(_date(item.get('publication_date')))}</td>
-          <td>{escape(item['description'])}</td>
-          <td>{escape(str(item.get('document_identifier') or '—'))}</td>
-          <td>{escape(str(item.get('reference_identifier') or '—'))}</td>
-          <td class="document-preview-cell">{render_public_document_preview(item, root=intake_root())}</td>
-        </tr>"""
+        f"""<article class="library-document-row">
+          <div class="library-document-primary">
+            <h2><a href="/documents/{escape(item['intake_id'])}">{escape(item['title'])}</a></h2>
+            <p class="library-document-identifier"><strong>Document Identifier:</strong> <span>{escape(str(item.get('document_identifier') or '—'))}</span></p>
+            <p class="library-document-status"><strong>Current status:</strong> Published</p>
+          </div>
+          <dl class="library-document-secondary">
+            <div><dt>Institution / Source</dt><dd>{escape(item['institution_source'])}</dd></div>
+            <div><dt>Category</dt><dd>{escape(item['category'])}</dd></div>
+            <div><dt>Publication date</dt><dd>{escape(_date(item.get('publication_date')))}</dd></div>
+            <div><dt>Optional Reference Identifier</dt><dd>{escape(str(item.get('reference_identifier') or '—'))}</dd></div>
+            <div><dt>Lifecycle</dt><dd>{escape(_public_lifecycle_presentation(item).get('public_lifecycle_summary') or 'Original lifecycle')}</dd></div>
+          </dl>
+          <div class="library-document-description"><strong>Description:</strong> {escape(item['description'])}</div>
+          <div class="library-document-action">{render_public_document_preview(item, root=intake_root())}</div>
+        </article>"""
         for item in documents
-    ) or '<tr><td colspan="8">No published documents match these criteria.</td></tr>'
+    ) or '<p class="library-empty">No published documents match these criteria.</p>'
     active_query = urlencode(
         {
             key: value
@@ -306,10 +318,10 @@ def _render_library(
     )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Public Document Library</title>
-<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(1240px,calc(100% - 32px));margin:32px auto 64px}}h1{{color:#143a52}}{PUBLIC_NAVIGATION_CSS}.governance{{max-width:900px;padding:16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;grid-template-columns:2fr repeat(3,1fr) auto;gap:10px;margin:24px 0}}input,select,button{{min-width:0;padding:9px;border:1px solid #c9c6bd;background:#fff;font:inherit}}button{{border-color:#245d61;background:#245d61;color:#fff;cursor:pointer}}.table-wrap{{overflow-x:auto}}table{{width:100%;border-collapse:collapse;background:#fff;font-size:.9rem}}th{{background:#143a52;color:#fff;text-align:left}}th,td{{padding:10px;border:1px solid #e1dfd8;vertical-align:top;white-space:normal;overflow-wrap:break-word}}a{{color:#245d61}}.result-count{{color:#555}}.document-preview-cell{{width:150px;min-width:150px}}.public-document-preview{{display:grid;gap:6px;justify-items:start;max-width:132px}}.public-document-thumbnail{{display:block;width:112px;max-width:100%;height:84px;object-fit:contain;background:#faf9f5;border:1px solid #d8d4ca}}.preview-thumbnail-link,.preview-fallback-link{{display:inline-grid;gap:5px;text-decoration:none;color:#143a52}}.preview-thumbnail-link:focus,.preview-fallback-link:focus,.preview-action:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}.preview-fallback-link{{width:118px;min-height:84px;align-content:center;justify-items:center;padding:9px;border:1px solid #d8d4ca;background:#faf9f5;text-align:center}}.preview-file-glyph{{width:28px;height:34px;border:2px solid #245d61;border-radius:2px;background:#fff;box-shadow:8px -8px 0 -6px #245d61}}.preview-media-label{{font-weight:750;color:#143a52}}.preview-action,.preview-action-text{{font-size:.8rem;color:#245d61;text-decoration:underline}}.preview-unavailable{{font-weight:650;color:#6b4f00}}@media(max-width:800px){{form{{grid-template-columns:1fr}}table{{min-width:1040px}}.document-preview-cell{{min-width:128px}}.public-document-thumbnail{{width:96px;height:72px}}}}</style></head>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#f7f7f4;color:#1f2933;font-family:system-ui,sans-serif}}main{{width:min(1240px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}{PUBLIC_NAVIGATION_CSS}.governance{{max-width:900px;padding:16px;border-left:4px solid #2e8b9a;background:#fff}}form{{display:grid;grid-template-columns:2fr repeat(3,1fr) auto;gap:10px;margin:24px 0}}input,select,button{{min-width:0;padding:9px;border:1px solid #c9c6bd;background:#fff;font:inherit}}button{{border-color:#245d61;background:#245d61;color:#fff;cursor:pointer}}a{{color:#245d61}}.result-count{{color:#555}}.library-results{{display:grid;gap:14px}}.library-document-row{{display:grid;grid-template-columns:minmax(260px,1.2fr) minmax(260px,1fr) minmax(230px,1fr) minmax(130px,.42fr);gap:16px;align-items:start;padding:16px;background:#fff;border:1px solid #d8d4ca}}.library-document-primary h2{{margin:0 0 8px;font-size:1.08rem}}.library-document-primary p,.library-document-description{{margin:6px 0;line-height:1.45;overflow-wrap:anywhere}}.library-document-identifier span{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}}.library-document-status{{font-weight:600}}.library-document-secondary{{display:grid;gap:7px;margin:0}}.library-document-secondary div{{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px}}.library-document-secondary dt{{font-weight:700;color:#555}}.library-document-secondary dd{{margin:0;overflow-wrap:anywhere}}.library-document-description{{color:#555}}.library-document-action{{min-width:0}}.library-empty{{padding:18px;background:#fff;border:1px solid #d8d4ca}}.public-document-preview{{display:grid;gap:6px;justify-items:start;max-width:132px}}.public-document-thumbnail{{display:block;width:112px;max-width:100%;height:84px;object-fit:contain;background:#faf9f5;border:1px solid #d8d4ca}}.preview-thumbnail-link,.preview-fallback-link{{display:inline-grid;gap:5px;text-decoration:none;color:#143a52}}.preview-thumbnail-link:focus,.preview-fallback-link:focus,.preview-action:focus{{outline:3px solid #2e8b9a;outline-offset:2px}}.preview-fallback-link{{width:118px;min-height:84px;align-content:center;justify-items:center;padding:9px;border:1px solid #d8d4ca;background:#faf9f5;text-align:center}}.preview-file-glyph{{width:28px;height:34px;border:2px solid #245d61;border-radius:2px;background:#fff;box-shadow:8px -8px 0 -6px #245d61}}.preview-media-label{{font-weight:750;color:#143a52}}.preview-action,.preview-action-text{{font-size:.8rem;color:#245d61;text-decoration:underline}}.preview-unavailable{{font-weight:650;color:#6b4f00}}@media(max-width:900px){{form{{grid-template-columns:1fr}}.library-document-row{{grid-template-columns:1fr 1fr}}.library-document-action{{grid-column:2;grid-row:1 / span 2}}}}@media(max-width:600px){{.library-document-row{{display:block}}.library-document-secondary{{margin:12px 0}}.library-document-secondary div{{grid-template-columns:1fr;gap:2px}}.library-document-action{{margin-top:14px}}.public-document-thumbnail{{width:96px;height:72px}}}}</style></head>
 <body><main>{public_primary_navigation(active="documents")}{public_breadcrumbs([("Home", "/"), ("Archive", "/archive"), ("Published Documents", None)])}<h1>Public Document Library</h1><p class="governance">{escape(GOVERNANCE_STATEMENT)}</p>
 <form method="get" action="/documents"><input name="q" value="{escape(str(query or ''))}" placeholder="Search title, institution, category, or reference" aria-label="Search documents"><select name="institution" aria-label="Filter by institution"><option value="">All institutions</option>{options(institutions, institution)}</select><select name="category" aria-label="Filter by category"><option value="">All categories</option>{options(categories, category)}</select><select name="publication_year" aria-label="Filter by publication year"><option value="">All publication years</option>{options(years, publication_year)}</select><button type="submit">Search</button></form>
-<p class="result-count">{len(documents)} published document{"s" if len(documents) != 1 else ""}.{f' Active query: {escape(active_query)}' if active_query else ''}</p><div class="table-wrap" role="region" aria-label="Published documents table"><table><thead><tr><th>Title</th><th>Institution / Source</th><th>Category</th><th>Publication Date</th><th>Description</th><th>Document Identifier</th><th>Optional Reference Identifier</th><th>Preview</th></tr></thead><tbody>{rows}</tbody></table></div></main></body></html>"""
+<p class="result-count">{len(documents)} published document{"s" if len(documents) != 1 else ""}.{f' Active query: {escape(active_query)}' if active_query else ''}</p><section class="library-results" aria-label="Published documents">{rows}</section></main></body></html>"""
 
 
 def _display_value(value: object) -> str:
@@ -361,7 +373,8 @@ def _first_event(item: dict, new_status: str) -> dict | None:
 
 
 def _publication_timestamp(item: dict) -> str:
-    event = _first_event(item, "published")
+    presentation = _public_lifecycle_presentation(item)
+    event = active_episode_decision(presentation, new_status="published") or _first_event(item, "published")
     if event and event.get("timestamp"):
         return str(event["timestamp"])
     return str(item.get("publication_date") or "")
@@ -439,10 +452,8 @@ def _media_family_label(item: dict) -> str:
 
 
 def _render_publication_pathway(item: dict) -> str:
-    db_path = intake_root().resolve(strict=False).parent / "records.db"
-    episodes = list_lifecycle_episodes(
-        intake_id=str(item.get("intake_id") or ""), db_path=db_path
-    )
+    presentation = _public_lifecycle_presentation(item)
+    episodes = presentation.get("episodes", [])[1:]
     pathway_events = _pathway_events(item)
     if episodes:
         pathway_events = [
@@ -462,31 +473,25 @@ def _render_publication_pathway(item: dict) -> str:
     ) or '<tr><td colspan="5">No lifecycle pathway entries are available.</td></tr>'
     episode_sections = ""
     if episodes:
-        decisions = list_lifecycle_decisions(
-            intake_id=str(item.get("intake_id") or ""), db_path=db_path
-        )
         sections = []
         for episode in episodes:
-            episode_id = str(episode.get("episode_id") or "")
-            episode_events = [
-                event for event in decisions
-                if str(event.get("episode_id") or "") == episode_id
-            ]
+            episode_events = episode.get("decisions", [])
             event_rows = "".join(
                 f"<tr><td>{escape(_display_value(event.get('decided_at')))}</td><td>{escape(_status_label(event.get('previous_status')))}</td><td>{escape(_status_label(event.get('new_status')))}</td><td>{escape(_display_value(event.get('actor')))}</td><td>{escape(_display_value(event.get('rationale')))}</td></tr>"
                 for event in episode_events
             ) or '<tr><td colspan="5">No lifecycle decisions recorded in this episode.</td></tr>'
             sections.append(
-                f'<section class="publication-episode"><h3>Subsequent governed consideration — Episode {escape(str(episode.get("episode_sequence") or ""))}</h3><p class="provenance-boundary">Initiated {escape(_display_value(episode.get("initiated_at")))}. The original lifecycle remains preserved; reconsideration did not reverse or erase earlier decisions. Initial state: Pending Intake.</p><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{event_rows}</tbody></table></div></section>'
+                f'<section class="publication-episode"><h3>Subsequent governed consideration — Episode {escape(str(episode.get("sequence") or ""))}</h3><p class="provenance-boundary">Initiated {escape(_display_value(episode.get("initiated")))}. The original lifecycle remains preserved; reconsideration did not reverse or erase earlier decisions. Initial state: Pending Intake.</p><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th>Timestamp</th><th>Previous status</th><th>New status</th><th>Actor</th><th>Note</th></tr></thead><tbody>{event_rows}</tbody></table></div></section>'
             )
         episode_sections = "".join(sections)
     return f"""<section id="publication-pathway" class="publication-pathway"><h2>Publication Pathway</h2><h3>Original lifecycle</h3><div class="publication-pathway-wrapper"><table class="publication-pathway-table"><thead><tr><th class="publication-pathway-timestamp">Timestamp</th><th class="publication-pathway-previous-status">Previous status</th><th class="publication-pathway-new-status">New status</th><th class="publication-pathway-actor">Actor</th><th class="publication-pathway-note">Note</th></tr></thead><tbody>{rows}</tbody></table></div>{episode_sections}<p class="provenance-boundary">Actor identifies the administrative identity recorded for the lifecycle action. It does not by itself establish authorship, factual verification, or legal responsibility for the document contents.</p></section>"""
 
 
 def _render_publication_provenance(item: dict) -> str:
-    review_event = _first_event(item, "under_review")
-    approval_event = _first_event(item, "approved")
-    publication_event = _first_event(item, "published")
+    presentation = _public_lifecycle_presentation(item)
+    review_event = active_episode_decision(presentation, new_status="under_review") or _first_event(item, "under_review")
+    approval_event = active_episode_decision(presentation, new_status="approved") or _first_event(item, "approved")
+    publication_event = active_episode_decision(presentation, new_status="published") or _first_event(item, "published")
     initial_event = _first_event(item, "pending")
     email_metadata = _email_metadata(item)
     outlook_archive_metadata = _outlook_archive_metadata(item)
@@ -533,6 +538,7 @@ def _render_publication_provenance(item: dict) -> str:
         ("SHA-256 digest", item.get("sha256_hash")),
         ("SHA-512 digest", item.get("sha512_hash") if is_outlook_archive_document(item) or is_gmail_takeout_document(item) or is_imap_acquisition_document(item) else None),
         ("Document Identifier", item.get("document_identifier")),
+        ("Current lifecycle", presentation.get("public_lifecycle_summary") or "Original lifecycle"),
         ("Initial intake actor", initial_event.get("actor") if initial_event else None),
         ("Review actor", review_event.get("actor") if review_event else None),
         ("Approval actor", approval_event.get("actor") if approval_event else None),

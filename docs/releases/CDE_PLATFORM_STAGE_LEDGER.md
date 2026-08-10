@@ -32,6 +32,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 56 | Durable Document Lifecycle Decision Record | document-lifecycle-governance | — | 2026-08-09 | `647c23dd4222cbcf704eaf0a93a4447b74b55c61` | [#323](https://github.com/nickdebrief/civic-decision-engine/pull/323) | [Stage 56](CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md) | Implemented · merged · deployed |
 | 57 | Governed Lifecycle Decision Confirmation | lifecycle-decision-confirmation | — | 2026-08-09 | `e949f3363f3a10d132e7add78717f858d007abd5` | [#325](https://github.com/nickdebrief/civic-decision-engine/pull/325) | [Stage 57](CDE_PLATFORM_STAGE_57_GOVERNED_LIFECYCLE_DECISION_CONFIRMATION.md) | Implemented · merged · deployed |
 | 58 | Governed Document Reconsideration and Lifecycle Episodes | document-lifecycle-episodes | — | 2026-08-10 | `7820418807269f448125cd5019c553a273ff0bea` | [#326](https://github.com/nickdebrief/civic-decision-engine/pull/326), [#327](https://github.com/nickdebrief/civic-decision-engine/pull/327), [#328](https://github.com/nickdebrief/civic-decision-engine/pull/328) | [Stage 58](CDE_PLATFORM_STAGE_58_GOVERNED_DOCUMENT_RECONSIDERATION_AND_LIFECYCLE_EPISODES.md) | Implemented · merged · deployed |
+| 59 | Lifecycle Episode Presentation | lifecycle-episode-presentation | — | — | — | — | [Stage 59](CDE_PLATFORM_STAGE_59_LIFECYCLE_EPISODE_PRESENTATION.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 
