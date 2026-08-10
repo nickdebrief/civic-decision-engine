@@ -90,6 +90,46 @@ class Stage59LifecycleEpisodePresentationTests(unittest.TestCase):
         self.assertNotIn("Archived → Pending", content)
         self.assertIn("class=\"library-document-row\"", content)
 
+    def test_library_wraps_long_titles_and_metadata_without_losing_identity(self):
+        difficult_title = {
+            **self.item,
+            "intake_id": "intake-long-token",
+            "title": "UN_ESCALATION_PRI_ACCESS_NICK_MOLONEY.pdf",
+            "institution_source": "An institution or source name that is long enough to test intrinsic grid sizing safely",
+            "category": "A category with a deliberately long readable value",
+            "reference_identifier": "REFERENCE-WITH-A-LONG-VALUE-THAT-MUST-REMAIN-VISIBLE",
+        }
+        spaced_title = {
+            **self.item,
+            "intake_id": "intake-long-spaces",
+            "title": "A document title with many ordinary words that must wrap inside its own column",
+        }
+        with patch.object(
+            documents,
+            "_public_lifecycle_presentation",
+            return_value=build_lifecycle_presentation(item=self.item),
+        ):
+            content = documents._render_library(
+                [difficult_title, spaced_title],
+                [difficult_title, spaced_title],
+                query=None,
+                institution=None,
+                category=None,
+                publication_year=None,
+            )
+        self.assertIn("UN_ESCALATION_PRI_ACCESS_NICK_MOLONEY.pdf", content)
+        self.assertIn("A document title with many ordinary words", content)
+        self.assertIn("DOC-2026-000131", content)
+        self.assertIn("minmax(0,1.2fr)", content)
+        self.assertIn(
+            ".library-document-primary,.library-document-secondary,.library-document-description,.library-document-action{min-width:0}",
+            content,
+        )
+        self.assertIn(".library-document-primary h2{", content)
+        self.assertIn("overflow-wrap:anywhere", content)
+        self.assertIn("@media(max-width:600px)", content)
+        self.assertIn("class=\"library-document-action\"", content)
+
     def test_public_provenance_selects_active_episode_decisions(self):
         item = {
             **self.item,
