@@ -31,7 +31,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 55 | Attachment Published Document Source Context and Navigation | attachment-source-context-navigation | — | 2026-08-08 | `b9e01d81782f2a605fc3bdea88b64af450c1ee5c` | [#321](https://github.com/nickdebrief/civic-decision-engine/pull/321) | [Stage 55](CDE_PLATFORM_STAGE_55_ATTACHMENT_PUBLISHED_DOCUMENT_SOURCE_CONTEXT_AND_NAVIGATION.md) | Implemented · merged · deployed |
 | 56 | Durable Document Lifecycle Decision Record | document-lifecycle-governance | — | 2026-08-09 | `647c23dd4222cbcf704eaf0a93a4447b74b55c61` | [#323](https://github.com/nickdebrief/civic-decision-engine/pull/323) | [Stage 56](CDE_PLATFORM_STAGE_56_DURABLE_DOCUMENT_LIFECYCLE_DECISION_RECORD.md) | Implemented · merged · deployed |
 | 57 | Governed Lifecycle Decision Confirmation | lifecycle-decision-confirmation | — | 2026-08-09 | `e949f3363f3a10d132e7add78717f858d007abd5` | [#325](https://github.com/nickdebrief/civic-decision-engine/pull/325) | [Stage 57](CDE_PLATFORM_STAGE_57_GOVERNED_LIFECYCLE_DECISION_CONFIRMATION.md) | Implemented · merged · deployed |
-| 58 | Governed Document Reconsideration and Lifecycle Episodes | document-lifecycle-episodes | — | — | — | — | [Stage 58](CDE_PLATFORM_STAGE_58_GOVERNED_DOCUMENT_RECONSIDERATION_AND_LIFECYCLE_EPISODES.md) | Implemented · pending merge · pending deployment |
+| 58 | Governed Document Reconsideration and Lifecycle Episodes | document-lifecycle-episodes | — | 2026-08-10 | `7820418807269f448125cd5019c553a273ff0bea` | [#326](https://github.com/nickdebrief/civic-decision-engine/pull/326), [#327](https://github.com/nickdebrief/civic-decision-engine/pull/327), [#328](https://github.com/nickdebrief/civic-decision-engine/pull/328) | [Stage 58](CDE_PLATFORM_STAGE_58_GOVERNED_DOCUMENT_RECONSIDERATION_AND_LIFECYCLE_EPISODES.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 
@@ -43,6 +43,37 @@ clinical Canonical Record work extended CDE Platform Stage 40 — Gmail Takeout.
 The canonical documentation was corrected to preserve the integrity and
 chronology of the CDE Platform sequence. Git commits, commit hashes, pull
 requests, branches, deployment records, and release history remain unchanged.
+
+## Stage 58 Closure Evidence
+
+Stage 58 implementation and correctness lineage: PR #326 merged as
+`70f2b447c8d7fc55826c31f5a7c2a1153d2ea351`; episode-aware administrative
+reconciliation correction, PR #327, merged as
+`9e48ca6b40c0c668a546ad96671158a44fe36ea3`; and episode-aware lifecycle
+confirmation correction, PR #328, merged as
+`7820418807269f448125cd5019c553a273ff0bea`.
+
+Production verification of DOC-2026-000131 established that Episode 1 remains
+preserved through `Pending Intake → Under Review → Rejected → Archived`, while
+the same preserved document entered a subsequent governed Episode 2 and
+progressed through `Pending Intake → Under Review → Approved → Published`.
+The original lifecycle remains historical evidence; Archived remains terminal
+within Episode 1; no `Archived → Pending Intake` transition was manufactured;
+and Episode 2 is the durable active episode. The document identity, preserved
+bytes, recorded digests, and source relationships remained unchanged.
+
+Durable episode identity is authoritative over compatibility metadata.
+Historical lifecycle evidence is integrity-checked, active-episode
+reconciliation and confirmation revalidation remain strict and fail closed,
+and documents without lifecycle episodes retain Stage 56 behavior. Public
+eligibility remains active-episode-aware and fail closed, and GET/rendering
+remains observational. No preservation, document identity, provenance,
+relationship, schema, or lifecycle-state semantics were changed by the
+corrective work.
+
+The Public Document Library and other document-facing views may still flatten
+episode presentation. That is follow-on presentation work and is not a Stage
+58 correctness blocker.
 
 ## Ledger Rules
 
