@@ -2,7 +2,13 @@
 
 ## Release State
 
-Implemented · pending merge · pending deployment
+Implemented · merged · deployed
+
+## Closure Evidence
+
+Stage 61.1 was implemented in commit `687eb89edcd5812f2dfd6100185d17d0065fc1a3` and merged through PR [#337](https://github.com/nickdebrief/civic-decision-engine/pull/337) at `2026-08-11T15:46:32Z` as merge SHA `12879cc00ed3bc1493e1ba205bc5820fdfcc6b98`. GitHub records a successful Railway production deployment for that merge SHA at `2026-08-11T15:47:27Z`–`2026-08-11T15:47:30Z`; current `origin/main` was subsequently deployed successfully at `2026-08-11T16:38:41Z`–`2026-08-11T16:39:27Z` and contains the Stage 61.1 implementation.
+
+The deployed capability is the authenticated, administrative, observational relationship-decision diagnostic. It uses SQLite `mode=ro`, performs no GET-side writes or initialization, preserves public non-disclosure, and exposes only a passive Stage 60 projection. Stage 61 relationship authority and semantics remain unchanged.
 
 ## Purpose
 

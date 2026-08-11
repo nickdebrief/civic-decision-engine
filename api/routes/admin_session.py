@@ -74,6 +74,7 @@ from api.document_lifecycle_presentation import (
 from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api import record_document_association_decisions as rdd
+from api import record_document_association_corrections as rdc
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -46023,6 +46024,37 @@ def _render_association_form_page(
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}.authoritative-source-context{{margin:12px 0;padding:12px;border-left:4px solid #2e8b9a;background:#fff}}.authoritative-source-context h3,.authoritative-source-context p{{margin:0 0 7px}}.authoritative-source-identifier{{font-family:ui-monospace,monospace}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label for="relationship-type">Relationship type<select id="relationship-type" name="relationship_type" required>{relationship_options}</select><span id="source-relationship-guidance" class="field-help" hidden>This Canonical Record already has its authoritative source Published Document. Additional Published Documents should normally be associated as Supporting documents, Related documents, or another governed relationship.</span></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label><label>Decision rationale<textarea name="decision_rationale" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
 
 
+def _render_association_correction_page(
+    preview: dict[str, Any],
+    diagnostic: dict[str, Any],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    association = preview.get("association") or {}
+    association_id = int(association.get("id") or 0)
+    candidates = preview.get("candidates") or []
+    candidate_options = "".join(
+        f'<option value="{escape(str(item.get("id")))}">'
+        f'{escape(str(item.get("public_reference") or item.get("id")))} — '
+        f'{escape(str(item.get("document_identifier") or item.get("document_id") or ""))} — '
+        f'{escape(str(item.get("relationship_type") or ""))}</option>'
+        for item in candidates
+    )
+    decision_rows = "".join(
+        f'<li>{escape(str(item.get("decision_type") or ""))} — '
+        f'{escape(str(item.get("decided_at") or ""))}</li>'
+        for item in diagnostic.get("decisions") or []
+    ) or "<li>No Stage 61 decision evidence available.</li>"
+    existing_corrections = preview.get("corrections") or []
+    correction_rows = "".join(
+        f'<li>Correction {escape(str(item.get("id") or ""))} — '
+        f'{escape(str(item.get("resolution_mode") or ""))} — '
+        f'{escape(str(item.get("decided_at") or ""))}</li>'
+        for item in existing_corrections
+    ) or "<li>No prior correction recorded.</li>"
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Correct Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1040px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.notice,.warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}.warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 20px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:240px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:100px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;border:1px solid #d8d4ca;padding:12px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations/{association_id}">Back to association</a></p><h1>Correct Record–Document Association</h1><p class="notice">This workflow adds accountable correction evidence. It preserves the original association, Stage 61 decisions, request payload, rationale, timestamps, actors, and history.</p><h2>Original governed relationship</h2><table><tr><th>Association ID</th><td>{escape(str(association.get('id') or ''))}</td></tr><tr><th>Public reference</th><td>{escape(str(association.get('public_reference') or ''))}</td></tr><tr><th>Record reference</th><td>{escape(str(association.get('record_reference') or ''))}</td></tr><tr><th>Persisted document ID</th><td>{escape(str(association.get('document_id') or ''))}</td></tr><tr><th>Relationship type</th><td>{escape(str(association.get('relationship_type') or ''))}</td></tr><tr><th>Active status</th><td>{escape(str(association.get('is_active') or ''))}</td></tr></table><h2>Existing decision evidence</h2><ul>{decision_rows}</ul><h2>Correction</h2><form method="post" action="/api/admin/session/associations/{association_id}/correction"><label>Resolution mode<select name="resolution_mode" required><option value="reuse_existing">Reuse existing active association</option><option value="create_new">Create new correct association</option></select></label><label>Existing replacement association<select name="replacement_association_id"><option value="">Select only for reuse_existing</option>{candidate_options}</select></label><label>Replacement record reference<input name="replacement_record_reference" value="{escape(str(association.get('record_reference') or ''))}"></label><label>Replacement document ID<input name="replacement_document_id"></label><label>Replacement relationship type<input name="replacement_relationship_type" value="{escape(str(association.get('relationship_type') or ''))}"></label><label>Correction rationale<textarea name="rationale" required></textarea></label><label>Evidence references JSON<textarea name="evidence_references_json">[]</textarea></label><label>Opaque context reference<input name="context_reference"></label><label>Idempotency key<input name="idempotency_key"></label><label><input type="checkbox" name="legacy_evidence_acknowledged" value="1"> Acknowledge legacy evidence boundary if no Stage 61 creation decision exists</label><button type="submit">Confirm governed correction</button></form><h2>Prior corrections</h2><ul>{correction_rows}</ul><h2>Stage 61.1 diagnostic warnings</h2><pre>{escape(json.dumps(diagnostic.get('warnings') or [], ensure_ascii=False, indent=2))}</pre></main></body></html>"""
+
+
 def _render_association_detail(
     association: dict[str, Any],
     history: list[dict[str, Any]],
@@ -46080,7 +46112,7 @@ def _render_association_detail(
         if source_locked
         else ""
     )
-    diagnostic_link = f'<p><a class="association-public-action" href="/admin/associations/{int(association["id"])}/decisions">Governed decisions</a></p>'
+    diagnostic_link = f'<p><a class="association-public-action" href="/admin/associations/{int(association["id"])}/decisions">Governed decisions</a> <a class="association-public-action" href="/admin/associations/{int(association["id"])}/correction">Correct association</a></p>'
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}{diagnostic_link}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{relationship_options}</select>{source_guidance}</label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
@@ -48804,6 +48836,28 @@ def admin_association_decision_diagnostic(association_id: int, request: Request)
     )
 
 
+@router.get("/admin/associations/{association_id}/correction", response_class=HTMLResponse)
+def admin_association_correction_page(association_id: int, request: Request):
+    session = require_admin_session(request)
+    preview = rdc.read_correction_preview(association_id, db_path=DB_PATH)
+    if preview.get("status") == "association_not_found":
+        raise _http_error(404, "association_not_found")
+    if preview.get("status") in {"database_unavailable", "association_table_absent"}:
+        raise _http_error(404, str(preview.get("status")))
+    diagnostic = rdd.read_association_decision_diagnostic(
+        association_id,
+        db_path=DB_PATH,
+        document_root=intake_root(),
+    )
+    return HTMLResponse(
+        content=_render_association_correction_page(
+            preview,
+            diagnostic,
+            admin_session=session,
+        )
+    )
+
+
 @router.post("/api/admin/session/associations", response_class=HTMLResponse)
 def admin_association_create(
     request: Request,
@@ -48854,6 +48908,65 @@ def admin_association_create(
     return HTMLResponse(
         content=_render_association_detail(association, history, admin_session=session),
         status_code=201,
+    )
+
+
+@router.post("/api/admin/session/associations/{association_id}/correction", response_class=HTMLResponse)
+def admin_association_correction(
+    association_id: int,
+    request: Request,
+    resolution_mode: str = Form(...),
+    replacement_association_id: int | None = Form(None),
+    replacement_record_reference: str | None = Form(None),
+    replacement_document_id: str | None = Form(None),
+    replacement_relationship_type: str | None = Form(None),
+    rationale: str = Form(...),
+    evidence_references_json: str = Form("[]"),
+    context_reference: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+    legacy_evidence_acknowledged: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    try:
+        evidence_references = json.loads(evidence_references_json or "[]")
+    except json.JSONDecodeError as exc:
+        raise _http_error(400, "association_correction_evidence_invalid") from exc
+    conn = get_db()
+    try:
+        correction = rdc.correct_association(
+            conn,
+            original_association_id=association_id,
+            resolution_mode=resolution_mode,
+            replacement_association_id=replacement_association_id,
+            replacement_record_reference=replacement_record_reference,
+            replacement_document_id=replacement_document_id,
+            replacement_relationship_type=replacement_relationship_type,
+            rationale=rationale,
+            actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            evidence_references=evidence_references,
+            context_reference=context_reference,
+            idempotency_key=idempotency_key,
+            root=intake_root(),
+            legacy_evidence_acknowledged=bool(legacy_evidence_acknowledged),
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    preview = rdc.read_correction_preview(association_id, db_path=DB_PATH)
+    diagnostic = rdd.read_association_decision_diagnostic(
+        association_id,
+        db_path=DB_PATH,
+        document_root=intake_root(),
+    )
+    return HTMLResponse(
+        content=_render_association_correction_page(
+            preview,
+            diagnostic,
+            admin_session=session,
+        ),
+        status_code=201 if correction else 200,
     )
 
 
