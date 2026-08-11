@@ -33,7 +33,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 57 | Governed Lifecycle Decision Confirmation | lifecycle-decision-confirmation | — | 2026-08-09 | `e949f3363f3a10d132e7add78717f858d007abd5` | [#325](https://github.com/nickdebrief/civic-decision-engine/pull/325) | [Stage 57](CDE_PLATFORM_STAGE_57_GOVERNED_LIFECYCLE_DECISION_CONFIRMATION.md) | Implemented · merged · deployed |
 | 58 | Governed Document Reconsideration and Lifecycle Episodes | document-lifecycle-episodes | — | 2026-08-10 | `7820418807269f448125cd5019c553a273ff0bea` | [#326](https://github.com/nickdebrief/civic-decision-engine/pull/326), [#327](https://github.com/nickdebrief/civic-decision-engine/pull/327), [#328](https://github.com/nickdebrief/civic-decision-engine/pull/328) | [Stage 58](CDE_PLATFORM_STAGE_58_GOVERNED_DOCUMENT_RECONSIDERATION_AND_LIFECYCLE_EPISODES.md) | Implemented · merged · deployed |
 | 59 | Lifecycle Episode Presentation | lifecycle-episode-presentation | — | 2026-08-10 | `c9c740c43297d70b6286c0aadd650568c5dd6cce` | [#330](https://github.com/nickdebrief/civic-decision-engine/pull/330), [#331](https://github.com/nickdebrief/civic-decision-engine/pull/331) | [Stage 59](CDE_PLATFORM_STAGE_59_LIFECYCLE_EPISODE_PRESENTATION.md) | Implemented · merged · deployed |
-| 60 | Governed Decision Application-Layer Abstraction | governed-decision-abstraction | — | — | — | — | [Stage 60](CDE_PLATFORM_STAGE_60_GOVERNED_DECISION_APPLICATION_LAYER_ABSTRACTION.md) | Implemented · pending merge · pending deployment |
+| 60 | Governed Decision Application-Layer Abstraction | governed-decision-abstraction | — | 2026-08-11 | `ea9a67b33065e263b2d5e56f2a7a012fda56e7c9` | [#334](https://github.com/nickdebrief/civic-decision-engine/pull/334) | [Stage 60](CDE_PLATFORM_STAGE_60_GOVERNED_DECISION_APPLICATION_LAYER_ABSTRACTION.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 
@@ -118,6 +118,35 @@ publication date, description, and the document-opening action.
 Stage 59 remains presentation-only: no lifecycle, governance, eligibility,
 schema, preservation, relationship, identifier, publication, or production
 data behavior was changed by its implementation or presentation correction.
+
+## Stage 60 Closure Evidence
+
+Stage 60 implementation commit `79d4937c7cd4cd291c2fe356100c05af6abcb6c5`,
+PR #334, was merged to `main` as the single-parent squash commit
+`ea9a67b33065e263b2d5e56f2a7a012fda56e7c9` at `2026-08-11T09:09:33Z`.
+Production deployment was subsequently verified active on Railway under the
+GitHub delivery `Implement CDE Platform Stage 60 governed decision abstraction
+(#334)`.
+
+Stage 60 established an immutable, passive `GovernedDecision`
+application-layer contract with opaque domain-owned subject identity, actor and
+role attribution, decision time, optional decision type and state values,
+optional rationale, opaque evidence references, optional opaque context, and
+optional idempotency identity. A Published Document adapter represents existing
+Stage 56 durable lifecycle decision evidence without changing its storage,
+decision key, intake identity, Document Identifier, sequence, hashes, actor,
+role, rationale, timestamp, or lifecycle episode context.
+
+Stage 60 establishes contract feasibility only. It does not establish a
+generic governance authority or second production decision domain. Existing
+Stage 56–59 lifecycle authority, authorization, reconciliation, confirmation,
+publication eligibility, persistence, schema, migration, historical backfill,
+decision-key generation, decision sequences, episode identity, preservation,
+evidence relationships, identifier allocation, disclosure rules, and
+production-data semantics remain authoritative and unchanged. The contract
+does not validate decisions, authorize operations, establish evidential
+sufficiency, impose episode semantics, or require shared lifecycle states,
+authority rules, or consequences across domains.
 
 ## Ledger Rules
 
