@@ -185,6 +185,38 @@ class SearchableRecordSelectionTests(unittest.TestCase):
         )
         return item["intake_id"]
 
+    def _published_document_with_identity(self, *, title, reference):
+        item = store_pending_document(
+            data=PDF_BYTES + b"\n" + reference.encode("utf-8"),
+            original_filename=f"{reference}.pdf",
+            content_type="application/pdf",
+            title=title,
+            institution_source="Civic Office",
+            document_date="2026-07-09",
+            category="Decision",
+            description="Published document for option identity selection.",
+            visibility="private",
+            notes="Private administrative notes.",
+            reference_identifier=reference,
+            actor="admin",
+            uploaded_at="2026-07-09T10:00:00Z",
+            root=self.root,
+        )
+        for status, timestamp, note in (
+            ("under_review", "2026-07-09T11:00:00Z", "Review started."),
+            ("approved", "2026-07-09T12:00:00Z", "Approved."),
+            ("published", "2026-07-09T13:00:00Z", "Published."),
+        ):
+            update_intake_status(
+                item["intake_id"],
+                status,
+                actor="admin-user",
+                note=note,
+                changed_at=timestamp,
+                root=self.root,
+            )
+        return load_pending_document(item["intake_id"], root=self.root)
+
     def _conn(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -254,6 +286,55 @@ class SearchableRecordSelectionTests(unittest.TestCase):
         self.assertIn("body-only", option)
         self.assertIn("document-search-clear", content)
         self.assertIn("No Published documents match this search.", content)
+
+    def test_distinct_published_documents_keep_option_identity_paired(self):
+        document_a = self._published_document_with_identity(
+            title="Croom Admission – 19 June 2018",
+            reference="DOC-2026-000118",
+        )
+        document_b = self._published_document_with_identity(
+            title="Operation Record – 19 June 2018",
+            reference="DOC-2026-000123",
+        )
+
+        content = self._content()
+        select_match = re.search(
+            r'<select id="document-id" name="document_id" required>(.*?)</select>',
+            content,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(select_match)
+        option_matches = re.findall(
+            r'<option\s+([^>]*)>(.*?)</option>',
+            select_match.group(1),
+            flags=re.DOTALL,
+        )
+        options = []
+        for attributes, label in option_matches:
+            value_match = re.search(r'value="([^"]*)"', attributes)
+            if value_match and value_match.group(1):
+                options.append((value_match.group(1), label))
+
+        option_values = [value for value, _ in options]
+        self.assertEqual(
+            option_values.count(document_a["intake_id"]),
+            1,
+        )
+        self.assertEqual(
+            option_values.count(document_b["intake_id"]),
+            1,
+        )
+
+        label_a = next(label for value, label in options if value == document_a["intake_id"])
+        label_b = next(label for value, label in options if value == document_b["intake_id"])
+        self.assertIn(document_a["title"], label_a)
+        self.assertIn(document_a["document_identifier"], label_a)
+        self.assertIn(document_b["title"], label_b)
+        self.assertIn(document_b["document_identifier"], label_b)
+        self.assertNotIn(document_b["title"], label_a)
+        self.assertNotIn(document_b["document_identifier"], label_a)
+        self.assertNotIn(document_a["title"], label_b)
+        self.assertNotIn(document_a["document_identifier"], label_b)
 
     def test_label_helper_fallbacks_are_deterministic_and_do_not_leak_internal_values(self):
         self.assertEqual(
