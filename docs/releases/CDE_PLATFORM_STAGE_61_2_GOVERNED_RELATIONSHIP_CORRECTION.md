@@ -32,4 +32,10 @@ Correction identity, original decision identity, idempotency, actor role, ration
 
 ## Status
 
-Implemented · pending merge · pending deployment. No production correction or production-data mutation is included.
+Implemented · merged · deployed.
+
+## Closure Evidence
+
+Stage 61.2 was squash-merged through [PR #339](https://github.com/nickdebrief/civic-decision-engine/pull/339) at `2026-08-11T17:38:59Z` as merge SHA `58b72bdb3eeff4222accc9f66c500d7a795bd9d5`. Railway reports a successful deployment of that exact revision at `2026-08-11T17:40:21Z`; the production service returned HTTP 200 during verification. The unauthenticated correction preview returned HTTP 401 (`admin_session_unauthorized`), demonstrating the authenticated administrative boundary. An authenticated preview was not performed.
+
+The correction capability is deployed, but no governed relationship correction has been executed. Association 66 and all production data remain unchanged. No production correction POST was submitted.
