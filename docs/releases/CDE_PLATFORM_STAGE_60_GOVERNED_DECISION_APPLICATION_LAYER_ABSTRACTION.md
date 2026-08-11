@@ -2,7 +2,7 @@
 
 ## Release State
 
-Implemented · pending merge · pending deployment
+Implemented · merged · deployed
 
 ## Purpose
 

@@ -218,6 +218,7 @@ class DocumentIdentifierOnIntakeTests(unittest.TestCase):
                 public_note="Uses the existing governed document.",
                 admin_note="No duplicate document identity.",
                 actor="admin-user",
+                rationale="Association created for this test.",
                 created_at="2026-07-21T11:00:00Z",
                 root=self.root,
             )

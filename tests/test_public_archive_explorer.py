@@ -183,6 +183,7 @@ class PublicArchiveExplorerTests(unittest.TestCase):
                 admin_note="Private association note.",
                 is_public=True,
                 actor="admin-user",
+                rationale="Association created for this test.",
                 created_at="2026-07-23T11:00:00Z",
                 root=self.root,
             )

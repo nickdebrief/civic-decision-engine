@@ -182,6 +182,7 @@ class GovernedSourceRelationshipSelectionTests(unittest.TestCase):
             public_note="",
             admin_note="Stage 47 governed relationship.",
             is_public="1",
+            decision_rationale="Association created for this test.",
         )
 
     def test_source_backed_record_exposes_locked_source_state_and_guidance(self):
@@ -262,6 +263,7 @@ class GovernedSourceRelationshipSelectionTests(unittest.TestCase):
                 public_note="",
                 admin_note="Attempted second source.",
                 is_public="1",
+                decision_rationale="The attempted source relationship was reviewed.",
             )
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(

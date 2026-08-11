@@ -470,6 +470,7 @@ class CanonicalRecordTypesTests(unittest.TestCase):
             public_note="Evidence package associated with the complaint record.",
             admin_note="Governed canonical record type association.",
             is_public="1",
+            decision_rationale="Association created for this test.",
         )
         self.assertEqual(response.status_code, 201)
 

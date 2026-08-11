@@ -163,6 +163,7 @@ class AssociationPublicTraceabilityTests(unittest.TestCase):
                 admin_note=kwargs.get("admin_note", "Private administrative association note."),
                 is_public=kwargs.get("is_public", True),
                 actor=kwargs.get("actor", "admin-user"),
+                rationale=kwargs.get("rationale", "Association created for this test."),
                 created_at=kwargs.get("created_at", "2026-07-13T14:00:00Z"),
                 root=self.root,
             )
@@ -175,9 +176,9 @@ class AssociationPublicTraceabilityTests(unittest.TestCase):
         self.assertRegex(first["public_reference"], r"^CDE-ASSOC-20260713-\d{3}$")
         self.assertNotEqual(first["public_reference"], second["public_reference"])
         self.assertNotEqual(first["public_reference"], str(first["id"]))
-        admin_session.admin_association_update(first["id"], self.request, "related_document", "Related document", "Updated public note.", "Updated private note.", "1")
-        admin_session.admin_association_deactivate(first["id"], self.request, "Deactivate privately.")
-        admin_session.admin_association_reactivate(first["id"], self.request, "Reactivate privately.")
+        admin_session.admin_association_update(first["id"], self.request, "related_document", "Related document", "Updated public note.", "Updated private note.", is_public="1", decision_rationale="The relationship was reclassified after review.")
+        admin_session.admin_association_deactivate(first["id"], self.request, "Deactivate privately.", decision_rationale="The relationship is no longer active.")
+        admin_session.admin_association_reactivate(first["id"], self.request, "Reactivate privately.", decision_rationale="The relationship was reviewed and restored.")
         conn = self._conn()
         try:
             updated = rda.get_association(conn, first["id"])
@@ -299,10 +300,10 @@ class AssociationPublicTraceabilityTests(unittest.TestCase):
         for bad_reference in ("1", "CDE-ASSOC-19990101-999", "not-a-reference"):
             with self.subTest(bad_reference=bad_reference), self.assertRaises(FakeHTTPException):
                 association_routes.public_association_page(bad_reference)
-        admin_session.admin_association_deactivate(association["id"], self.request, "Deactivate privately.")
+        admin_session.admin_association_deactivate(association["id"], self.request, "Deactivate privately.", decision_rationale="The relationship is temporarily inactive.")
         with self.assertRaises(FakeHTTPException):
             association_routes.public_association_page(association["public_reference"])
-        admin_session.admin_association_reactivate(association["id"], self.request, "Reactivate privately.")
+        admin_session.admin_association_reactivate(association["id"], self.request, "Reactivate privately.", decision_rationale="The relationship was reviewed and restored.")
         self.assertEqual(association_routes.public_association_page(association["public_reference"]).status_code, 200)
         update_intake_status(self.document_id, "archived", actor="admin-user", note="Archive.", changed_at="2026-07-13T16:00:00Z", root=self.root)
         with self.assertRaises(FakeHTTPException):
@@ -322,9 +323,9 @@ class AssociationPublicTraceabilityTests(unittest.TestCase):
 
     def test_public_association_pathway_is_separate_and_public_safe(self):
         association = self._create()
-        admin_session.admin_association_update(association["id"], self.request, "related_document", "Related document", "Updated public note.", "Private update note.", "1")
-        admin_session.admin_association_deactivate(association["id"], self.request, "Private deactivation note.")
-        admin_session.admin_association_reactivate(association["id"], self.request, "Private reactivation note.")
+        admin_session.admin_association_update(association["id"], self.request, "related_document", "Related document", "Updated public note.", "Private update note.", is_public="1", decision_rationale="The relationship was reclassified after review.")
+        admin_session.admin_association_deactivate(association["id"], self.request, "Private deactivation note.", decision_rationale="The relationship is not currently active.")
+        admin_session.admin_association_reactivate(association["id"], self.request, "Private reactivation note.", decision_rationale="The relationship was reviewed and restored.")
         content = association_routes.public_association_page(association["public_reference"]).content
         self.assertIn("Created", content)
         self.assertIn("Updated", content)
@@ -352,7 +353,7 @@ class AssociationPublicTraceabilityTests(unittest.TestCase):
         self.assertIn(f"/associations/{association['public_reference']}", detail)
         self.assertIn("Open public association", detail)
         self.assertNotIn('name="public_reference"', detail)
-        admin_session.admin_association_deactivate(association["id"], self.request, "Private deactivation.")
+        admin_session.admin_association_deactivate(association["id"], self.request, "Private deactivation.", decision_rationale="The relationship is being deactivated administratively.")
         unavailable = admin_session.admin_association_detail_page(association["id"], self.request).content
         self.assertIn("Public association page is not currently available.", unavailable)
 

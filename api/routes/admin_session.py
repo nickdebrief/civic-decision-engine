@@ -46019,7 +46019,7 @@ def _render_association_form_page(
   }
 })();
 </script>"""
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}.authoritative-source-context{{margin:12px 0;padding:12px;border-left:4px solid #2e8b9a;background:#fff}}.authoritative-source-context h3,.authoritative-source-context p{{margin:0 0 7px}}.authoritative-source-identifier{{font-family:ui-monospace,monospace}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label for="relationship-type">Relationship type<select id="relationship-type" name="relationship_type" required>{relationship_options}</select><span id="source-relationship-guidance" class="field-help" hidden>This Canonical Record already has its authoritative source Published Document. Additional Published Documents should normally be associated as Supporting documents, Related documents, or another governed relationship.</span></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Create Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(960px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.empty-state{{padding:14px 16px;border-left:4px solid #b45309;background:#fff;color:#555}}form{{display:grid;gap:14px;background:#fff;border:1px solid #d8d4ca;padding:18px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}.record-selection-control,.document-selection-control{{display:grid;gap:10px}}.record-search-status,.document-search-status{{color:#555;font:.88rem system-ui,sans-serif}}.secondary-button{{background:#fff;color:#245d61;border:1px solid #245d61}}.selected-record-context{{border:1px solid #d8d4ca;background:#faf9f5;padding:12px}}.selected-record-context h2{{font-size:1rem;margin:0 0 8px}}.selected-record-card h3{{margin:0 0 8px;color:#143a52}}.selected-record-card table{{width:100%;border-collapse:collapse;background:#fff}}.selected-record-card th,.selected-record-card td{{padding:8px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}.selected-record-card th{{width:150px;background:#f4f3ef;color:#555}}.authoritative-source-context{{margin:12px 0;padding:12px;border-left:4px solid #2e8b9a;background:#fff}}.authoritative-source-context h3,.authoritative-source-context p{{margin:0 0 7px}}.authoritative-source-identifier{{font-family:ui-monospace,monospace}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer}}button[disabled]{{background:#8b8b8b;cursor:not-allowed}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Create Record–Document Association</h1><p class="notice">Create an explicit association between one existing public CDE record and one existing Published document. Select each object independently. This does not add evidence to the record, alter either lifecycle, or change verification hashes.</p><form method="post" action="/api/admin/session/associations">{record_control}{document_control}<label for="relationship-type">Relationship type<select id="relationship-type" name="relationship_type" required>{relationship_options}</select><span id="source-relationship-guidance" class="field-help" hidden>This Canonical Record already has its authoritative source Published Document. Additional Published Documents should normally be associated as Supporting documents, Related documents, or another governed relationship.</span></label><label>Public label<input name="public_label" maxlength="160" placeholder="Optional; defaults to the relationship label"></label><label>Public visibility<select name="is_public" required><option value="1">Public</option><option value="0">Private</option></select></label><label>Public note<textarea name="public_note" placeholder="Optional public relationship note"></textarea></label><label>Administrative note<textarea name="admin_note" required></textarea></label><label>Decision rationale<textarea name="decision_rationale" required></textarea></label>{submit_button}</form>{search_script}</main></body></html>"""
 
 
 def _render_association_detail(
@@ -46062,9 +46062,9 @@ def _render_association_detail(
         else '<p class="association-warning">Public association page is not currently available.</p>'
     )
     active_controls = (
-        f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/deactivate"><label>Deactivation note<input name="deactivation_note" required></label><button type="submit">Deactivate association</button></form>"""
+        f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/deactivate"><label>Deactivation note<input name="deactivation_note" required></label><label>Decision rationale<textarea name="decision_rationale" required></textarea></label><button type="submit">Deactivate association</button></form>"""
         if int(association.get("is_active") or 0) == 1
-        else f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><button type="submit">Reactivate association</button></form>"""
+        else f"""<form method="post" action="/api/admin/session/associations/{int(association['id'])}/reactivate"><label>Reactivation note<input name="reactivation_note"></label><label>Decision rationale<textarea name="decision_rationale" required></textarea></label><button type="submit">Reactivate association</button></form>"""
     )
     source_locked = bool(
         association.get("record_has_authoritative_source")
@@ -47455,7 +47455,7 @@ Document Identifier: {escape(str(item.get('document_identifier') or ''))}
 Optional Reference Identifier: {escape(str(item.get('reference_identifier') or ''))}
 Document Keywords: {escape(document_keywords_display(item.get('keywords') or item.get('tags')) or 'None recorded')}
 Document intake ID: {escape(str(item.get('intake_id') or ''))}
-Document SHA-256 is preserved on the document and is not reused as the record verification hash.</textarea></label><label><input type="checkbox" name="create_association" value="1"> Create association to source document</label><label>Association public label<input name="association_public_label" value="{escape(default_public_label)}"></label><label>Association public note<textarea name="association_public_note">{escape(default_public_note)}</textarea></label><button type="submit">Create canonical record</button></form></main></body></html>"""
+Document SHA-256 is preserved on the document and is not reused as the record verification hash.</textarea></label><label><input type="checkbox" name="create_association" value="1"> Create association to source document</label><label>Association public label<input name="association_public_label" value="{escape(default_public_label)}"></label><label>Association public note<textarea name="association_public_note">{escape(default_public_note)}</textarea></label><label>Association decision rationale<textarea name="association_decision_rationale"></textarea></label><button type="submit">Create canonical record</button></form></main></body></html>"""
 
 
 LIFECYCLE_CONFIRMATION_ACTION_LABELS = {
@@ -48698,6 +48698,8 @@ def admin_association_create(
     public_label: str | None = Form(None),
     public_note: str | None = Form(None),
     admin_note: str | None = Form(None),
+    decision_rationale: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
     is_public: str | None = Form("1"),
 ):
     session = require_admin_session(request)
@@ -48713,6 +48715,9 @@ def admin_association_create(
             admin_note=admin_note,
             is_public=is_public,
             actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            rationale=decision_rationale,
+            idempotency_key=idempotency_key,
             root=intake_root(),
         )
         association = rda.enrich_association(conn, association, root=intake_root())
@@ -48745,6 +48750,8 @@ def admin_association_update(
     public_label: str | None = Form(None),
     public_note: str | None = Form(None),
     admin_note: str | None = Form(None),
+    decision_rationale: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
     is_public: str | None = Form("1"),
 ):
     session = require_admin_session(request)
@@ -48759,6 +48766,9 @@ def admin_association_update(
             admin_note=admin_note,
             is_public=is_public,
             actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            rationale=decision_rationale,
+            idempotency_key=idempotency_key,
         )
         association = rda.enrich_association(conn, association, root=intake_root())
         history = rda.association_history(conn, association_id)
@@ -48774,6 +48784,8 @@ def admin_association_deactivate(
     association_id: int,
     request: Request,
     deactivation_note: str = Form(...),
+    decision_rationale: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
 ):
     session = require_admin_session(request)
     conn = get_db()
@@ -48783,6 +48795,9 @@ def admin_association_deactivate(
             association_id,
             actor=_admin_session_actor(session),
             note=deactivation_note,
+            actor_role=_admin_session_role(session),
+            rationale=decision_rationale,
+            idempotency_key=idempotency_key,
         )
         association = rda.enrich_association(conn, association, root=intake_root())
         history = rda.association_history(conn, association_id)
@@ -48798,6 +48813,8 @@ def admin_association_reactivate(
     association_id: int,
     request: Request,
     reactivation_note: str | None = Form(None),
+    decision_rationale: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
 ):
     session = require_admin_session(request)
     conn = get_db()
@@ -48807,6 +48824,9 @@ def admin_association_reactivate(
             association_id,
             actor=_admin_session_actor(session),
             note=reactivation_note,
+            actor_role=_admin_session_role(session),
+            rationale=decision_rationale,
+            idempotency_key=idempotency_key,
         )
         association = rda.enrich_association(conn, association, root=intake_root())
         history = rda.association_history(conn, association_id)
@@ -51000,6 +51020,7 @@ def admin_canonical_record_from_document_create(
     create_association: str | None = Form(None),
     association_public_label: str | None = Form(None),
     association_public_note: str | None = Form(None),
+    association_decision_rationale: str | None = Form(None),
 ):
     session = require_admin_session(request)
     actor = _admin_session_actor(session)
@@ -51009,6 +51030,10 @@ def admin_canonical_record_from_document_create(
         raise _http_error(404, "document_intake_not_found") from exc
     if str(item.get("status") or "").lower() != "published":
         raise _http_error(400, "source_document_not_published")
+    if str(create_association or "").strip() == "1" and not str(
+        association_decision_rationale or ""
+    ).strip():
+        raise _http_error(400, "association_decision_rationale_required")
 
     conn = get_db()
     try:
@@ -51106,6 +51131,8 @@ def admin_canonical_record_from_document_create(
                 admin_note="Created during canonical-record-from-document workflow.",
                 is_public="1",
                 actor=actor,
+                actor_role=_admin_session_role(session),
+                rationale=association_decision_rationale,
                 root=intake_root(),
             )
             association_notice = (
