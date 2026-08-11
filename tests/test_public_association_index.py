@@ -151,6 +151,7 @@ class PublicAssociationIndexTests(unittest.TestCase):
                 admin_note=kwargs.get("admin_note", "Private administrative index note."),
                 is_public=kwargs.get("is_public", True),
                 actor="admin-user",
+                rationale=kwargs.get("rationale", "Association created for this test."),
                 created_at=kwargs.get("created_at", "2026-07-13T14:00:00Z"),
                 root=self.root,
             )
@@ -177,7 +178,7 @@ class PublicAssociationIndexTests(unittest.TestCase):
         visible = self._create(public_note="Visible note.")
         private = self._create(document_id=self.image_id, relationship_type="related_document", public_label="Private label", is_public=False, public_note="Private public-note text")
         inactive = self._create(document_id=self.png_id, relationship_type="source_document", public_label="Inactive label", public_note="Inactive public-note text")
-        admin_session.admin_association_deactivate(inactive["id"], self.request, "Deactivate hidden association.")
+        admin_session.admin_association_deactivate(inactive["id"], self.request, "Deactivate hidden association.", decision_rationale="The relationship is hidden while inactive.")
         hidden_record = self._create(record_reference="REC-HIDDEN-003", document_id=self.image_id, relationship_type="publication_context", public_label="Hidden record", public_note="Hidden record note")
         conn = self._conn()
         conn.execute("UPDATE records SET is_latest = 0 WHERE reference = 'REC-HIDDEN-003'")
@@ -191,7 +192,7 @@ class PublicAssociationIndexTests(unittest.TestCase):
         self.assertNotIn("Private public-note text", content)
         self.assertNotIn("Inactive public-note text", content)
         self.assertNotIn("Hidden record note", content)
-        admin_session.admin_association_reactivate(inactive["id"], self.request, "Reactivate.")
+        admin_session.admin_association_reactivate(inactive["id"], self.request, "Reactivate.", decision_rationale="The relationship was reviewed and restored.")
         content_after = self._index()
         self.assertIn(inactive["public_reference"], content_after)
         self.assertEqual(rda.get_association(self._conn(), inactive["id"])["public_reference"], inactive["public_reference"])

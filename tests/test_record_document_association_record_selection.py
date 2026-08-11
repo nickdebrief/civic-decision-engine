@@ -165,6 +165,7 @@ class RecordDocumentAssociationRecordSelectionTests(unittest.TestCase):
             public_note="Public note.",
             admin_note="Administrative note.",
             is_public="1",
+            decision_rationale="Association created for this test.",
         )
 
     def test_create_page_renders_public_record_selector_not_free_text(self):

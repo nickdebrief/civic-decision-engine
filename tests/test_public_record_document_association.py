@@ -187,6 +187,7 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
                 admin_note=kwargs.get("admin_note", "Private association note."),
                 is_public=kwargs.get("is_public", True),
                 actor=kwargs.get("actor", "admin-user"),
+                rationale=kwargs.get("rationale", "Association created for this test."),
                 created_at=kwargs.get("created_at", "2026-07-10T09:00:00Z"),
                 root=self.root,
             )
@@ -214,6 +215,7 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
             public_label="Source document",
             public_note="Public note.",
             admin_note="Private admin note.",
+            decision_rationale="The association is supported by the submitted record and document evidence.",
             is_public="1",
         )
         self.assertEqual(response.status_code, 201)
@@ -247,6 +249,7 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
             public_label="Preserved visual record",
             public_note="Image note.",
             admin_note="Admin note.",
+            decision_rationale="The preserved visual record is intentionally associated with this public record.",
             is_public="1",
         )
         self.assertIn("session-user", response.content)
@@ -293,6 +296,7 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
             public_label="Related document",
             public_note="Updated public note.",
             admin_note="Updated private note.",
+            decision_rationale="The relationship classification is being corrected after administrative review.",
             is_public="0",
         )
         self.assertIn("Related document", response.content)
@@ -312,7 +316,8 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
     def test_deactivation_and_reactivation_are_explicit_and_preserve_history(self):
         association = self._create_association()
         deactivated = admin_session.admin_association_deactivate(
-            association["id"], self.request, deactivation_note="Incorrect link."
+            association["id"], self.request, deactivation_note="Incorrect link.",
+            decision_rationale="The association is being deactivated because the link was incorrect."
         ).content
         self.assertIn("Inactive", deactivated)
         self.assertIn("Incorrect link.", deactivated)
@@ -326,7 +331,8 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
         finally:
             conn.close()
         reactivated = admin_session.admin_association_reactivate(
-            association["id"], self.request, reactivation_note="Restored."
+            association["id"], self.request, reactivation_note="Restored.",
+            decision_rationale="The association was reviewed and restored as valid."
         ).content
         self.assertIn("Active", reactivated)
         conn = self._conn()
@@ -379,7 +385,10 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
         self.assertNotIn("Private association note", content)
         self.assertNotIn(str(self.root), content)
         self.assertIn(hashlib.sha256(b"record-one").hexdigest(), content)
-        admin_session.admin_association_deactivate(association["id"], self.request, "No longer public.")
+        admin_session.admin_association_deactivate(
+            association["id"], self.request, "No longer public.",
+            decision_rationale="The association is being deactivated from public presentation."
+        )
         hidden = asyncio.run(records.verify_record("REC-2026-001")).content
         self.assertNotIn("Associated Public Documents", hidden)
         self.assertNotIn("Published Association Document", hidden)
@@ -411,7 +420,8 @@ class PublicRecordDocumentAssociationTests(unittest.TestCase):
             "Supporting document",
             "Public note.",
             "Admin note.",
-            "1",
+            is_public="1",
+            decision_rationale="The association metadata is being refreshed without changing its type.",
         )
         update_intake_status(
             self.document_id,

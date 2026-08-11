@@ -148,6 +148,9 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
                 "Initial evidence package submitted with the formal Medical Council "
                 "of Ireland complaint on 2 December 2019."
             ),
+            association_decision_rationale=(
+                "The source document is being associated with the newly created canonical record."
+            ),
         )
 
     def test_published_document_admin_page_exposes_create_canonical_record_action(self):
@@ -394,6 +397,7 @@ class CanonicalRecordFromPublishedDocumentTests(unittest.TestCase):
                 admin_note="Not the source-creation pathway.",
                 is_public="1",
                 actor="admin-user",
+                rationale="Association created for this test.",
                 root=self.root,
             )
             conn.commit()

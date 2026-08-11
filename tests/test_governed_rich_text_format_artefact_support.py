@@ -248,6 +248,7 @@ class GovernedRichTextFormatArtefactSupportTests(unittest.TestCase):
                 admin_note="Private association note.",
                 is_public=True,
                 actor="admin-user",
+                rationale="Association created for this test.",
                 root=self.root,
             )
             collection = ac.create_collection(

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sqlite3
+from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from api.document_intake import (
     load_pending_document,
     load_published_document,
 )
+from api import record_document_association_decisions as rdd
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 
@@ -547,6 +549,45 @@ def _association_state(row: sqlite3.Row | dict[str, Any] | None) -> dict[str, An
     }
 
 
+def _decision_state(*, relationship_type: str, is_active: bool) -> dict[str, Any]:
+    return {
+        "is_active": bool(is_active),
+        "relationship_type": str(relationship_type),
+    }
+
+
+def _decision_request(
+    *,
+    association_id: int | None,
+    decision_type: str,
+    actor: str,
+    actor_role: str,
+    rationale: str,
+    **values: Any,
+) -> dict[str, Any]:
+    payload = {
+        "association_id": association_id,
+        "decision_type": decision_type,
+        "actor": str(actor).strip(),
+        "actor_role": str(actor_role).strip(),
+        "rationale": str(rationale).strip(),
+    }
+    payload.update(values)
+    return payload
+
+
+def _rollback_on_error(function):
+    @wraps(function)
+    def wrapped(conn: sqlite3.Connection, *args, **kwargs):
+        try:
+            return function(conn, *args, **kwargs)
+        except Exception:
+            conn.rollback()
+            raise
+
+    return wrapped
+
+
 def _record_history(
     conn: sqlite3.Connection,
     *,
@@ -601,6 +642,7 @@ def association_history(conn: sqlite3.Connection, association_id: int | str) -> 
     return [dict(row) for row in rows]
 
 
+@_rollback_on_error
 def create_association(
     conn: sqlite3.Connection,
     *,
@@ -612,6 +654,9 @@ def create_association(
     admin_note: str | None = None,
     is_public: Any = True,
     actor: str,
+    actor_role: str = "admin",
+    rationale: str | None = None,
+    idempotency_key: str | None = None,
     created_at: str | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
@@ -624,11 +669,38 @@ def create_association(
     if document is None:
         raise ValueError("association_document_not_published")
     rel_type = validate_relationship_type(relationship_type)
+    actor_role_value = str(actor_role or "").strip()
+    rationale_value = str(rationale or "").strip()
+    if not actor_role_value:
+        raise ValueError("association_decision_actor_role_required")
+    if not rationale_value:
+        raise ValueError("association_decision_rationale_required")
     record = public_record_context(conn, reference)
     if rel_type == "source_document" and record_has_authoritative_source(
         record, conn=conn
     ):
         raise ValueError("association_authoritative_source_already_assigned")
+    request_payload = _decision_request(
+        association_id=None,
+        decision_type="association_created",
+        actor=actor_value,
+        actor_role=actor_role_value,
+        rationale=rationale_value,
+        record_reference=reference,
+        document_id=document["intake_id"],
+        relationship_type=rel_type,
+    )
+    decision_key = rdd.resolve_idempotency_key(idempotency_key, request_payload)
+    existing_decision = (
+        rdd.existing_for_request(
+            conn, idempotency_key=decision_key, request_payload=request_payload
+        )
+        if str(idempotency_key or "").strip()
+        else None
+    )
+    if existing_decision is not None:
+        return get_association(conn, existing_decision["association_id"])
+
     existing = conn.execute(
         """
         SELECT id, is_active FROM record_document_associations
@@ -681,10 +753,24 @@ def create_association(
         new_state=_association_state(row),
         note=admin_note or public_note or "Association created.",
     )
+    rdd.record_decision(
+        conn,
+        association_id=association_id,
+        idempotency_key=decision_key,
+        decision_type="association_created",
+        previous_state=None,
+        resulting_state=_decision_state(relationship_type=rel_type, is_active=True),
+        actor=actor_value,
+        actor_role=actor_role_value,
+        decided_at=timestamp,
+        rationale=rationale_value,
+        request_payload=request_payload,
+    )
     conn.commit()
     return row
 
 
+@_rollback_on_error
 def update_association(
     conn: sqlite3.Connection,
     association_id: int | str,
@@ -695,6 +781,9 @@ def update_association(
     admin_note: str | None,
     is_public: Any,
     actor: str,
+    actor_role: str = "admin",
+    rationale: str | None = None,
+    idempotency_key: str | None = None,
     updated_at: str | None = None,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
@@ -714,6 +803,34 @@ def update_association(
         raise ValueError("association_authoritative_source_already_assigned")
     label = relationship_label(rel_type, public_label)
     public_flag = 1 if normalize_bool(is_public, default=True) else 0
+    semantic_change = previous.get("relationship_type") != rel_type
+    decision_key = None
+    request_payload = None
+    if semantic_change:
+        actor_role_value = str(actor_role or "").strip()
+        rationale_value = str(rationale or "").strip()
+        if not actor_role_value:
+            raise ValueError("association_decision_actor_role_required")
+        if not rationale_value:
+            raise ValueError("association_decision_rationale_required")
+        request_payload = _decision_request(
+            association_id=int(association_id),
+            decision_type="relationship_reclassified",
+            actor=actor_value,
+            actor_role=actor_role_value,
+            rationale=rationale_value,
+            relationship_type=rel_type,
+        )
+        decision_key = rdd.resolve_idempotency_key(idempotency_key, request_payload)
+        existing_decision = (
+            rdd.existing_for_request(
+                conn, idempotency_key=decision_key, request_payload=request_payload
+            )
+            if str(idempotency_key or "").strip()
+            else None
+        )
+        if existing_decision is not None:
+            return get_association(conn, association_id)
     timestamp = updated_at or utc_now()
     conn.execute(
         """
@@ -744,16 +861,40 @@ def update_association(
         new_state=_association_state(updated),
         note=admin_note or "Association updated.",
     )
+    if semantic_change:
+        rdd.record_decision(
+            conn,
+            association_id=int(association_id),
+            idempotency_key=str(decision_key),
+            decision_type="relationship_reclassified",
+            previous_state=_decision_state(
+                relationship_type=str(previous.get("relationship_type") or ""),
+                is_active=bool(previous.get("is_active")),
+            ),
+            resulting_state=_decision_state(
+                relationship_type=rel_type,
+                is_active=bool(updated.get("is_active")),
+            ),
+            actor=actor_value,
+            actor_role=str(actor_role).strip(),
+            decided_at=timestamp,
+            rationale=str(rationale).strip(),
+            request_payload=request_payload or {},
+        )
     conn.commit()
     return updated
 
 
+@_rollback_on_error
 def deactivate_association(
     conn: sqlite3.Connection,
     association_id: int | str,
     *,
     actor: str,
     note: str,
+    actor_role: str = "admin",
+    rationale: str | None = None,
+    idempotency_key: str | None = None,
     deactivated_at: str | None = None,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
@@ -764,6 +905,29 @@ def deactivate_association(
     if not normalized_note:
         raise ValueError("association_deactivation_note_required")
     previous = get_association(conn, association_id)
+    actor_role_value = str(actor_role or "").strip()
+    rationale_value = str(rationale or "").strip()
+    if not actor_role_value:
+        raise ValueError("association_decision_actor_role_required")
+    if not rationale_value:
+        raise ValueError("association_decision_rationale_required")
+    request_payload = _decision_request(
+        association_id=int(association_id),
+        decision_type="association_deactivated",
+        actor=actor_value,
+        actor_role=actor_role_value,
+        rationale=rationale_value,
+    )
+    decision_key = rdd.resolve_idempotency_key(idempotency_key, request_payload)
+    existing_decision = (
+        rdd.existing_for_request(
+            conn, idempotency_key=decision_key, request_payload=request_payload
+        )
+        if str(idempotency_key or "").strip()
+        else None
+    )
+    if existing_decision is not None:
+        return get_association(conn, association_id)
     timestamp = deactivated_at or utc_now()
     conn.execute(
         """
@@ -785,16 +949,39 @@ def deactivate_association(
         new_state=_association_state(updated),
         note=normalized_note,
     )
+    rdd.record_decision(
+        conn,
+        association_id=int(association_id),
+        idempotency_key=decision_key,
+        decision_type="association_deactivated",
+        previous_state=_decision_state(
+            relationship_type=str(previous.get("relationship_type") or ""),
+            is_active=bool(previous.get("is_active")),
+        ),
+        resulting_state=_decision_state(
+            relationship_type=str(updated.get("relationship_type") or ""),
+            is_active=False,
+        ),
+        actor=actor_value,
+        actor_role=actor_role_value,
+        decided_at=timestamp,
+        rationale=rationale_value,
+        request_payload=request_payload,
+    )
     conn.commit()
     return updated
 
 
+@_rollback_on_error
 def reactivate_association(
     conn: sqlite3.Connection,
     association_id: int | str,
     *,
     actor: str,
     note: str | None = None,
+    actor_role: str = "admin",
+    rationale: str | None = None,
+    idempotency_key: str | None = None,
     reactivated_at: str | None = None,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
@@ -804,6 +991,29 @@ def reactivate_association(
     previous = get_association(conn, association_id)
     if int(previous.get("is_active") or 0) == 1:
         raise ValueError("association_already_active")
+    actor_role_value = str(actor_role or "").strip()
+    rationale_value = str(rationale or "").strip()
+    if not actor_role_value:
+        raise ValueError("association_decision_actor_role_required")
+    if not rationale_value:
+        raise ValueError("association_decision_rationale_required")
+    request_payload = _decision_request(
+        association_id=int(association_id),
+        decision_type="association_reactivated",
+        actor=actor_value,
+        actor_role=actor_role_value,
+        rationale=rationale_value,
+    )
+    decision_key = rdd.resolve_idempotency_key(idempotency_key, request_payload)
+    existing_decision = (
+        rdd.existing_for_request(
+            conn, idempotency_key=decision_key, request_payload=request_payload
+        )
+        if str(idempotency_key or "").strip()
+        else None
+    )
+    if existing_decision is not None:
+        return get_association(conn, association_id)
     timestamp = reactivated_at or utc_now()
     try:
         conn.execute(
@@ -827,6 +1037,25 @@ def reactivate_association(
         previous_state=_association_state(previous),
         new_state=_association_state(updated),
         note=note or "Association reactivated.",
+    )
+    rdd.record_decision(
+        conn,
+        association_id=int(association_id),
+        idempotency_key=decision_key,
+        decision_type="association_reactivated",
+        previous_state=_decision_state(
+            relationship_type=str(previous.get("relationship_type") or ""),
+            is_active=False,
+        ),
+        resulting_state=_decision_state(
+            relationship_type=str(updated.get("relationship_type") or ""),
+            is_active=True,
+        ),
+        actor=actor_value,
+        actor_role=actor_role_value,
+        decided_at=timestamp,
+        rationale=rationale_value,
+        request_payload=request_payload,
     )
     conn.commit()
     return updated

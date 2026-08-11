@@ -216,6 +216,7 @@ class SearchableRecordSelectionTests(unittest.TestCase):
             public_note="Public note.",
             admin_note="Administrative note.",
             is_public="1",
+            decision_rationale="Association created for this test.",
         )
 
     def test_search_field_selector_placeholder_and_compact_labels_render(self):

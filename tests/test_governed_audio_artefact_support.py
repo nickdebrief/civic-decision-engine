@@ -300,6 +300,7 @@ class GovernedAudioArtefactSupportTests(unittest.TestCase):
             public_note="Published audio recording preserved as a contemporaneous artefact.",
             admin_note="Created explicit governed association for audio artefact.",
             is_public="1",
+            decision_rationale="Association created for this test.",
         )
         self.assertEqual(response.status_code, 201)
         loaded = load_pending_document(item["intake_id"], root=self.root)

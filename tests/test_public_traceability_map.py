@@ -49,6 +49,7 @@ class PublicTraceabilityMapTests(unittest.TestCase):
                 admin_note="Private second association note.",
                 is_public=True,
                 actor="admin-user",
+                rationale="Association created for this test.",
                 created_at="2026-07-23T11:30:00Z",
                 root=self.fixture.root,
             )
@@ -88,6 +89,7 @@ class PublicTraceabilityMapTests(unittest.TestCase):
                 admin_note="Private association note.",
                 is_public=False,
                 actor="admin-user",
+                rationale="Association created for this test.",
                 created_at="2026-07-23T11:40:00Z",
                 root=self.fixture.root,
             )
@@ -107,6 +109,7 @@ class PublicTraceabilityMapTests(unittest.TestCase):
                 admin_note="Private association note.",
                 is_public=True,
                 actor="admin-user",
+                rationale="Association created for this test.",
                 created_at="2026-07-23T11:50:00Z",
                 root=self.fixture.root,
             )
@@ -115,6 +118,7 @@ class PublicTraceabilityMapTests(unittest.TestCase):
                 association["id"],
                 actor="admin-user",
                 note="Deactivate for traceability test.",
+                rationale="The relationship is being deactivated for the traceability test.",
             )
             return association
         finally:
