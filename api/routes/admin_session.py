@@ -73,6 +73,7 @@ from api.document_lifecycle_presentation import (
 )
 from api import public_transmissions as trm
 from api import record_document_associations as rda
+from api import record_document_association_decisions as rdd
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -46079,7 +46080,8 @@ def _render_association_detail(
         if source_locked
         else ""
     )
-    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{relationship_options}</select>{source_guidance}</label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
+    diagnostic_link = f'<p><a class="association-public-action" href="/admin/associations/{int(association["id"])}/decisions">Governed decisions</a></p>'
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Record–Document Association</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:break-word;word-break:normal}}th{{background:#143a52;color:#fff}}.metadata th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:14px;margin:12px 0}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}.field-help{{font:.88rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}input,select,textarea{{width:100%;padding:9px;border:1px solid #c9c6bd;background:#fff;font:.92rem system-ui,sans-serif}}textarea{{min-height:80px}}button,.association-public-action{{width:max-content;padding:9px 12px;border:0;background:#245d61;color:#fff;cursor:pointer;text-decoration:none;display:inline-block}}.association-history-wrapper{{overflow-x:auto}}.association-history-table{{min-width:1100px;table-layout:auto}}.association-history-timestamp{{min-width:180px;white-space:nowrap}}.association-history-action,.association-history-actor{{min-width:120px}}.association-history-note{{min-width:220px}}.association-history-state{{min-width:260px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>Record–Document Association</h1><p class="notice">This association is a separate governed object. It does not make a document evidence for a record, alter record verification, or change document publication lifecycle.</p>{'' if association.get('record_publicly_eligible') and association.get('document_publicly_eligible') else '<p class="association-warning">Linked object is not currently publicly eligible.</p>'}<h2>Association metadata</h2>{public_action}{diagnostic_link}<table class="metadata"><tbody>{rows}</tbody></table><h2>Update association</h2><form method="post" action="/api/admin/session/associations/{int(association['id'])}/update"><label>Relationship type<select name="relationship_type" required>{relationship_options}</select>{source_guidance}</label><label>Public label<input name="public_label" value="{escape(str(association.get('public_label') or ''))}" maxlength="160"></label><label>Public visibility<select name="is_public" required><option value="1"{' selected' if int(association.get('is_public') or 0) == 1 else ''}>Public</option><option value="0"{' selected' if int(association.get('is_public') or 0) == 0 else ''}>Private</option></select></label><label>Public note<textarea name="public_note">{escape(str(association.get('public_note') or ''))}</textarea></label><label>Administrative note<textarea name="admin_note">{escape(str(association.get('admin_note') or ''))}</textarea></label><button type="submit">Update association</button></form><h2>Activation</h2>{active_controls}<h2>Association history</h2><div class="association-history-wrapper"><table class="association-history-table"><thead><tr><th class="association-history-timestamp">Timestamp</th><th class="association-history-action">Action</th><th class="association-history-actor">Actor</th><th class="association-history-note">Note</th><th class="association-history-state">Previous state</th><th class="association-history-state">New state</th></tr></thead><tbody>{history_rows}</tbody></table></div></main></body></html>"""
 
 
 def _collection_display(value: Any) -> str:
@@ -48639,6 +48641,101 @@ def admin_associations_page(
     )
 
 
+def _diagnostic_json_text(value: Any) -> str:
+    if value is None:
+        return "—"
+    try:
+        return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _render_association_decision_diagnostic(
+    diagnostic: dict[str, Any],
+    *,
+    admin_session: dict[str, Any] | None = None,
+) -> str:
+    association = diagnostic.get("association") or {}
+    association_document = diagnostic.get("association_document") or {}
+    status = str(diagnostic.get("status") or "ok")
+    warnings = list(dict.fromkeys(diagnostic.get("warnings") or []))
+    comparison = diagnostic.get("comparison") or {"state": "NOT DETERMINABLE"}
+    association_fields = (
+        ("Association ID", association.get("id")),
+        ("Public association reference", association.get("public_reference")),
+        ("Record reference", association.get("record_reference")),
+        ("Relationship type", association.get("relationship_type")),
+        ("Active status", "Active" if int(association.get("is_active") or 0) else "Inactive"),
+        ("Public status", "Public" if int(association.get("is_public") or 0) else "Private"),
+        ("RAW STORED document_id", association.get("document_id")),
+        ("RAW STORED document_reference_identifier", association.get("document_reference_identifier")),
+        ("RESOLVED document title", association_document.get("title")),
+        ("RESOLVED DOC-* identifier", association_document.get("document_identifier")),
+    )
+    association_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td><pre>{escape(_diagnostic_json_text(value))}</pre></td></tr>"
+        for label, value in association_fields
+    )
+    warning_html = (
+        "<section class=\"association-warning\"><h2>Forensic warnings</h2><ul>"
+        + "".join(f"<li>{escape(str(warning))}</li>" for warning in warnings)
+        + "</ul></section>"
+        if warnings
+        else ""
+    )
+    comparison_rows = "".join(
+        f"<tr><th>{escape(label)}</th><td><pre>{escape(_diagnostic_json_text(value))}</pre></td></tr>"
+        for label, value in (
+            ("Match", comparison.get("state")),
+            ("Request RAW document_id", comparison.get("request_document_id")),
+            ("Association RAW document_id", comparison.get("association_document_id")),
+            ("Request RESOLVED document", comparison.get("request_document")),
+            ("Association RESOLVED document", comparison.get("association_document")),
+        )
+    )
+    decision_sections = []
+    for decision in diagnostic.get("decisions") or []:
+        projection = decision.get("stage60_projection")
+        fields = (
+            ("Decision ID", decision.get("id")),
+            ("Association ID", decision.get("association_id")),
+            ("Decision type", decision.get("decision_type")),
+            ("Actor", decision.get("actor")),
+            ("Actor role", decision.get("actor_role")),
+            ("Decided at", decision.get("decided_at")),
+            ("Rationale", decision.get("rationale")),
+            ("Previous state", decision.get("previous_state")),
+            ("Resulting state", decision.get("resulting_state")),
+            ("Evidence references", decision.get("evidence_references")),
+            ("Context reference", decision.get("context_reference")),
+            ("Idempotency key", "Present" if decision.get("idempotency_key_present") else "Absent"),
+            ("Idempotency fingerprint", decision.get("idempotency_key_fingerprint")),
+            ("Stored request payload", decision.get("request_payload")),
+            ("Stage 60 GovernedDecision projection", projection),
+        )
+        decision_sections.append(
+            "<section class=\"decision-card\"><h2>Decision {}</h2><table>{}</table></section>".format(
+                escape(str(decision.get("id") or "—")),
+                "".join(
+                    f"<tr><th>{escape(label)}</th><td><pre>{escape(_diagnostic_json_text(value))}</pre></td></tr>"
+                    for label, value in fields
+                ),
+            )
+        )
+    if not decision_sections:
+        decision_sections.append('<p class="empty-state">No Stage 61 decisions are available for this association.</p>')
+    title = "Governed Decision Diagnostic"
+    body = (
+        f"<p class=\"notice\">This is an observational projection of relationship-owned Stage 61 evidence. It does not authorize, validate, reconcile, repair, or mutate the association.</p>"
+        f"{warning_html}<h2>Association context</h2><table>{association_rows}</table>"
+        f"<h2>Association/document comparison</h2><table>{comparison_rows}</table>"
+        f"<h2>Stage 61 decisions</h2>{''.join(decision_sections)}"
+        if association
+        else f"{warning_html}<p class=\"empty-state\">No association diagnostic is available.</p>"
+    )
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{title}</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.admin-console-navigation a{{font-weight:650}}.notice,.association-warning,.empty-state{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}.association-warning{{border-left-color:#b45309}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:290px;background:#faf9f5;color:#555}}pre{{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:.86rem ui-monospace,monospace}}.decision-card{{margin:24px 0;padding:14px;background:#fff;border:1px solid #d8d4ca}}.decision-card h2{{margin-top:0}}ul{{margin-bottom:0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin/associations">Back to associations</a></p><h1>{title}</h1>{body}</main></body></html>"""
+
+
 @router.get("/admin/associations/new", response_class=HTMLResponse)
 def admin_association_new_page(request: Request):
     session = require_admin_session(request)
@@ -48684,6 +48781,24 @@ def admin_association_detail_page(association_id: int, request: Request):
         content=_render_association_detail(
             association,
             history,
+            admin_session=session,
+        )
+    )
+
+
+@router.get("/admin/associations/{association_id}/decisions", response_class=HTMLResponse)
+def admin_association_decision_diagnostic(association_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rdd.read_association_decision_diagnostic(
+        association_id,
+        db_path=DB_PATH,
+        document_root=intake_root(),
+    )
+    if diagnostic.get("status") == "association_not_found":
+        raise _http_error(404, "association_not_found")
+    return HTMLResponse(
+        content=_render_association_decision_diagnostic(
+            diagnostic,
             admin_session=session,
         )
     )
