@@ -659,6 +659,7 @@ def create_association(
     idempotency_key: str | None = None,
     created_at: str | None = None,
     root: Path | None = None,
+    _commit: bool = True,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
     actor_value = str(actor or "").strip()
@@ -766,7 +767,8 @@ def create_association(
         rationale=rationale_value,
         request_payload=request_payload,
     )
-    conn.commit()
+    if _commit:
+        conn.commit()
     return row
 
 
@@ -785,6 +787,7 @@ def update_association(
     rationale: str | None = None,
     idempotency_key: str | None = None,
     updated_at: str | None = None,
+    _commit: bool = True,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
     actor_value = str(actor or "").strip()
@@ -881,7 +884,8 @@ def update_association(
             rationale=str(rationale).strip(),
             request_payload=request_payload or {},
         )
-    conn.commit()
+    if _commit:
+        conn.commit()
     return updated
 
 
@@ -896,6 +900,7 @@ def deactivate_association(
     rationale: str | None = None,
     idempotency_key: str | None = None,
     deactivated_at: str | None = None,
+    _commit: bool = True,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
     actor_value = str(actor or "").strip()
@@ -968,7 +973,8 @@ def deactivate_association(
         rationale=rationale_value,
         request_payload=request_payload,
     )
-    conn.commit()
+    if _commit:
+        conn.commit()
     return updated
 
 
@@ -983,6 +989,7 @@ def reactivate_association(
     rationale: str | None = None,
     idempotency_key: str | None = None,
     reactivated_at: str | None = None,
+    _commit: bool = True,
 ) -> dict[str, Any]:
     ensure_association_tables(conn)
     actor_value = str(actor or "").strip()
@@ -1057,7 +1064,8 @@ def reactivate_association(
         rationale=rationale_value,
         request_payload=request_payload,
     )
-    conn.commit()
+    if _commit:
+        conn.commit()
     return updated
 
 
