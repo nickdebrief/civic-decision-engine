@@ -338,6 +338,27 @@ def targets_by_type(registry: dict[str, ReferenceTarget], object_type: str) -> l
     return sorted(unique.values(), key=lambda item: item.identifier)
 
 
+def unique_targets(registry: dict[str, ReferenceTarget]) -> list[ReferenceTarget]:
+    """Return registry targets in their canonical traversal order."""
+    return list({target.identifier: target for target in registry.values()}.values())
+
+
+def section_number_key(value: str) -> tuple[int, ...] | None:
+    """Return numeric components for a leading hierarchical section number."""
+    match = re.match(r"^(\d+(?:\.\d+)+)(?:\s|$)", value.strip())
+    if not match:
+        return None
+    return tuple(int(component) for component in match.group(1).split("."))
+
+
+def semantic_index_key(paragraph: Paragraph) -> tuple:
+    """Naturally order numbered sections while retaining conceptual alpha order."""
+    number = section_number_key(paragraph.text)
+    if number is not None:
+        return (0, number, paragraph.text.casefold())
+    return (1, paragraph.text.casefold())
+
+
 def generated_section(title: str, generation_type: str, blocks: list[Paragraph]) -> Section:
     identifier = f"generated-{slugify(generation_type)}"
     return Section(
@@ -353,11 +374,9 @@ def generated_section(title: str, generation_type: str, blocks: list[Paragraph])
 def build_contents(registry: dict[str, ReferenceTarget]) -> Section:
     targets = [
         target
-        for target in {item.identifier: item for item in registry.values()}.values()
+        for target in unique_targets(registry)
         if target.object_type in {"Front Matter", "Volume", "Chapter", "Section"}
     ]
-    order = {"Front Matter": 0, "Volume": 1, "Chapter": 2, "Section": 3}
-    targets.sort(key=lambda item: (order.get(item.object_type, 99), item.identifier))
     return generated_section(
         "Contents",
         "table_of_contents",
@@ -374,7 +393,7 @@ def build_object_list(title: str, generation_type: str, registry: dict[str, Refe
 
 
 def build_semantic_index(registry: dict[str, ReferenceTarget]) -> Section:
-    unique = {target.identifier: target for target in registry.values()}.values()
+    unique = unique_targets(registry)
     def index_label(target: ReferenceTarget) -> str:
         if target.title.startswith(target.display_label):
             return target.title
@@ -393,7 +412,7 @@ def build_semantic_index(registry: dict[str, ReferenceTarget]) -> Section:
             "Research Methodology",
         }
     ]
-    entries.sort(key=lambda paragraph: paragraph.text.casefold())
+    entries.sort(key=semantic_index_key)
     return generated_section("Semantic Index", "semantic_index", entries)
 
 

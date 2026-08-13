@@ -258,6 +258,7 @@ def validate_html_output(path: Path, language: str) -> tuple[ValidationResult, H
 @dataclass(frozen=True)
 class PdfTextExtraction:
     text: str = ""
+    raw_text: str = ""
     status: str = "unavailable"
     backend: str = ""
     reason: str = "No supported PDF text extraction backend was available."
@@ -289,7 +290,7 @@ def extract_pdf_text_result(path: Path) -> PdfTextExtraction:
     tool = discover_tool("pdftotext")
     if tool is not None:
         completed = subprocess.run(
-            [str(tool), str(path), "-"],
+            [str(tool), "-layout", str(path), "-"],
             check=False,
             capture_output=True,
             text=True,
@@ -300,6 +301,7 @@ def extract_pdf_text_result(path: Path) -> PdfTextExtraction:
         attempts.append(("pdftotext", "available"))
         return PdfTextExtraction(
             text=normalize_text(completed.stdout),
+            raw_text=completed.stdout,
             status="available",
             backend="pdftotext",
             reason="",
@@ -323,6 +325,7 @@ def extract_pdf_text_result(path: Path) -> PdfTextExtraction:
             attempts.append(("pypdf", "available"))
             return PdfTextExtraction(
                 text=text,
+                raw_text="\n".join(page.extract_text() or "" for page in pages),
                 status="available",
                 backend="pypdf",
                 reason="",
@@ -346,6 +349,7 @@ def extract_pdf_text_result(path: Path) -> PdfTextExtraction:
             attempts.append(("pdfminer.six", "available"))
             return PdfTextExtraction(
                 text=text,
+                raw_text=str(pdfminer.extract_text(str(path)) or ""),
                 status="available",
                 backend="pdfminer.six",
                 reason="",
@@ -359,6 +363,32 @@ def extract_pdf_text(path: Path) -> str:
     """Compatibility API returning text only; unavailable extraction is empty."""
 
     return extract_pdf_text_result(path).text
+
+
+PDF_RUNNING_HEADER = re.compile(
+    r"Structured\s*·\s*Traceable\s*·\s*Governed\s*·\s*\d+\s+EVIDENCE-LED GOVERNANCE"
+)
+
+
+def _pdf_equivalence_pattern(block: str) -> re.Pattern[str]:
+    """Build a strict pattern for PDF line-wrap representation artifacts."""
+    escaped = re.escape(block)
+    escaped = escaped.replace(r"\ ", r"\s+")
+    escaped = re.sub(
+        r"\\-(?=[A-Za-z])",
+        lambda _match: r"(?:-\s*|[\r\n\f]\s*)",
+        escaped,
+    )
+    return re.compile(escaped, re.DOTALL)
+
+
+def pdf_block_matches(block: str, extraction: PdfTextExtraction) -> bool:
+    """Match source text while accounting only for proven PDF representation artifacts."""
+    if block in extraction.text:
+        return True
+    raw = extraction.raw_text or extraction.text
+    raw = PDF_RUNNING_HEADER.sub(" ", raw)
+    return _pdf_equivalence_pattern(block).search(raw) is not None
 
 
 @dataclass
@@ -469,7 +499,9 @@ def validate_cross_format_equivalence(
     missing_pdf = [
         block
         for block in blocks
-        if pdf_extraction is not None and pdf_extraction.available and block not in pdf_value
+        if pdf_extraction is not None
+        and pdf_extraction.available
+        and not pdf_block_matches(block, pdf_extraction)
     ]
     result.add("DOCX source equivalence", not missing_docx, f"{len(blocks) - len(missing_docx)}/{len(blocks)} blocks")
     if html_path is not None:

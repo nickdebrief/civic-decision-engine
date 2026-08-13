@@ -1,0 +1,121 @@
+Publication Validation
+
+✓ Manifest schema — version 1
+✓ Publication metadata — Working Manuscript
+✓ Output formats — docx, pdf, html
+✓ Theme resolved — handbook
+✓ Publication profile — digital
+✓ Page profile — letter
+✓ Title template — handbook
+✓ Volume template — institutional
+✓ Chapter template — standard
+✓ Semantic callout styles — 6 styles
+✓ Theme diagnostics — 0 errors, 0 warnings
+✓ Source ordering — 10 files
+✓ Source files discovered — 10 files
+✓ Front Matter — 2 entries
+✓ Volumes — 2 detected
+✓ Chapters — 7 detected
+✓ Sections — 95 detected
+✓ Governance Principles — 11 detected
+✓ Canonical Definitions — 14 detected
+✓ Research Findings — 4 detected
+✓ Research Methodologies — 5 detected
+✓ Governance Architectures — 2 detected
+✓ Flow Diagrams — 6 detected
+✓ Parser Diagnostics — 0 errors, 0 warnings
+✓ Volume I Chapter Membership — Chapters 1-6
+✓ Chapter 5 Synthesis — plain-English Chapter Synthesis heading
+✓ RF-5 Research Finding — legacy Research Finding / RF-5 structure
+✓ Duplicate Chapter Numbers
+✓ Duplicate Coded Identifiers
+✓ Empty Chapter Titles — 0 empty
+✓ Empty Coded Object Bodies
+✓ Section Number Alignment
+✓ Flow Diagram Shape — 0 invalid
+✓ Non-empty Lists — 0 empty
+✓ Heading Hierarchy — 0 gaps
+✓ Orphan Subsections — 0 orphaned
+✓ Volume Chapter Membership
+✓ Chapter Section Membership
+✓ Source Provenance — 0 missing
+✓ Identifiers assigned — 142 reference targets
+✓ Identifiers unique — 0 duplicates
+✓ Identifiers valid — 0 invalid
+✓ Numbering validated — canonical identifiers stable
+✓ Reference registry built — 142 targets
+✓ Cross-references resolved — 0 references
+✓ Generated lists created — 7 sections
+✓ Semantic index created — 138 entries
+✓ Bookmark identifiers — 0 invalid, 0 duplicate
+✓ Generated section targets — 0 missing
+✓ Semantic index targets — 0 missing
+✓ Enrichment diagnostics — 0 errors
+✓ DOCX generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.22-ylb1jlxm/Evidence-Led_Governance_v1.22.docx
+✓ DOCX reopened — 1381 paragraphs, 36 tables
+✓ DOCX structure — 36 expected tables
+✓ DOCX metadata — Evidence-Led Governance
+✓ DOCX bookmarks unique
+✓ DOCX internal links — 280 links, 0 broken
+✓ DOCX unresolved markup — none
+✓ HTML generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.22-ylb1jlxm/Evidence-Led_Governance_v1.22.html
+✓ HTML parsed — 187 anchors, 311 internal links
+✓ HTML language — en
+✓ HTML identifiers — 0 duplicate, 0 invalid
+✓ HTML internal links — 0 broken, 0 empty
+✓ HTML assets
+✓ HTML heading hierarchy — 0 empty, 0 gaps
+✓ HTML unresolved markup — none
+✓ PDF generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.22-ylb1jlxm/Evidence-Led_Governance_v1.22.pdf
+✓ PDF opened — 73 pages
+✓ PDF metadata — Evidence-Led Governance
+✓ PDF page profile — 612 x 792 pt
+✓ PDF expected text — Evidence-Led Governance
+✓ DOCX source equivalence — 1256/1256 blocks
+✓ HTML source equivalence — 1256/1256 blocks
+✓ PDF source equivalence — 1256/1256 blocks
+
+PASS
+
+Build Report
+
+Publication version: v1.22
+
+Manifest
+✓ schema version 1
+✓ 10 source files resolved
+✓ output formats: docx, pdf, html
+
+Rendering
+✓ DOCX: 1381 paragraphs, 36 tables
+✓ HTML: 187 anchors, 311 internal links
+✓ PDF: 73 pages
+
+PDF Validation
+
+Status: Available
+Backend: pdftotext
+PDF equivalence: Completed
+
+Publication Enrichment
+✓ 142 reference targets
+✓ 7 generated sections
+✓ 138 semantic index entries
+✓ 280 model hyperlinks
+
+Cross-format Equivalence
+✓ 1256 source-derived blocks checked
+✓ DOCX missing: 0
+✓ HTML missing: 0
+✓ PDF missing: 0
+
+Packaging
+✓ checksums generated
+✓ build manifest generated
+✓ publication package complete
+
+Warnings: 0
+Errors: 0
+Overall build status: PASS
+
+PASS

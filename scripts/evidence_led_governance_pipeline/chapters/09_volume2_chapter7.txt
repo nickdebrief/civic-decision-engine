@@ -1,0 +1,602 @@
+[[PARTTITLE: VOLUME II | Application of Evidence-Led Governance]]
+## Introduction to Volume II
+
+
+
+Volume I established the conceptual and research foundations of Evidence-Led Governance.
+
+It examined the relationship between evidence, institutional memory, administrative continuity, legal authority, procedural rights and accountable decision-making.
+
+Volume II applies that methodology.
+
+The purpose is not to select individual disputes because they appear to prove conclusions already reached.
+
+Nor is the purpose to use case studies as illustrations for predetermined arguments.
+
+The case-study method operates in the opposite direction.
+
+It begins with the administrative record.
+
+It reconstructs what happened.
+
+It identifies the institutions involved, the functions they exercised, the information available to them, the legal frameworks within which they acted, the decisions they made, the reasons they recorded, and the mechanisms through which those decisions could be reviewed.
+
+Only after that reconstruction may governance observations be considered.
+
+This distinction is fundamental.
+
+A case study within Evidence-Led Governance is therefore not principally a narrative of events.
+
+It is a reconstruction of an administrative pathway.
+
+The reconstruction asks:
+
+What entered the system?
+
+Who received it?
+
+Under what authority?
+
+For what institutional purpose?
+
+What evidence existed at that point?
+
+What decision was made?
+
+What reasons were recorded?
+
+What happened to the evidence afterwards?
+
+Was the decision reviewed?
+
+Did later institutions receive the same evidence?
+
+Did they exercise the same function?
+
+Did information accumulate across the pathway, or was it repeatedly encountered as though new?
+
+These questions allow administrative systems to be examined without requiring the researcher to determine the conclusion in advance.
+
+The governing principle remains:
+
+The researcher does not determine the destination.
+
+The researcher reconstructs the pathway.
+
+⸻
+
+Chapter 7 — Case Study Method
+
+7.1 Purpose
+
+Chapter 7 does not establish a separate methodology. It operationalises the Evidence-Led Governance methodology established in Volume I for application to individual administrative case studies. RM-1 to RM-5 remain controlling throughout every case-study reconstruction.
+
+The purpose of the Evidence-Led Governance case-study method is to examine how governance operates when information enters real administrative systems.
+
+Legal frameworks describe powers, duties, rights and procedures.
+
+Institutional structures allocate responsibility.
+
+Administrative processes determine how those structures operate in practice.
+
+Documentary records preserve evidence of what actually occurred.
+
+A case study brings those layers together.
+
+Its purpose is not merely to establish a chronology.
+
+It seeks to reconstruct the relationship between:
+
+legal authority;
+
+institutional function;
+
+administrative action;
+
+documentary evidence;
+
+decision-making;
+
+reasoning;
+
+review;
+
+and
+
+institutional memory.
+
+The method therefore examines not only what decision was eventually reached, but the pathway through which that decision became possible.
+
+⸻
+
+7.2 Case Study Selection
+
+A case study should not be selected because it appears likely to prove a particular governance proposition.
+
+Selection should instead be based upon whether the available record permits meaningful reconstruction.
+
+Relevant considerations include:
+
+* whether a sufficiently developed documentary record exists;
+* whether institutional actors and functions can be identified;
+* whether important events can be placed chronologically;
+* whether decisions and their reasons are preserved;
+* whether relevant legal or procedural frameworks can be identified;
+* whether evidence can be traced between stages;
+* whether review or escalation mechanisms can be reconstructed;
+* and whether unresolved gaps can themselves be identified.
+
+A case study need not contain a complete record.
+
+Absence may itself be relevant.
+
+But absence must not be replaced by assumption.
+
+Where the evidence does not establish what happened, the reconstruction records that limitation.
+
+⸻
+
+7.3 Defining the Administrative Boundary
+
+Every case study requires a defined boundary.
+
+That boundary may be:
+
+* a complaint;
+* an application;
+* an investigation;
+* a regulatory process;
+* a statutory decision;
+* a review;
+* an appeal;
+* an information-access request;
+* or a sequence of related administrative processes.
+
+The boundary should be determined by the institutional function being reconstructed rather than simply by the subject matter of the underlying events.
+
+This is necessary because the same evidence may enter several administrative systems.
+
+For example, the same document may become relevant to:
+
+professional regulation;
+
+law enforcement;
+
+freedom of information;
+
+data protection;
+
+administrative review;
+
+or
+
+judicial proceedings.
+
+Those pathways may concern the same underlying events while asking entirely different legal questions.
+
+They must therefore remain distinguishable.
+
+⸻
+
+7.4 The Reconstruction Unit
+
+The basic unit of the case-study method is not simply the document.
+
+It is the governed administrative event.
+
+For each significant event, the reconstruction should seek to establish:
+
+Date
+
+When did the event occur?
+
+Actor
+
+Who performed the action or made the decision?
+
+Institution
+
+Within what institution did the event occur?
+
+Function
+
+What administrative function was being exercised?
+
+Authority
+
+What legal, statutory, regulatory or procedural authority governed that function?
+
+Evidence State
+
+What information can be established as available at that point?
+
+Action
+
+What happened?
+
+Decision
+
+Was a determination made?
+
+Reasoning
+
+Were reasons recorded?
+
+Resulting State
+
+What changed because of the action or decision?
+
+Review
+
+Was there a mechanism through which the action or decision could be reconsidered?
+
+This structure prevents chronology from becoming merely a list of dates.
+
+It reconstructs the governance significance of each event.
+
+⸻
+
+7.5 Evidence-State Boundaries
+
+A central feature of the case-study method is the evidence-state boundary.
+
+Evidence-State Boundary — the point in an administrative pathway at which the evidence demonstrably available to a decision-maker can be distinguished from evidence received before or after that decision.
+
+A decision must be examined against the evidence that was available when the decision was made.
+
+Evidence received afterwards must not retrospectively be treated as though it formed part of the earlier decision.
+
+The reconstruction should therefore distinguish between:
+
+Evidence available before Decision A
+
+and
+
+Evidence received after Decision A but before Decision B.
+
+This distinction may be critical where a pathway contains several decision stages.
+
+The method does not initially determine what consequence later evidence should have produced.
+
+It first establishes the narrower factual question:
+
+What evidence existed at each decision point?
+
+Only after that boundary has been reconstructed can the significance of later evidence properly be analysed.
+
+⸻
+
+7.6 Provenance
+
+Source authority is question-dependent. Primary legal authority governs propositions of law. Documentary evidence governs propositions concerning what was recorded, communicated or administratively performed. Institutional decisions establish the decisions and reasoning they contain. No category acquires authority to establish a proposition outside its evidential function.
+
+Every documentary source should retain its origin.
+
+A later copy does not replace the earlier source.
+
+A summary does not replace the underlying document.
+
+A chronology does not replace the correspondence from which the chronology was constructed.
+
+A later institutional description of an earlier decision does not replace the original decision where that decision remains available.
+
+Sources should therefore be treated according to their evidential function.
+
+Where possible, the reconstruction should distinguish:
+
+primary contemporaneous records;
+
+institutional decisions;
+
+subsequent institutional descriptions;
+
+later summaries or chronologies;
+
+researcher reconstruction;
+
+and
+
+analytical observation.
+
+These categories may corroborate one another.
+
+They should not be collapsed into one another.
+
+⸻
+
+7.7 Documentary Fact, Reported Claim and Finding
+
+The case-study method requires explicit separation between different evidential propositions.
+
+A document may establish that:
+
+an allegation was made.
+
+That does not establish that:
+
+the allegation was proven.
+
+A decision may establish that:
+
+an institution reached a particular conclusion.
+
+That does not necessarily establish that:
+
+the conclusion was factually correct.
+
+A review may establish that:
+
+a decision was affirmed.
+
+That does not necessarily establish that:
+
+every reason supporting the earlier decision was affirmed.
+
+The reconstruction must therefore distinguish among:
+
+documentary fact;
+
+reported allegation;
+
+institutional finding;
+
+legal determination;
+
+research inference;
+
+and
+
+unresolved question.
+
+This distinction is essential to evidence-led analysis.
+
+⸻
+
+7.8 Conflicting Evidence
+
+Administrative records do not always agree.
+
+Dates may differ.
+
+Descriptions may change.
+
+Later correspondence may characterise earlier events differently.
+
+Records may be incomplete.
+
+Where two credible sources contain different information, the discrepancy should ordinarily be preserved.
+
+The researcher should not silently select the version that best fits the emerging narrative.
+
+The correct research statement may therefore be:
+
+Source A records 22 December.
+
+Source B records 23 December.
+
+The available evidence does not presently resolve the discrepancy.
+
+Preserving disagreement is part of preserving the record.
+
+⸻
+
+7.9 Parallel Administrative Pathways
+
+A single underlying episode may generate several institutional pathways.
+
+Those pathways should initially be reconstructed independently.
+
+Their chronology may overlap.
+
+Their documentary evidence may overlap.
+
+Their participants may overlap.
+
+But their functions may remain different.
+
+The case-study method therefore asks of each pathway:
+
+What question was this institution actually empowered to answer?
+
+This prevents an outcome in one process from being mistaken for an answer to a question belonging to another.
+
+A freedom-of-information decision, for example, may determine whether information can lawfully be disclosed.
+
+It does not necessarily determine whether the underlying administrative decision was correct.
+
+A data-protection decision may address processing of personal information.
+
+It does not necessarily determine the merits of a regulatory complaint.
+
+Functional separation must therefore precede cross-pathway analysis.
+
+⸻
+
+7.10 Decision and Review Lineage
+
+Administrative decisions should be reconstructed as a lineage.
+
+Where a decision is reviewed, the reconstruction should identify:
+
+the original decision;
+
+the original reasons;
+
+the review request;
+
+the scope of review;
+
+the reviewing authority;
+
+the evidence before the reviewer;
+
+the review reasoning;
+
+and
+
+the review outcome.
+
+A later affirmation should not be allowed to rewrite the earlier reasoning.
+
+Where a reviewer reaches the same outcome for different reasons, both decision states should remain visible.
+
+Accordingly:
+
+Outcome affirmed
+
+does not necessarily mean:
+
+Every earlier reason affirmed.
+
+Decision lineage preserves that distinction.
+
+⸻
+
+7.11 Unresolved Questions
+
+An unresolved question is a legitimate research result.
+
+The case-study method does not require every gap to be filled before reconstruction can proceed.
+
+Instead, unresolved questions should be expressly identified.
+
+They may arise because:
+
+* a document has not been located;
+* the available documents conflict;
+* an institution did not record its reasoning;
+* a later decision did not determine an earlier question;
+* the available evidence establishes chronology but not causation;
+* or the legal significance of an event requires separate research.
+
+The researcher should not fill these gaps through narrative convenience.
+
+The appropriate status is:
+
+Unresolved pending further evidence or authority.
+
+⸻
+
+7.12 From Reconstruction to Governance Observation
+
+Governance analysis begins only when the pathway, governing authority and evidential record have been sufficiently reconstructed to support it.
+
+An observation should identify something demonstrated by the reconstructed case without claiming more than the evidence supports.
+
+For example, a case study may demonstrate that:
+
+* information moved between several institutions;
+* different institutions applied different legal tests to overlapping evidence;
+* evidence available at one decision point differed from evidence available at another;
+* a review preserved the outcome while changing the reasoning;
+* or documentary continuity was lost between stages.
+
+These may become case-study observations.
+
+They do not automatically become general Research Findings.
+
+⸻
+
+7.13 Case-Study Observation and Research Finding Threshold
+
+A case-study observation is not a Research Finding.
+
+An observation records a characteristic demonstrated within the reconstructed pathway.
+
+A Research Finding requires recurrence across the accumulated record in accordance with the standard established in Chapter 6.
+
+Accordingly, no proposition arising solely from one case study should be designated an RF finding unless independent evidence elsewhere in the research establishes the required recurring pattern.
+
+Volume I distinguishes research findings from individual observations.
+
+That distinction continues in Volume II.
+
+A proposition emerging from one case study should ordinarily remain a case-study observation until it can be tested against additional evidence.
+
+Where the same governance characteristic appears independently across multiple administrative pathways, the research may consider whether it has become sufficiently recurrent to support a broader finding.
+
+The progression is therefore:
+
+Documentary Evidence
+
+↓
+
+Administrative Reconstruction
+
+↓
+
+Case-Study Observation
+
+↓
+
+Cross-Case Comparison
+
+↓
+
+Recurring Pattern
+
+↓
+
+Research Finding
+
+This prevents an individual case from being used to manufacture a general conclusion.
+
+⸻
+
+7.14 Case Study Output Structure
+
+Each developed case study should, where the evidence permits, contain:
+
+Purpose and Scope
+
+Administrative Reconstruction
+
+Legal Question
+
+Authorities and Statutory Provisions
+
+Institutional Function
+
+Evidence-State Analysis
+
+Institutional Reasoning
+
+Decision and Review Lineage
+
+Outcome
+
+Principles Emerging from Reconstruction
+
+Unresolved Questions
+
+Governance Observation
+
+Chapter Synthesis
+
+Not every case will support every component equally.
+
+Where evidence is absent, that absence should remain visible.
+
+⸻
+
+7.15 Methodological Safeguard
+
+Every case study remains governed by the methodological disciplines established in Volume I: Reconstruction Precedes Evaluation (RM-1), Evidence Before Inference (RM-2), Independent Authority (RM-3), Traceability (RM-4), and The Researcher’s Discipline (RM-5).
+
+Their application to case studies requires the researcher to preserve provenance, identify evidence-state boundaries, distinguish institutional functions, maintain decision lineage, preserve conflicting evidence and record unresolved questions.
+
+These controls ensure that the case study applies the methodology rather than becoming an exception to it.
+
+⸻
+
+7.16 Governing Principle
+
+The application method therefore retains the governing discipline established in Volume I:
+
+The researcher does not determine the destination.
+
+The researcher reconstructs the pathway.
+
+A case study begins with the record.
+
+Governance analysis begins only when the pathway, governing authority and evidential record have been sufficiently reconstructed to support it.
