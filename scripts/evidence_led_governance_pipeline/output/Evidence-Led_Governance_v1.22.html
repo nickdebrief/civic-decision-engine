@@ -1,0 +1,1334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Nick Moloney">
+<meta name="description" content="A Research Methodology for Analysing Statutory Administration">
+<meta name="publication-version" content="1.22">
+<title>Evidence-Led Governance</title>
+<style>
+:root {
+  --primary: #154B5F;
+  --secondary: #2E8B9A;
+  --accent: #0F5F73;
+  --body: #202020;
+  --muted: #5A646E;
+  --rule: #9FC4CC;
+  --link: #0F5F73;
+  --page: #FFFFFF;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; color: var(--body); background: var(--page); font-family: 'Aptos', serif; font-size: 11.0pt; line-height: 1.2; }
+.skip-link { position: absolute; left: -10000px; top: 0; padding: .6rem; background: var(--primary); color: white; z-index: 10; }
+.skip-link:focus { left: .5rem; top: .5rem; }
+.publication-header, .publication-footer, main { max-width: 6.5in; margin-inline: auto; padding-inline: 1rem; }
+.publication-header { padding-block: 1rem; border-bottom: 1px solid var(--rule); color: var(--muted); font-size: .82rem; }
+.publication-footer { padding-block: 1.5rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .82rem; }
+.title-page, .volume-page { min-height: 78vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.title-page h1 { margin: 0 0 6.0pt; color: #154B5F; font-family: 'Aptos', sans-serif; font-size: 26.0pt; }
+.title-page .subtitle { color: #2E8B9A; font-family: 'Aptos', sans-serif; font-size: 14.0pt; font-style: italic; }
+h1 { color: #154B5F; font: 700 18.0pt 'Aptos', sans-serif; margin: 6.0pt 0 14.0pt; }
+h2 { color: #154B5F; font: 700 14.0pt 'Aptos', sans-serif; margin: 16.0pt 0 8.0pt; }
+h3 { color: #2E8B9A; font: 700 12.0pt 'Aptos', sans-serif; margin: 12.0pt 0 6.0pt; }
+p { margin: 0 0 .75rem; }
+a { color: var(--link); text-underline-offset: .15em; }
+a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+nav ul, .semantic-list { list-style: none; padding-left: 0; }
+.primary-nav ul { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.generated-section { border-top: 1px solid var(--rule); padding-top: 1rem; }
+.generated-section p { font-size: .95em; }
+.chapter, .front-matter, .generated-section { padding-block: 1.5rem; }
+.chapter-nav { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--rule); padding-top: 1rem; margin-top: 2rem; }
+.callout { margin: 1.2rem 0; padding: 1rem 1.1rem; border: 1px solid; border-left-width: 4px; }
+.callout-label { margin: 0 0 .25rem; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.callout h3 { margin-top: 0; }
+.flow { margin: 1.3rem auto; padding: 1rem; text-align: center; }
+.flow ol { list-style: none; padding: 0; margin: 0; }
+.flow li { font-weight: 700; margin: .3rem 0; }
+.flow .connector { display: block; color: var(--muted); font-size: .9em; font-style: italic; }
+.flow .arrow { display: block; color: var(--muted); }
+.back-to-top { text-align: right; font-size: .85rem; }
+@page { size: 8.5in 11.0in; margin: 0.85in 1.0in 0.8in 1.0in; }
+@media print { .skip-link, .primary-nav, .back-to-top { display: none; } .title-page, .volume-page, .chapter { break-before: page; } a { color: inherit; text-decoration: none; } }
+.callout-callout { background: #EAF4F6; border-color: #9FC4CC; border-left-color: #2E8B9A; }
+.callout-callout .callout-label { color: #5A646E; }
+.callout-callout h3 { color: #154B5F; }
+.callout-canonical-definition { background: #F2F5F7; border-color: #A5B5BE; border-left-color: #607D8B; }
+.callout-canonical-definition .callout-label { color: #566871; }
+.callout-canonical-definition h3 { color: #294E5B; }
+.callout-governance-architecture { background: #EDF5F3; border-color: #88ACA4; border-left-color: #3F8276; }
+.callout-governance-architecture .callout-label { color: #4F6C66; }
+.callout-governance-architecture h3 { color: #21594F; }
+.callout-governance-principle { background: #EAF4F6; border-color: #71A9B4; border-left-color: #2E8B9A; }
+.callout-governance-principle .callout-label { color: #46606A; }
+.callout-governance-principle h3 { color: #154B5F; }
+.callout-research-finding { background: #EEF3F6; border-color: #91A9B5; border-left-color: #557C8D; }
+.callout-research-finding .callout-label { color: #526671; }
+.callout-research-finding h3 { color: #244B5B; }
+.callout-research-methodology { background: #F1F4F2; border-color: #9AAEA3; border-left-color: #668477; }
+.callout-research-methodology .callout-label { color: #5A6B63; }
+.callout-research-methodology h3 { color: #355C4C; }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<header class="publication-header"><span>EVIDENCE-LED GOVERNANCE</span></header>
+<header class="title-page" id="top">
+<h1>Evidence-Led Governance</h1>
+<p class="subtitle">A Research Methodology for Analysing Statutory Administration</p>
+<p class="author">Nick Moloney</p><p class="version">Version 1.22</p><p class="tagline">Structured · Traceable · Governed</p>
+</header>
+<nav class="primary-nav" aria-label="Publication navigation"><ul><li><a href="#generated-table-of-contents">Contents</a></li><li><a href="#generated-governance-principles">List of Governance Principles</a></li><li><a href="#generated-research-findings">List of Research Findings</a></li><li><a href="#generated-canonical-definitions">List of Canonical Definitions</a></li><li><a href="#generated-governance-architectures">List of Governance Architectures</a></li><li><a href="#generated-research-methodologies">List of Research Methodologies</a></li><li><a href="#generated-semantic-index">Semantic Index</a></li><li><a href="#volume-i">Volume I</a></li><li><a href="#volume-ii">Volume II</a></li></ul></nav>
+<main id="main-content">
+<section class="generated-section" id="generated-table-of-contents"><h2>Contents</h2><p class="paragraph-body"><a href="#frontmatter-preface">Preface</a></p>
+<p class="paragraph-body"><a href="#frontmatter-statement-of-method">Statement of Method</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-1">1.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-2">1.2 Purpose</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-3">1.3 Foundational Principles</a></p>
+<p class="paragraph-body"><a href="#section-principle-1-authority-before-commentary">Principle 1 — Authority before commentary</a></p>
+<p class="paragraph-body"><a href="#section-principle-2-each-source-remains-independent">Principle 2 — Each source remains independent</a></p>
+<p class="paragraph-body"><a href="#section-principle-3-distinction-between-legal-functions">Principle 3 — Distinction between legal functions</a></p>
+<p class="paragraph-body"><a href="#section-principle-4-evidence-before-inference">Principle 4 — Evidence before inference</a></p>
+<p class="paragraph-body"><a href="#section-principle-5-conclusions-emerge-from-reconstruction">Principle 5 — Conclusions emerge from reconstruction</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-4">1.4 Research Sequence</a></p>
+<p class="paragraph-body"><a href="#section-stage-one-identify-the-legal-obligation">Stage One — Identify the Legal Obligation</a></p>
+<p class="paragraph-body"><a href="#section-stage-two-examine-judicial-interpretation">Stage Two — Examine Judicial Interpretation</a></p>
+<p class="paragraph-body"><a href="#section-stage-three-analyse-institutional-design">Stage Three — Analyse Institutional Design</a></p>
+<p class="paragraph-body"><a href="#section-stage-four-reconstruct-administrative-practice">Stage Four — Reconstruct Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#section-stage-five-preserve-and-evaluate-documentary-evidence">Stage Five — Preserve and Evaluate Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-stage-six-governance-analysis">Stage Six — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-5">1.5 The Role of Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-6">1.6 Analytical Discipline</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-7">1.7 Scope</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-8">1.8 Closing Statement</a></p>
+<p class="paragraph-body"><a href="#volume-i">Volume I — Foundations of Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-introduction-to-volume-i">Introduction to Volume I</a></p>
+<p class="paragraph-body"><a href="#chapter-1">Chapter 1 — Why This Handbook Exists</a></p>
+<p class="paragraph-body"><a href="#section-1-1">1.1 The Problem</a></p>
+<p class="paragraph-body"><a href="#section-1-2">1.2 The Missing Relationship</a></p>
+<p class="paragraph-body"><a href="#section-1-3">1.3 A Different Way of Reading Governance</a></p>
+<p class="paragraph-body"><a href="#section-1-4">1.4 The Discovery</a></p>
+<p class="paragraph-body"><a href="#section-1-5">1.5 The Central Proposition</a></p>
+<p class="paragraph-body"><a href="#section-1-6">1.6 The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#section-1-7">1.7 Why This Matters</a></p>
+<p class="paragraph-body"><a href="#section-1-8">1.8 Research Finding</a></p>
+<p class="paragraph-body"><a href="#chapter-2">Chapter 2 — The Governance Architecture</a></p>
+<p class="paragraph-body"><a href="#section-2-1">2.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-2-2">2.2 Governance as Relationship</a></p>
+<p class="paragraph-body"><a href="#section-2-3">2.3 The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#section-2-4">2.4 The Function of Each Stage</a></p>
+<p class="paragraph-body"><a href="#section-law">Law</a></p>
+<p class="paragraph-body"><a href="#section-authority">Authority</a></p>
+<p class="paragraph-body"><a href="#section-institutions">Institutions</a></p>
+<p class="paragraph-body"><a href="#section-administration">Administration</a></p>
+<p class="paragraph-body"><a href="#section-evidence">Evidence</a></p>
+<p class="paragraph-body"><a href="#section-reasons">Reasons</a></p>
+<p class="paragraph-body"><a href="#section-documentary-record">Documentary Record</a></p>
+<p class="paragraph-body"><a href="#section-independent-review">Independent Review</a></p>
+<p class="paragraph-body"><a href="#section-governance">Governance</a></p>
+<p class="paragraph-body"><a href="#section-2-5">2.5 Relationships Rather Than Hierarchies</a></p>
+<p class="paragraph-body"><a href="#section-2-6">2.6 Traceability</a></p>
+<p class="paragraph-body"><a href="#section-2-7">2.7 Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#section-2-8">2.8 Research Finding</a></p>
+<p class="paragraph-body"><a href="#section-2-9">2.9 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#chapter-3">Chapter 3 — The Evidence-Led Governance Methodology</a></p>
+<p class="paragraph-body"><a href="#section-3-1">3.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-3-2">3.2 Why Methodology Matters</a></p>
+<p class="paragraph-body"><a href="#section-3-3">3.3 Reconstruction Before Evaluation</a></p>
+<p class="paragraph-body"><a href="#section-3-4">3.4 The Six Stages of Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-stage-one-legal-authority">Stage One — Legal Authority</a></p>
+<p class="paragraph-body"><a href="#section-stage-two-judicial-interpretation">Stage Two — Judicial Interpretation</a></p>
+<p class="paragraph-body"><a href="#section-stage-three-institutional-design">Stage Three — Institutional Design</a></p>
+<p class="paragraph-body"><a href="#section-stage-four-administrative-practice">Stage Four — Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#section-stage-five-documentary-evidence">Stage Five — Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-stage-six-governance-analysis-2">Stage Six — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#section-3-5">3.5 Distinguishing Evidence from Inference</a></p>
+<p class="paragraph-body"><a href="#section-3-6">3.6 Independence of Sources</a></p>
+<p class="paragraph-body"><a href="#section-3-7">3.7 Traceability</a></p>
+<p class="paragraph-body"><a href="#section-3-8">3.8 Repeatability</a></p>
+<p class="paragraph-body"><a href="#section-3-9">3.9 The Role of the Researcher</a></p>
+<p class="paragraph-body"><a href="#section-3-10">3.10 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#chapter-4">Chapter 4 — Governance Principles</a></p>
+<p class="paragraph-body"><a href="#section-4-1">4.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-4-2">4.2 Relationship Between the Principles</a></p>
+<p class="paragraph-body"><a href="#section-4-3">4.3 Research Finding</a></p>
+<p class="paragraph-body"><a href="#section-4-4">4.4 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#chapter-5">Chapter 5 — Canonical Definitions</a></p>
+<p class="paragraph-body"><a href="#section-5-1">5.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-5-2">5.2 Relationship Between Definitions</a></p>
+<p class="paragraph-body"><a href="#section-chapter-synthesis">Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#chapter-6">Chapter 6 — Research Findings</a></p>
+<p class="paragraph-body"><a href="#section-6-1">6.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-6-2">6.2 Methodological Note</a></p>
+<p class="paragraph-body"><a href="#section-6-3">6.3 Finding One — Institutional Accumulation and Administrative Understanding</a></p>
+<p class="paragraph-body"><a href="#section-6-4">6.4 Characteristics of Institutional Accumulation</a></p>
+<p class="paragraph-body"><a href="#section-6-5">6.5 Governance Implications</a></p>
+<p class="paragraph-body"><a href="#section-6-6">6.6 Relationship to Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-6-7">6.7 Discussion</a></p>
+<p class="paragraph-body"><a href="#section-6-8">6.8 Conclusion</a></p>
+<p class="paragraph-body"><a href="#volume-ii">Volume II — Application of Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-introduction-to-volume-ii">Introduction to Volume II</a></p>
+<p class="paragraph-body"><a href="#chapter-7">Chapter 7 — Case Study Method</a></p>
+<p class="paragraph-body"><a href="#section-7-1">7.1 Purpose</a></p>
+<p class="paragraph-body"><a href="#section-7-2">7.2 Case Study Selection</a></p>
+<p class="paragraph-body"><a href="#section-7-3">7.3 Defining the Administrative Boundary</a></p>
+<p class="paragraph-body"><a href="#section-7-4">7.4 The Reconstruction Unit</a></p>
+<p class="paragraph-body"><a href="#section-7-5">7.5 Evidence-State Boundaries</a></p>
+<p class="paragraph-body"><a href="#section-7-6">7.6 Provenance</a></p>
+<p class="paragraph-body"><a href="#section-7-7">7.7 Documentary Fact, Reported Claim and Finding</a></p>
+<p class="paragraph-body"><a href="#section-7-8">7.8 Conflicting Evidence</a></p>
+<p class="paragraph-body"><a href="#section-7-9">7.9 Parallel Administrative Pathways</a></p>
+<p class="paragraph-body"><a href="#section-7-10">7.10 Decision and Review Lineage</a></p>
+<p class="paragraph-body"><a href="#section-7-11">7.11 Unresolved Questions</a></p>
+<p class="paragraph-body"><a href="#section-7-12">7.12 From Reconstruction to Governance Observation</a></p>
+<p class="paragraph-body"><a href="#section-7-13">7.13 Case-Study Observation and Research Finding Threshold</a></p>
+<p class="paragraph-body"><a href="#section-7-14">7.14 Case Study Output Structure</a></p>
+<p class="paragraph-body"><a href="#section-chapter-synthesis-2">Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-7-15">7.15 Methodological Safeguard</a></p>
+<p class="paragraph-body"><a href="#section-7-16">7.16 Governing Principle</a></p></section>
+<section class="generated-section" id="generated-governance-principles"><h2>List of Governance Principles</h2><p class="paragraph-body"><a href="#gp-1">GP-1 — RIGHTS REQUIRE GOVERNANCE</a></p>
+<p class="paragraph-body"><a href="#gp-1-2">GP-1 — Rights Require Governance</a></p>
+<p class="paragraph-body"><a href="#gp-2">GP-2 — Power Must Remain Traceable</a></p>
+<p class="paragraph-body"><a href="#gp-2-2">GP-2 — Power Must Remain Traceable</a></p>
+<p class="paragraph-body"><a href="#gp-3">GP-3 — THE PATHWAY PRECEDES THE CONCLUSION</a></p>
+<p class="paragraph-body"><a href="#gp-3-2">GP-3 — The Pathway Precedes the Conclusion</a></p>
+<p class="paragraph-body"><a href="#gp-4">GP-4 — The Law Creates the Obligation</a></p>
+<p class="paragraph-body"><a href="#gp-5">GP-5 — Evidence Preserves Governance</a></p>
+<p class="paragraph-body"><a href="#gp-6">GP-6 — Reasons Preserve Accountability</a></p>
+<p class="paragraph-body"><a href="#gp-7">GP-7 — Consistency Builds Trust</a></p>
+<p class="paragraph-body"><a href="#gp-8">GP-8 — Review Preserves the Rule of Law</a></p></section>
+<section class="generated-section" id="generated-research-findings"><h2>List of Research Findings</h2><p class="paragraph-body"><a href="#rf-2">RF-2</a></p>
+<p class="paragraph-body"><a href="#rf-3">RF-3</a></p>
+<p class="paragraph-body"><a href="#rf-4">RF-4</a></p>
+<p class="paragraph-body"><a href="#rf-5">RF-5</a></p></section>
+<section class="generated-section" id="generated-canonical-definitions"><h2>List of Canonical Definitions</h2><p class="paragraph-body"><a href="#cd-1">CD-1 — Governance</a></p>
+<p class="paragraph-body"><a href="#cd-1-2">CD-1 — Governance</a></p>
+<p class="paragraph-body"><a href="#cd-10">CD-10 — Traceability</a></p>
+<p class="paragraph-body"><a href="#cd-11">CD-11 — Reconstruction</a></p>
+<p class="paragraph-body"><a href="#cd-12">CD-12 — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#cd-2">CD-2 — Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#cd-2-2">CD-2 — Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#cd-3">CD-3 — Legal Authority</a></p>
+<p class="paragraph-body"><a href="#cd-4">CD-4 — Institutional Design</a></p>
+<p class="paragraph-body"><a href="#cd-5">CD-5 — Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#cd-6">CD-6 — Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#cd-7">CD-7 — Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#cd-8">CD-8 — Reasons</a></p>
+<p class="paragraph-body"><a href="#cd-9">CD-9 — Governance Architecture</a></p></section>
+<section class="generated-section" id="generated-governance-architectures"><h2>List of Governance Architectures</h2><p class="paragraph-body"><a href="#ga-1">GA-1 — The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#ga-2">GA-2 — Evidence-Led Governance Methodology</a></p></section>
+<section class="generated-section" id="generated-research-methodologies"><h2>List of Research Methodologies</h2><p class="paragraph-body"><a href="#rm-1">RM-1 — Reconstruction Precedes Evaluation</a></p>
+<p class="paragraph-body"><a href="#rm-2">RM-2 — Evidence Before Inference</a></p>
+<p class="paragraph-body"><a href="#rm-3">RM-3 — Independent Authority</a></p>
+<p class="paragraph-body"><a href="#rm-4">RM-4 — Traceability</a></p>
+<p class="paragraph-body"><a href="#rm-5">RM-5 — The Researcher’s Discipline</a></p></section>
+<section class="generated-section" id="generated-semantic-index"><h2>Semantic Index</h2><p class="paragraph-body"><a href="#section-statement-of-method-1-1">1.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-1-1">1.1 The Problem</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-2">1.2 Purpose</a></p>
+<p class="paragraph-body"><a href="#section-1-2">1.2 The Missing Relationship</a></p>
+<p class="paragraph-body"><a href="#section-1-3">1.3 A Different Way of Reading Governance</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-3">1.3 Foundational Principles</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-4">1.4 Research Sequence</a></p>
+<p class="paragraph-body"><a href="#section-1-4">1.4 The Discovery</a></p>
+<p class="paragraph-body"><a href="#section-1-5">1.5 The Central Proposition</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-5">1.5 The Role of Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-6">1.6 Analytical Discipline</a></p>
+<p class="paragraph-body"><a href="#section-1-6">1.6 The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-7">1.7 Scope</a></p>
+<p class="paragraph-body"><a href="#section-1-7">1.7 Why This Matters</a></p>
+<p class="paragraph-body"><a href="#section-statement-of-method-1-8">1.8 Closing Statement</a></p>
+<p class="paragraph-body"><a href="#section-1-8">1.8 Research Finding</a></p>
+<p class="paragraph-body"><a href="#section-2-1">2.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-2-2">2.2 Governance as Relationship</a></p>
+<p class="paragraph-body"><a href="#section-2-3">2.3 The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#section-2-4">2.4 The Function of Each Stage</a></p>
+<p class="paragraph-body"><a href="#section-2-5">2.5 Relationships Rather Than Hierarchies</a></p>
+<p class="paragraph-body"><a href="#section-2-6">2.6 Traceability</a></p>
+<p class="paragraph-body"><a href="#section-2-7">2.7 Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#section-2-8">2.8 Research Finding</a></p>
+<p class="paragraph-body"><a href="#section-2-9">2.9 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-3-1">3.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-3-2">3.2 Why Methodology Matters</a></p>
+<p class="paragraph-body"><a href="#section-3-3">3.3 Reconstruction Before Evaluation</a></p>
+<p class="paragraph-body"><a href="#section-3-4">3.4 The Six Stages of Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-3-5">3.5 Distinguishing Evidence from Inference</a></p>
+<p class="paragraph-body"><a href="#section-3-6">3.6 Independence of Sources</a></p>
+<p class="paragraph-body"><a href="#section-3-7">3.7 Traceability</a></p>
+<p class="paragraph-body"><a href="#section-3-8">3.8 Repeatability</a></p>
+<p class="paragraph-body"><a href="#section-3-9">3.9 The Role of the Researcher</a></p>
+<p class="paragraph-body"><a href="#section-3-10">3.10 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-4-1">4.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-4-2">4.2 Relationship Between the Principles</a></p>
+<p class="paragraph-body"><a href="#section-4-3">4.3 Research Finding</a></p>
+<p class="paragraph-body"><a href="#section-4-4">4.4 Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-5-1">5.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-5-2">5.2 Relationship Between Definitions</a></p>
+<p class="paragraph-body"><a href="#section-6-1">6.1 Introduction</a></p>
+<p class="paragraph-body"><a href="#section-6-2">6.2 Methodological Note</a></p>
+<p class="paragraph-body"><a href="#section-6-3">6.3 Finding One — Institutional Accumulation and Administrative Understanding</a></p>
+<p class="paragraph-body"><a href="#section-6-4">6.4 Characteristics of Institutional Accumulation</a></p>
+<p class="paragraph-body"><a href="#section-6-5">6.5 Governance Implications</a></p>
+<p class="paragraph-body"><a href="#section-6-6">6.6 Relationship to Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#section-6-7">6.7 Discussion</a></p>
+<p class="paragraph-body"><a href="#section-6-8">6.8 Conclusion</a></p>
+<p class="paragraph-body"><a href="#section-7-1">7.1 Purpose</a></p>
+<p class="paragraph-body"><a href="#section-7-2">7.2 Case Study Selection</a></p>
+<p class="paragraph-body"><a href="#section-7-3">7.3 Defining the Administrative Boundary</a></p>
+<p class="paragraph-body"><a href="#section-7-4">7.4 The Reconstruction Unit</a></p>
+<p class="paragraph-body"><a href="#section-7-5">7.5 Evidence-State Boundaries</a></p>
+<p class="paragraph-body"><a href="#section-7-6">7.6 Provenance</a></p>
+<p class="paragraph-body"><a href="#section-7-7">7.7 Documentary Fact, Reported Claim and Finding</a></p>
+<p class="paragraph-body"><a href="#section-7-8">7.8 Conflicting Evidence</a></p>
+<p class="paragraph-body"><a href="#section-7-9">7.9 Parallel Administrative Pathways</a></p>
+<p class="paragraph-body"><a href="#section-7-10">7.10 Decision and Review Lineage</a></p>
+<p class="paragraph-body"><a href="#section-7-11">7.11 Unresolved Questions</a></p>
+<p class="paragraph-body"><a href="#section-7-12">7.12 From Reconstruction to Governance Observation</a></p>
+<p class="paragraph-body"><a href="#section-7-13">7.13 Case-Study Observation and Research Finding Threshold</a></p>
+<p class="paragraph-body"><a href="#section-7-14">7.14 Case Study Output Structure</a></p>
+<p class="paragraph-body"><a href="#section-7-15">7.15 Methodological Safeguard</a></p>
+<p class="paragraph-body"><a href="#section-7-16">7.16 Governing Principle</a></p>
+<p class="paragraph-body"><a href="#section-administration">Administration</a></p>
+<p class="paragraph-body"><a href="#section-authority">Authority</a></p>
+<p class="paragraph-body"><a href="#chapter-5">Canonical Definitions — Chapter 5</a></p>
+<p class="paragraph-body"><a href="#chapter-7">Case Study Method — Chapter 7</a></p>
+<p class="paragraph-body"><a href="#cd-1">CD-1 — Governance</a></p>
+<p class="paragraph-body"><a href="#cd-1-2">CD-1 — Governance</a></p>
+<p class="paragraph-body"><a href="#cd-10">CD-10 — Traceability</a></p>
+<p class="paragraph-body"><a href="#cd-11">CD-11 — Reconstruction</a></p>
+<p class="paragraph-body"><a href="#cd-12">CD-12 — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#cd-2-2">CD-2 — Evidence-Led Governance</a></p>
+<p class="paragraph-body"><a href="#cd-2">CD-2 — Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#cd-3">CD-3 — Legal Authority</a></p>
+<p class="paragraph-body"><a href="#cd-4">CD-4 — Institutional Design</a></p>
+<p class="paragraph-body"><a href="#cd-5">CD-5 — Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#cd-6">CD-6 — Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#cd-7">CD-7 — Institutional Memory</a></p>
+<p class="paragraph-body"><a href="#cd-8">CD-8 — Reasons</a></p>
+<p class="paragraph-body"><a href="#cd-9">CD-9 — Governance Architecture</a></p>
+<p class="paragraph-body"><a href="#section-chapter-synthesis">Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-chapter-synthesis-2">Chapter Synthesis</a></p>
+<p class="paragraph-body"><a href="#section-documentary-record">Documentary Record</a></p>
+<p class="paragraph-body"><a href="#section-evidence">Evidence</a></p>
+<p class="paragraph-body"><a href="#ga-1">GA-1 — The Governance Continuum</a></p>
+<p class="paragraph-body"><a href="#ga-2">GA-2 — Evidence-Led Governance Methodology</a></p>
+<p class="paragraph-body"><a href="#section-governance">Governance</a></p>
+<p class="paragraph-body"><a href="#chapter-4">Governance Principles — Chapter 4</a></p>
+<p class="paragraph-body"><a href="#gp-1">GP-1 — RIGHTS REQUIRE GOVERNANCE</a></p>
+<p class="paragraph-body"><a href="#gp-1-2">GP-1 — Rights Require Governance</a></p>
+<p class="paragraph-body"><a href="#gp-2">GP-2 — Power Must Remain Traceable</a></p>
+<p class="paragraph-body"><a href="#gp-2-2">GP-2 — Power Must Remain Traceable</a></p>
+<p class="paragraph-body"><a href="#gp-3">GP-3 — THE PATHWAY PRECEDES THE CONCLUSION</a></p>
+<p class="paragraph-body"><a href="#gp-3-2">GP-3 — The Pathway Precedes the Conclusion</a></p>
+<p class="paragraph-body"><a href="#gp-4">GP-4 — The Law Creates the Obligation</a></p>
+<p class="paragraph-body"><a href="#gp-5">GP-5 — Evidence Preserves Governance</a></p>
+<p class="paragraph-body"><a href="#gp-6">GP-6 — Reasons Preserve Accountability</a></p>
+<p class="paragraph-body"><a href="#gp-7">GP-7 — Consistency Builds Trust</a></p>
+<p class="paragraph-body"><a href="#gp-8">GP-8 — Review Preserves the Rule of Law</a></p>
+<p class="paragraph-body"><a href="#section-independent-review">Independent Review</a></p>
+<p class="paragraph-body"><a href="#section-institutions">Institutions</a></p>
+<p class="paragraph-body"><a href="#section-introduction-to-volume-i">Introduction to Volume I</a></p>
+<p class="paragraph-body"><a href="#section-introduction-to-volume-ii">Introduction to Volume II</a></p>
+<p class="paragraph-body"><a href="#section-law">Law</a></p>
+<p class="paragraph-body"><a href="#section-principle-1-authority-before-commentary">Principle 1 — Authority before commentary</a></p>
+<p class="paragraph-body"><a href="#section-principle-2-each-source-remains-independent">Principle 2 — Each source remains independent</a></p>
+<p class="paragraph-body"><a href="#section-principle-3-distinction-between-legal-functions">Principle 3 — Distinction between legal functions</a></p>
+<p class="paragraph-body"><a href="#section-principle-4-evidence-before-inference">Principle 4 — Evidence before inference</a></p>
+<p class="paragraph-body"><a href="#section-principle-5-conclusions-emerge-from-reconstruction">Principle 5 — Conclusions emerge from reconstruction</a></p>
+<p class="paragraph-body"><a href="#section-reasons">Reasons</a></p>
+<p class="paragraph-body"><a href="#chapter-6">Research Findings — Chapter 6</a></p>
+<p class="paragraph-body"><a href="#rf-2">RF-2</a></p>
+<p class="paragraph-body"><a href="#rf-3">RF-3</a></p>
+<p class="paragraph-body"><a href="#rf-4">RF-4</a></p>
+<p class="paragraph-body"><a href="#rf-5">RF-5</a></p>
+<p class="paragraph-body"><a href="#rm-1">RM-1 — Reconstruction Precedes Evaluation</a></p>
+<p class="paragraph-body"><a href="#rm-2">RM-2 — Evidence Before Inference</a></p>
+<p class="paragraph-body"><a href="#rm-3">RM-3 — Independent Authority</a></p>
+<p class="paragraph-body"><a href="#rm-4">RM-4 — Traceability</a></p>
+<p class="paragraph-body"><a href="#rm-5">RM-5 — The Researcher’s Discipline</a></p>
+<p class="paragraph-body"><a href="#section-stage-five-documentary-evidence">Stage Five — Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-stage-five-preserve-and-evaluate-documentary-evidence">Stage Five — Preserve and Evaluate Documentary Evidence</a></p>
+<p class="paragraph-body"><a href="#section-stage-four-administrative-practice">Stage Four — Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#section-stage-four-reconstruct-administrative-practice">Stage Four — Reconstruct Administrative Practice</a></p>
+<p class="paragraph-body"><a href="#section-stage-one-identify-the-legal-obligation">Stage One — Identify the Legal Obligation</a></p>
+<p class="paragraph-body"><a href="#section-stage-one-legal-authority">Stage One — Legal Authority</a></p>
+<p class="paragraph-body"><a href="#section-stage-six-governance-analysis">Stage Six — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#section-stage-six-governance-analysis-2">Stage Six — Governance Analysis</a></p>
+<p class="paragraph-body"><a href="#section-stage-three-analyse-institutional-design">Stage Three — Analyse Institutional Design</a></p>
+<p class="paragraph-body"><a href="#section-stage-three-institutional-design">Stage Three — Institutional Design</a></p>
+<p class="paragraph-body"><a href="#section-stage-two-examine-judicial-interpretation">Stage Two — Examine Judicial Interpretation</a></p>
+<p class="paragraph-body"><a href="#section-stage-two-judicial-interpretation">Stage Two — Judicial Interpretation</a></p>
+<p class="paragraph-body"><a href="#chapter-3">The Evidence-Led Governance Methodology — Chapter 3</a></p>
+<p class="paragraph-body"><a href="#chapter-2">The Governance Architecture — Chapter 2</a></p>
+<p class="paragraph-body"><a href="#chapter-1">Why This Handbook Exists — Chapter 1</a></p></section>
+<section class="front-matter" id="frontmatter-preface"><h1>Preface</h1><p class="paragraph-body">Every system of public administration leaves a record.</p>
+<p class="paragraph-body">Legislation establishes authority. Courts define legal meaning. Institutions translate legal obligations into administrative practice. Decisions are made, evidence is gathered, reasons are recorded and public power is exercised.</p>
+<p class="paragraph-body">Yet these stages are often studied in isolation.</p>
+<p class="paragraph-body">Legal research commonly examines legislation, judicial decisions or institutional policy separately. Administrative investigations frequently focus on individual decisions without reconstructing the legal framework from which those decisions arose. Documentary records are often treated as evidence of isolated events rather than as components of a continuous system of governance.</p>
+<p class="paragraph-body">This handbook proceeds from a different premise.</p>
+<p class="paragraph-body">It proposes that public administration can be understood only by examining the complete pathway through which legal obligations become institutional action.</p>
+<p class="paragraph-body">That pathway begins with law but does not end there.</p>
+<p class="paragraph-body">Between legislation and lived reality stand institutions, administrative procedures, documentary evidence and mechanisms of review. Each stage contributes something distinct. None should be collapsed into another.</p>
+<p class="paragraph-body">The purpose of this handbook is therefore not simply to explain legal rules. It is to present a methodology for reconstructing statutory administration through authoritative legal sources, institutional design and documentary evidence.</p>
+<p class="paragraph-body">The work has been developed through the examination of multiple independent statutory frameworks, including victims’ rights, criminal injuries compensation, housing law and administrative justice. Each framework was examined independently. Yet each revealed the same underlying architecture.</p>
+<p class="paragraph-body">This recurring architecture did not arise from assumption.</p>
+<p class="paragraph-body">It emerged from the evidence.</p>
+<p class="paragraph-body">Throughout this handbook, legislation is distinguished from judicial interpretation. Judicial interpretation is distinguished from institutional design. Institutional design is distinguished from administrative practice. Documentary evidence is distinguished from inference.</p>
+<p class="paragraph-body">Only after those stages have been reconstructed are conclusions reached.</p>
+<p class="paragraph-body">The methodology therefore does not begin by asking whether an institution succeeded or failed.</p>
+<p class="paragraph-body">It begins by asking:</p>
+<p class="paragraph-body">What legal obligation exists?</p>
+<p class="paragraph-body">How has it been interpreted?</p>
+<p class="paragraph-body">How has it been translated into institutional design?</p>
+<p class="paragraph-body">How is it administered?</p>
+<p class="paragraph-body">What does the documentary record establish?</p>
+<p class="paragraph-body">What conclusions are justified when those elements are examined together?</p>
+<p class="paragraph-body">The objective is not advocacy.</p>
+<p class="paragraph-body">The objective is understanding.</p>
+<p class="paragraph-body">If the governing framework is accurately reconstructed and the evidential record faithfully preserved, the structure of governance becomes visible.</p>
+<p class="paragraph-body">This handbook is an invitation to undertake that reconstruction.</p>
+<p class="paragraph-body">It is intended for researchers, public administrators, lawyers, policymakers, oversight bodies and any person seeking to understand how statutory administration operates in practice.</p>
+<p class="paragraph-body">Its central proposition is simple.</p>
+<p class="paragraph-emphasis">Rights are realised through administration, and administration becomes accountable through evidence.</p>
+<p class="paragraph-body">The chapters that follow are an attempt to demonstrate that proposition through careful examination of authoritative legal sources and the documentary record they ultimately produce.</p>
+<div class="page-break" aria-hidden="true"></div><p class="back-to-top"><a href="#top">Back to top</a></p></section>
+<section class="front-matter" id="frontmatter-statement-of-method"><h1>Statement of Method</h1><section class="section" id="section-statement-of-method-1-1"><h2>1.1 Introduction</h2><p class="paragraph-body">This handbook adopts an evidence-led methodology for analysing statutory administration.</p>
+<p class="paragraph-body">Its purpose is not to advocate predetermined conclusions, nor to evaluate institutions by reference to assumption, opinion or isolated events.</p>
+<p class="paragraph-body">Instead, it reconstructs the legal and administrative framework governing a statutory function before any conclusion is reached.</p>
+<p class="paragraph-body">The methodology recognises that public administration is a continuous legal process extending beyond legislation alone. Statutes establish powers and duties. Courts define their legal meaning. Institutions translate those legal obligations into operational systems. Administrative decisions apply those systems to individual circumstances. Documentary records preserve the exercise of those powers. Independent review evaluates whether the process remained lawful.</p>
+<p class="paragraph-body">Each stage contributes distinct information.</p>
+<p class="paragraph-body">Each stage must therefore be examined independently before the relationship between them can be understood.</p></section>
+<section class="section" id="section-statement-of-method-1-2"><h2>1.2 Purpose</h2><p class="paragraph-body">The purpose of this methodology is to reconstruct governance rather than merely describe it.</p>
+<p class="paragraph-body">The objective is to identify:</p>
+<p class="paragraph-body">the legal obligation created by law;</p>
+<p class="paragraph-body">the judicial interpretation of that obligation;</p>
+<p class="paragraph-body">the institutional structures created to implement it;</p>
+<p class="paragraph-body">the administrative processes through which it operates;</p>
+<p class="paragraph-body">the documentary evidence generated by those processes;</p>
+<p class="paragraph-body">the extent to which the evidential record corresponds with the governing legal framework.</p>
+<p class="paragraph-body">Only after those stages have been completed are conclusions drawn.</p>
+<p class="paragraph-body">The methodology therefore proceeds from reconstruction to evaluation rather than from allegation to confirmation.</p></section>
+<section class="section" id="section-statement-of-method-1-3"><h2>1.3 Foundational Principles</h2><p class="paragraph-body">The methodology is governed by the following principles.</p></section>
+<section class="section" id="section-principle-1-authority-before-commentary"><h3>Principle 1 — Authority before commentary</h3><p class="paragraph-body">Primary legal sources take precedence over commentary.</p>
+<p class="paragraph-body">Legislation, judicial decisions, constitutional provisions, regulations and official reports establish the governing framework.</p>
+<p class="paragraph-body">Secondary commentary may assist interpretation but does not replace the primary sources.</p></section>
+<section class="section" id="section-principle-2-each-source-remains-independent"><h3>Principle 2 — Each source remains independent</h3><p class="paragraph-body">Every authoritative source contributes only what it is competent to establish.</p>
+<p class="paragraph-body">Legislation creates obligations.</p>
+<p class="paragraph-body">Courts interpret legislation.</p>
+<p class="paragraph-body">Institutional reports describe administrative structures.</p>
+<p class="paragraph-body">Documentary evidence records events.</p>
+<p class="paragraph-body">No source should be required to establish matters beyond its own authority.</p></section>
+<section class="section" id="section-principle-3-distinction-between-legal-functions"><h3>Principle 3 — Distinction between legal functions</h3><p class="paragraph-body">Throughout this handbook, clear distinctions are maintained between:</p>
+<p class="paragraph-body">legislation;</p>
+<p class="paragraph-body">judicial interpretation;</p>
+<p class="paragraph-body">institutional design;</p>
+<p class="paragraph-body">administrative practice;</p>
+<p class="paragraph-body">documentary evidence;</p>
+<p class="paragraph-body">analytical inference.</p>
+<p class="paragraph-body">These categories are related but not interchangeable.</p>
+<p class="paragraph-body">Maintaining those distinctions preserves analytical clarity.</p></section>
+<section class="section" id="section-principle-4-evidence-before-inference"><h3>Principle 4 — Evidence before inference</h3><p class="paragraph-body">Documentary evidence establishes:</p>
+<p class="paragraph-body">what occurred;</p>
+<p class="paragraph-body">what was communicated;</p>
+<p class="paragraph-body">what decisions were recorded;</p>
+<p class="paragraph-body">what procedures were followed.</p>
+<p class="paragraph-body">Inference begins only after the evidential record has been reconstructed.</p>
+<p class="paragraph-body">Where evidence does not establish a proposition, the handbook does not present that proposition as fact.</p></section>
+<section class="section" id="section-principle-5-conclusions-emerge-from-reconstruction"><h3>Principle 5 — Conclusions emerge from reconstruction</h3><p class="paragraph-body">The methodology deliberately postpones conclusions.</p>
+<p class="paragraph-body">Each chapter first reconstructs the governing legal framework.</p>
+<p class="paragraph-body">Only after legislation, judicial interpretation, institutional design, administrative practice and documentary evidence have been examined together does evaluative analysis begin.</p>
+<p class="paragraph-body">The destination therefore emerges from the evidence rather than preceding it.</p></section>
+<section class="section" id="section-statement-of-method-1-4"><h2>1.4 Research Sequence</h2><p class="paragraph-body">The methodology proceeds through six sequential stages.</p></section>
+<section class="section" id="section-stage-one-identify-the-legal-obligation"><h3>Stage One — Identify the Legal Obligation</h3><p class="paragraph-body">The first task is to identify the authoritative legal source.</p>
+<p class="paragraph-body">Depending upon the statutory framework, this may include:</p>
+<p class="paragraph-body">constitutional provisions;</p>
+<p class="paragraph-body">European Union law;</p>
+<p class="paragraph-body">legislation;</p>
+<p class="paragraph-body">delegated legislation;</p>
+<p class="paragraph-body">binding regulations.</p>
+<p class="paragraph-body">The question asked is:</p></section>
+<section class="section" id="section-stage-two-examine-judicial-interpretation"><h3>Stage Two — Examine Judicial Interpretation</h3><p class="paragraph-body">Legislation establishes legal duties.</p>
+<p class="paragraph-body">Courts determine how those duties are to be understood.</p>
+<p class="paragraph-body">Judicial interpretation therefore defines:</p>
+<p class="paragraph-body">legal meaning;</p>
+<p class="paragraph-body">limits of discretion;</p>
+<p class="paragraph-body">procedural requirements;</p>
+<p class="paragraph-body">governing principles.</p>
+<p class="paragraph-body">The question becomes:</p></section>
+<section class="section" id="section-stage-three-analyse-institutional-design"><h3>Stage Three — Analyse Institutional Design</h3><p class="paragraph-body">Statutory obligations require institutional implementation.</p>
+<p class="paragraph-body">Institutional design includes:</p>
+<p class="paragraph-body">statutory bodies;</p>
+<p class="paragraph-body">governance arrangements;</p>
+<p class="paragraph-body">operational procedures;</p>
+<p class="paragraph-body">published guidance;</p>
+<p class="paragraph-body">organisational responsibilities.</p>
+<p class="paragraph-body">This stage asks:</p></section>
+<section class="section" id="section-stage-four-reconstruct-administrative-practice"><h3>Stage Four — Reconstruct Administrative Practice</h3><p class="paragraph-body">Institutional design must then be distinguished from actual administration.</p>
+<p class="paragraph-body">Administrative practice includes:</p>
+<p class="paragraph-body">applications;</p>
+<p class="paragraph-body">assessments;</p>
+<p class="paragraph-body">correspondence;</p>
+<p class="paragraph-body">decision-making;</p>
+<p class="paragraph-body">implementation;</p>
+<p class="paragraph-body">review procedures.</p>
+<p class="paragraph-body">The question asked is:</p></section>
+<section class="section" id="section-stage-five-preserve-and-evaluate-documentary-evidence"><h3>Stage Five — Preserve and Evaluate Documentary Evidence</h3><p class="paragraph-body">Administrative activity produces documentary records.</p>
+<p class="paragraph-body">These records include:</p>
+<p class="paragraph-body">applications;</p>
+<p class="paragraph-body">decisions;</p>
+<p class="paragraph-body">reports;</p>
+<p class="paragraph-body">emails;</p>
+<p class="paragraph-body">policies;</p>
+<p class="paragraph-body">notices;</p>
+<p class="paragraph-body">timelines;</p>
+<p class="paragraph-body">supporting evidence.</p>
+<p class="paragraph-body">The documentary record allows reconstruction of the exercise of public power.</p>
+<p class="paragraph-body">It provides the evidential basis for later evaluation.</p></section>
+<section class="section" id="section-stage-six-governance-analysis"><h3>Stage Six — Governance Analysis</h3><p class="paragraph-body">Only after the preceding stages have been completed are conclusions reached.</p>
+<p class="paragraph-body">Governance analysis compares:</p>
+<p class="paragraph-body">the governing legal framework;</p>
+<p class="paragraph-body">with</p>
+<p class="paragraph-body">institutional structures;</p>
+<p class="paragraph-body">with</p>
+<p class="paragraph-body">administrative practice;</p>
+<p class="paragraph-body">with</p>
+<p class="paragraph-body">documentary evidence.</p>
+<p class="paragraph-body">The objective is to determine whether the administration observed the legal framework revealed by the earlier stages.</p></section>
+<section class="section" id="section-statement-of-method-1-5"><h2>1.5 The Role of Documentary Evidence</h2><p class="paragraph-body">Documentary evidence occupies a distinct position within this methodology.</p>
+<p class="paragraph-body">It neither creates legal obligations nor interprets legislation.</p>
+<p class="paragraph-body">Instead, it records the exercise of public power.</p>
+<p class="paragraph-body">The record therefore performs two essential functions.</p>
+<p class="paragraph-body">First, it preserves institutional memory.</p>
+<p class="paragraph-body">Secondly, it permits independent examination of whether administration corresponded with the governing legal framework.</p>
+<p class="paragraph-body">The documentary record is therefore treated as an independent evidential category rather than as commentary upon legal obligations.</p></section>
+<section class="section" id="section-statement-of-method-1-6"><h2>1.6 Analytical Discipline</h2><p class="paragraph-body">This methodology requires continual analytical discipline.</p>
+<p class="paragraph-body">Accordingly:</p>
+<p class="paragraph-body">legislation is not treated as evidence of administrative performance;</p>
+<p class="paragraph-body">judicial interpretation is not treated as legislation;</p>
+<p class="paragraph-body">institutional policy is not treated as legal obligation;</p>
+<p class="paragraph-body">documentary evidence is not treated as proof of legal conclusions without analysis;</p>
+<p class="paragraph-body">inference is distinguished from established fact.</p>
+<p class="paragraph-body">These distinctions protect both the integrity of the research and the integrity of the institutions being examined.</p></section>
+<section class="section" id="section-statement-of-method-1-7"><h2>1.7 Scope</h2><p class="paragraph-body">This handbook is a methodology for analysing statutory administration.</p>
+<p class="paragraph-body">It is not intended to provide legal advice or determine the outcome of any individual dispute.</p>
+<p class="paragraph-body">Instead, it provides a structured method through which statutory systems may be reconstructed, understood and evaluated using authoritative legal sources and documentary evidence.</p>
+<p class="paragraph-body">The methodology is intended to be applicable across multiple areas of public administration, including but not limited to:</p>
+<p class="paragraph-body">victims’ rights;</p>
+<p class="paragraph-body">compensation;</p>
+<p class="paragraph-body">housing;</p>
+<p class="paragraph-body">health;</p>
+<p class="paragraph-body">planning;</p>
+<p class="paragraph-body">policing;</p>
+<p class="paragraph-body">local government;</p>
+<p class="paragraph-body">regulatory administration;</p>
+<p class="paragraph-body">and other statutory frameworks.</p></section>
+<section class="section" id="section-statement-of-method-1-8"><h2>1.8 Closing Statement</h2><p class="paragraph-body">The methodology presented in this handbook proceeds from a single proposition.</p>
+<p class="paragraph-body">Public administration cannot be understood by examining legislation alone.</p>
+<p class="paragraph-body">Nor can it be understood solely through judicial decisions, institutional policy or documentary evidence in isolation.</p>
+<p class="paragraph-body">Governance becomes visible only when those elements are reconstructed as parts of a continuous legal and administrative process.</p>
+<p class="paragraph-body">For that reason, this handbook does not begin with conclusions.</p>
+<p class="paragraph-body">It begins with authoritative legal sources.</p>
+<p class="paragraph-body">Each source is examined independently.</p>
+<p class="paragraph-body">Judicial interpretation is distinguished from legislation.</p>
+<p class="paragraph-body">Institutional design is distinguished from administration.</p>
+<p class="paragraph-body">Documentary evidence is distinguished from inference.</p>
+<p class="paragraph-body">Only after the governing legal framework and the evidential record have been reconstructed do conclusions emerge.</p>
+<p class="paragraph-body">That discipline defines the methodology adopted throughout this handbook.</p>
+<div class="page-break" aria-hidden="true"></div></section><p class="back-to-top"><a href="#top">Back to top</a></p></section>
+<section class="volume" id="volume-i"><header class="volume-page"><p>VOLUME I</p><h1>Foundations of Evidence-Led Governance</h1></header><section class="section" id="section-introduction-to-volume-i"><h2>Introduction to Volume I</h2><p class="paragraph-body">Every statutory system operates through a sequence of legal and administrative relationships.</p>
+<p class="paragraph-body">Legislation alone does not deliver rights.</p>
+<p class="paragraph-body">Judicial interpretation alone does not implement statutory obligations.</p>
+<p class="paragraph-body">Institutions alone do not create legality.</p>
+<p class="paragraph-body">Nor does documentary evidence, considered in isolation, explain governance.</p>
+<p class="paragraph-body">Each performs a distinct function within a continuous legal process.</p>
+<p class="paragraph-body">The purpose of this volume is to identify the recurring architecture through which statutory administration operates.</p>
+<p class="paragraph-body">The chapters that follow do not analyse a single institution or area of law.</p>
+<p class="paragraph-body">Instead, they identify the structural principles that repeatedly emerged from the independent examination of victims’ rights, criminal injuries compensation, housing law and administrative justice.</p>
+<p class="paragraph-body">These principles form the conceptual framework for the remainder of the handbook.</p>
+<p class="paragraph-body">They are not presented as abstract theories.</p>
+<p class="paragraph-body">They emerged through the systematic reconstruction of authoritative legal sources, institutional structures and documentary evidence.</p></section>
+<article class="chapter" id="chapter-1"><h1>Chapter 1 — Why This Handbook Exists</h1><section class="section" id="section-1-1"><h2>1.1 The Problem</h2><p class="paragraph-body">Public administration is frequently examined through individual decisions, isolated complaints or specific legal disputes.</p>
+<p class="paragraph-body">While such analysis is often valuable, it rarely reconstructs the complete legal pathway through which statutory obligations become administrative action.</p>
+<p class="paragraph-body">As a consequence, governance is frequently understood only in fragments.</p>
+<p class="paragraph-body">Legislation may be examined without considering institutional implementation.</p>
+<p class="paragraph-body">Administrative decisions may be criticised without identifying the governing legal framework.</p>
+<p class="paragraph-body">Documentary evidence may be reviewed without distinguishing recorded fact from legal obligation.</p>
+<p class="paragraph-body">Judicial decisions may be discussed without recognising the administrative structures to which they apply.</p>
+<p class="paragraph-body">Each of these approaches provides part of the picture.</p>
+<p class="paragraph-body">None provides the whole.</p></section>
+<section class="section" id="section-1-2"><h2>1.2 The Missing Relationship</h2><p class="paragraph-body">Throughout the research underlying this handbook, one recurring question emerged.</p>
+<p class="paragraph-body">How does a legal obligation become lived administrative reality?</p>
+<p class="paragraph-body">The answer was not contained within legislation alone.</p>
+<p class="paragraph-body">Nor was it found exclusively within judicial interpretation.</p>
+<p class="paragraph-body">Instead, the research revealed a continuous sequence extending from legal authority to institutional practice.</p>
+<p class="paragraph-body">That sequence became visible only when legislation, judicial interpretation, institutional design, administration and documentary evidence were examined together.</p></section>
+<section class="section" id="section-1-3"><h2>1.3 A Different Way of Reading Governance</h2><p class="paragraph-body">This handbook therefore adopts a different perspective.</p>
+<p class="paragraph-body">Rather than asking:</p>
+<p class="paragraph-body">Was the institution right?</p>
+<p class="paragraph-body">It first asks:</p>
+<p class="paragraph-body">What was the institution legally required to do?</p>
+<p class="paragraph-body">Rather than beginning with criticism, it begins with reconstruction.</p>
+<p class="paragraph-body">Rather than beginning with conclusions, it begins with authoritative sources.</p>
+<p class="paragraph-body">This distinction is fundamental.</p>
+<p class="paragraph-body">Evaluation follows reconstruction.</p>
+<p class="paragraph-body">It never replaces it.</p></section>
+<section class="section" id="section-1-4"><h2>1.4 The Discovery</h2><p class="paragraph-body">As multiple statutory frameworks were examined, an unexpected pattern emerged.</p>
+<p class="paragraph-body">Victims’ rights.</p>
+<p class="paragraph-body">Compensation.</p>
+<p class="paragraph-body">Housing.</p>
+<p class="paragraph-body">Administrative justice.</p>
+<p class="paragraph-body">Each was created independently.</p>
+<p class="paragraph-body">Each operates under different legislation.</p>
+<p class="paragraph-body">Each is administered by different institutions.</p>
+<p class="paragraph-body">Yet each revealed the same underlying architecture.</p>
+<p class="paragraph-body">That recurring architecture forms the basis of this handbook.</p>
+<p class="paragraph-body">It is not presented as an assumption.</p>
+<p class="paragraph-body">It is presented as the result of repeated observation across independent legal frameworks.</p></section>
+<section class="section" id="section-1-5"><h2>1.5 The Central Proposition</h2><p class="paragraph-body">The research conducted throughout this handbook supports the following proposition.</p>
+<p class="paragraph-body">Rights are not realised merely because legislation recognises them. Rights become effective only when institutions possess the legal authority, administrative capacity and evidential governance necessary to deliver them.</p>
+<p class="paragraph-body">This proposition does not diminish the importance of legislation.</p>
+<p class="paragraph-body">Rather, it recognises that legislation is the beginning of governance rather than its conclusion.</p></section>
+<section class="section" id="section-1-6"><h2>1.6 The Governance Continuum</h2><p class="paragraph-body">The research repeatedly identified a continuous sequence.</p>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Legal Authority<span class="connector">creates</span><span class="arrow" aria-hidden="true">↓</span></li><li>Institutional Responsibility<span class="connector">implemented through</span><span class="arrow" aria-hidden="true">↓</span></li><li>Administrative Practice<span class="connector">recorded by</span><span class="arrow" aria-hidden="true">↓</span></li><li>Documentary Evidence<span class="connector">examined through</span><span class="arrow" aria-hidden="true">↓</span></li><li>Independent Review<span class="connector">strengthening</span><span class="arrow" aria-hidden="true">↓</span></li><li>Governance</li></ol></figure>
+<p class="paragraph-body">Each stage depends upon the integrity of those before it.</p>
+<p class="paragraph-body">Failure at any stage weakens the operation of the whole.</p></section>
+<section class="section" id="section-1-7"><h2>1.7 Why This Matters</h2><p class="paragraph-body">Modern democratic societies increasingly depend upon complex statutory systems.</p>
+<p class="paragraph-body">Housing.</p>
+<p class="paragraph-body">Health.</p>
+<p class="paragraph-body">Education.</p>
+<p class="paragraph-body">Policing.</p>
+<p class="paragraph-body">Planning.</p>
+<p class="paragraph-body">Environmental regulation.</p>
+<p class="paragraph-body">Victims’ rights.</p>
+<p class="paragraph-body">Social protection.</p>
+<p class="paragraph-body">Each relies upon institutions exercising public power.</p>
+<p class="paragraph-body">Understanding those systems therefore requires more than identifying legal rules.</p>
+<p class="paragraph-body">It requires understanding the pathway through which law becomes administration.</p>
+<p class="paragraph-body">This handbook is written to explain that pathway.</p></section>
+<section class="section" id="section-1-8"><h2>1.8 Research Finding</h2><p class="paragraph-body">The examination of multiple independent statutory frameworks demonstrates that governance cannot be understood through legislation, administration or documentary evidence in isolation.</p>
+<p class="paragraph-body">Instead, governance emerges from the relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review.</p>
+<p class="paragraph-body">That recurring relationship forms the foundation of the Evidence-Led Governance methodology.</p>
+<aside class="callout callout-governance-principle" id="gp-1" aria-labelledby="gp-1-title"><p class="callout-label">Governance Principle No. 1</p><h3 id="gp-1-title">GP-1 — RIGHTS REQUIRE GOVERNANCE</h3><p class="paragraph-body">A right does not exist because it is written. It exists when institutions can deliver it.</p>
+<p class="paragraph-body">Legislation creates the obligation. Administration delivers the obligation. Evidence shows whether it occurred.</p></aside></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="next" href="#chapter-2">Next: The Governance Architecture</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article>
+<article class="chapter" id="chapter-2"><h1>Chapter 2 — The Governance Architecture</h1><section class="section" id="section-2-1"><h2>2.1 Introduction</h2><p class="paragraph-body">Every system of statutory administration possesses an internal structure.</p>
+<p class="paragraph-body">That structure is rarely described in legislation itself.</p>
+<p class="paragraph-body">Nor is it fully explained by judicial decisions, institutional reports or documentary evidence when each is examined in isolation.</p>
+<p class="paragraph-body">Throughout the research presented in this handbook, a recurring pattern emerged across multiple independent statutory frameworks.</p>
+<p class="paragraph-body">The same sequence appeared in victims’ rights, criminal injuries compensation, housing law and administrative justice.</p>
+<p class="paragraph-body">The repetition of that sequence suggested the presence of an underlying governance architecture.</p>
+<p class="paragraph-body">This chapter describes that architecture.</p>
+<p class="paragraph-body">It is not presented as an abstract theory.</p>
+<p class="paragraph-body">It is presented as the recurring structure revealed through the examination of authoritative legal sources.</p></section>
+<section class="section" id="section-2-2"><h2>2.2 Governance as Relationship</h2><p class="paragraph-body">Governance is often described as decision-making, management or institutional oversight.</p>
+<p class="paragraph-body">This handbook adopts a different understanding.</p>
+<p class="paragraph-body">Governance is not a single institution.</p>
+<p class="paragraph-body">Nor is it a single decision.</p>
+<p class="paragraph-body">Governance is the relationship between:</p>
+<p class="paragraph-body">legal authority;</p>
+<p class="paragraph-body">institutional responsibility;</p>
+<p class="paragraph-body">administrative practice;</p>
+<p class="paragraph-body">documentary evidence;</p>
+<p class="paragraph-body">independent review.</p>
+<p class="paragraph-body">No single element is sufficient.</p>
+<p class="paragraph-body">Only their relationship explains how statutory administration operates.</p>
+<aside class="callout callout-canonical-definition" id="cd-1" aria-labelledby="cd-1-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-1-title">CD-1 — Governance</h3><p class="paragraph-body">Governance is the continuous relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review through which statutory obligations are translated into accountable public administration.</p></aside></section>
+<section class="section" id="section-2-3"><h2>2.3 The Governance Continuum</h2><p class="paragraph-body">The research repeatedly revealed the same progression.</p>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Law<span class="connector">creates</span><span class="arrow" aria-hidden="true">↓</span></li><li>Authority<span class="connector">confers</span><span class="arrow" aria-hidden="true">↓</span></li><li>Institutions<span class="connector">organise</span><span class="arrow" aria-hidden="true">↓</span></li><li>Administration<span class="connector">acts</span><span class="arrow" aria-hidden="true">↓</span></li><li>Evidence<span class="connector">records</span><span class="arrow" aria-hidden="true">↓</span></li><li>Reasons<span class="connector">explain</span><span class="arrow" aria-hidden="true">↓</span></li><li>The Record<span class="connector">preserves</span><span class="arrow" aria-hidden="true">↓</span></li><li>Review<span class="connector">examines</span><span class="arrow" aria-hidden="true">↓</span></li><li>Governance<span class="connector">learns</span></li></ol></figure>
+<p class="paragraph-body">Each stage depends upon those preceding it.</p>
+<p class="paragraph-body">None can be removed without weakening the integrity of the whole.</p>
+<aside class="callout callout-governance-architecture" id="ga-1" aria-labelledby="ga-1-title"><p class="callout-label">Governance Architecture</p><h3 id="ga-1-title">GA-1 — The Governance Continuum</h3><p class="paragraph-body">This architecture forms the structural model used throughout this handbook.</p></aside></section>
+<section class="section" id="section-2-4"><h2>2.4 The Function of Each Stage</h2></section>
+<section class="section" id="section-law"><h3>Law</h3><p class="paragraph-body">Legislation establishes the legal obligation.</p>
+<p class="paragraph-body">It creates the statutory powers, duties and responsibilities that govern institutional behaviour.</p>
+<p class="paragraph-body">Without legal authority there can be no lawful exercise of public power.</p></section>
+<section class="section" id="section-authority"><h3>Authority</h3><p class="paragraph-body">Authority provides the legal capacity to act.</p>
+<p class="paragraph-body">It is always derived from law.</p>
+<p class="paragraph-body">Authority is therefore delegated rather than inherent.</p></section>
+<section class="section" id="section-institutions"><h3>Institutions</h3><p class="paragraph-body">Institutions transform legal obligations into operational systems.</p>
+<p class="paragraph-body">They establish governance arrangements, procedures and organisational responsibilities through which statutory functions may be performed.</p></section>
+<section class="section" id="section-administration"><h3>Administration</h3><p class="paragraph-body">Administration performs the statutory function.</p>
+<p class="paragraph-body">Applications are received.</p>
+<p class="paragraph-body">Evidence is gathered.</p>
+<p class="paragraph-body">Assessments are undertaken.</p>
+<p class="paragraph-body">Decisions are reached.</p>
+<p class="paragraph-body">Administration therefore becomes the point at which legal obligations enter lived experience.</p></section>
+<section class="section" id="section-evidence"><h3>Evidence</h3><p class="paragraph-body">Administrative activity produces evidence.</p>
+<p class="paragraph-body">Correspondence.</p>
+<p class="paragraph-body">Applications.</p>
+<p class="paragraph-body">Reports.</p>
+<p class="paragraph-body">Decisions.</p>
+<p class="paragraph-body">Policies.</p>
+<p class="paragraph-body">Records.</p>
+<p class="paragraph-body">Evidence documents the exercise of public power.</p></section>
+<section class="section" id="section-reasons"><h3>Reasons</h3><p class="paragraph-body">Reasons explain why statutory authority produced a particular decision.</p>
+<p class="paragraph-body">They connect:</p>
+<p class="paragraph-body">evidence</p>
+<p class="paragraph-body">to</p>
+<p class="paragraph-body">judgment.</p>
+<p class="paragraph-body">Without reasons the pathway between evidence and decision becomes incomplete.</p></section>
+<section class="section" id="section-documentary-record"><h3>Documentary Record</h3><p class="paragraph-body">The documentary record preserves institutional memory.</p>
+<p class="paragraph-body">It enables later reconstruction of:</p>
+<p class="paragraph-body">legal authority;</p>
+<p class="paragraph-body">administrative process;</p>
+<p class="paragraph-body">evidence;</p>
+<p class="paragraph-body">reasoning;</p>
+<p class="paragraph-body">decision-making.</p>
+<p class="paragraph-body">Without preservation, governance cannot be examined.</p></section>
+<section class="section" id="section-independent-review"><h3>Independent Review</h3><p class="paragraph-body">Independent review examines legality.</p>
+<p class="paragraph-body">It reconstructs the pathway preserved by the documentary record.</p>
+<p class="paragraph-body">Its function is not to recreate administration.</p>
+<p class="paragraph-body">Its function is to determine whether public power remained within the governing legal framework.</p></section>
+<section class="section" id="section-governance"><h3>Governance</h3><p class="paragraph-body">Governance represents institutional learning.</p>
+<p class="paragraph-body">Review informs future administration.</p>
+<p class="paragraph-body">Administration improves institutional practice.</p>
+<p class="paragraph-body">The cycle therefore continues.</p>
+<p class="paragraph-body">Governance is not static.</p>
+<p class="paragraph-body">It evolves through evidence.</p></section>
+<section class="section" id="section-2-5"><h2>2.5 Relationships Rather Than Hierarchies</h2><p class="paragraph-body">One of the most significant findings emerging from this research is that governance should not be understood as a hierarchy alone.</p>
+<p class="paragraph-body">Instead it should be understood as a continuous relationship.</p>
+<p class="paragraph-body">Each stage informs the next.</p>
+<p class="paragraph-body">Each stage depends upon the integrity of those before it.</p>
+<p class="paragraph-body">Governance therefore resembles a continuous evidential chain rather than a series of isolated administrative acts.</p></section>
+<section class="section" id="section-2-6"><h2>2.6 Traceability</h2><p class="paragraph-body">Every administrative decision should remain traceable.</p>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Decision<span class="arrow" aria-hidden="true">↓</span></li><li>Reasons<span class="arrow" aria-hidden="true">↓</span></li><li>Evidence<span class="arrow" aria-hidden="true">↓</span></li><li>Administrative Procedure<span class="arrow" aria-hidden="true">↓</span></li><li>Institutional Responsibility<span class="arrow" aria-hidden="true">↓</span></li><li>Legal Authority</li></ol></figure>
+<p class="paragraph-body">Traceability therefore performs two functions.</p>
+<p class="paragraph-body">It supports legality.</p>
+<p class="paragraph-body">It supports accountability.</p>
+<aside class="callout callout-governance-principle" id="gp-2" aria-labelledby="gp-2-title"><p class="callout-label">Governance Principle</p><h3 id="gp-2-title">GP-2 — Power Must Remain Traceable</h3><p class="paragraph-body">Every exercise of public power should remain connected to the legal authority from which it derives.</p>
+<p class="paragraph-body">Evidence records that exercise.</p>
+<p class="paragraph-body">Reasons explain it.</p>
+<p class="paragraph-body">The documentary record preserves it.</p>
+<p class="paragraph-body">Review examines it.</p>
+<p class="paragraph-body">Governance learns from it.</p></aside></section>
+<section class="section" id="section-2-7"><h2>2.7 Institutional Memory</h2><p class="paragraph-body">Repeated examination of multiple statutory frameworks demonstrated that governance depends upon continuity.</p>
+<p class="paragraph-body">Institutions cannot administer consistently if they cannot remember.</p>
+<p class="paragraph-body">Institutional memory is therefore not merely administrative convenience.</p>
+<p class="paragraph-body">It is a condition of accountable governance.</p>
+<aside class="callout callout-canonical-definition" id="cd-2" aria-labelledby="cd-2-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-2-title">CD-2 — Institutional Memory</h3><p class="paragraph-body">Institutional Memory is the preserved documentary record through which the exercise of public power remains capable of reconstruction, explanation and independent review.</p></aside></section>
+<section class="section" id="section-2-8"><h2>2.8 Research Finding</h2><aside class="callout callout-research-finding" id="rf-2" aria-labelledby="rf-2-title"><p class="callout-label">Research Finding</p><h3 id="rf-2-title">RF-2</h3><p class="paragraph-body">The examination of independent statutory frameworks demonstrates that governance consistently operates through a recurring sequence linking legal authority, institutional responsibility, administration, evidence, reasons, documentary preservation and independent review.</p>
+<p class="paragraph-body">This architecture appears to be general rather than subject-specific.</p></aside></section>
+<section class="section" id="section-2-9"><h2>2.9 Chapter Synthesis</h2><p class="paragraph-body">This chapter has established the conceptual architecture that will guide every subsequent volume of the handbook.</p>
+<p class="paragraph-body">It demonstrates that governance is not reducible to legislation, institutions or administration considered separately.</p>
+<p class="paragraph-body">Instead, governance emerges from the continuous relationship between those elements.</p>
+<p class="paragraph-body">The recurring architecture identified in this chapter provides the analytical framework through which victims’ rights, compensation, housing, administrative justice and future statutory systems will be examined.</p></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-1">Previous: Why This Handbook Exists</a><a rel="next" href="#chapter-3">Next: The Evidence-Led Governance Methodology</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article>
+<article class="chapter" id="chapter-3"><h1>Chapter 3 — The Evidence-Led Governance Methodology</h1><section class="section" id="section-3-1"><h2>3.1 Introduction</h2><p class="paragraph-body">Every discipline is distinguished by its methodology.</p>
+<p class="paragraph-body">Medicine relies upon clinical investigation.</p>
+<p class="paragraph-body">History relies upon documentary reconstruction.</p>
+<p class="paragraph-body">Science relies upon observation, experimentation and verification.</p>
+<p class="paragraph-body">Evidence-Led Governance is distinguished by a methodology designed to reconstruct statutory administration before reaching evaluative conclusions.</p>
+<p class="paragraph-body">The methodology developed throughout this handbook does not begin with criticism, advocacy or predetermined outcomes.</p>
+<p class="paragraph-body">Instead, it proceeds through a structured sequence of legal and evidential reconstruction.</p>
+<p class="paragraph-body">The objective is to understand governance before evaluating it.</p></section>
+<section class="section" id="section-3-2"><h2>3.2 Why Methodology Matters</h2><p class="paragraph-body">Governance cannot be evaluated reliably through isolated documents or individual administrative decisions.</p>
+<p class="paragraph-body">Nor can legislation, judicial interpretation or institutional practice be understood independently of one another.</p>
+<p class="paragraph-body">Each represents only one part of a continuous legal process.</p>
+<p class="paragraph-body">Accordingly, this methodology requires that every stage be reconstructed before conclusions emerge.</p>
+<p class="paragraph-body">This discipline protects the integrity of both the research and the institutions being examined.</p></section>
+<section class="section" id="section-3-3"><h2>3.3 Reconstruction Before Evaluation</h2><p class="paragraph-body">The defining characteristic of this methodology is that reconstruction precedes evaluation.</p>
+<p class="paragraph-body">The research therefore asks:</p>
+<p class="paragraph-body">First</p>
+<p class="paragraph-emphasis">What legal obligation exists?</p>
+<p class="paragraph-body">Then</p>
+<p class="paragraph-emphasis">How has that obligation been interpreted?</p>
+<p class="paragraph-body">Then</p>
+<p class="paragraph-emphasis">How has it been translated into institutional design?</p>
+<p class="paragraph-body">Then</p>
+<p class="paragraph-emphasis">How is that design implemented through administration?</p>
+<p class="paragraph-body">Then</p>
+<p class="paragraph-emphasis">What documentary evidence records that administration?</p>
+<p class="paragraph-body">Only then is the final question asked.</p>
+<p class="paragraph-emphasis">What conclusions are supported by the reconstructed framework and the evidential record?</p>
+<p class="paragraph-body">This ordering is deliberate.</p>
+<p class="paragraph-body">Changing the order changes the character of the research.</p>
+<p class="paragraph-body">Beginning with conclusions risks confirmation bias.</p>
+<p class="paragraph-body">Beginning with reconstruction promotes analytical discipline.</p>
+<aside class="callout callout-research-methodology" id="rm-1" aria-labelledby="rm-1-title"><p class="callout-label">Research Methodology</p><h3 id="rm-1-title">RM-1 — Reconstruction Precedes Evaluation</h3><p class="paragraph-body">No evaluative conclusion should be reached until the governing legal framework and the evidential record have been independently reconstructed.</p></aside></section>
+<section class="section" id="section-3-4"><h2>3.4 The Six Stages of Evidence-Led Governance</h2><p class="paragraph-body">The methodology proceeds through six sequential stages.</p></section>
+<section class="section" id="section-stage-one-legal-authority"><h3>Stage One — Legal Authority</h3><p class="paragraph-body">Identify the governing legal obligation.</p>
+<p class="paragraph-body">Sources include:</p>
+<p class="paragraph-body">constitutions;</p>
+<p class="paragraph-body">legislation;</p>
+<p class="paragraph-body">regulations;</p>
+<p class="paragraph-body">directives;</p>
+<p class="paragraph-body">statutory instruments.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">What does the law require?</p></section>
+<section class="section" id="section-stage-two-judicial-interpretation"><h3>Stage Two — Judicial Interpretation</h3><p class="paragraph-body">Determine how courts have interpreted those obligations.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">How has the legal obligation been understood?</p></section>
+<section class="section" id="section-stage-three-institutional-design"><h3>Stage Three — Institutional Design</h3><p class="paragraph-body">Identify the institutions responsible for implementation.</p>
+<p class="paragraph-body">Examine:</p>
+<p class="paragraph-body">statutory bodies;</p>
+<p class="paragraph-body">governance structures;</p>
+<p class="paragraph-body">published procedures;</p>
+<p class="paragraph-body">organisational responsibilities.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">How has the legal obligation been translated into institutional practice?</p></section>
+<section class="section" id="section-stage-four-administrative-practice"><h3>Stage Four — Administrative Practice</h3><p class="paragraph-body">Reconstruct how statutory responsibilities are exercised.</p>
+<p class="paragraph-body">Examples include:</p>
+<p class="paragraph-body">applications;</p>
+<p class="paragraph-body">investigations;</p>
+<p class="paragraph-body">assessments;</p>
+<p class="paragraph-body">communications;</p>
+<p class="paragraph-body">decision-making;</p>
+<p class="paragraph-body">review procedures.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">How does administration perform the statutory function?</p></section>
+<section class="section" id="section-stage-five-documentary-evidence"><h3>Stage Five — Documentary Evidence</h3><p class="paragraph-body">Reconstruct the documentary record.</p>
+<p class="paragraph-body">This includes:</p>
+<p class="paragraph-body">correspondence;</p>
+<p class="paragraph-body">reports;</p>
+<p class="paragraph-body">applications;</p>
+<p class="paragraph-body">policies;</p>
+<p class="paragraph-body">notices;</p>
+<p class="paragraph-body">decisions;</p>
+<p class="paragraph-body">timelines.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">What does the record establish?</p></section>
+<section class="section" id="section-stage-six-governance-analysis-2"><h3>Stage Six — Governance Analysis</h3><p class="paragraph-body">Only after the preceding stages are complete does governance analysis begin.</p>
+<p class="paragraph-body">The reconstructed legal framework is compared with the documentary record.</p>
+<p class="paragraph-body">Question:</p>
+<p class="paragraph-emphasis">Does the evidence demonstrate correspondence between statutory obligation and administrative practice?</p>
+<aside class="callout callout-governance-architecture" id="ga-2" aria-labelledby="ga-2-title"><p class="callout-label">Governance Architecture</p><h3 id="ga-2-title">GA-2 — Evidence-Led Governance Methodology</h3><p class="paragraph-body">This sequence forms the methodological framework adopted throughout the handbook.</p></aside>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Law<span class="arrow" aria-hidden="true">↓</span></li><li>Interpretation<span class="arrow" aria-hidden="true">↓</span></li><li>Institutional Design<span class="arrow" aria-hidden="true">↓</span></li><li>Administration<span class="arrow" aria-hidden="true">↓</span></li><li>Evidence<span class="arrow" aria-hidden="true">↓</span></li><li>Governance Analysis</li></ol></figure></section>
+<section class="section" id="section-3-5"><h2>3.5 Distinguishing Evidence from Inference</h2><p class="paragraph-body">One of the defining characteristics of this methodology is the distinction between evidence and inference.</p>
+<p class="paragraph-body">Evidence establishes:</p>
+<p class="paragraph-body">what occurred;</p>
+<p class="paragraph-body">what was recorded;</p>
+<p class="paragraph-body">what was communicated.</p>
+<p class="paragraph-body">Inference explains:</p>
+<p class="paragraph-body">relationships;</p>
+<p class="paragraph-body">implications;</p>
+<p class="paragraph-body">governance conclusions.</p>
+<p class="paragraph-body">The distinction is essential.</p>
+<p class="paragraph-body">Research loses integrity when inference is presented as evidence.</p>
+<aside class="callout callout-research-methodology" id="rm-2" aria-labelledby="rm-2-title"><p class="callout-label">Research Methodology</p><h3 id="rm-2-title">RM-2 — Evidence Before Inference</h3><p class="paragraph-body">Inference begins only after the documentary record has been reconstructed.</p></aside></section>
+<section class="section" id="section-3-6"><h2>3.6 Independence of Sources</h2><p class="paragraph-body">Each source contributes something different.</p>
+<p class="paragraph-body">Legislation creates obligations.</p>
+<p class="paragraph-body">Courts interpret those obligations.</p>
+<p class="paragraph-body">Institutions design administrative systems.</p>
+<p class="paragraph-body">Administrative practice exercises statutory powers.</p>
+<p class="paragraph-body">Documentary evidence records those exercises.</p>
+<p class="paragraph-body">No source substitutes for another.</p>
+<aside class="callout callout-research-methodology" id="rm-3" aria-labelledby="rm-3-title"><p class="callout-label">Research Methodology</p><h3 id="rm-3-title">RM-3 — Independent Authority</h3><p class="paragraph-body">Every authoritative source contributes only what it is competent to establish.</p></aside></section>
+<section class="section" id="section-3-7"><h2>3.7 Traceability</h2><p class="paragraph-body">Every conclusion should remain traceable.</p>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Research Finding<span class="arrow" aria-hidden="true">↓</span></li><li>Evidence<span class="arrow" aria-hidden="true">↓</span></li><li>Administrative Record<span class="arrow" aria-hidden="true">↓</span></li><li>Institutional Practice<span class="arrow" aria-hidden="true">↓</span></li><li>Legal Authority</li></ol></figure>
+<p class="paragraph-body">Readers should be capable of reconstructing every conclusion independently.</p>
+<aside class="callout callout-research-methodology" id="rm-4" aria-labelledby="rm-4-title"><p class="callout-label">Research Methodology</p><h3 id="rm-4-title">RM-4 — Traceability</h3><p class="paragraph-body">Every analytical conclusion should remain capable of being traced to the authoritative sources upon which it depends.</p></aside></section>
+<section class="section" id="section-3-8"><h2>3.8 Repeatability</h2><p class="paragraph-body">Perhaps the strongest test of a methodology is whether it remains effective when applied to unrelated statutory frameworks.</p>
+<p class="paragraph-body">This methodology has now been applied to:</p>
+<p class="paragraph-body">Victims’ Rights;</p>
+<p class="paragraph-body">Criminal Injuries Compensation;</p>
+<p class="paragraph-body">Housing Law;</p>
+<p class="paragraph-body">Administrative Justice.</p>
+<p class="paragraph-body">Despite their different legal contexts, each revealed the same recurring governance architecture.</p>
+<p class="paragraph-body">The methodology therefore demonstrates repeatability across independent areas of statutory administration.</p>
+<aside class="callout callout-research-finding" id="rf-3" aria-labelledby="rf-3-title"><p class="callout-label">Research Finding</p><h3 id="rf-3-title">RF-3</h3><p class="paragraph-body">Evidence-Led Governance is capable of reconstructing multiple independent statutory systems through a common analytical framework.</p></aside></section>
+<section class="section" id="section-3-9"><h2>3.9 The Role of the Researcher</h2><p class="paragraph-body">The researcher does not determine the destination.</p>
+<p class="paragraph-body">The researcher reconstructs the pathway.</p>
+<p class="paragraph-body">The distinction is fundamental.</p>
+<p class="paragraph-body">The methodology therefore requires restraint.</p>
+<p class="paragraph-body">The objective is not to persuade.</p>
+<p class="paragraph-body">The objective is to understand.</p>
+<p class="paragraph-body">Conclusions arise because the governing framework and the documentary record point towards them.</p>
+<aside class="callout callout-research-methodology" id="rm-5" aria-labelledby="rm-5-title"><p class="callout-label">Research Methodology</p><h3 id="rm-5-title">RM-5 — The Researcher’s Discipline</h3><p class="paragraph-body">The role of the researcher is to reconstruct statutory administration faithfully before attempting to evaluate it.</p></aside></section>
+<section class="section" id="section-3-10"><h2>3.10 Chapter Synthesis</h2><p class="paragraph-body">The methodology presented in this chapter provides the operational framework for every volume that follows.</p>
+<p class="paragraph-body">It establishes:</p>
+<p class="paragraph-body">the order of analysis;</p>
+<p class="paragraph-body">the distinction between authoritative sources;</p>
+<p class="paragraph-body">the independence of documentary evidence;</p>
+<p class="paragraph-body">the discipline of reconstruction;</p>
+<p class="paragraph-body">the traceability of conclusions.</p>
+<p class="paragraph-body">The methodology therefore becomes more than a research technique.</p>
+<p class="paragraph-body">It becomes the mechanism through which statutory governance is made intelligible.</p>
+<aside class="callout callout-governance-principle" id="gp-3" aria-labelledby="gp-3-title"><p class="callout-label">Governance Principle</p><h3 id="gp-3-title">GP-3 — THE PATHWAY PRECEDES THE CONCLUSION</h3><p class="paragraph-body">Understanding does not begin with answers.</p>
+<p class="paragraph-body">It begins with reconstruction.</p>
+<p class="paragraph-body">Law defines the obligation.</p>
+<p class="paragraph-body">Evidence records its exercise.</p>
+<p class="paragraph-body">Governance emerges only after the pathway has been faithfully rebuilt.</p></aside></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-2">Previous: The Governance Architecture</a><a rel="next" href="#chapter-4">Next: Governance Principles</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article>
+<article class="chapter" id="chapter-4"><h1>Chapter 4 — Governance Principles</h1><section class="section" id="section-4-1"><h2>4.1 Introduction</h2><p class="paragraph-body">The preceding chapters established the methodology through which statutory administration is reconstructed and analysed.</p>
+<p class="paragraph-body">During that process, a number of recurring principles emerged.</p>
+<p class="paragraph-body">These principles did not arise from abstract theory.</p>
+<p class="paragraph-body">They emerged independently through the examination of victims’ rights, criminal injuries compensation, housing law and administrative justice.</p>
+<p class="paragraph-body">Although each statutory framework possessed its own legislation, institutions and procedures, the same governance principles appeared repeatedly.</p>
+<p class="paragraph-body">This chapter consolidates those principles into a common framework.</p>
+<p class="paragraph-body">They are referred to throughout the remainder of this handbook as Governance Principles (GP).</p>
+<p class="paragraph-body">Each principle represents a recurring proposition supported by the research undertaken in earlier chapters and applied throughout the later volumes.</p>
+<aside class="callout callout-governance-principle" id="gp-1-2" aria-labelledby="gp-1-2-title"><p class="callout-label">Governance Principle</p><h3 id="gp-1-2-title">GP-1 — Rights Require Governance</h3><p class="paragraph-body">Rights do not become effective solely because legislation recognises them.</p>
+<p class="paragraph-body">They become effective only when institutions possess the legal authority, administrative capacity and evidential governance necessary to deliver them.</p>
+<p class="paragraph-body">Governance therefore represents the operational condition through which legal rights become practical reality.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">A right does not exist in practice because it is written. It exists when institutions can deliver it.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-2-2" aria-labelledby="gp-2-2-title"><p class="callout-label">Governance Principle</p><h3 id="gp-2-2-title">GP-2 — Power Must Remain Traceable</h3><p class="paragraph-body">Every exercise of public power should remain capable of reconstruction.</p>
+<p class="paragraph-body">Authority should be traceable to legislation.</p>
+<p class="paragraph-body">Administration should be traceable to institutional responsibility.</p>
+<p class="paragraph-body">Decisions should be traceable to evidence.</p>
+<p class="paragraph-body">Reasons should be traceable to statutory purpose.</p>
+<p class="paragraph-body">The documentary record preserves this continuity.</p>
+<p class="paragraph-body">Traceability therefore protects both legality and accountability.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Every exercise of public power should remain connected to the legal authority from which it derives.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-3-2" aria-labelledby="gp-3-2-title"><p class="callout-label">Governance Principle</p><h3 id="gp-3-2-title">GP-3 — The Pathway Precedes the Conclusion</h3><p class="paragraph-body">Evidence-Led Governance begins with reconstruction rather than evaluation.</p>
+<p class="paragraph-body">Legal obligations are identified before institutions are assessed.</p>
+<p class="paragraph-body">Administrative pathways are reconstructed before conclusions are drawn.</p>
+<p class="paragraph-body">The methodology therefore avoids beginning with predetermined outcomes.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Understanding begins with reconstruction, not with conclusions.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-4" aria-labelledby="gp-4-title"><p class="callout-label">Governance Principle</p><h3 id="gp-4-title">GP-4 — The Law Creates the Obligation</h3><p class="paragraph-body">Throughout every statutory framework examined, legislation performed the same constitutional function.</p>
+<p class="paragraph-body">It created legal duties.</p>
+<p class="paragraph-body">Neither institutions nor courts create statutory obligations.</p>
+<p class="paragraph-body">Institutions implement them.</p>
+<p class="paragraph-body">Courts interpret them.</p>
+<p class="paragraph-body">The distinction preserves constitutional order.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Legislation creates the obligation. Judicial interpretation explains its meaning. Institutions build their practice upon it.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-5" aria-labelledby="gp-5-title"><p class="callout-label">Governance Principle</p><h3 id="gp-5-title">GP-5 — Evidence Preserves Governance</h3><p class="paragraph-body">Governance cannot be examined unless the exercise of public power is preserved.</p>
+<p class="paragraph-body">Documentary evidence performs this function.</p>
+<p class="paragraph-body">Applications.</p>
+<p class="paragraph-body">Correspondence.</p>
+<p class="paragraph-body">Reports.</p>
+<p class="paragraph-body">Policies.</p>
+<p class="paragraph-body">Reasons.</p>
+<p class="paragraph-body">Decisions.</p>
+<p class="paragraph-body">Together they preserve institutional memory.</p>
+<p class="paragraph-body">Without evidence, governance cannot be reconstructed.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Evidence preserves the exercise of public power.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-6" aria-labelledby="gp-6-title"><p class="callout-label">Governance Principle</p><h3 id="gp-6-title">GP-6 — Reasons Preserve Accountability</h3><p class="paragraph-body">Administrative decisions become intelligible through reasons.</p>
+<p class="paragraph-body">Reasons explain:</p>
+<p class="paragraph-body">the statutory authority;</p>
+<p class="paragraph-body">the relevant evidence;</p>
+<p class="paragraph-body">the exercise of judgment;</p>
+<p class="paragraph-body">the resulting decision.</p>
+<p class="paragraph-body">Without reasons, accountability becomes significantly more difficult.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Reasons connect evidence to judgment and judgment to accountability.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-7" aria-labelledby="gp-7-title"><p class="callout-label">Governance Principle</p><h3 id="gp-7-title">GP-7 — Consistency Builds Trust</h3><p class="paragraph-body">Institutions develop legitimacy through consistency.</p>
+<p class="paragraph-body">Policies.</p>
+<p class="paragraph-body">Procedures.</p>
+<p class="paragraph-body">Representations.</p>
+<p class="paragraph-body">Administrative practice.</p>
+<p class="paragraph-body">When these remain consistent with statutory authority, public confidence increases.</p>
+<p class="paragraph-body">Where change becomes necessary, reasons preserve fairness.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">Institutional trust depends upon lawful consistency.</p></aside>
+<aside class="callout callout-governance-principle" id="gp-8" aria-labelledby="gp-8-title"><p class="callout-label">Governance Principle</p><h3 id="gp-8-title">GP-8 — Review Preserves the Rule of Law</h3><p class="paragraph-body">Independent review examines the legality of public administration.</p>
+<p class="paragraph-body">It protects:</p>
+<p class="paragraph-body">statutory authority;</p>
+<p class="paragraph-body">procedural fairness;</p>
+<p class="paragraph-body">evidence;</p>
+<p class="paragraph-body">reasons;</p>
+<p class="paragraph-body">accountability.</p>
+<p class="paragraph-body">Review therefore strengthens governance rather than replacing it.</p>
+<p class="paragraph-body">Statement</p>
+<p class="paragraph-body">The Rule of Law is preserved through independent review of public power.</p></aside></section>
+<section class="section" id="section-4-2"><h2>4.2 Relationship Between the Principles</h2><p class="paragraph-body">The Governance Principles are not independent propositions.</p>
+<p class="paragraph-body">They form a continuous sequence.</p>
+<figure class="flow flow-vertical" aria-label="Flow diagram"><ol><li>Rights<span class="arrow" aria-hidden="true">↓</span></li><li>Law<span class="arrow" aria-hidden="true">↓</span></li><li>Authority<span class="arrow" aria-hidden="true">↓</span></li><li>Institutions<span class="arrow" aria-hidden="true">↓</span></li><li>Administration<span class="arrow" aria-hidden="true">↓</span></li><li>Evidence<span class="arrow" aria-hidden="true">↓</span></li><li>Reasons<span class="arrow" aria-hidden="true">↓</span></li><li>Record<span class="arrow" aria-hidden="true">↓</span></li><li>Review<span class="arrow" aria-hidden="true">↓</span></li><li>Governance</li></ol></figure>
+<p class="paragraph-body">Each principle strengthens those surrounding it.</p>
+<p class="paragraph-body">Together they describe the recurring architecture of statutory administration identified throughout this handbook.</p></section>
+<section class="section" id="section-4-3"><h2>4.3 Research Finding</h2><aside class="callout callout-research-finding" id="rf-4" aria-labelledby="rf-4-title"><p class="callout-label">Research Finding</p><h3 id="rf-4-title">RF-4</h3><p class="paragraph-body">Independent statutory frameworks repeatedly reveal the same foundational governance principles despite differences in subject matter, institutional responsibility and legislative purpose.</p>
+<p class="paragraph-body">This consistency supports the proposition that the principles identified in this chapter are general characteristics of statutory governance rather than features unique to individual legal systems.</p></aside></section>
+<section class="section" id="section-4-4"><h2>4.4 Chapter Synthesis</h2><p class="paragraph-body">The Governance Principles established in this chapter provide the conceptual vocabulary for the remainder of the handbook.</p>
+<p class="paragraph-body">Subsequent volumes will not redefine these principles.</p>
+<p class="paragraph-body">Instead, they will demonstrate how each principle operates within specific statutory frameworks.</p>
+<p class="paragraph-body">The principles therefore serve both as analytical tools and as reference points through which later chapters may be understood and compared.</p></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-3">Previous: The Evidence-Led Governance Methodology</a><a rel="next" href="#chapter-5">Next: Canonical Definitions</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article>
+<article class="chapter" id="chapter-5"><h1>Chapter 5 — Canonical Definitions</h1><section class="section" id="section-5-1"><h2>5.1 Introduction</h2><p class="paragraph-body">Every scholarly discipline develops a shared vocabulary.</p>
+<p class="paragraph-body">Legal systems define concepts through legislation and judicial interpretation.</p>
+<p class="paragraph-body">Scientific disciplines establish technical terminology to ensure that researchers use common language.</p>
+<p class="paragraph-body">Evidence-Led Governance requires the same discipline.</p>
+<p class="paragraph-body">The following definitions are referred to throughout this handbook.</p>
+<p class="paragraph-body">They are not intended to replace statutory definitions where legislation provides one.</p>
+<p class="paragraph-body">Rather, they establish how recurring concepts are used within this methodology.</p>
+<p class="paragraph-body">These definitions remain constant throughout every subsequent volume.</p>
+<aside class="callout callout-canonical-definition" id="cd-1-2" aria-labelledby="cd-1-2-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-1-2-title">CD-1 — Governance</h3><p class="paragraph-body">Governance is the continuous relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review through which statutory obligations are translated into accountable public administration.</p>
+<p class="paragraph-body">Governance is therefore understood as a relationship rather than an institution or isolated administrative act.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-2-2" aria-labelledby="cd-2-2-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-2-2-title">CD-2 — Evidence-Led Governance</h3><p class="paragraph-body">Evidence-Led Governance is a methodology for reconstructing statutory administration by examining authoritative legal sources, judicial interpretation, institutional design, administrative practice and documentary evidence before reaching evaluative conclusions.</p>
+<p class="paragraph-body">Its defining characteristic is reconstruction before evaluation.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-3" aria-labelledby="cd-3-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-3-title">CD-3 — Legal Authority</h3><p class="paragraph-body">Legal Authority is the lawful power created by constitutions, legislation, delegated legislation or other recognised legal sources enabling institutions to exercise public functions.</p>
+<p class="paragraph-body">Authority always derives from law.</p>
+<p class="paragraph-body">It is never assumed.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-4" aria-labelledby="cd-4-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-4-title">CD-4 — Institutional Design</h3><p class="paragraph-body">Institutional Design is the organisational structure through which statutory obligations are translated into administrative capability.</p>
+<p class="paragraph-body">It includes:</p>
+<ul><li>statutory bodies;</li><li>governance arrangements;</li><li>operational responsibilities;</li><li>published procedures;</li><li>administrative systems.</li></ul>
+<p class="paragraph-body">Institutional Design explains how legal obligations become operational functions.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-5" aria-labelledby="cd-5-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-5-title">CD-5 — Administrative Practice</h3><p class="paragraph-body">Administrative Practice is the day-to-day exercise of statutory powers by institutions acting within their lawful authority.</p>
+<p class="paragraph-body">Administrative practice includes:</p>
+<ul><li>receiving applications;</li><li>conducting investigations;</li><li>gathering evidence;</li><li>communicating with affected persons;</li><li>making decisions;</li><li>implementing statutory duties.</li></ul>
+<p class="paragraph-body">Administrative practice should always remain distinguishable from institutional design.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-6" aria-labelledby="cd-6-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-6-title">CD-6 — Documentary Evidence</h3><p class="paragraph-body">Documentary Evidence consists of records generated during the exercise of statutory administration.</p>
+<p class="paragraph-body">Examples include:</p>
+<ul><li>applications;</li><li>correspondence;</li><li>reports;</li><li>policies;</li><li>decisions;</li><li>notices;</li><li>meeting records;</li><li>timelines.</li></ul>
+<p class="paragraph-body">Within this methodology, documentary evidence is treated as an independent evidential category.</p>
+<p class="paragraph-body">It records the exercise of public power rather than creating legal obligations.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-7" aria-labelledby="cd-7-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-7-title">CD-7 — Institutional Memory</h3><p class="paragraph-body">Institutional Memory is the preserved documentary record through which previous administrative activity remains capable of reconstruction, explanation and independent review.</p>
+<p class="paragraph-body">Institutional memory enables continuity.</p>
+<p class="paragraph-body">Without preservation, governance becomes fragmented.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-8" aria-labelledby="cd-8-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-8-title">CD-8 — Reasons</h3><p class="paragraph-body">Reasons are the explanation connecting legal authority, evidence and judgment to an administrative decision.</p>
+<p class="paragraph-body">Reasons demonstrate:</p>
+<ul><li>the statutory framework;</li><li>the relevant evidence;</li><li>the exercise of discretion;</li><li>the pathway to the decision.</li></ul>
+<p class="paragraph-body">Reasons therefore support transparency and accountability.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-9" aria-labelledby="cd-9-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-9-title">CD-9 — Governance Architecture</h3><p class="paragraph-body">Governance Architecture is the recurring structural relationship identified between:</p>
+<p class="paragraph-body">Law</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Authority</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Institutional Design</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Administration</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Evidence</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Reasons</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Documentary Record</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Review</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Governance</p>
+<p class="paragraph-body">This architecture provides the analytical model used throughout this handbook.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-10" aria-labelledby="cd-10-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-10-title">CD-10 — Traceability</h3><p class="paragraph-body">Traceability is the ability to reconstruct every stage of administrative decision-making from the governing legal authority through to the documentary record and subsequent review.</p>
+<p class="paragraph-body">Traceability is a necessary condition of accountable governance.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-11" aria-labelledby="cd-11-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-11-title">CD-11 — Reconstruction</h3><p class="paragraph-body">Reconstruction is the analytical process of rebuilding the complete statutory and administrative pathway before evaluation begins.</p>
+<p class="paragraph-body">Reconstruction requires examination of:</p>
+<ul><li>legal obligations;</li><li>judicial interpretation;</li><li>institutional design;</li><li>administrative practice;</li><li>documentary evidence.</li></ul>
+<p class="paragraph-body">Only after reconstruction is complete does governance analysis begin.</p></aside>
+<aside class="callout callout-canonical-definition" id="cd-12" aria-labelledby="cd-12-title"><p class="callout-label">Canonical Definition</p><h3 id="cd-12-title">CD-12 — Governance Analysis</h3><p class="paragraph-body">Governance Analysis is the comparison between the reconstructed legal framework and the documentary record to determine whether statutory administration corresponds with the governing legal obligations.</p>
+<p class="paragraph-body">Governance Analysis is therefore the final stage of the Evidence-Led Governance methodology.</p></aside></section>
+<section class="section" id="section-5-2"><h2>5.2 Relationship Between Definitions</h2><p class="paragraph-body">The Canonical Definitions should not be understood as independent concepts.</p>
+<p class="paragraph-body">They form an integrated vocabulary.</p>
+<p class="paragraph-body">Legal Authority creates Institutional Design.</p>
+<p class="paragraph-body">Institutional Design enables Administrative Practice.</p>
+<p class="paragraph-body">Administrative Practice produces Documentary Evidence.</p>
+<p class="paragraph-body">Documentary Evidence preserves Institutional Memory.</p>
+<p class="paragraph-body">Institutional Memory supports Traceability.</p>
+<p class="paragraph-body">Traceability enables Governance Analysis.</p>
+<p class="paragraph-body">Governance Analysis strengthens Governance.</p>
+<p class="paragraph-body">The definitions therefore describe one continuous administrative relationship.</p>
+<aside class="callout callout-research-finding" id="rf-5" aria-labelledby="rf-5-title"><p class="callout-label">Research Finding</p><h3 id="rf-5-title">RF-5</h3><p class="paragraph-body">The repeated application of the Evidence-Led Governance methodology demonstrates that a stable analytical vocabulary can be developed across multiple statutory frameworks without altering the underlying legal obligations of those frameworks.</p>
+<p class="paragraph-body">The Canonical Definitions therefore provide methodological consistency rather than replacing statutory terminology.</p></aside></section>
+<section class="section" id="section-chapter-synthesis"><h2>Chapter Synthesis</h2><p class="paragraph-body">The Canonical Definitions established in this chapter provide the common language used throughout the remainder of the handbook.</p>
+<p class="paragraph-body">Each definition has emerged from the repeated examination of independent statutory systems rather than from abstract theory.</p>
+<p class="paragraph-body">Accordingly, these definitions should be read as methodological tools designed to support consistent reconstruction and analysis of statutory administration.</p></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-4">Previous: Governance Principles</a><a rel="next" href="#chapter-6">Next: Research Findings</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article>
+<article class="chapter" id="chapter-6"><h1>Chapter 6 — Research Findings</h1><section class="section" id="section-6-1"><h2>6.1 Introduction</h2><p class="paragraph-body">The preceding chapters established the foundations of the Evidence-Led Governance methodology. They defined the governing principles, described the research methodology, established the canonical framework, and introduced the terminology necessary for the consistent interpretation of administrative evidence.</p>
+<p class="paragraph-body">This chapter marks a transition.</p>
+<p class="paragraph-body">The purpose is no longer to describe how the research is conducted. The purpose is to present what the research has revealed.</p>
+<p class="paragraph-body">The findings presented in this chapter arise from the systematic reconstruction and examination of legal authority, institutional design, administrative practice, and documentary evidence. They concern the operation of governance itself rather than any single institution, statutory framework, or administrative process.</p>
+<p class="paragraph-body">Accordingly, this chapter records the recurring characteristics that emerged through the application of the Evidence-Led Governance methodology.</p></section>
+<section class="section" id="section-6-2"><h2>6.2 Methodological Note</h2><p class="paragraph-body">The findings presented in this chapter were not predetermined.</p>
+<p class="paragraph-body">They emerge from the repeated application of the Evidence-Led Governance methodology across reconstructed legal authority, institutional design, administrative practice, and documentary evidence.</p>
+<p class="paragraph-body">Findings are reported only where recurring patterns are observed across the accumulated record.</p>
+<p class="paragraph-body">They remain open to refinement, expansion, or rejection as additional evidence becomes available.</p>
+<p class="paragraph-body">This chapter therefore records what the research has revealed, rather than what the research set out to prove.</p>
+<p class="paragraph-body">The methodology establishes the process by which evidence is reconstructed and examined.</p>
+<p class="paragraph-body">The findings emerge only after that process has been completed.</p></section>
+<section class="section" id="section-6-3"><h2>6.3 Finding One — Institutional Accumulation and Administrative Understanding</h2><p class="paragraph-body">Core Principle</p>
+<p class="paragraph-body">Institutions should not repeatedly rediscover what they already know.</p>
+<p class="paragraph-body">The accumulated record consistently indicates that effective administration depends upon the accumulation of evidence into institutional understanding.</p>
+<p class="paragraph-body">Individual documents rarely reveal administrative performance in isolation. Administrative governance becomes observable only when records are examined collectively across time and institutional responsibility.</p>
+<p class="paragraph-body">Each administrative action forms part of a wider evidential relationship. Decisions derive meaning not solely from their individual content but from their connection to preceding records, governing authority, and subsequent administrative activity.</p>
+<p class="paragraph-body">Where each decision builds upon previous evidence:</p>
+<ul><li>institutional understanding increases;</li><li>administrative continuity becomes observable;</li><li>consistency becomes measurable;</li><li>accountability becomes traceable;</li><li>rights become progressively capable of practical realisation.</li></ul>
+<p class="paragraph-body">Conversely, where each interaction is treated as a new beginning:</p>
+<ul><li>evidence becomes fragmented;</li><li>institutional memory diminishes;</li><li>repeated assessment replaces accumulated understanding;</li><li>similar issues repeatedly reappear without organisational learning;</li><li>governance becomes increasingly difficult to evaluate.</li></ul>
+<p class="paragraph-body">The first research finding therefore identifies institutional accumulation as a recurring characteristic associated with coherent administrative governance.</p></section>
+<section class="section" id="section-6-4"><h2>6.4 Characteristics of Institutional Accumulation</h2><p class="paragraph-body">The accumulated evidence consistently revealed several characteristics that together constitute institutional accumulation.</p>
+<p class="paragraph-body">Continuity</p>
+<p class="paragraph-body">Administrative actions should build upon the existing record rather than replacing or disregarding it.</p>
+<p class="paragraph-body">Continuity enables institutions to develop understanding through successive decisions rather than repeated rediscovery.</p>
+<p class="paragraph-body">Traceability</p>
+<p class="paragraph-body">Later decisions should remain explainable through the evidence that preceded them.</p>
+<p class="paragraph-body">Administrative reasoning should therefore remain traceable across the documentary record.</p>
+<p class="paragraph-body">Reproducibility</p>
+<p class="paragraph-body">Independent examination of the same accumulated record should permit substantially similar conclusions regarding administrative development and governance.</p>
+<p class="paragraph-body">Where findings cannot be reproduced from the available evidence, administrative understanding becomes uncertain.</p>
+<p class="paragraph-body">Administrative Learning</p>
+<p class="paragraph-body">Institutions should demonstrate increasing understanding as evidence accumulates.</p>
+<p class="paragraph-body">Repeated assessment without corresponding institutional development indicates fragmentation rather than learning.</p>
+<p class="paragraph-body">These characteristics repeatedly emerged across reconstructed administrative records and together describe the first research finding.</p></section>
+<section class="section" id="section-6-5"><h2>6.5 Governance Implications</h2><p class="paragraph-body">Institutional accumulation is not merely an administrative convenience.</p>
+<p class="paragraph-body">It is a characteristic of effective governance.</p>
+<p class="paragraph-body">Where accumulation is absent, the evidence consistently indicated increased risks of:</p>
+<ul><li>inconsistent administrative decision-making;</li><li>repeated procedural engagement without substantive progression;</li><li>duplication of assessment;</li><li>fragmentation of institutional understanding;</li><li>unnecessary administrative burden;</li><li>reduced transparency;</li><li>diminished accountability.</li></ul>
+<p class="paragraph-body">Conversely, where evidence accumulated through successive administrative activity, governance became progressively easier to reconstruct, interpret, and evaluate.</p>
+<p class="paragraph-body">Administrative understanding therefore depends not only upon the existence of evidence but upon its continued relationship to subsequent administrative action.</p></section>
+<section class="section" id="section-6-6"><h2>6.6 Relationship to Evidence-Led Governance</h2><p class="paragraph-body">Evidence-Led Governance treats administrative records as cumulative rather than isolated.</p>
+<p class="paragraph-body">Individual records remain important.</p>
+<p class="paragraph-body">Their greater significance, however, lies in their relationship to one another.</p>
+<p class="paragraph-body">Accordingly:</p>
+<ul><li>evidence is preserved;</li><li>provenance remains intact;</li><li>institutional understanding develops through accumulation;</li><li>governance becomes observable through continuity;</li><li>accountability becomes traceable across successive administrative decisions.</li></ul>
+<p class="paragraph-body">Administrative understanding therefore emerges from the accumulated relationship between records rather than from any individual document considered in isolation.</p>
+<p class="paragraph-body">This relationship permits governance itself to become capable of systematic examination.</p></section>
+<section class="section" id="section-6-7"><h2>6.7 Discussion</h2><p class="paragraph-body">The first research finding extends beyond any individual statutory framework.</p>
+<p class="paragraph-body">The recurring relationship between accumulated evidence and institutional understanding was observed across multiple areas of administrative activity.</p>
+<p class="paragraph-body">Accordingly, the finding should not be interpreted as specific to a particular institution or administrative process.</p>
+<p class="paragraph-body">Rather, it describes a characteristic of governance itself.</p>
+<p class="paragraph-body">Institutions become progressively capable of coherent administration where evidence accumulates into organisational understanding.</p>
+<p class="paragraph-body">Where evidence remains fragmented, governance likewise becomes fragmented.</p>
+<p class="paragraph-body">The significance of the finding therefore lies not in the quantity of evidence available but in the continuity of the relationships preserved between successive records.</p></section>
+<section class="section" id="section-6-8"><h2>6.8 Conclusion</h2><p class="paragraph-body">The first research finding indicates that governance depends upon institutional accumulation.</p>
+<p class="paragraph-body">The question is not whether evidence exists.</p>
+<p class="paragraph-body">The question is whether institutions allow that evidence to become institutional understanding.</p>
+<p class="paragraph-body">Where evidence accumulates, administrative continuity becomes observable.</p>
+<p class="paragraph-body">Where continuity becomes observable, accountability becomes measurable.</p>
+<p class="paragraph-body">Where accountability becomes measurable, governance itself becomes capable of systematic evaluation.</p>
+<p class="paragraph-body">The first finding therefore establishes institutional accumulation not as an administrative preference, but as a recurring characteristic emerging from the accumulated record.</p>
+<p class="paragraph-body">Subsequent findings continue this examination by identifying additional recurring patterns that emerge through the application of the Evidence-Led Governance methodology.</p></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-5">Previous: Canonical Definitions</a><a rel="next" href="#chapter-7">Next: Case Study Method</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article></section>
+<section class="volume" id="volume-ii"><header class="volume-page"><p>VOLUME II</p><h1>Application of Evidence-Led Governance</h1></header><section class="section" id="section-introduction-to-volume-ii"><h2>Introduction to Volume II</h2><p class="paragraph-body">Volume I established the conceptual and research foundations of Evidence-Led Governance.</p>
+<p class="paragraph-body">It examined the relationship between evidence, institutional memory, administrative continuity, legal authority, procedural rights and accountable decision-making.</p>
+<p class="paragraph-body">Volume II applies that methodology.</p>
+<p class="paragraph-body">The purpose is not to select individual disputes because they appear to prove conclusions already reached.</p>
+<p class="paragraph-body">Nor is the purpose to use case studies as illustrations for predetermined arguments.</p>
+<p class="paragraph-body">The case-study method operates in the opposite direction.</p>
+<p class="paragraph-body">It begins with the administrative record.</p>
+<p class="paragraph-body">It reconstructs what happened.</p>
+<p class="paragraph-body">It identifies the institutions involved, the functions they exercised, the information available to them, the legal frameworks within which they acted, the decisions they made, the reasons they recorded, and the mechanisms through which those decisions could be reviewed.</p>
+<p class="paragraph-body">Only after that reconstruction may governance observations be considered.</p>
+<p class="paragraph-body">This distinction is fundamental.</p>
+<p class="paragraph-body">A case study within Evidence-Led Governance is therefore not principally a narrative of events.</p>
+<p class="paragraph-body">It is a reconstruction of an administrative pathway.</p>
+<p class="paragraph-body">The reconstruction asks:</p>
+<p class="paragraph-body">What entered the system?</p>
+<p class="paragraph-body">Who received it?</p>
+<p class="paragraph-body">Under what authority?</p>
+<p class="paragraph-body">For what institutional purpose?</p>
+<p class="paragraph-body">What evidence existed at that point?</p>
+<p class="paragraph-body">What decision was made?</p>
+<p class="paragraph-body">What reasons were recorded?</p>
+<p class="paragraph-body">What happened to the evidence afterwards?</p>
+<p class="paragraph-body">Was the decision reviewed?</p>
+<p class="paragraph-body">Did later institutions receive the same evidence?</p>
+<p class="paragraph-body">Did they exercise the same function?</p>
+<p class="paragraph-body">Did information accumulate across the pathway, or was it repeatedly encountered as though new?</p>
+<p class="paragraph-body">These questions allow administrative systems to be examined without requiring the researcher to determine the conclusion in advance.</p>
+<p class="paragraph-body">The governing principle remains:</p>
+<p class="paragraph-body">The researcher does not determine the destination.</p>
+<p class="paragraph-body">The researcher reconstructs the pathway.</p></section>
+<article class="chapter" id="chapter-7"><h1>Chapter 7 — Case Study Method</h1><section class="section" id="section-7-1"><h2>7.1 Purpose</h2><p class="paragraph-body">Chapter 7 does not establish a separate methodology. It operationalises the Evidence-Led Governance methodology established in Volume I for application to individual administrative case studies. RM-1 to RM-5 remain controlling throughout every case-study reconstruction.</p>
+<p class="paragraph-body">The purpose of the Evidence-Led Governance case-study method is to examine how governance operates when information enters real administrative systems.</p>
+<p class="paragraph-body">Legal frameworks describe powers, duties, rights and procedures.</p>
+<p class="paragraph-body">Institutional structures allocate responsibility.</p>
+<p class="paragraph-body">Administrative processes determine how those structures operate in practice.</p>
+<p class="paragraph-body">Documentary records preserve evidence of what actually occurred.</p>
+<p class="paragraph-body">A case study brings those layers together.</p>
+<p class="paragraph-body">Its purpose is not merely to establish a chronology.</p>
+<p class="paragraph-body">It seeks to reconstruct the relationship between:</p>
+<p class="paragraph-body">legal authority;</p>
+<p class="paragraph-body">institutional function;</p>
+<p class="paragraph-body">administrative action;</p>
+<p class="paragraph-body">documentary evidence;</p>
+<p class="paragraph-body">decision-making;</p>
+<p class="paragraph-body">reasoning;</p>
+<p class="paragraph-body">review;</p>
+<p class="paragraph-body">and</p>
+<p class="paragraph-body">institutional memory.</p>
+<p class="paragraph-body">The method therefore examines not only what decision was eventually reached, but the pathway through which that decision became possible.</p></section>
+<section class="section" id="section-7-2"><h2>7.2 Case Study Selection</h2><p class="paragraph-body">A case study should not be selected because it appears likely to prove a particular governance proposition.</p>
+<p class="paragraph-body">Selection should instead be based upon whether the available record permits meaningful reconstruction.</p>
+<p class="paragraph-body">Relevant considerations include:</p>
+<ul><li>whether a sufficiently developed documentary record exists;</li><li>whether institutional actors and functions can be identified;</li><li>whether important events can be placed chronologically;</li><li>whether decisions and their reasons are preserved;</li><li>whether relevant legal or procedural frameworks can be identified;</li><li>whether evidence can be traced between stages;</li><li>whether review or escalation mechanisms can be reconstructed;</li><li>and whether unresolved gaps can themselves be identified.</li></ul>
+<p class="paragraph-body">A case study need not contain a complete record.</p>
+<p class="paragraph-body">Absence may itself be relevant.</p>
+<p class="paragraph-body">But absence must not be replaced by assumption.</p>
+<p class="paragraph-body">Where the evidence does not establish what happened, the reconstruction records that limitation.</p></section>
+<section class="section" id="section-7-3"><h2>7.3 Defining the Administrative Boundary</h2><p class="paragraph-body">Every case study requires a defined boundary.</p>
+<p class="paragraph-body">That boundary may be:</p>
+<ul><li>a complaint;</li><li>an application;</li><li>an investigation;</li><li>a regulatory process;</li><li>a statutory decision;</li><li>a review;</li><li>an appeal;</li><li>an information-access request;</li><li>or a sequence of related administrative processes.</li></ul>
+<p class="paragraph-body">The boundary should be determined by the institutional function being reconstructed rather than simply by the subject matter of the underlying events.</p>
+<p class="paragraph-body">This is necessary because the same evidence may enter several administrative systems.</p>
+<p class="paragraph-body">For example, the same document may become relevant to:</p>
+<p class="paragraph-body">professional regulation;</p>
+<p class="paragraph-body">law enforcement;</p>
+<p class="paragraph-body">freedom of information;</p>
+<p class="paragraph-body">data protection;</p>
+<p class="paragraph-body">administrative review;</p>
+<p class="paragraph-body">or</p>
+<p class="paragraph-body">judicial proceedings.</p>
+<p class="paragraph-body">Those pathways may concern the same underlying events while asking entirely different legal questions.</p>
+<p class="paragraph-body">They must therefore remain distinguishable.</p></section>
+<section class="section" id="section-7-4"><h2>7.4 The Reconstruction Unit</h2><p class="paragraph-body">The basic unit of the case-study method is not simply the document.</p>
+<p class="paragraph-body">It is the governed administrative event.</p>
+<p class="paragraph-body">For each significant event, the reconstruction should seek to establish:</p>
+<p class="paragraph-body">Date</p>
+<p class="paragraph-body">When did the event occur?</p>
+<p class="paragraph-body">Actor</p>
+<p class="paragraph-body">Who performed the action or made the decision?</p>
+<p class="paragraph-body">Institution</p>
+<p class="paragraph-body">Within what institution did the event occur?</p>
+<p class="paragraph-body">Function</p>
+<p class="paragraph-body">What administrative function was being exercised?</p>
+<p class="paragraph-body">Authority</p>
+<p class="paragraph-body">What legal, statutory, regulatory or procedural authority governed that function?</p>
+<p class="paragraph-body">Evidence State</p>
+<p class="paragraph-body">What information can be established as available at that point?</p>
+<p class="paragraph-body">Action</p>
+<p class="paragraph-body">What happened?</p>
+<p class="paragraph-body">Decision</p>
+<p class="paragraph-body">Was a determination made?</p>
+<p class="paragraph-body">Reasoning</p>
+<p class="paragraph-body">Were reasons recorded?</p>
+<p class="paragraph-body">Resulting State</p>
+<p class="paragraph-body">What changed because of the action or decision?</p>
+<p class="paragraph-body">Review</p>
+<p class="paragraph-body">Was there a mechanism through which the action or decision could be reconsidered?</p>
+<p class="paragraph-body">This structure prevents chronology from becoming merely a list of dates.</p>
+<p class="paragraph-body">It reconstructs the governance significance of each event.</p></section>
+<section class="section" id="section-7-5"><h2>7.5 Evidence-State Boundaries</h2><p class="paragraph-body">A central feature of the case-study method is the evidence-state boundary.</p>
+<p class="paragraph-body">Evidence-State Boundary — the point in an administrative pathway at which the evidence demonstrably available to a decision-maker can be distinguished from evidence received before or after that decision.</p>
+<p class="paragraph-body">A decision must be examined against the evidence that was available when the decision was made.</p>
+<p class="paragraph-body">Evidence received afterwards must not retrospectively be treated as though it formed part of the earlier decision.</p>
+<p class="paragraph-body">The reconstruction should therefore distinguish between:</p>
+<p class="paragraph-body">Evidence available before Decision A</p>
+<p class="paragraph-body">and</p>
+<p class="paragraph-body">Evidence received after Decision A but before Decision B.</p>
+<p class="paragraph-body">This distinction may be critical where a pathway contains several decision stages.</p>
+<p class="paragraph-body">The method does not initially determine what consequence later evidence should have produced.</p>
+<p class="paragraph-body">It first establishes the narrower factual question:</p>
+<p class="paragraph-body">What evidence existed at each decision point?</p>
+<p class="paragraph-body">Only after that boundary has been reconstructed can the significance of later evidence properly be analysed.</p></section>
+<section class="section" id="section-7-6"><h2>7.6 Provenance</h2><p class="paragraph-body">Source authority is question-dependent. Primary legal authority governs propositions of law. Documentary evidence governs propositions concerning what was recorded, communicated or administratively performed. Institutional decisions establish the decisions and reasoning they contain. No category acquires authority to establish a proposition outside its evidential function.</p>
+<p class="paragraph-body">Every documentary source should retain its origin.</p>
+<p class="paragraph-body">A later copy does not replace the earlier source.</p>
+<p class="paragraph-body">A summary does not replace the underlying document.</p>
+<p class="paragraph-body">A chronology does not replace the correspondence from which the chronology was constructed.</p>
+<p class="paragraph-body">A later institutional description of an earlier decision does not replace the original decision where that decision remains available.</p>
+<p class="paragraph-body">Sources should therefore be treated according to their evidential function.</p>
+<p class="paragraph-body">Where possible, the reconstruction should distinguish:</p>
+<p class="paragraph-body">primary contemporaneous records;</p>
+<p class="paragraph-body">institutional decisions;</p>
+<p class="paragraph-body">subsequent institutional descriptions;</p>
+<p class="paragraph-body">later summaries or chronologies;</p>
+<p class="paragraph-body">researcher reconstruction;</p>
+<p class="paragraph-body">and</p>
+<p class="paragraph-body">analytical observation.</p>
+<p class="paragraph-body">These categories may corroborate one another.</p>
+<p class="paragraph-body">They should not be collapsed into one another.</p></section>
+<section class="section" id="section-7-7"><h2>7.7 Documentary Fact, Reported Claim and Finding</h2><p class="paragraph-body">The case-study method requires explicit separation between different evidential propositions.</p>
+<p class="paragraph-body">A document may establish that:</p>
+<p class="paragraph-body">an allegation was made.</p>
+<p class="paragraph-body">That does not establish that:</p>
+<p class="paragraph-body">the allegation was proven.</p>
+<p class="paragraph-body">A decision may establish that:</p>
+<p class="paragraph-body">an institution reached a particular conclusion.</p>
+<p class="paragraph-body">That does not necessarily establish that:</p>
+<p class="paragraph-body">the conclusion was factually correct.</p>
+<p class="paragraph-body">A review may establish that:</p>
+<p class="paragraph-body">a decision was affirmed.</p>
+<p class="paragraph-body">That does not necessarily establish that:</p>
+<p class="paragraph-body">every reason supporting the earlier decision was affirmed.</p>
+<p class="paragraph-body">The reconstruction must therefore distinguish among:</p>
+<p class="paragraph-body">documentary fact;</p>
+<p class="paragraph-body">reported allegation;</p>
+<p class="paragraph-body">institutional finding;</p>
+<p class="paragraph-body">legal determination;</p>
+<p class="paragraph-body">research inference;</p>
+<p class="paragraph-body">and</p>
+<p class="paragraph-body">unresolved question.</p>
+<p class="paragraph-body">This distinction is essential to evidence-led analysis.</p></section>
+<section class="section" id="section-7-8"><h2>7.8 Conflicting Evidence</h2><p class="paragraph-body">Administrative records do not always agree.</p>
+<p class="paragraph-body">Dates may differ.</p>
+<p class="paragraph-body">Descriptions may change.</p>
+<p class="paragraph-body">Later correspondence may characterise earlier events differently.</p>
+<p class="paragraph-body">Records may be incomplete.</p>
+<p class="paragraph-body">Where two credible sources contain different information, the discrepancy should ordinarily be preserved.</p>
+<p class="paragraph-body">The researcher should not silently select the version that best fits the emerging narrative.</p>
+<p class="paragraph-body">The correct research statement may therefore be:</p>
+<p class="paragraph-body">Source A records 22 December.</p>
+<p class="paragraph-body">Source B records 23 December.</p>
+<p class="paragraph-body">The available evidence does not presently resolve the discrepancy.</p>
+<p class="paragraph-body">Preserving disagreement is part of preserving the record.</p></section>
+<section class="section" id="section-7-9"><h2>7.9 Parallel Administrative Pathways</h2><p class="paragraph-body">A single underlying episode may generate several institutional pathways.</p>
+<p class="paragraph-body">Those pathways should initially be reconstructed independently.</p>
+<p class="paragraph-body">Their chronology may overlap.</p>
+<p class="paragraph-body">Their documentary evidence may overlap.</p>
+<p class="paragraph-body">Their participants may overlap.</p>
+<p class="paragraph-body">But their functions may remain different.</p>
+<p class="paragraph-body">The case-study method therefore asks of each pathway:</p>
+<p class="paragraph-body">What question was this institution actually empowered to answer?</p>
+<p class="paragraph-body">This prevents an outcome in one process from being mistaken for an answer to a question belonging to another.</p>
+<p class="paragraph-body">A freedom-of-information decision, for example, may determine whether information can lawfully be disclosed.</p>
+<p class="paragraph-body">It does not necessarily determine whether the underlying administrative decision was correct.</p>
+<p class="paragraph-body">A data-protection decision may address processing of personal information.</p>
+<p class="paragraph-body">It does not necessarily determine the merits of a regulatory complaint.</p>
+<p class="paragraph-body">Functional separation must therefore precede cross-pathway analysis.</p></section>
+<section class="section" id="section-7-10"><h2>7.10 Decision and Review Lineage</h2><p class="paragraph-body">Administrative decisions should be reconstructed as a lineage.</p>
+<p class="paragraph-body">Where a decision is reviewed, the reconstruction should identify:</p>
+<p class="paragraph-body">the original decision;</p>
+<p class="paragraph-body">the original reasons;</p>
+<p class="paragraph-body">the review request;</p>
+<p class="paragraph-body">the scope of review;</p>
+<p class="paragraph-body">the reviewing authority;</p>
+<p class="paragraph-body">the evidence before the reviewer;</p>
+<p class="paragraph-body">the review reasoning;</p>
+<p class="paragraph-body">and</p>
+<p class="paragraph-body">the review outcome.</p>
+<p class="paragraph-body">A later affirmation should not be allowed to rewrite the earlier reasoning.</p>
+<p class="paragraph-body">Where a reviewer reaches the same outcome for different reasons, both decision states should remain visible.</p>
+<p class="paragraph-body">Accordingly:</p>
+<p class="paragraph-body">Outcome affirmed</p>
+<p class="paragraph-body">does not necessarily mean:</p>
+<p class="paragraph-body">Every earlier reason affirmed.</p>
+<p class="paragraph-body">Decision lineage preserves that distinction.</p></section>
+<section class="section" id="section-7-11"><h2>7.11 Unresolved Questions</h2><p class="paragraph-body">An unresolved question is a legitimate research result.</p>
+<p class="paragraph-body">The case-study method does not require every gap to be filled before reconstruction can proceed.</p>
+<p class="paragraph-body">Instead, unresolved questions should be expressly identified.</p>
+<p class="paragraph-body">They may arise because:</p>
+<ul><li>a document has not been located;</li><li>the available documents conflict;</li><li>an institution did not record its reasoning;</li><li>a later decision did not determine an earlier question;</li><li>the available evidence establishes chronology but not causation;</li><li>or the legal significance of an event requires separate research.</li></ul>
+<p class="paragraph-body">The researcher should not fill these gaps through narrative convenience.</p>
+<p class="paragraph-body">The appropriate status is:</p>
+<p class="paragraph-body">Unresolved pending further evidence or authority.</p></section>
+<section class="section" id="section-7-12"><h2>7.12 From Reconstruction to Governance Observation</h2><p class="paragraph-body">Governance analysis begins only when the pathway, governing authority and evidential record have been sufficiently reconstructed to support it.</p>
+<p class="paragraph-body">An observation should identify something demonstrated by the reconstructed case without claiming more than the evidence supports.</p>
+<p class="paragraph-body">For example, a case study may demonstrate that:</p>
+<ul><li>information moved between several institutions;</li><li>different institutions applied different legal tests to overlapping evidence;</li><li>evidence available at one decision point differed from evidence available at another;</li><li>a review preserved the outcome while changing the reasoning;</li><li>or documentary continuity was lost between stages.</li></ul>
+<p class="paragraph-body">These may become case-study observations.</p>
+<p class="paragraph-body">They do not automatically become general Research Findings.</p></section>
+<section class="section" id="section-7-13"><h2>7.13 Case-Study Observation and Research Finding Threshold</h2><p class="paragraph-body">A case-study observation is not a Research Finding.</p>
+<p class="paragraph-body">An observation records a characteristic demonstrated within the reconstructed pathway.</p>
+<p class="paragraph-body">A Research Finding requires recurrence across the accumulated record in accordance with the standard established in Chapter 6.</p>
+<p class="paragraph-body">Accordingly, no proposition arising solely from one case study should be designated an RF finding unless independent evidence elsewhere in the research establishes the required recurring pattern.</p>
+<p class="paragraph-body">Volume I distinguishes research findings from individual observations.</p>
+<p class="paragraph-body">That distinction continues in Volume II.</p>
+<p class="paragraph-body">A proposition emerging from one case study should ordinarily remain a case-study observation until it can be tested against additional evidence.</p>
+<p class="paragraph-body">Where the same governance characteristic appears independently across multiple administrative pathways, the research may consider whether it has become sufficiently recurrent to support a broader finding.</p>
+<p class="paragraph-body">The progression is therefore:</p>
+<p class="paragraph-body">Documentary Evidence</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Administrative Reconstruction</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Case-Study Observation</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Cross-Case Comparison</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Recurring Pattern</p>
+<p class="paragraph-body">↓</p>
+<p class="paragraph-body">Research Finding</p>
+<p class="paragraph-body">This prevents an individual case from being used to manufacture a general conclusion.</p></section>
+<section class="section" id="section-7-14"><h2>7.14 Case Study Output Structure</h2><p class="paragraph-body">Each developed case study should, where the evidence permits, contain:</p>
+<p class="paragraph-body">Purpose and Scope</p>
+<p class="paragraph-body">Administrative Reconstruction</p>
+<p class="paragraph-body">Legal Question</p>
+<p class="paragraph-body">Authorities and Statutory Provisions</p>
+<p class="paragraph-body">Institutional Function</p>
+<p class="paragraph-body">Evidence-State Analysis</p>
+<p class="paragraph-body">Institutional Reasoning</p>
+<p class="paragraph-body">Decision and Review Lineage</p>
+<p class="paragraph-body">Outcome</p>
+<p class="paragraph-body">Principles Emerging from Reconstruction</p>
+<p class="paragraph-body">Unresolved Questions</p>
+<p class="paragraph-body">Governance Observation</p></section>
+<section class="section" id="section-chapter-synthesis-2"><h2>Chapter Synthesis</h2><p class="paragraph-body">Not every case will support every component equally.</p>
+<p class="paragraph-body">Where evidence is absent, that absence should remain visible.</p></section>
+<section class="section" id="section-7-15"><h2>7.15 Methodological Safeguard</h2><p class="paragraph-body">Every case study remains governed by the methodological disciplines established in Volume I: Reconstruction Precedes Evaluation (RM-1), Evidence Before Inference (RM-2), Independent Authority (RM-3), Traceability (RM-4), and The Researcher’s Discipline (RM-5).</p>
+<p class="paragraph-body">Their application to case studies requires the researcher to preserve provenance, identify evidence-state boundaries, distinguish institutional functions, maintain decision lineage, preserve conflicting evidence and record unresolved questions.</p>
+<p class="paragraph-body">These controls ensure that the case study applies the methodology rather than becoming an exception to it.</p></section>
+<section class="section" id="section-7-16"><h2>7.16 Governing Principle</h2><p class="paragraph-body">The application method therefore retains the governing discipline established in Volume I:</p>
+<p class="paragraph-body">The researcher does not determine the destination.</p>
+<p class="paragraph-body">The researcher reconstructs the pathway.</p>
+<p class="paragraph-body">A case study begins with the record.</p>
+<p class="paragraph-body">Governance analysis begins only when the pathway, governing authority and evidential record have been sufficiently reconstructed to support it.</p></section><nav class="chapter-nav" aria-label="Chapter navigation"><a rel="prev" href="#chapter-6">Previous: Research Findings</a></nav><p class="back-to-top"><a href="#top">Back to top</a></p></article></section>
+</main>
+<footer class="publication-footer">Structured · Traceable · Governed · Version 1.22</footer>
+</body>
+</html>

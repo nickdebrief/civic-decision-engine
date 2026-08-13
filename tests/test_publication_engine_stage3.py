@@ -186,6 +186,71 @@ class PublicationEngineStage3Tests(unittest.TestCase):
         self.assertTrue(any("Chapter 1" in block.text for block in section.blocks))
         self.assertTrue(any("1.1 Intro" in block.text for block in section.blocks))
 
+    def test_table_of_contents_preserves_canonical_numeric_section_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source = write_source(
+                Path(temp),
+                "chapter.txt",
+                "# Chapter 1 — One\n\n## 1.1 First\n\nBody.\n\n## 1.2 Second\n\nBody.\n\n## 1.10 Tenth\n\nBody.",
+            )
+            book = parse_book([source])
+            enrich_publication(book)
+
+        section = next(section for section in book.generated_sections if section.generation_type == "table_of_contents")
+        numbered = [block.text for block in section.blocks if block.text[:1].isdigit()]
+        self.assertEqual(numbered, ["1.1 First", "1.2 Second", "1.10 Tenth"])
+
+    def test_semantic_index_naturally_orders_hierarchical_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source = write_source(
+                Path(temp),
+                "chapter.txt",
+                "# Chapter 7 — Seven\n\n## 7.1 First\n\nBody.\n\n## 7.10 Tenth\n\nBody.\n\n## 7.2 Second\n\nBody.\n\n## 7.9 Ninth\n\nBody.\n\nCD-1 Alpha\n\nBody.",
+            )
+            book = parse_book([source])
+            enrich_publication(book)
+
+        section = next(section for section in book.generated_sections if section.generation_type == "semantic_index")
+        entries = [block.text for block in section.blocks]
+        self.assertEqual(
+            entries[:4],
+            ["7.1 First", "7.2 Second", "7.9 Ninth", "7.10 Tenth"],
+        )
+        self.assertIn("CD-1 — Alpha", entries)
+        self.assertEqual(entries[-2:], ["CD-1 — Alpha", "Seven — Chapter 7"])
+
+    def test_semantic_index_naturally_orders_chapter_three_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source = write_source(
+                Path(temp),
+                "chapter.txt",
+                "# Chapter 3 — Three\n\n## 3.1 First\n\nBody.\n\n## 3.10 Tenth\n\nBody.\n\n## 3.2 Second\n\nBody.",
+            )
+            book = parse_book([source])
+            enrich_publication(book)
+
+        section = next(section for section in book.generated_sections if section.generation_type == "semantic_index")
+        numbered = [block.text for block in section.blocks if block.text[:1].isdigit()]
+        self.assertEqual(numbered, ["3.1 First", "3.2 Second", "3.10 Tenth"])
+
+    def test_contents_preserves_chapter_and_volume_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            intro = write_source(root, "intro.txt", "[[PARTTITLE: VOLUME I | Foundations]]\n\n## Introduction\n\nIntro.")
+            ch1 = write_source(root, "ch1.txt", "# Chapter 1 — One\n\nBody.")
+            ch6 = write_source(root, "ch6.txt", "# Chapter 6 — Six\n\nBody.")
+            ch7 = write_source(root, "ch7.txt", "[[PARTTITLE: VOLUME II | Continuation]]\n\n# Chapter 7 — Seven\n\nBody.")
+            book = parse_book([intro, ch1, ch6, ch7])
+            enrich_publication(book)
+
+        contents = next(section for section in book.generated_sections if section.generation_type == "table_of_contents")
+        labels = [block.text for block in contents.blocks]
+        chapter_labels = [label for label in labels if label.startswith("Chapter ")]
+        self.assertEqual(chapter_labels, ["Chapter 1 — One", "Chapter 6 — Six", "Chapter 7 — Seven"])
+        self.assertEqual([volume.number for volume in book.volumes], ["I", "II"])
+        self.assertEqual([chapter.number for chapter in book.volumes[0].chapters], [1, 6])
+        self.assertEqual([chapter.number for chapter in book.volumes[1].chapters], [7])
+
     def test_docx_bookmarks_are_created(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -254,7 +319,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
             )
             self.assertTrue(path.exists())
             self.assertEqual(version, "1.0")
-            self.assertEqual(len(files), 9)
+            self.assertEqual(len(files), 10)
 
 
 def walk_paragraphs(book):
