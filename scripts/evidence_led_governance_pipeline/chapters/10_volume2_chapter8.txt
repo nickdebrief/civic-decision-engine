@@ -1,0 +1,737 @@
+Chapter 8 — Complaint, Evidence and Information Access
+
+8.1 Purpose and Scope
+
+This chapter applies the Evidence-Led Governance methodology to a connected sequence of administrative processes arising from complaint C397/19 before the Medical Council and the subsequent information-access process F60-2020.
+
+The reconstruction begins with the complaint and supporting evidence submitted to the Medical Council on 2 December 2019. It follows the complaint through the Preliminary Proceedings Committee, the investigation conducted under section 59 of the Medical Practitioners Act 2007, the PPC’s opinion under section 61, and the Medical Council’s final decision.
+
+It then reconstructs a second pathway arising from the same institutional record: the request under the Freedom of Information Act 2014 for correspondence received by the Medical Council from Dr Dominic Harmon, the Medical Council’s FOI decision, internal review and independent review by the Office of the Information Commissioner.
+
+The two pathways are connected by evidence but governed by different legal questions.
+
+The complaint pathway concerned whether there was sufficient cause to warrant further action in relation to allegations concerning professional conduct or performance.
+
+The information-access pathway concerned whether records generated or received during that complaint process could subsequently be disclosed under the Freedom of Information Act 2014.
+
+The purpose of the chapter is not to redetermine either proceeding.
+
+It is to reconstruct:
+
+* what was submitted;
+* what statutory process governed its consideration;
+* what further information was sought or received;
+* what the institutional record states was considered;
+* what decisions were made;
+* what records were subsequently requested;
+* what was disclosed or withheld;
+* what independent review determined; and
+* what remains incapable of determination from the surviving record.
+
+The case study therefore examines the relationship between evidence submission, evidence acquisition, institutional consideration, decision-making and subsequent access to the institutional record.
+
+⸻
+
+8.2 Medical Council Complaint Pathway — C397/19
+
+8.2.1 Complaint and evidential context
+
+The complaint form identified allegations concerning medical treatment and professional conduct and expressly contemplated supporting documentation.
+
+The Medical Council’s own form stated that letters or medical records capable of supporting a complaint could be enclosed. It separately explained that relevant medical records might need to be obtained in order to consider the complaint.
+
+The form identified Barrington’s Hospital, Limerick and Croom Hospital as organisations holding relevant medical records.
+
+The Council’s form further stated that it could obtain relevant medical records from healthcare providers and other relevant organisations for the purpose of investigating a complaint and that, where necessary, the Preliminary Proceedings Committee could issue a direction compelling their release. Complaint-Form-August-2019.pdf
+
+This is important to the subsequent reconstruction.
+
+Medical records were not external to the complaint procedure. The Council’s own complaint process expressly contemplated their acquisition and use in investigating a complaint.
+
+8.2.2 Submission of 2 December 2019
+
+The surviving record establishes that the Medical Council received the complaint on 2 December 2019.
+
+The evidence was not confined to a complaint form.
+
+The surviving submission record establishes a multi-part evidential transmission comprising five packages. The extracted material includes correspondence, medical and clinical records, prescription material, images, screenshots, an audio file, referral material and other documentary evidence.
+
+The reconstructed packages include material relating to Barringtons and Croom, including files identified as:
+
+Croom_19_June_2018.jpeg
+
+and
+
+Croom_27_August_2019.jpeg.
+
+The reconstructed evidence also includes correspondence concerning treatment and appointments, prescription material, clinical material, a referral letter, photographs, an activity spreadsheet and an audio file.
+
+The complaint form itself preserves a wider inventory of material associated with the complaint record, including Barringtons and Croom material, correspondence concerning Harmon and John O’Donnell, prescriptions, clinical material, photographs, screenshots and other records. Complaint-Form-August-2019.pdf
+
+The evidential significance at this stage is limited but important.
+
+The surviving material establishes submission.
+
+Submission alone does not establish how each individual item was assessed or what weight was attached to it.
+
+8.2.3 Withdrawal and continuation
+
+The Medical Council acknowledged the complaint by letter dated 18 December 2019.
+
+That letter recorded that the complaint had been received on 2 December and that an email dated 13 December indicated a wish to withdraw it.
+
+By then, however, the complaint had been processed and assigned to a case officer on 5 December 2019.
+
+The Council explained that the matter would therefore go before the PPC on 24 January 2020.
+
+The Council expressly invoked section 59(10) of the Medical Practitioners Act 2007, explaining that the PPC could either decide that no further action should be taken or proceed as though the complaint had not been withdrawn.
+
+The letter further explained that, if the PPC proceeded, an investigation would follow. Letter to Mr Nicholas Moloney dated 18.12.19.pdf
+
+The documentary record subsequently establishes that the complaint did continue.
+
+8.2.4 PPC investigation
+
+On 24 January 2020, the PPC considered the matter.
+
+The Council’s letter of 30 January 2020 records that the PPC formally assigned the complaint to case officer Darren Smith and directed an investigation.
+
+The direction was specific.
+
+Harmon was to be invited to provide any information he believed should be considered pursuant to section 59(6) of the Medical Practitioners Act 2007.
+
+If he did not respond within a reasonable period, the case officer was directed to issue a formal notice under section 59(7) requiring him to provide information.
+
+The Council further stated that the information obtained would be considered by the PPC and that the PPC could either form an opinion or direct further investigations. ELetter to Mr Nicholas Moloney dated 30.01.20.pdf
+
+This establishes an important point in the decision lineage.
+
+C397/19 had moved from complaint submission to a formally directed statutory investigation.
+
+8.2.5 Response and continuing evidential exchange
+
+A response dated February 2020 subsequently entered the complaint record.
+
+In that response Harmon described the material he had received as including GP notes, prescriptions and images. He referred to his clinical relationship with the complainant, disputed the implications of the complaint and stated that a copy of medical notes would be helpful. F60-2020 Records NM.pdf
+
+The surviving institutional record shows that correspondence and evidence continued to accumulate after the original December submission.
+
+The eventual PPC decision letter identifies complainant correspondence and attachments dated:
+
+2 December 2019;
+13 December 2019;
+20 January 2020;
+24 January 2020;
+27 January 2020;
+23 March 2020;
+6 April 2020;
+22 April 2020;
+5 May 2020;
+5 June 2020; and
+16 June 2020.
+
+It also identifies correspondence from Harmon dated:
+
+10 February 2020;
+14 August 2020;
+14 September 2020;
+23 September 2020; and
+18 October 2020;
+
+together with a letter from Harmon enclosing a letter from Inspector for Superintendent Andrew Lacey dated 14 September 2020. ELetter to Mr Nicholas Moloney dated 25.11.20.pdf
+
+The complaint record was therefore cumulative.
+
+It was not confined to the material existing on 2 December 2019.
+
+8.2.6 Croom records and the evidential process
+
+The submission of Croom records must be understood within this procedural context.
+
+The Council’s complaint form had already identified Croom Hospital as a holder of relevant medical records and expressly informed complainants that medical records could be obtained for investigation and, where necessary, compelled by the PPC. Complaint-Form-August-2019.pdf
+
+The complainant understood from the procedure that the evidential record remained capable of supplementation while the complaint was being investigated.
+
+Croom material was supplied on that basis.
+
+This understanding was consistent with the statutory structure subsequently examined in this chapter: section 59 expressly provided mechanisms for obtaining further information, while section 59(11) imported specified powers concerning production of records.
+
+The evidential proposition should nevertheless remain narrow.
+
+The record establishes that Croom material was supplied and that the complaint procedure contemplated the acquisition of medical records.
+
+It does not follow merely from those facts that every Croom document was individually examined or relied upon by the PPC.
+
+That is a separate question of institutional consideration.
+
+8.2.7 Renewed section 59(7) direction
+
+The investigation continued into September 2020.
+
+On 18 September 2020, the Council recorded a PPC direction to issue a notice under section 59(7) requiring Harmon to respond specifically to the allegations contained in the complaint submitted on 2 December 2019.
+
+The Council stated that information obtained during the investigation would be sent to Harmon so that he could supply information he believed should be considered.
+
+It then stated:
+
+“All information relating to the complaint will then be considered by the PPC…”
+
+The PPC could thereafter form an opinion or direct further investigations. ELetter to Mr Nicholas Moloney dated 18.09.20.pdf
+
+The significance of this correspondence is procedural.
+
+It demonstrates the continuing operation of the section 59 investigative mechanism and records the Council’s representation that all information relating to the complaint would be considered before the PPC formed its opinion.
+
+8.2.8 PPC opinion
+
+The PPC considered C397/19 at its meeting on 12 November 2020.
+
+The Medical Council’s letter of 25 November 2020 records that the Committee considered the case report and documentation relating to the matter, followed by a non-exhaustive list of correspondence and attachments received from the complainant and Harmon between December 2019 and October 2020. ELetter to Mr Nicholas Moloney dated 25.11.20.pdf
+
+The PPC formed the opinion under section 61(1)(a) that there was not sufficient cause to warrant further action.
+
+The stated reasoning was that there was no prima facie evidence of professional misconduct or poor professional performance.
+
+The letter further records that the PPC took account of a Garda investigation and a formal direction that there be no prosecution and, on that basis, concluded that there was no substantiating evidence warranting further action. ELetter to Mr Nicholas Moloney dated 25.11.20.pdf
+
+Those propositions are recorded here as the PPC’s stated reasoning.
+
+The chapter does not convert them into an independent finding concerning the underlying allegations.
+
+8.2.9 Final Medical Council decision
+
+The PPC’s opinion was subsequently placed before the Medical Council.
+
+At its meeting on 2 December 2020, the Council considered the PPC opinion and decided that no further action should be taken.
+
+The decision was communicated on 11 December 2020 and expressly described as the Medical Council’s final decision. ELetter to Mr Nicholas Moloney dated 11.12.20.pdf
+
+The complaint pathway can therefore be reconstructed as:
+
+complaint and evidence → PPC consideration → section 59 investigation → continuing evidential exchange → PPC opinion under section 61(1)(a) → Council consideration → final decision of no further action.
+
+⸻
+
+8.3 Information-Access Pathway — F60-2020
+
+8.3.1 FOI request
+
+Before the final Council decision was communicated, a separate information-access pathway had begun.
+
+On 30 November 2020, a request was made under the Freedom of Information Act 2014.
+
+The request initially sought six identified items of correspondence from Harmon together with any information held about the applicant in computerised or manual form. F60-2020 Decision Letter.pdf
+
+The timing is significant.
+
+The FOI request arose after the PPC opinion had been communicated on 25 November but before the Medical Council’s final decision was communicated on 11 December.
+
+The complaint and information-access pathways therefore briefly overlapped chronologically.
+
+8.3.2 Identification of the institutional record
+
+On 4 December 2020, the Medical Council informed the applicant that a search using the original parameters had identified more than 600 pages.
+
+The Council asked that the request be narrowed, explaining that otherwise section 15(1)(c) of the FOI Act might apply because of the volume of material requiring retrieval and examination. F60-2020 Narrow Parameters.pdf
+
+This is itself a significant evidential fact.
+
+By December 2020, the search conducted by the Medical Council against the original FOI parameters identified an institutional record exceeding 600 pages.
+
+The applicant responded the same day and narrowed the request to six specified items of correspondence from Harmon.
+
+He expressly excluded documentation and correspondence he had sent to the Council and documentation and correspondence the Council had already sent to him. Re REQUEST FOR ACCESS TO RECORDS UNDER THE FOI ACT 2014.pdf
+
+The resulting access dispute was therefore deliberately narrow.
+
+It was not a request for the complete C397/19 case file.
+
+8.3.3 Records sought
+
+The six specified records were:
+
+1. email and attachment from Harmon dated 10 February 2020;
+2. email from Harmon dated 14 August 2020;
+3. email from Harmon dated 14 September 2020;
+4. letter from Harmon enclosing a letter from Inspector for Superintendent Andrew Lacey dated 14 September 2020;
+5. email from Harmon dated 23 September 2020; and
+6. email from Harmon dated 18 October 2020. F60-2020 Decision Letter.pdf
+
+These records correspond closely with practitioner-side material subsequently identified in the PPC’s 25 November description of the documentation considered.
+
+The complaint pathway and information-access pathway therefore intersect at identifiable documentary objects.
+
+8.3.4 Original FOI decision
+
+On 21 December 2020, the Medical Council issued its FOI decision.
+
+The Council stated that although its search had identified more than 600 pages overall, 19 pages fell within the narrowed scope.
+
+Partial access was granted.
+
+The Council relied upon section 37(1) concerning personal information and section 35(1)(a) concerning information obtained in confidence to redact or withhold material. F60-2020 Decision Letter.pdf
+
+The result was therefore neither complete disclosure nor complete refusal.
+
+A portion of the institutional record became accessible while other information remained withheld.
+
+⸻
+
+8.4 Internal Review
+
+The original FOI decision was challenged through the statutory internal-review process.
+
+The request for internal review was received by the Medical Council in December 2020. On 5 January 2021, Lorna Purcell acknowledged the request, identified herself as a more senior member of staff than the original decision-maker and stated that she would conduct a full review. The acknowledgement explained the applicable review timeframe and the subsequent right to seek review by the Office of the Information Commissioner. Internal Review Acknowledgement F60.pdf
+
+On 12 January 2021, Purcell issued the internal-review decision.
+
+She expressly described the review as an entirely new and separate decision. She confirmed that the narrowed request concerned six identified items of correspondence received from Harmon and determined that the original decision-maker had adequately gathered the records falling within scope — 19 pages in total.
+
+Purcell stated that she had reviewed those records herself and affirmed the original decision. IR F60.pdf
+
+The internal review separately considered sections 37(1) and 35(1)(a) of the Freedom of Information Act 2014.
+
+In relation to section 37(1), Purcell concluded that withholding the doctor’s name and the identities of third parties was justified. Her reasoning included the proposition that release under FOI constitutes release to the public at large and that those persons would not expect information bearing their names to be released into the public domain. IR F60.pdf
+
+In relation to section 35(1)(a), the internal-review decision expressly identified the withheld material as information supplied by the doctor in relation to complaint C397/19.
+
+Purcell considered the four statutory conditions for the exemption satisfied. Her recorded reasoning was that information supplied by doctors was provided confidentially; that there was an explicit understanding of confidentiality; that doctors were not informed at the outset that information supplied by them might subsequently be released publicly; that public disclosure might discourage future provision of such information; and that continued receipt of such information was important to the Medical Council’s ability to perform its statutory functions. IR F60.pdf
+
+The internal reviewer also considered the public-interest provision in section 35(3). She identified a strong public interest in preserving the Medical Council’s ability to conduct effective investigations and reasoned that an inability to gather the information needed for those investigations could adversely affect the Council’s statutory functions under the Medical Practitioners Act 2007. IR F60.pdf
+
+The original FOI decision was therefore not merely affirmed as an outcome.
+
+It was reconsidered through a fresh internal decision which expressly connected the confidentiality claimed for the records with the Medical Council’s ability to obtain information for its complaint-investigation function.
+
+The internal-review decision preserved a further right to seek independent review by the Office of the Information Commissioner. 
+
+⸻
+
+8.5 Independent Review — OIC-102280-Z3W2H8
+
+The applicant sought independent review by the Office of the Information Commissioner.
+
+The review was ultimately determined by Stephen Rafferty, Senior Investigator, on 17 February 2021, under section 22(2) of the Freedom of Information Act 2014. OICDecision102280.pdf
+
+The OIC’s jurisdiction was narrower than the underlying complaint.
+
+It was not conducting a new investigation into the allegations against Harmon.
+
+It was not reviewing the adequacy of the PPC investigation as a general administrative matter.
+
+It was determining whether the Medical Council was legally entitled under the FOI Act to refuse access to the remaining withheld material.
+
+The records at issue consisted of correspondence received by the Medical Council from the named doctor.
+
+The OIC ultimately affirmed the refusal under section 37. OICDecision102280.pdf
+
+This distinction is fundamental to the reconstruction.
+
+An independent determination concerning access to records is not an independent determination concerning the merits of the complaint recorded within those records.
+
+⸻
+
+8.6 Legal Question
+
+The reconstructed case contains two principal legal questions.
+
+Complaint pathway
+
+The first arose under the Medical Practitioners Act 2007:
+
+Whether, following investigation and consideration of the information relating to C397/19, there was sufficient cause to warrant further action in relation to the complaint.
+
+The PPC answered that question by forming an opinion under section 61(1)(a) that there was not sufficient cause.
+
+The Medical Council subsequently decided that no further action should be taken.
+
+Information-access pathway
+
+The second arose under the Freedom of Information Act 2014:
+
+Whether the Medical Council was justified in withholding, wholly or partly, specified correspondence received from Harmon where disclosure would reveal personal information, joint personal information or information said to have been provided in confidence, and whether the statutory exceptions or public-interest provisions nevertheless required disclosure.
+
+The OIC ultimately determined the access question under section 37.
+
+These questions must remain separate.
+
+A decision that there was insufficient cause for further professional-disciplinary action does not itself determine an FOI entitlement.
+
+An FOI refusal based upon privacy does not itself determine whether the underlying complaint was well founded.
+
+⸻
+
+8.7 Authorities and Statutory Provisions
+
+Two principal statutory frameworks governed the reconstructed pathways.
+
+Medical Practitioners Act 2007
+
+Part 7 of the Medical Practitioners Act 2007 governs complaints to the Preliminary Proceedings Committee.
+
+Section 57 establishes the statutory complaint pathway and requires the PPC to make reasonable efforts to keep the complainant informed and to process complaints in a timely manner.
+
+Section 58 permits persons appointed to assist the PPC to perform investigative functions, including interviewing persons concerning potentially relevant evidence, recording statements and requesting written statements.
+
+Section 59 governs consideration and investigation of complaints.
+
+Of particular importance:
+
+* section 59(3) permits the PPC to seek further information from a complainant;
+* section 59(6) permits the practitioner to supply information believed relevant;
+* section 59(7) permits the PPC formally to require specified information from the practitioner;
+* section 59(8) requires compliance with such a notice;
+* section 59(9) requires the PPC, before forming its opinion, to consider any information supplied under section 59 concerning the complaint, together with whether the complaint is trivial, vexatious, without substance or made in bad faith;
+* section 59(10) governs withdrawal of a complaint and permitted C397/19 to continue notwithstanding the attempted withdrawal; and
+* section 59(11) applies section 66(1)(c), section 66(2) insofar as it concerns the production of records, and section 66(9) to the PPC and its chairperson, thereby making specified record-production provisions available within the PPC process.
+
+This statutory architecture is consistent with the Medical Council’s own complaint form, which told complainants that relevant medical records might be obtained and that the PPC could, where necessary, compel their release.
+
+Section 60 provides a separate mechanism for seeking immediate suspension of registration where necessary for protection of the public. The surviving C397/19 record examined here does not establish that this mechanism was invoked.
+
+Section 61 governs the PPC’s reporting of an opinion where it concludes, among other possibilities, that there is insufficient cause to warrant further action.
+
+It was under section 61(1)(a) that the PPC recorded its opinion in C397/19.
+
+Section 62 provides for mediation or other informal resolution in appropriate circumstances.
+
+Section 63 governs referral to the Fitness to Practise Committee where the PPC is of the opinion that there is a prima facie case to warrant further action, or where the Council directs further action under section 61(2)(e).
+
+C397/19 did not proceed to that stage on the reconstructed record.
+
+Freedom of Information Act 2014
+
+The information-access pathway engaged:
+
+Section 13 — decision on an FOI request.
+
+Section 15(1)(c) — potential refusal where the number or nature of records would cause substantial and unreasonable interference with or disruption of the work of the FOI body. The Medical Council raised this provision when asking that the original request be narrowed. F60-2020 Narrow Parameters.pdf
+
+Section 35(1)(a) — information obtained in confidence.
+
+Section 35(3) — public-interest test applicable to information to which section 35(1) would otherwise apply.
+
+Section 37(1) — personal information.
+
+Section 37(2) — circumstances in which the section 37(1) exemption does not apply.
+
+Section 37(5) — circumstances permitting release notwithstanding section 37(1), including the public-interest test.
+
+Section 37(7) — joint personal information.
+
+Section 22(2) — independent review by the Information Commissioner.
+
+Section 24 — appeal to the High Court on a point of law.
+
+The OIC also considered judicial authority concerning the distinction between private interests and a legally cognisable public interest when applying the statutory balancing exercise.
+
+⸻
+
+8.8 Institutional Reasoning
+
+8.8.1 PPC reasoning
+
+The PPC’s recorded reasoning can be reconstructed from the 25 November 2020 correspondence.
+
+It stated that it had considered the case report and documentation relating to the complaint, including but not limited to the identified complainant and practitioner correspondence accumulated between December 2019 and October 2020.
+
+It formed the opinion that there was no prima facie evidence of professional misconduct or poor professional performance.
+
+The PPC also referred to the Garda investigation and a formal direction that there be no prosecution.
+
+On that basis, it stated that there was no substantiating evidence warranting further action. ELetter to Mr Nicholas Moloney dated 25.11.20.pdf
+
+The evidential discipline required here is important.
+
+The chapter can establish what reasons the PPC recorded.
+
+It cannot infer from those reasons an item-by-item evidential assessment that the surviving decision does not contain.
+
+8.8.2 FOI reasoning
+
+The Medical Council’s FOI decision took a different approach because it answered a different question.
+
+It identified 19 pages within the narrowed request and granted partial access.
+
+It relied upon personal-information protections under section 37 and confidentiality under section 35 for the information withheld or redacted. F60-2020 Decision Letter.pdf
+
+8.8.3 OIC reasoning
+
+The OIC ultimately treated section 37 as determinative.
+
+The independent review considered the privacy interests attaching to information concerning the doctor and other persons and the public-interest provisions governing possible disclosure.
+
+The OIC regarded disclosure under FOI as effectively disclosure to the world at large because the Act places no restrictions upon subsequent use.
+
+The applicant’s interest in obtaining the records to pursue his grievance with the doctor and Medical Council was characterised as essentially private.
+
+The OIC concluded that no relevant public interest outweighed the privacy rights engaged and therefore affirmed refusal under section 37(1).
+
+Having reached that conclusion, it considered it unnecessary to determine the application of sections 35 or 32. OICDecision102280.pdf
+
+The OIC decision also records the Medical Council’s submission that the complaint had not been upheld.
+
+That proposition retains its provenance as a Medical Council submission to the OIC rather than becoming an independent OIC determination of the merits of C397/19. OICDecision102280.pdf
+
+⸻
+
+8.9 Review Outcome
+
+The reconstructed pathways produced distinct outcomes.
+
+Complaint outcome
+
+On 12 November 2020, the PPC formed the opinion under section 61(1)(a) that there was insufficient cause to warrant further action. ELetter to Mr Nicholas Moloney dated 25.11.20.pdf
+
+On 2 December 2020, the Medical Council considered that opinion and decided that no further action should be taken.
+
+That was communicated as the Council’s final decision on 11 December 2020. ELetter to Mr Nicholas Moloney dated 11.12.20.pdf
+
+FOI outcome
+
+On 21 December 2020, partial access was granted to the records falling within the narrowed F60-2020 request, with other information withheld or redacted under sections 35 and 37. F60-2020 Decision Letter.pdf
+
+Following internal review, independent review was sought.
+
+On 17 February 2021, the OIC affirmed the refusal of the remaining material under section 37. OICDecision102280.pdf
+
+The OIC decision identified a further statutory right of appeal to the High Court under section 24, normally on a point of law and subject to the statutory time limit. OICDecision102280.pdf
+
+The independent review therefore resolved an information-access question.
+
+It did not constitute an independent merits review of C397/19.
+
+⸻
+
+8.10 Principles Emerging from Reconstruction
+
+Research Finding — Evidential State Must Be Distinguished from Evidential Treatment
+
+A document may pass through several evidential states:
+
+submitted → received → preserved → incorporated → considered → relied upon → reflected in reasons.
+
+Evidence of one state does not automatically establish the next.
+
+A transmission record can establish submission.
+
+An institutional inventory can establish possession.
+
+A decision may establish that a category of material was considered.
+
+Only sufficiently specific reasoning can establish how particular evidence affected the decision.
+
+Governance Principle — Investigative Power Does Not Establish Investigative Use
+
+The existence of statutory authority to obtain information or compel records does not establish that the authority was exercised in relation to every potentially relevant record.
+
+Authority and exercise must be reconstructed separately.
+
+Governance Principle — Institutional Procedure Shapes Evidential Participation
+
+Where an institution tells a participant that additional information and medical records may be obtained and considered during an investigation, later evidential submissions must be understood within that procedural framework.
+
+Their submission is not equivalent to their consideration, but neither are they extraneous merely because they post-date the original complaint.
+
+Governance Principle — Distinct Procedures Determine Distinct Questions
+
+Complaint determination and information-access review may concern the same underlying documents without deciding the same legal issue.
+
+Their outcomes must not be collapsed into one another.
+
+Governance Principle — Access Review Is Not Merits Review
+
+An independent finding that information is exempt from disclosure does not constitute an independent determination of the allegations contained within or associated with that information.
+
+Governance Principle — Partial Disclosure Reveals the Boundary of the Accessible Record
+
+A partial-access decision establishes that the institutional record extends beyond what has been disclosed.
+
+The resulting evidential distinction is between:
+
+record known to exist and record available for independent examination.
+
+Governance Principle — Institutional Statements Retain Provenance
+
+A proposition communicated by one institution and repeated within another institution’s decision remains attributable to its originating source unless the second institution independently determines it.
+
+Governance Principle — Reasons Define the Observable Decision
+
+A decision can be evaluated only to the extent that its reasoning is preserved.
+
+Where an institution states that a body of documentation was considered but does not identify how particular records affected the outcome, the researcher may establish consideration at the stated level but should not reconstruct an evidential weighting that the decision itself does not disclose.
+
+⸻
+
+8.11 Unresolved Questions
+
+The reconstruction has resolved several questions that were initially open.
+
+The existence and broad composition of the 2 December 2019 evidence submission can now be reconstructed from the surviving packages.
+
+The statutory basis upon which the PPC could seek further information and obtain records can also be identified.
+
+The actual section 59 investigation directions are preserved.
+
+The correspondence identified by the PPC as having been considered is recorded.
+
+The PPC opinion and final Medical Council decision are known.
+
+The FOI and independent-review outcomes are also known.
+
+The remaining questions are consequently narrower.
+
+The present record does not yet establish precisely:
+
+* whether every file transmitted within the five evidence packages on 2 December 2019 was successfully received, extracted, opened and incorporated into the operative C397/19 case record;
+* whether an item-level institutional inventory was created for those five packages;
+* how each individual item within the December submission was evaluated;
+* whether, and in what manner, the Croom medical records identified at the commencement of the complaint and subsequently supplied by the complainant were incorporated into the material considered by the PPC when forming its section 61(1)(a) opinion;
+* whether the PPC itself obtained additional Croom or other clinical records through the statutory mechanisms available under section 59(11), as distinct from records supplied by the complainant;
+* what evidential weight, if any, was assigned to particular clinical records, correspondence, images or audio material;
+* how conflicting accounts within the accumulated record were individually evaluated;
+* what the complete case report placed before the PPC on 12 November 2020 contained;
+* whether internal analysis or deliberative records exist that would further explain the transition from the accumulated evidential record to the stated conclusion of insufficient cause;
+* the complete reasoning applied during the Medical Council’s internal FOI review beyond the outcome preserved in the subsequent independent-review record; and
+* whether the more-than-600-page record identified during the original F60-2020 search corresponds completely with the institutional record used in the C397/19 decision process.
+
+These questions are not findings of omission.
+
+They are evidential boundaries.
+
+They identify propositions that the surviving record examined so far does not permit the researcher to determine.
+
+⸻
+
+8.12 Governance Observation
+
+C397/19 demonstrates why administrative evidence cannot be analysed solely by asking whether a document exists.
+
+The statutory architecture permitted evidence to enter the process through several routes.
+
+The complainant could submit evidence.
+
+The PPC could request additional information.
+
+The practitioner could provide information.
+
+The PPC could formally require information from the practitioner.
+
+Specified statutory powers concerning production of records were also available.
+
+The investigation could continue as information accumulated.
+
+The eventual decision nevertheless required that accumulated material to pass through another institutional transformation:
+
+evidence had to become reasoning.
+
+The surviving record demonstrates considerable accumulation.
+
+The original complaint generated multiple evidence packages.
+
+Further correspondence and attachments followed.
+
+The practitioner responded.
+
+Further statutory investigation was directed.
+
+The PPC’s final correspondence records consideration of a substantial sequence of documentation.
+
+The later FOI search identified more than 600 pages against the original search parameters. F60-2020 Narrow Parameters.pdf
+
+Yet accumulation and explanation are different characteristics of governance.
+
+The surviving decision identifies the material considered at a categorical and chronological level and records the conclusion reached.
+
+It does not provide an item-by-item explanation of how the accumulated evidence was evaluated.
+
+The subsequent FOI pathway then exposes a second boundary.
+
+Records generated within an administrative procedure may be relevant to understanding that procedure while simultaneously being protected from unrestricted disclosure by another statutory regime.
+
+The result is not a simple conflict between transparency and secrecy.
+
+It is a relationship between:
+
+participation;
+evidence;
+investigative authority;
+institutional accumulation;
+decision reasoning;
+privacy;
+access;
+and independent review.
+
+Evidence-Led Governance requires each of those relationships to remain visible without treating one as a substitute for another.
+
+The complaint decision establishes what the institution decided.
+
+The FOI decision establishes what could be disclosed.
+
+The OIC decision establishes whether the remaining withholding was lawful under the provision it determined.
+
+None, considered alone, reconstructs the complete administrative pathway.
+
+The pathway becomes observable only when the records are related.
+
+⸻
+
+8.13 Chapter Synthesis
+
+This case study began with a complaint and an accumulated evidential submission.
+
+The complaint entered a statutory process governed by Part 7 of the Medical Practitioners Act 2007.
+
+The surviving record establishes that the PPC did not merely receive the complaint.
+
+It considered whether to continue after attempted withdrawal, directed an investigation, invoked the information-gathering mechanisms of section 59, received further material, directed a later section 59(7) response and ultimately formed an opinion under section 61(1)(a).
+
+The PPC recorded that it had considered the case report and a substantial body of documentation accumulated between December 2019 and October 2020.
+
+It concluded that there was insufficient cause to warrant further action.
+
+The Medical Council subsequently decided that no further action should be taken. 
+
+A second pathway then tested access to part of the institutional record.
+
+The initial FOI search identified more than 600 pages.
+
+The request was narrowed to six identified pieces of correspondence from Harmon.
+
+Nineteen pages were identified as falling within that narrowed scope.
+
+Partial access was granted and other information withheld.
+
+The withholding survived internal review and was ultimately affirmed by the Office of the Information Commissioner under section 37 of the Freedom of Information Act 2014. 
+
+The reconstruction therefore establishes three different forms of institutional knowledge.
+
+The complaint record shows what entered and accumulated within the professional-regulatory process.
+
+The decision record shows what the institution states it considered and the reasons it recorded for its conclusion.
+
+The information-access record shows what part of that institutional record could subsequently be obtained and independently examined.
+
+They overlap.
+
+They are not identical.
+
+The central governance observation arising from the case is therefore not that evidence was absent.
+
+The record demonstrates substantial evidential accumulation.
+
+The more precise question is whether the relationship between evidence received, evidence considered and reasons given remains sufficiently traceable for the resulting administrative decision to be reconstructed.
+
+That question cannot be answered by filling gaps with inference.
+
+It can only be answered by continuing to reconstruct the record.
+
+The case study therefore demonstrates the governing discipline established in Volume I and operationalised in Chapter 7:
+
+The researcher does not determine the destination.
+
+The researcher reconstructs the pathway.
+
+And in this case, reconstruction reveals that accountability depends not merely upon preserving evidence or preserving a decision.
+
+It depends upon preserving the relationship between evidence and decision.
