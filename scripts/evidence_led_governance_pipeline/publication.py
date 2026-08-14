@@ -53,6 +53,11 @@ def word_safe_bookmark(identifier: str) -> str:
     value = re.sub(r"[^A-Za-z0-9_]", "_", identifier)
     if not value or not value[0].isalpha():
         value = f"b_{value}"
+    if len(value) <= 40:
+        return value
+    suffix = re.search(r"(_\d+)$", value)
+    if suffix:
+        return f"{value[:40 - len(suffix.group(1))]}{suffix.group(1)}"
     return value[:40]
 
 
@@ -191,7 +196,11 @@ def assign_identifier(block, counters: dict[str, int], parent=None) -> str:
     if isinstance(block, Section):
         if block.number and isinstance(parent, FrontMatter):
             return f"section-{slugify(parent.title)}-{block.number.replace('.', '-')}"
-        return f"section-{block.number.replace('.', '-')}" if block.number else f"section-{slugify(block.title)}"
+        if block.number:
+            return f"section-{block.number.replace('.', '-')}"
+        base = f"section-{slugify(block.title)}"
+        counters[base] += 1
+        return base if counters[base] == 1 else f"{base}-{counters[base]}"
     if isinstance(block, Callout) and block.code:
         return block.code.lower()
 

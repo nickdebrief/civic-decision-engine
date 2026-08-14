@@ -333,7 +333,6 @@ The methodology therefore becomes more than a research technique.
 
 It becomes the mechanism through which statutory governance is made intelligible.
 
-[[CALLOUT: Governance Principle | GP-3 — THE PATHWAY PRECEDES THE CONCLUSION]]
 
 Understanding does not begin with answers.
 
@@ -344,5 +343,3 @@ Law defines the obligation.
 Evidence records its exercise.
 
 Governance emerges only after the pathway has been faithfully rebuilt.
-
-[[/CALLOUT]]

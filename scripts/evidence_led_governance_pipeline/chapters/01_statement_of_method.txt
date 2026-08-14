@@ -103,7 +103,7 @@ The destination therefore emerges from the evidence rather than preceding it.
 ## 1.4 Research Sequence
 The methodology proceeds through six sequential stages.
 
-### Stage One — Identify the Legal Obligation
+### Stage One — Legal Authority
 The first task is to identify the authoritative legal source.
 
 Depending upon the statutory framework, this may include:
@@ -120,7 +120,7 @@ binding regulations.
 
 The question asked is:
 
-### Stage Two — Examine Judicial Interpretation
+### Stage Two — Judicial Interpretation
 Legislation establishes legal duties.
 
 Courts determine how those duties are to be understood.
@@ -137,7 +137,7 @@ governing principles.
 
 The question becomes:
 
-### Stage Three — Analyse Institutional Design
+### Stage Three — Institutional Design
 Statutory obligations require institutional implementation.
 
 Institutional design includes:
@@ -154,7 +154,7 @@ organisational responsibilities.
 
 This stage asks:
 
-### Stage Four — Reconstruct Administrative Practice
+### Stage Four — Administrative Practice
 Institutional design must then be distinguished from actual administration.
 
 Administrative practice includes:
@@ -173,7 +173,7 @@ review procedures.
 
 The question asked is:
 
-### Stage Five — Preserve and Evaluate Documentary Evidence
+### Stage Five — Documentary Evidence
 Administrative activity produces documentary records.
 
 These records include:

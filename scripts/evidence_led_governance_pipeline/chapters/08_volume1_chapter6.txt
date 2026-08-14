@@ -34,6 +34,8 @@ The findings emerge only after that process has been completed.
 
 6.3 Finding One — Institutional Accumulation and Administrative Understanding
 
+[[CALLOUT: Research Finding | RF-1]]
+
 Core Principle
 
 Institutions should not repeatedly rediscover what they already know.
@@ -175,3 +177,5 @@ Where accountability becomes measurable, governance itself becomes capable of sy
 The first finding therefore establishes institutional accumulation not as an administrative preference, but as a recurring characteristic emerging from the accumulated record.
 
 Subsequent findings continue this examination by identifying additional recurring patterns that emerge through the application of the Evidence-Led Governance methodology.
+
+[[/CALLOUT]]

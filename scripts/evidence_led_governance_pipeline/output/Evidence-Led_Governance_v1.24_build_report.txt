@@ -16,10 +16,10 @@ Publication Validation
 ✓ Front Matter — 2 entries
 ✓ Volumes — 2 detected
 ✓ Chapters — 9 detected
-✓ Sections — 163 detected
-✓ Governance Principles — 11 detected
-✓ Canonical Definitions — 14 detected
-✓ Research Findings — 4 detected
+✓ Sections — 158 detected
+✓ Governance Principles — 8 detected
+✓ Canonical Definitions — 12 detected
+✓ Research Findings — 5 detected
 ✓ Research Methodologies — 5 detected
 ✓ Governance Architectures — 2 detected
 ✓ Flow Diagrams — 6 detected
@@ -39,41 +39,41 @@ Publication Validation
 ✓ Volume Chapter Membership
 ✓ Chapter Section Membership
 ✓ Source Provenance — 0 missing
-✓ Identifiers assigned — 212 reference targets
+✓ Identifiers assigned — 203 reference targets
 ✓ Identifiers unique — 0 duplicates
 ✓ Identifiers valid — 0 invalid
 ✓ Numbering validated — canonical identifiers stable
-✓ Reference registry built — 212 targets
+✓ Reference registry built — 203 targets
 ✓ Cross-references resolved — 0 references
 ✓ Generated lists created — 7 sections
-✓ Semantic index created — 208 entries
+✓ Semantic index created — 199 entries
 ✓ Bookmark identifiers — 0 invalid, 0 duplicate
 ✓ Generated section targets — 0 missing
 ✓ Semantic index targets — 0 missing
 ✓ Enrichment diagnostics — 0 errors
-✓ DOCX generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.24-cugo986x/Evidence-Led_Governance_v1.24.docx
-✓ DOCX reopened — 2722 paragraphs, 36 tables
-✓ DOCX structure — 36 expected tables
+✓ DOCX generated — /tmp/egl-v124-corrected/.Evidence-Led_Governance_v1.24-6tm3hzgz/Evidence-Led_Governance_v1.24.docx
+✓ DOCX reopened — 2640 paragraphs, 32 tables
+✓ DOCX structure — 32 expected tables
 ✓ DOCX metadata — Evidence-Led Governance
 ✓ DOCX bookmarks unique
-✓ DOCX internal links — 420 links, 0 broken
+✓ DOCX internal links — 402 links, 0 broken
 ✓ DOCX unresolved markup — none
-✓ HTML generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.24-cugo986x/Evidence-Led_Governance_v1.24.html
-✓ HTML parsed — 257 anchors, 457 internal links
+✓ HTML generated — /tmp/egl-v124-corrected/.Evidence-Led_Governance_v1.24-6tm3hzgz/Evidence-Led_Governance_v1.24.html
+✓ HTML parsed — 244 anchors, 439 internal links
 ✓ HTML language — en
 ✓ HTML identifiers — 0 duplicate, 0 invalid
 ✓ HTML internal links — 0 broken, 0 empty
 ✓ HTML assets
 ✓ HTML heading hierarchy — 0 empty, 0 gaps
 ✓ HTML unresolved markup — none
-✓ PDF generated — /Users/nick/Documents/GitHub/civic-decision-engine/scripts/evidence_led_governance_pipeline/output/.Evidence-Led_Governance_v1.24-cugo986x/Evidence-Led_Governance_v1.24.pdf
-✓ PDF opened — 132 pages
+✓ PDF generated — /tmp/egl-v124-corrected/.Evidence-Led_Governance_v1.24-6tm3hzgz/Evidence-Led_Governance_v1.24.pdf
+✓ PDF opened — 131 pages
 ✓ PDF metadata — Evidence-Led Governance
 ✓ PDF page profile — 612 x 792 pt
 ✓ PDF expected text — Evidence-Led Governance
-✓ DOCX source equivalence — 2457/2457 blocks
-✓ HTML source equivalence — 2457/2457 blocks
-✓ PDF source equivalence — 2457/2457 blocks
+✓ DOCX source equivalence — 2449/2449 blocks
+✓ HTML source equivalence — 2449/2449 blocks
+✓ PDF source equivalence — 2449/2449 blocks
 
 PASS
 
@@ -87,9 +87,9 @@ Manifest
 ✓ output formats: docx, pdf, html
 
 Rendering
-✓ DOCX: 2722 paragraphs, 36 tables
-✓ HTML: 257 anchors, 457 internal links
-✓ PDF: 132 pages
+✓ DOCX: 2640 paragraphs, 32 tables
+✓ HTML: 244 anchors, 439 internal links
+✓ PDF: 131 pages
 
 PDF Validation
 
@@ -98,13 +98,13 @@ Backend: pdftotext
 PDF equivalence: Completed
 
 Publication Enrichment
-✓ 212 reference targets
+✓ 203 reference targets
 ✓ 7 generated sections
-✓ 208 semantic index entries
-✓ 420 model hyperlinks
+✓ 199 semantic index entries
+✓ 402 model hyperlinks
 
 Cross-format Equivalence
-✓ 2457 source-derived blocks checked
+✓ 2449 source-derived blocks checked
 ✓ DOCX missing: 0
 ✓ HTML missing: 0
 ✓ PDF missing: 0

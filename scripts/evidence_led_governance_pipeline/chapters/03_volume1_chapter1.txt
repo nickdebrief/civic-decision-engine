@@ -135,8 +135,6 @@ Instead, governance emerges from the relationship between legal authority, insti
 
 That recurring relationship forms the foundation of the Evidence-Led Governance methodology.
 
-[[CALLOUT: Governance Principle No. 1 | GP-1 — RIGHTS REQUIRE GOVERNANCE]]
 A right does not exist because it is written. It exists when institutions can deliver it.
 
 Legislation creates the obligation. Administration delivers the obligation. Evidence shows whether it occurred.
-[[/CALLOUT]]
