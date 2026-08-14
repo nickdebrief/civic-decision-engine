@@ -43,9 +43,7 @@ No single element is sufficient.
 
 Only their relationship explains how statutory administration operates.
 
-[[CALLOUT: Canonical Definition | CD-1 — Governance]]
 Governance is the continuous relationship between legal authority, institutional design, administrative practice, documentary evidence and independent review through which statutory obligations are translated into accountable public administration.
-[[/CALLOUT]]
 ## 2.3 The Governance Continuum
 The research repeatedly revealed the same progression.
 
@@ -197,7 +195,6 @@ It supports legality.
 
 It supports accountability.
 
-[[CALLOUT: Governance Principle | GP-2 — Power Must Remain Traceable]]
 Every exercise of public power should remain connected to the legal authority from which it derives.
 
 Evidence records that exercise.
@@ -210,7 +207,6 @@ Review examines it.
 
 Governance learns from it.
 
-[[/CALLOUT]]
 ## 2.7 Institutional Memory
 Repeated examination of multiple statutory frameworks demonstrated that governance depends upon continuity.
 
@@ -220,9 +216,7 @@ Institutional memory is therefore not merely administrative convenience.
 
 It is a condition of accountable governance.
 
-[[CALLOUT: Canonical Definition | CD-2 — Institutional Memory]]
 Institutional Memory is the preserved documentary record through which the exercise of public power remains capable of reconstruction, explanation and independent review.
-[[/CALLOUT]]
 ## 2.8 Research Finding
 [[CALLOUT: Research Finding | RF-2]]
 The examination of independent statutory frameworks demonstrates that governance consistently operates through a recurring sequence linking legal authority, institutional responsibility, administration, evidence, reasons, documentary preservation and independent review.

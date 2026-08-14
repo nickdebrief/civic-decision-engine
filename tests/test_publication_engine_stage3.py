@@ -301,6 +301,60 @@ class PublicationEngineStage3Tests(unittest.TestCase):
 
         self.assertTrue(validate_enriched_publication(book, enrichment).ok)
 
+    def test_authoritative_stage_titles_are_one_canonical_sequence(self) -> None:
+        source_paths = [
+            PIPELINE_DIR / "chapters" / "01_statement_of_method.txt",
+            PIPELINE_DIR / "chapters" / "05_volume1_chapter3.txt",
+        ]
+        book = parse_book(source_paths)
+        enrich_publication(book)
+
+        expected = [
+            "Stage One — Legal Authority",
+            "Stage Two — Judicial Interpretation",
+            "Stage Three — Institutional Design",
+            "Stage Four — Administrative Practice",
+            "Stage Five — Documentary Evidence",
+            "Stage Six — Governance Analysis",
+        ]
+        headings = [
+            section.heading_text
+            for section in walk_sections(book)
+            if section.heading_text.startswith("Stage ")
+        ]
+        self.assertEqual(headings, expected + expected)
+
+        index = next(section for section in book.generated_sections if section.generation_type == "semantic_index")
+        index_text = [block.text for block in index.blocks]
+        for title in expected:
+            self.assertEqual(sum(title in text for text in index_text), 2)
+        self.assertFalse(any("Identify the Legal Obligation" in text for text in index_text))
+
+    def test_research_findings_form_complete_rf_sequence(self) -> None:
+        book = parse_book([PIPELINE_DIR / "chapters" / "08_volume1_chapter6.txt", PIPELINE_DIR / "chapters" / "04_volume1_chapter2.txt", PIPELINE_DIR / "chapters" / "05_volume1_chapter3.txt", PIPELINE_DIR / "chapters" / "06_volume1_chapter4.txt", PIPELINE_DIR / "chapters" / "07_volume1_chapter5.txt"])
+        enrich_publication(book)
+
+        findings = [target.identifier.upper() for target in unique_registry_targets(book) if target.object_type == "Research Finding"]
+        self.assertEqual(findings, ["RF-1", "RF-2", "RF-3", "RF-4", "RF-5"])
+        research_list = next(section for section in book.generated_sections if section.generation_type == "research_findings")
+        self.assertEqual([block.text.split(" — ", 1)[0] for block in research_list.blocks], findings)
+
+    def test_catalogue_semantic_objects_have_unique_canonical_ids(self) -> None:
+        book = parse_book(load_manifest(PIPELINE_DIR / "book.toml", chapters_dir=PIPELINE_DIR / "chapters").source_files)
+        enrich_publication(book)
+
+        for object_type, expected in {
+            "Canonical Definition": [f"CD-{number}" for number in range(1, 13)],
+            "Governance Principle": [f"GP-{number}" for number in range(1, 9)],
+        }.items():
+            actual = [target.identifier.upper() for target in unique_registry_targets(book) if target.object_type == object_type]
+            self.assertEqual(actual, expected)
+            catalogue = next(
+                section for section in book.generated_sections
+                if section.generation_type == ("canonical_definitions" if object_type == "Canonical Definition" else "governance_principles")
+            )
+            self.assertEqual(len(catalogue.blocks), len(expected))
+
     def test_compatibility_wrapper_build_document_works(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -319,7 +373,7 @@ class PublicationEngineStage3Tests(unittest.TestCase):
             )
             self.assertTrue(path.exists())
             self.assertEqual(version, "1.0")
-            self.assertEqual(len(files), 11)
+            self.assertEqual(len(files), 12)
 
 
 def walk_paragraphs(book):
@@ -330,6 +384,20 @@ def walk_paragraphs(book):
             yield block
         for attr in ("blocks", "body"):
             stack[0:0] = list(getattr(block, attr, []))
+
+
+def walk_sections(book):
+    stack = list(book.blocks)
+    while stack:
+        block = stack.pop(0)
+        if isinstance(block, Section) and not block.generated:
+            yield block
+        for attr in ("blocks",):
+            stack[0:0] = list(getattr(block, attr, []))
+
+
+def unique_registry_targets(book):
+    return list({target.identifier: target for target in book.reference_registry.values()}.values())
 
 
 def read_docx_xml(path: Path) -> str:

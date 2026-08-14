@@ -1,0 +1,1758 @@
+Chapter 9 — The Pathway Is Part of the Evidence
+
+9.1 Introduction
+
+Chapter 7 established a method for reconstructing administrative decision-making from evidence.
+
+Chapter 8 demonstrated that method through a completed case reconstruction.
+
+The next question is whether the same method remains useful when the evidential pathway is not contained within a single decision.
+
+Administrative processes frequently extend across institutions, functions and forms of review. Evidence may be submitted to one part of an institution, classified by another, transferred into a different process, subjected to preliminary assessment, incorporated into an investigation, and later placed before an external reviewer.
+
+At every boundary, the evidence state may change.
+
+Facts may be carried forward. Others may cease to appear. A complaint may be narrowed. A preliminary assessment may create a new institutional finding. A referral may change the function governing the evidence. A final response may itself become evidence in another decision process.
+
+Understanding such a pathway therefore requires more than chronology.
+
+It requires preservation of the evidence state at each administrative boundary.
+
+This chapter reconstructs one such pathway from original-source records involving the Health Service Executive, UL Hospitals Group, the HSE National Investigations Unit and the Office of the Ombudsman.
+
+It does not determine whether the underlying allegations were true.
+
+It does not determine whether any institution acted lawfully or unlawfully.
+
+It does not substitute a new decision for the decision of any administrative body.
+
+Its purpose is narrower:
+
+To reconstruct what entered each process, who acted upon it, under what function and authority, what action or decision followed, what reasoning was recorded, what evidence state resulted, and what route of review remained.
+
+The reconstruction applies the Chapter 7 fields:
+
+Date · Actor · Institution · Function · Authority · Evidence State · Action · Decision · Reasoning · Resulting State · Review
+
+It demonstrates a further principle of evidence-led governance:
+
+A decision cannot be fully understood if the evidence state entering it cannot be distinguished from the evidence state leaving it.
+
+⸻
+
+9.2 The Reconstruction Model
+
+A conventional chronology records that one event followed another.
+
+A governed reconstruction asks more.
+
+For each material transition it asks:
+
+Date — When did the event occur?
+
+Actor — Who performed the relevant action?
+
+Institution — Within what institutional structure did that actor operate?
+
+Function — What administrative function was being exercised?
+
+Authority — What policy, procedure or other basis governed the action?
+
+Evidence State — What information or evidence existed at that point?
+
+Action — What was done?
+
+Decision — What determination, if any, was made?
+
+Reasoning — What recorded reasons supported it?
+
+Resulting State — What changed?
+
+Review — What mechanism remained for reconsideration or external scrutiny?
+
+These elements must remain distinct.
+
+An acknowledgement is not necessarily substantive consideration.
+
+A referral is not an investigation.
+
+Commissioning an investigation is not necessarily its commencement.
+
+An invitation to participate is not proof that participation occurred.
+
+A final response is not proof that every issue in the originating submission was addressed.
+
+And the existence of a review pathway does not establish that review occurred.
+
+The reconstruction therefore does not complete gaps by inference.
+
+Where an event is evidenced, it is recorded.
+
+Where a state remains uncertain, the uncertainty is preserved.
+
+Where a source has not been located, the record remains incomplete.
+
+That discipline is fundamental.
+
+⸻
+
+Part I — Entry Into the HSE Pathway
+
+9.3 Submission, Acknowledgement and Institutional Capture
+
+The reconstructed pathway begins before the later formal investigation.
+
+An earlier submission through HSE Your Say generated an automated acknowledgement on 26 January 2021.
+
+The acknowledgement establishes that an automated response was generated following the submission.
+
+It does not, however, establish durable institutional capture of the underlying complaint.
+
+Later HSE correspondence recorded that searches of the Your Say database and associated email records had not located the feedback submitted on that date. A possible technical issue with the submission mechanism was identified as an explanation, but the cause was not established by the record.
+
+No substantive determination of the underlying complaint from that interaction has been identified within the reconstructed collection.
+
+The resulting state is therefore:
+
+Submission attempted
+
+→ Automated acknowledgement generated
+
+→ Later institutional search unable to locate submission record
+
+→ Possible technical failure identified
+
+→ Substantive merits determination not evidenced
+
+The distinction matters.
+
+An acknowledgement can be evidenced.
+
+Durable institutional receipt cannot safely be inferred from the acknowledgement alone.
+
+Nor can the absence of a later record be converted into proof that no submission was made.
+
+The evidence instead preserves two different states:
+
+the complainant’s contemporaneous evidence of submission
+
+and
+
+the institution’s later inability to locate the corresponding record.
+
+The first governance lesson therefore appears immediately:
+
+Where the record stops, reconstruction must stop with it.
+
+And a second follows:
+
+Even receipt has an evidence state.
+
+⸻
+
+9.4 The 20 September 2022 Complaint
+
+A materially different administrative pathway began with correspondence dated 20 September 2022.
+
+UL Hospitals Group subsequently assigned that correspondence reference ULHG-COM.4338.
+
+Its acknowledgement of 30 September recorded that the 20 September correspondence had been received and was with the Peri-Operative Directorate.
+
+The acknowledgement stated that the Directorate would review the correspondence and revert.
+
+It also stated that details of the complaint would be recorded on the local Q Pulse Complaints Management System and the HSE Complaints Management System.
+
+Those propositions are prospective.
+
+The 30 September document therefore establishes:
+
+Complaint received
+
+→ Peri-Operative Directorate identified as the reviewing function
+
+→ Institutional recording represented as the intended next state
+
+It does not, by itself, establish that the Directorate review had already occurred.
+
+Nor does it independently establish that recording on both systems had already been completed.
+
+That distinction should remain visible.
+
+Later investigation records connect the same 20 September complaint to the HSE Trust in Care Policy and ultimately to National Investigations case HRNIU224155.
+
+The complaint therefore did not remain merely correspondence.
+
+It entered an institutional decision pathway.
+
+⸻
+
+9.5 Preliminary Screening
+
+The next material boundary was a Preliminary Screening under the HSE Trust in Care Policy 2005.
+
+The surviving correspondence records that the Preliminary Screening had been completed and that its outcome indicated that an abusive interaction “could have occurred.”
+
+The same correspondence stated that the outcome would be forwarded to the HSE National Investigations Unit for review.
+
+The significance of that event is structural.
+
+Before screening, the evidence state consisted of allegations submitted for institutional consideration.
+
+After screening, another evidential object existed:
+
+an institutional preliminary-screening outcome.
+
+That did not establish that abuse had occurred.
+
+It was not a final determination of the allegation.
+
+But neither was the evidence state unchanged.
+
+The pathway had become:
+
+Complaint
+
+→ Preliminary Screening
+
+→ Recorded preliminary outcome
+
+→ Referral to National Investigations stated as the intended next action
+
+Later records establish that the matter did in fact enter the National Investigations structure.
+
+The evidence therefore permits the complete transition to be reconstructed across more than one document.
+
+The 14 November record establishes the screening and the intended referral.
+
+The later HRNIU records establish the subsequent investigative state.
+
+An administrative process had acted upon evidence and generated new evidence about the institutional treatment of the complaint.
+
+⸻
+
+Part II — From Complaint to Human Resources Investigation
+
+9.6 Commissioning the Investigation
+
+By January 2023, the matter had entered a Human Resources investigation structure.
+
+Lorraine Rafter acted in the capacity of Human Resources Investigation Commissioner and requested a Human Resources Investigation under Trust in Care.
+
+Gerry O’Neill was proposed as investigator, and draft Terms of Reference were supplied.
+
+The Terms of Reference are important because they defined the intended decision process.
+
+They contemplated evidence gathering, determination on the balance of probabilities, preliminary conclusions, a Draft Report, submissions from affected parties, a Final Report and transmission through the Investigation Commissioner and National Investigations structure.
+
+They also distinguished commissioning from commencement.
+
+The investigation was to be regarded as having commenced when the investigator received the case file from the Investigation Commissioner.
+
+That distinction prevents a seemingly minor but important evidential error.
+
+The record establishes that an investigation was commissioned.
+
+The January correspondence establishes that Gerry O’Neill was proposed as investigator.
+
+Later records establish that he was functioning as the investigator.
+
+But unless the precise case-file transfer is evidenced, the formal commencement date should not be invented.
+
+The reconstructed state is therefore:
+
+Preliminary outcome
+
+→ National Investigations transition
+
+→ Human Resources Investigation commissioned
+
+→ Investigator initially proposed
+
+→ Investigator later evidenced as acting
+
+→ Investigative process operational
+
+while:
+
+Exact formal commencement date = unresolved from the presently located sources.
+
+Uncertainty is preserved as data.
+
+⸻
+
+9.7 Scope Is an Evidence State
+
+The originating complaint concerned more than one named person.
+
+The surviving original complaint expressly concerned a named professor and two named doctors.
+
+The draft Terms of Reference then provide direct evidence of a proposed scope transition.
+
+They define the proposed Human Resources investigation more narrowly, identifying an allegation of sexual abuse against Professor Dominic Harmon and specifying the allegation the investigator was to determine.
+
+The draft Terms also distinguish another allegation as relating to a private hospital outside the governance of UL Hospitals.
+
+The reconstruction can therefore establish two different evidence states.
+
+Originating complaint state:
+
+A broader complaint concerning three named medical practitioners.
+
+Draft investigative scope:
+
+A specified allegation against one named respondent within the proposed Trust in Care investigation.
+
+That difference cannot simply be reconciled retrospectively.
+
+It is itself evidence.
+
+The Terms of Reference are therefore not merely procedural instructions.
+
+They are a scope-setting evidence object.
+
+They identify what the investigator was proposed to examine.
+
+Because the surviving document is expressly marked Draft Terms of Reference, the reconstruction does not assume without further evidence that every element of that draft became the final authorised scope.
+
+But the proposed transformation remains visible.
+
+That matters.
+
+If an initiating complaint contains A, B and C, while a later investigative instrument identifies A for investigation, the archive must preserve both states.
+
+Otherwise a future reader may incorrectly assume that the investigation determined the entirety of the original complaint.
+
+The correct relationship is:
+
+Originating complaint
+
+≠ necessarily
+
+Investigative scope
+
+The relationship between them must be evidenced.
+
+⸻
+
+9.8 The Non-Employee Question
+
+The HR investigation documentation also produced an unusual procedural feature.
+
+The process sat within the Human Resources Division and invoked Trust in Care.
+
+The complainant’s position throughout the correspondence was that he was not an HSE employee.
+
+The NIU paperwork itself demonstrates that the procedure contemplated participation by non-HSE employees.
+
+Attendance documentation distinguished between:
+
+Complainant
+
+Respondent
+
+Witness
+
+and
+
+Other
+
+and expressly included provision for a participant who was not a HSE employee.
+
+That proves something narrower but important:
+
+The Human Resources investigation procedure contemplated non-HSE participants.
+
+It does not, by itself, prove the particular employment status of every person using the form.
+
+That status must be established independently.
+
+This matters because institutional location must not be confused with participant status.
+
+A person participating in a Human Resources investigation does not thereby become an employee.
+
+Similarly, the surviving confidentiality documentation referred to possible statutory protections under the Health Act 2004 and Protected Disclosures Act 2014.
+
+But the wording preserved protections to which a person “may be entitled.”
+
+It did not itself establish entitlement.
+
+The record therefore supports a narrower conclusion:
+
+The HSE Human Resources investigation documentation expressly contemplated non-HSE participants and preserved any statutory protections that might independently apply.
+
+The legal or procedural consequences of that arrangement cannot be supplied merely from the form.
+
+⸻
+
+Part III — Participation
+
+9.9 The Proposed Interviews
+
+By February 2023, Gerry O’Neill was identified as the investigator and interview arrangements were being made.
+
+The process contemplated a stenographic record, documentary evidence, contemporaneous notes and a support person.
+
+Proposed meetings subsequently included 15 February, 29 March, 15 June and 13 July 2023.
+
+The purpose of those arrangements was evidential.
+
+The interview was a mechanism through which the complainant’s account and supporting material could enter the investigator’s record.
+
+The relevant state was therefore:
+
+Investigation operational
+
+→ Participation invited
+
+→ Additional evidence capable of entering investigation
+
+The fact that the interview ultimately did not occur does not erase the participation history that preceded that outcome.
+
+Participation is not a single event.
+
+It is a pathway of invitations, questions, conditions, objections, responses and proposed forms of engagement.
+
+⸻
+
+9.10 Participation Cannot Be Reduced to Attendance
+
+This distinction becomes important in the April correspondence.
+
+On 7 April 2023, the complainant wrote that he would offer the HSE Investigator an opportunity to meet after 23 April.
+
+He also stated that the opportunity would remain open to assist the investigation.
+
+On 13 April, UL Hospitals responded:
+
+“The National Investigations Unit is the appropriate independent body to deal with your complaint.”
+
+The complainant simultaneously challenged the applicability of Trust in Care by pointing to its language concerning the employment relationship.
+
+That exchange was forwarded contemporaneously to the Office of the Ombudsman.
+
+The evidential state is therefore more precise than:
+
+Complainant attended / did not attend.
+
+It includes:
+
+willingness to engage
+
+procedural objections
+
+questions about the governing framework
+
+continuing institutional correspondence
+
+transmission of the dispute into external oversight
+
+Participation is itself capable of having multiple states.
+
+A later absence from an interview cannot safely erase earlier evidence of willingness to engage.
+
+Nor can willingness to engage erase contemporaneous objections to the proposed process.
+
+Both states must remain visible.
+
+⸻
+
+9.11 Advocacy and Support
+
+The investigation correspondence also introduced a support question.
+
+When advocacy was sought, the NIU provided contact details for the Patient Advocacy Service.
+
+The resulting correspondence established that the service’s remit was connected with the Your Service Your Say Stage 2 process and did not simply provide representative advocacy for every HSE administrative investigation.
+
+This produces another useful governance distinction.
+
+Support requested
+
+does not necessarily equal
+
+support obtained.
+
+Likewise:
+
+Contact details supplied
+
+does not necessarily equal
+
+appropriate support available.
+
+A system that records only the referral or contact information loses the resulting state.
+
+The complete transition requires:
+
+Support requested
+
+→ Service identified
+
+→ Contact details provided
+
+→ Service contacted
+
+→ Service assesses remit
+
+→ Requested form of support not thereby established
+
+The outcome of a support pathway is therefore part of the evidence pathway.
+
+⸻
+
+Part IV — The Investigation Changes State
+
+9.12 The 27 June Invitation
+
+On 27 June 2023, another interview was scheduled for 13 July 2023 at 14:00 by MS Teams.
+
+The letter identified Gerry O’Neill as investigator and described participation as important in the interests of fair procedures and the opportunity to be heard.
+
+It invited relevant files, records and contemporaneous notes and contemplated a stenographer and support person.
+
+But the invitation contained an evident temporal problem.
+
+Although issued on 27 June for an interview in July, it requested a response by 24 March 2023.
+
+That date was already past.
+
+The defect subsequently became part of the correspondence.
+
+The important point is not whether the error was serious or trivial.
+
+The important point is that the error itself entered the evidence state before the next institutional decision.
+
+It became part of what the complainant was responding to.
+
+Therefore it cannot be separated from the later characterisation of that response.
+
+⸻
+
+9.13 The 30 June Evidence State
+
+On 30 June, the complainant responded to the invitation.
+
+The recovered correspondence does not contain a simple express statement:
+
+“I refuse to attend.”
+
+Instead, it records objections concerning the reliability of the process and the accuracy of the correspondence, including the erroneous date.
+
+It also records an expressed loss of confidence in the process.
+
+This distinction becomes important because of what happened next.
+
+The evidential state immediately before 6 July therefore contained:
+
+proposed interview
+
+procedural objection
+
+identified documentary error
+
+expressed loss of confidence in the process
+
+That state cannot safely be replaced by a later summary without preserving the underlying correspondence.
+
+The later institutional characterisation must remain attached to the evidence it characterises.
+
+⸻
+
+9.14 The 6 July Decision
+
+On 6 July, Declan Mangan, Deputy National Investigations Manager, acting on behalf of Gerry O’Neill, characterised the 30 June correspondence as confirmation that the complainant would not attend the 13 July interview.
+
+The letter then recorded a consequential procedural determination.
+
+A further interview deferral was not considered to be in the overall interest of the parties, and the investigator stated that the investigation would proceed in the complainant’s absence.
+
+The complainant immediately disputed the characterisation and asked HSE to identify where he had confirmed that he would not attend.
+
+This gives the reconstruction two different but equally preservable evidence objects.
+
+Institutional characterisation:
+
+30 June correspondence confirmed non-attendance.
+
+Underlying correspondence / contemporaneous challenge:
+
+procedural objections were raised, and the complainant disputed that those communications constituted confirmation of non-attendance.
+
+The reconstruction does not need to choose one description and erase the other.
+
+It preserves both.
+
+That is one of the most important functions of evidence-state reconstruction.
+
+A later administrative characterisation is itself evidence.
+
+But it does not replace the evidence it characterises.
+
+⸻
+
+9.15 Resulting Investigation State
+
+The 6 July decision changed the process.
+
+Before it:
+
+the investigation remained oriented toward direct complainant participation.
+
+After it:
+
+the investigator stated that the investigation would continue without that participation.
+
+This is a genuine administrative transition.
+
+It is not merely another email.
+
+It changes how subsequent evidence can be produced.
+
+The resulting state is:
+
+Investigation
+
+→ Participation dispute
+
+→ Decision against further deferral
+
+→ Investigator states investigation will proceed in complainant’s absence
+
+What becomes important next is the expected terminal state.
+
+The draft Terms of Reference contemplated preliminary conclusions, a Draft Report, representations, a Final Report and transmission through the Investigation Commissioner and National Investigations structure.
+
+Within the source collection audited for this reconstruction, an equivalent substantive final HR investigation report has not been established.
+
+The correct evidential position is therefore:
+
+The record establishes that the investigator stated that the investigation would proceed in the complainant’s absence; the audited collection does not presently establish the corresponding substantive final investigative determination contemplated by the draft Terms of Reference.
+
+It would be improper to manufacture one.
+
+⸻
+
+Part V — The Ombudsman Dependency
+
+9.16 OMB-133952-J0M0T7
+
+The Office of the Ombudsman was receiving material about the HSE pathway while that pathway was still developing.
+
+This is important because the Ombudsman process did not begin after everything at HSE had finished.
+
+The processes overlapped.
+
+The Ombudsman sought clarification about what HSE was investigating and later treated the Trust in Care investigation as an ongoing process.
+
+On 23 March 2023, the Ombudsman recorded that a Trust in Care investigation was currently ongoing.
+
+It explained that its role in relation to that process would be limited to examining whether procedures had been followed according to the Trust in Care Policy.
+
+Because the HSE process was considered unfinished, the Ombudsman closed the complaint file at that time and expressly stated that the complainant could return after receiving the final outcome.
+
+The Ombudsman pathway therefore became dependent upon an evidence state in another institution:
+
+HSE investigation treated as ongoing
+
+→ Ombudsman does not intervene at that time
+
+→ potential later Ombudsman consideration following HSE outcome
+
+That dependency is itself part of the governed record.
+
+One institution’s state had become another institution’s procedural premise.
+
+⸻
+
+9.17 Reopening and Review
+
+On 14 April 2023, the complainant expressly sought to reopen the formal Ombudsman complaint.
+
+On 18 April, Ombudsman Investigator Geraldine McCormack asked whether the Trust in Care investigation had been finalised.
+
+She also sought clarification of the original complaint, including whether matters of clinical judgement affected the Ombudsman’s remit.
+
+The complainant disputed the premise that the Trust in Care investigation had properly started and continued challenging the Ombudsman’s treatment of the matter.
+
+A formal review request followed.
+
+That produces another distinct administrative lifecycle:
+
+Ombudsman decision
+
+→ Challenge
+
+→ Request to reopen
+
+→ Formal review request
+
+→ Review Manager assessment
+
+The Ombudsman review was not a continuation of the HSE investigation.
+
+It was a separate institutional function examining the Ombudsman’s own earlier handling.
+
+That distinction matters because the evidential object under review had changed.
+
+The Ombudsman Review Manager was not deciding the underlying HSE allegations.
+
+She was deciding whether the earlier Ombudsman decision should be set aside.
+
+⸻
+
+9.18 The 14 June Ombudsman Review Decision
+
+On 14 June 2023, Review Manager Mary Byrne issued the review decision in OMB-133952-J0M0T7.
+
+She stated that the Ombudsman review process was not a reinvestigation of the underlying complaint.
+
+Its purpose was to consider whether there had been a failing in the original Ombudsman handling.
+
+She concluded that there was no basis to set aside Geraldine McCormack’s decision.
+
+She also stated that only one review was available in relation to the Office’s handling of a particular complaint, making the review decision final.
+
+The decisive dependency remained the Trust in Care process.
+
+Byrne recorded the complainant’s contention that the Trust in Care investigation had not started.
+
+She also noted the subsequent communication in which he had offered the HSE Investigator an opportunity to meet after 23 April.
+
+Her conclusion included:
+
+“As the TnC investigation is ongoing, there is no role for the Ombudsman…”
+
+The administrative disposition can therefore be reconstructed as:
+
+Decision:
+
+No basis found to set aside Ms McCormack’s decision; request for review not accepted.
+
+Reasoning:
+
+The Trust in Care investigation was treated as ongoing; therefore there was no role for the Ombudsman at that time.
+
+Resulting State:
+
+The Ombudsman review decision was final under the Office’s one-review procedure.
+
+This is a particularly important reconstruction.
+
+The Ombudsman’s decision depended upon the state attributed to another administrative process.
+
+The state:
+
+HSE Trust in Care investigation ongoing
+
+became part of the reasoning supporting:
+
+Ombudsman does not investigate at this time.
+
+This demonstrates why administrative pathways cannot always be reconstructed institution by institution in isolation.
+
+One institution’s resulting state may become another institution’s decision premise.
+
+⸻
+
+Part VI — A Parallel but Connected Pathway
+
+9.19 ULHG-COM.4894
+
+While the Ombudsman review was developing, another UL Hospitals complaint process became visible.
+
+On 5 May 2023, UL Hospitals Group issued correspondence under reference ULHG-COM.4894.
+
+It stated that a Complaints Officer would be assigned to undertake a “full investigation” of the issues raised and identified Bertha Lawlee as the Complaints Officer.
+
+The anticipated response date was 15 June 2023.
+
+The letter stated that relevant personal records might need to be accessed, that delays would be notified, and that following the investigation the complainant could seek either an HSE Internal Complaint Review or an Independent Review from the Office of the Ombudsman.
+
+The accompanying material identified the intended pathway as Your Service Your Say — Stage 2 Formal Investigation.
+
+This was therefore not HRNIU224155.
+
+It was a separate administrative object with:
+
+a separate reference;
+
+a separate complaints function;
+
+a separate procedural framework;
+
+and a separate review architecture.
+
+That distinction must be preserved.
+
+⸻
+
+9.20 The 26 April Submission
+
+ULHG-COM.4894 arose from correspondence concerning an attendance at the University Hospital Limerick Emergency Department on 10 June 2022.
+
+The original 26 April submission described a broader evidence state than simply a waiting-time complaint.
+
+It included:
+
+a reported presentation involving chest pain and a feeling of having a heart attack;
+
+prior contact with Shannon Doc;
+
+direction to attend UHL;
+
+an expectation that Shannon Doc would telephone ahead;
+
+arrival at approximately 10pm;
+
+communication of symptoms;
+
+difficulty remaining because of pain while standing;
+
+an interaction when leaving;
+
+departure without being seen;
+
+and the asserted absence of subsequent welfare contact.
+
+This is the incoming evidence state.
+
+It matters because the original submission survives.
+
+The reconstruction does not have to infer its content from the institution’s later summary.
+
+The initiating evidence state can be compared directly with the institutional response that followed.
+
+⸻
+
+9.21 Stage 2 Formal Investigation
+
+The 5 May acknowledgement represented the complaint as entering the Your Service Your Say Stage 2 Formal Investigation pathway.
+
+The institution stated that a Complaints Officer:
+
+“will be assigned to undertake a full investigation of the issues raised”.
+
+It also stated that only records specifically relating to the issues identified within the complaint might need to be accessed.
+
+The accompanying Stage 2 guidance describes the expected process.
+
+It provides for assessment, investigation, an investigation report identifying the issues examined and how they were investigated, findings, recommendations, and review rights.
+
+This creates an explicit expected pathway:
+
+Submission
+
+→ Complaint recorded
+
+→ Complaints Officer identified
+
+→ Stage 2 Formal Investigation pathway announced
+
+→ Investigation report/final response expected
+
+→ Internal or independent review available
+
+The evidence establishes that this pathway was announced.
+
+It does not require the reconstruction to infer that every contemplated investigative step occurred.
+
+The expected process can therefore be compared with the observed record.
+
+⸻
+
+9.22 The 12 May Final Response
+
+The final response arrived on 12 May 2023, seven days after the 5 May acknowledgement.
+
+Bertha Lawlee described the complaint as concerning the 10 June 2022 Emergency Department attendance, previous attendance at Shannon Doc, arrival at approximately 10pm and departure approximately one and a half hours later without being seen.
+
+She apologised for the delay and attributed it to the Emergency Department being busy.
+
+The response then described institutional initiatives relating to Emergency Department demand, Medical Assessment Unit pathways, extended operating hours and recruitment of additional medical and nursing staff.
+
+The response concluded by directing the complainant to the Office of the Ombudsman if dissatisfied.
+
+In explaining what the Ombudsman would require, it described the communication as:
+
+“our final response to your complaint.”
+
+This establishes a terminal institutional state for the material presently audited.
+
+No further Bertha Lawlee response has been identified in the audited collection.
+
+The state transition is therefore:
+
+Complaint
+
+→ Stage 2 Formal Investigation pathway announced
+
+→ Final response issued
+
+→ No later Bertha Lawlee response identified in audited collection
+
+→ Ombudsman identified as external review route
+
+The distinction between no further response identified and no further response ever existed must remain explicit.
+
+⸻
+
+Part VII — Comparing Evidence States
+
+9.23 What Entered and What Emerged
+
+Because both the originating submission and final response survive, the reconstruction can perform a direct evidence-state comparison.
+
+The final response carries forward several elements:
+
+* UHL Emergency Department attendance;
+* previous Shannon Doc attendance;
+* approximate arrival time;
+* approximately one-and-a-half-hour wait;
+* departure without being seen;
+* a busy Emergency Department.
+
+Other elements of the incoming evidence state are not substantively addressed in the final response, including:
+
+* the reported chest-pain presentation;
+* the reported feeling that a heart attack might be occurring;
+* the anticipated telephone contact from Shannon Doc;
+* the reported communication of symptoms at the desk;
+* the particular interaction described when leaving;
+* the asserted absence of subsequent welfare contact.
+
+The evidence permits a narrow but important finding:
+
+The evidence state represented in the final response was narrower than the evidence state contained in the initiating submission.
+
+That finding does not establish why.
+
+The documents do not establish deliberate omission.
+
+They do not establish improper motive.
+
+They do not establish that unmentioned matters were never considered internally.
+
+Nor do they establish that those matters were considered and rejected.
+
+They establish something more limited and more defensible:
+
+Evidence State A and Evidence State B are not identical.
+
+The difference is observable from the original sources.
+
+That difference is governance information.
+
+⸻
+
+9.24 Finality Changes the State Again
+
+The 12 May communication did more than answer the complaint.
+
+It created a final institutional response state.
+
+Before it:
+
+the matter was within the ULHG complaint process.
+
+After it:
+
+ULHG had issued what it described as its final response and identified external review.
+
+Finality therefore changes the evidence state.
+
+The final response becomes a new evidence object capable of entering another administrative system.
+
+That is exactly what happened.
+
+On 25 May 2023, the 12 May response was forwarded to both Ombudsman Complaints and the Ombudsman Review Shared Mailbox.
+
+The output of one administrative process became input to another.
+
+This transition is important.
+
+The final response did not cease to be a ULHG document.
+
+Its content did not change.
+
+But its governed context did.
+
+It became evidence within an Ombudsman process.
+
+⸻
+
+Part VIII — Two Pathways Meet at the Ombudsman
+
+9.25 The Ombudsman Distinguishes the Processes
+
+The 14 June review decision demonstrates that the Ombudsman had material relating to both administrative pathways.
+
+Mary Byrne expressly distinguished them.
+
+The complaint associated with HRNIU224155 concerned the earlier formal complaint involving a named professor and two named doctors and was treated as subject to an ongoing Trust in Care investigation.
+
+Separately, Byrne identified ULHG-COM.4894 as concerning the 10 June 2022 Emergency Department attendance.
+
+She recorded that the Hospital had apparently issued its reply on 12 May and advised that, if dissatisfied, the complainant could make a separate Ombudsman complaint concerning that decision.
+
+This is an important provenance result.
+
+The two HSE pathways were related through the broader record and through their transmission to the Ombudsman.
+
+But the Ombudsman did not collapse them into one complaint.
+
+Neither should the reconstruction.
+
+Administrative connection does not require administrative identity.
+
+⸻
+
+9.26 One Institution’s Output Becomes Another’s Input
+
+The pathway now demonstrates several forms of evidence transformation:
+
+Original complaint
+
+→ institutional screening evidence
+
+Screening outcome
+
+→ National Investigations input
+
+Investigation status
+
+→ Ombudsman decision premise
+
+ULHG final response
+
+→ potential Ombudsman complaint evidence
+
+The documents themselves may remain unchanged.
+
+Their governed relationships change.
+
+This means evidence governance cannot be confined to document preservation.
+
+A trustworthy system must preserve relationships such as:
+
+submitted as
+
+considered under
+
+resulted in
+
+referred to
+
+reviewed by
+
+relied upon by
+
+superseded by
+
+remained unresolved at
+
+Without those relationships, the archive may preserve every document and still lose the administrative pathway.
+
+⸻
+
+Part IX — The Consolidated Reconstruction
+
+9.27 HRNIU224155
+
+At the level supported by the recovered original sources, the HR National Investigation pathway can be reconstructed as follows.
+
+20 September 2022
+
+Formal complaint submitted and subsequently acknowledged by UL Hospitals Group.
+
+↓
+
+30 September 2022
+
+ULHG-COM.4338 acknowledgement records receipt, identifies the Peri-Operative Directorate as the intended reviewing function, and states that complaint details will be recorded within the relevant complaint-management systems.
+
+↓
+
+Trust in Care Preliminary Screening
+
+↓
+
+Preliminary outcome
+
+Screening completed; recorded outcome indicates that an abusive interaction could have occurred.
+
+↓
+
+Intended referral
+
+14 November correspondence states that the Preliminary Screening outcome will be forwarded to the HSE National Investigations Unit.
+
+↓
+
+January 2023
+
+Later NIU records establish that the matter has entered a Human Resources Investigation structure.
+
+Lorraine Rafter requests a Human Resources Investigation.
+
+Gerry O’Neill is initially proposed as investigator.
+
+Draft Terms of Reference are issued.
+
+↓
+
+Draft scope state
+
+The originating broader complaint is transformed into a proposed Human Resources investigation concerning a specified allegation against one named respondent.
+
+↓
+
+February–March 2023
+
+Interview and participation process develops.
+
+Later records identify Gerry O’Neill as the functioning investigator.
+
+↓
+
+7 April 2023
+
+Complainant expressly offers to meet the investigator after 23 April and states continuing willingness to assist.
+
+↓
+
+13–14 April 2023
+
+UL Hospitals confirms the National Investigations Unit as the process through which the complaint is to progress.
+
+The complainant challenges the applicability and scope of Trust in Care.
+
+The correspondence is transmitted to the Ombudsman and reopening is requested.
+
+↓
+
+June 2023
+
+Further interview, advocacy and procedural correspondence.
+
+↓
+
+27 June 2023
+
+Interview proposed for 13 July.
+
+Invitation contains an earlier, already-expired response deadline.
+
+↓
+
+30 June 2023
+
+Procedural objections raised, including objections concerning inaccurate dates and confidence in the process.
+
+↓
+
+6 July 2023
+
+HSE characterises the 30 June correspondence as confirmation of non-attendance.
+
+A further deferral is declined.
+
+The investigator states that the investigation will proceed in the complainant’s absence.
+
+↓
+
+Contemporaneous challenge
+
+The complainant disputes that characterisation and asks where he had confirmed non-attendance.
+
+↓
+
+Expected terminal state
+
+Draft Report / representations / Final Report contemplated by the draft Terms of Reference.
+
+↓
+
+Observed terminal evidential state
+
+No substantive final HR investigation report has been established in the presently audited collection.
+
+That final line is not a failure of reconstruction.
+
+It is the reconstructed state.
+
+⸻
+
+9.28 OMB-133952-J0M0T7
+
+The Ombudsman pathway can be reconstructed as follows.
+
+Complaint to Ombudsman
+
+↓
+
+Ombudsman identifies continuing HSE Trust in Care process as relevant
+
+↓
+
+23 March 2023
+
+Ombudsman closes the complaint at that time because the Trust in Care process is treated as ongoing.
+
+The complainant is told that he may return once the final HSE outcome has been received.
+
+↓
+
+Challenge
+
+↓
+
+Request to reopen
+
+↓
+
+Formal review request
+
+↓
+
+14 June 2023 — Mary Byrne
+
+Decision:
+
+No basis found to set aside Ms McCormack’s decision; request for review not accepted.
+
+Reasoning:
+
+The Trust in Care investigation is treated as ongoing; therefore there is no role for the Ombudsman at that time.
+
+Resulting State:
+
+Ombudsman review decision final under the Office’s one-review procedure.
+
+The important relationship is:
+
+The Ombudsman’s resulting state depended upon the state attributed to the HSE investigation.
+
+⸻
+
+9.29 ULHG-COM.4894
+
+The separate Emergency Department pathway can be reconstructed as follows.
+
+26 April 2023
+
+Submission concerning the 10 June 2022 UHL Emergency Department attendance.
+
+↓
+
+5 May 2023
+
+ULHG-COM.4894 created.
+
+Bertha Lawlee identified as Complaints Officer.
+
+Your Service Your Say Stage 2 Formal Investigation pathway announced.
+
+↓
+
+8 May 2023
+
+Receipt of the complaint correspondence acknowledged by the complainant and consent provided for access to relevant medical records.
+
+↓
+
+12 May 2023
+
+Bertha Lawlee issues what the correspondence describes as the final response.
+
+ED delay acknowledged.
+
+Busy Emergency Department identified as explanation.
+
+Service initiatives concerning demand, capacity and staffing described.
+
+Ombudsman route identified.
+
+↓
+
+No later Bertha Lawlee response identified in the audited collection
+
+↓
+
+25 May 2023
+
+Final response transmitted to Ombudsman Complaints and Ombudsman Review.
+
+↓
+
+14 June 2023
+
+Ombudsman Review Manager distinguishes ULHG-COM.4894 from HRNIU224155 and identifies it as capable of becoming a separate Ombudsman complaint.
+
+This branch reaches a documentary terminal state within the presently audited collection.
+
+⸻
+
+Part X — What the Reconstruction Establishes
+
+9.30 Administrative Pathways Are Not Linear
+
+The evidence does not reveal one complaint moving neatly from A to B to C.
+
+It reveals branching processes.
+
+Different institutional functions operated upon overlapping evidence:
+
+UL Hospitals complaint handling
+
+Peri-Operative review function
+
+Trust in Care Preliminary Screening
+
+Human Resources investigation
+
+National Investigations administration
+
+Your Service Your Say Stage 2
+
+Ombudsman complaint assessment
+
+Ombudsman review
+
+Each function possessed a different purpose.
+
+Each created a different evidence state.
+
+The same originating material could therefore produce different administrative branches without those branches becoming identical.
+
+A chronology alone cannot represent this adequately.
+
+A governed relationship model can.
+
+⸻
+
+9.31 Institutional Characterisation Is Evidence — Not Replacement Evidence
+
+The 30 June and 6 July sequence demonstrates another principle.
+
+An institution may characterise earlier evidence when making a later decision.
+
+That characterisation is itself an important evidence object.
+
+But it should not replace the underlying source.
+
+Where HSE characterised correspondence as confirmation of non-attendance, the system should preserve:
+
+the original correspondence
+
+and
+
+the institutional characterisation of that correspondence.
+
+That permits later examination of the relationship between them without rewriting either.
+
+The same principle applies to:
+
+complaint scope;
+
+investigative scope;
+
+participation;
+
+reasoning;
+
+final responses;
+
+and review decisions.
+
+A later summary may become part of the record.
+
+It does not become a substitute for the evidence it summarises.
+
+⸻
+
+9.32 What Is Not Addressed Must Not Be Converted Into a Finding
+
+The comparison between the 26 April submission and 12 May final response demonstrates another critical discipline.
+
+If an incoming submission contains propositions A, B, C, D and E, while the final response substantively addresses A and B, the reconstruction may establish:
+
+A and B were addressed in the response.
+
+C, D and E do not appear substantively addressed in that response.
+
+It cannot automatically establish:
+
+C, D and E were deliberately ignored.
+
+Nor can it establish:
+
+C, D and E were considered and rejected.
+
+Neither conclusion follows without further evidence.
+
+The correct evidence state is the observable difference.
+
+This is how evidence-led governance separates reconstruction from advocacy.
+
+⸻
+
+9.33 Missing States Are Governed States
+
+The HRNIU pathway also demonstrates why absence must be represented explicitly.
+
+The investigative architecture contemplated a Draft Report, representations and Final Report.
+
+The reconstructed collection establishes that the investigator later stated that the investigation would continue in the complainant’s absence.
+
+Yet an equivalent substantive final investigation determination has not been established in the audited source collection.
+
+A conventional narrative may feel compelled to complete that story.
+
+A governed reconstruction does not.
+
+It records:
+
+EXPECTED STATE: Final investigative determination
+
+OBSERVED STATE: Not established from located source
+
+That distinction is itself valuable.
+
+It tells the next researcher exactly what is known and exactly what remains unresolved.
+
+A missing state is therefore not an empty space to be filled by inference.
+
+It is a governed state in its own right.
+
+⸻
+
+Part XI — Governance Implications
+
+9.34 Evidence Does Not Merely Accumulate
+
+The pathway demonstrates that evidence changes administrative state.
+
+A document may begin as:
+
+submitted evidence.
+
+It may subsequently become:
+
+screened evidence.
+
+Then:
+
+investigation material.
+
+A screening outcome becomes:
+
+institutional evidence supporting referral.
+
+A final response becomes:
+
+decision evidence.
+
+The same response may later become:
+
+review evidence.
+
+And the state of one investigation may become:
+
+a decision premise in another institution.
+
+Evidence therefore possesses more than content.
+
+It possesses governed context.
+
+That context includes what function held the evidence, what authority applied to it, what action occurred, what decision followed and what resulting state was created.
+
+⸻
+
+9.35 The Archive Must Preserve Transitions
+
+A conventional archive could preserve every PDF and email examined in this chapter and still lose the most important information.
+
+It might know that the documents exist.
+
+But not:
+
+which submission initiated which process;
+
+which screening produced which referral;
+
+which Terms of Reference governed which proposed investigative scope;
+
+which correspondence was later characterised as non-participation;
+
+which response created a final institutional state;
+
+which response was subsequently sent to which reviewer;
+
+or
+
+which external decision depended upon which internal process remaining open.
+
+That is the difference between a document archive and an evidence-governance system.
+
+The archive preserves objects.
+
+Governance must preserve relationships between objects, functions, decisions and resulting states.
+
+⸻
+
+9.36 Reasoning Must Remain Attached to the Decision That Used It
+
+The pathway also demonstrates why reasoning cannot be detached from the decision state.
+
+The Ombudsman Review Manager’s conclusion was not simply:
+
+No Ombudsman investigation.
+
+The recorded reasoning was that the Trust in Care investigation was ongoing and therefore there was no role for the Ombudsman at that time.
+
+Likewise, Bertha Lawlee’s final response did not simply record:
+
+Complaint closed.
+
+It attributed the experienced delay to a busy Emergency Department and described service measures directed toward crowding and capacity.
+
+The decision and reasoning must remain bound.
+
+Otherwise later readers may know the result without knowing the institutional proposition that produced it.
+
+A decision without its reasoning is an incomplete evidence state.
+
+⸻
+
+Part XII — Limits of the Reconstruction
+
+9.37 What This Chapter Does Not Determine
+
+This reconstruction does not establish the truth or falsity of the underlying clinical or personal allegations.
+
+It does not determine whether Trust in Care was the legally correct mechanism.
+
+It does not determine whether any person breached fair procedures.
+
+It does not determine why investigative scope changed.
+
+It does not determine why particular propositions contained in one submission were absent from a later response.
+
+It does not determine that an unlocated document never existed.
+
+It does not infer the contents of documents that have not been recovered.
+
+It does not infer that an announced administrative step necessarily occurred merely because an institution said that it would occur.
+
+And it does not substitute an evidential reconstruction for the decision of a competent investigative or adjudicative body.
+
+Those limits are deliberate.
+
+They preserve the distinction between:
+
+what the evidence establishes
+
+and
+
+what someone might subsequently conclude from it.
+
+⸻
+
+Part XIII — Governance Principle
+
+9.38 The Pathway Is Part of the Evidence
+
+The reconstruction supports a broader principle.
+
+THE PATHWAY IS PART OF THE EVIDENCE
+
+Evidence does not enter an institution once and remain administratively unchanged.
+
+It is:
+
+received;
+
+classified;
+
+screened;
+
+referred;
+
+scoped;
+
+investigated;
+
+characterised;
+
+answered;
+
+closed;
+
+transmitted;
+
+and sometimes
+
+reviewed.
+
+Every transition can change the evidence state.
+
+A trustworthy record must therefore preserve more than the final outcome.
+
+It must preserve enough of the pathway to answer:
+
+What entered?
+
+Who received it?
+
+What function governed it?
+
+What authority was invoked?
+
+What evidence state existed?
+
+What action occurred?
+
+What decision was made?
+
+What reasoning was recorded?
+
+What evidence state emerged?
+
+What review remained?
+
+And where the answer is unknown:
+
+What remains unresolved?
+
+The governance requirement is therefore not merely preservation of documents.
+
+It is preservation of the transitions through which documents acquire administrative meaning.
+
+⸻
+
+9.39 Conclusion
+
+Chapter 7 established the reconstruction method.
+
+Chapter 8 demonstrated that method through a completed evidential case.
+
+Chapter 9 extends it across a branching administrative pathway.
+
+The reconstruction reveals that the important unit of governance is not merely the document.
+
+Nor is it merely the event.
+
+It is the governed transition between evidence states.
+
+A submission generates an acknowledgement without necessarily creating durable institutional capture.
+
+A complaint enters an institutional process.
+
+A screening creates a preliminary institutional determination.
+
+A determination produces an intended referral.
+
+Later records establish entry into another administrative function.
+
+A broad complaint may become a narrower draft investigative scope.
+
+An investigation creates participation states and procedural decisions.
+
+An institutional response creates a terminal decision state.
+
+That response can then become evidence before another institution.
+
+And the state attributed to one administrative process can become part of the reasoning by which another institution decides whether it will act.
+
+The documentary record therefore contains more than a history of correspondence.
+
+It contains a decision pathway.
+
+Preserving that pathway makes something possible that a conventional archive cannot reliably provide:
+
+reconstruction without invention.
+
+The record can show what entered.
+
+It can show what changed.
+
+It can show what emerged.
+
+It can show where one process depended upon another.
+
+It can show where a decision became final.
+
+It can show where an intended action was later evidenced as having occurred.
+
+And it can show where the evidence simply stops.
+
+That final capability is as important as all the others.
+
+A governed system must be capable of saying:
+
+known;
+
+announced;
+
+evidenced;
+
+decided;
+
+reasoned;
+
+transferred;
+
+unresolved;
+
+and
+
+not evidenced.
+
+Because accountability does not begin by deciding what the record ought to show.
+
+It begins by preserving what the record actually shows.
+
+And once the pathway itself is preserved as evidence, later scrutiny no longer has to reconstruct institutional history from fragments.
+
+The pathway remains visible.
+
+The transitions remain attributable.
+
+The decisions remain connected to their evidence and reasoning.
+
+Prospective actions remain distinguishable from completed actions.
+
+Institutional characterisations remain distinguishable from the underlying evidence.
+
+And what cannot be established remains distinguishable from what can.
+
+The record does not need to supply a conclusion.
+It needs to preserve the pathway through which a conclusion became possible.
+
+That is the governance function of evidence-state reconstruction.
+
+⸻
+
+Source and Provenance Note
+
+This chapter is an evidence-state reconstruction derived from original-source records preserved within the research collection.
+
+Statements concerning administrative events, institutional characterisations, decisions and recorded reasoning are intended to remain traceable to the source from which they were derived.
+
+The reconstruction distinguishes source evidence from later institutional characterisation; prospective administrative actions from evidenced completed actions; commissioning from commencement; originating complaint scope from draft investigative scope; contact with a support service from support actually obtained; final responses from the completeness of the investigation said to precede them; and absence from the audited collection from proof of non-existence.
+
+It does not treat the absence of a document from the presently audited collection as proof that the document never existed. It does not infer the contents of records that have not been located, nor does it infer that an institutional action occurred solely because a document stated that it would occur where later evidence of that transition has not been established.
+
+Principal administrative identifiers reconstructed in this chapter include:
+
+ULHG-COM.4338 
+
+HRNIU224155 
+
+OMB-133952-J0M0T7 
+
+ULHG-COM.4894
+
+The original-source records underlying this reconstruction are maintained independently of this publication. Where those records are preserved within the Civic Decision Engine, their provenance, integrity, administrative relationships and evidential context are governed within that system.
+
+This publication therefore presents the reconstruction. The governed evidence record preserves the sources from which that reconstruction can be examined.

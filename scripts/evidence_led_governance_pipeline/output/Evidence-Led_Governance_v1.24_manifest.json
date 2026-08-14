@@ -1,0 +1,95 @@
+{
+  "build": {
+    "git_commit": "bad64e65f07651aa29e01d30a63364bbf6a43e64",
+    "timestamp_utc": "2026-08-14T12:05:08+00:00",
+    "validation_status": "PASS"
+  },
+  "outputs": [
+    {
+      "format": "docx",
+      "path": "Evidence-Led_Governance_v1.24.docx",
+      "sha256": "624dd9a71ab12a95817b07155e23d6a217aef329f280dce8780e6d071498dd68",
+      "size_bytes": 100119
+    },
+    {
+      "format": "html",
+      "path": "Evidence-Led_Governance_v1.24.html",
+      "sha256": "02d8153e95c6b524c5bf1ecf895495b1b5df082c906ae040a2e70c6b6429e91f",
+      "size_bytes": 283950
+    },
+    {
+      "format": "pdf",
+      "path": "Evidence-Led_Governance_v1.24.pdf",
+      "sha256": "27237db8d901cfefa4ee40589b1e569032af79e20ffde1de4d8895b1dc0e0099",
+      "size_bytes": 1238755
+    }
+  ],
+  "package": {
+    "build_report": "Evidence-Led_Governance_v1.24_build_report.txt",
+    "checksums": "Evidence-Led_Governance_v1.24_checksums.txt"
+  },
+  "publication": {
+    "author": "Nick Moloney",
+    "page_profile": "letter",
+    "profile": "digital",
+    "theme": "handbook",
+    "title": "Evidence-Led Governance",
+    "version": "1.24"
+  },
+  "renderers": {
+    "docx": "python-docx 1.2.0",
+    "html": "native semantic HTML renderer v1",
+    "pdf": "LibreOfficeDev 26.8.0.0.alpha0 2c87e51eeaa2b413ff4ae097b2705eea1995d8e5"
+  },
+  "schema_version": 1,
+  "sources": [
+    {
+      "path": "00_preface.txt",
+      "sha256": "6c2cfe0a2793846ae9e1fabaf3575c2721985e73c8f1f9d76f28d25555a497e0"
+    },
+    {
+      "path": "01_statement_of_method.txt",
+      "sha256": "b4458fdaf3a81b3007315e2ae66fd5892a06f2dffd4d4034c227ad5adfe8025e"
+    },
+    {
+      "path": "02_volume1_introduction.txt",
+      "sha256": "48d4bb4511bbf688677143fbd4eab7f8b8f385b1bb20bda771cd3f7cb4b0bf18"
+    },
+    {
+      "path": "03_volume1_chapter1.txt",
+      "sha256": "fdf7e154744dd17b3d70113728c256a753ffc12498c15f9be89fbbe68da139aa"
+    },
+    {
+      "path": "04_volume1_chapter2.txt",
+      "sha256": "c4b851104e9cd092def1f7d849ddf2a3c2bfa3b3f15d8c8646d943a0cffc0a7b"
+    },
+    {
+      "path": "05_volume1_chapter3.txt",
+      "sha256": "c8156b84cdf24ded75d0281bd62ff316381136c558809a0375c9508fe46c24d7"
+    },
+    {
+      "path": "06_volume1_chapter4.txt",
+      "sha256": "8e2d80d04317d40e1d74a39aa884f07f114e684e56aadbcd4209f589da50663b"
+    },
+    {
+      "path": "07_volume1_chapter5.txt",
+      "sha256": "8b19c9fd108a74dea52b269557a4cb98df7d3e56e1df9183c5c61d447b084d45"
+    },
+    {
+      "path": "08_volume1_chapter6.txt",
+      "sha256": "77b67d6266a01f10146b7a40e8a05197f8f5af24be4ab00091905b11f81c301c"
+    },
+    {
+      "path": "09_volume2_chapter7.txt",
+      "sha256": "aa763caf7245e644884c6544d453049b2d4ac453d69453f7d8b81cdeeb18f551"
+    },
+    {
+      "path": "10_volume2_chapter8.txt",
+      "sha256": "63781a75cb274ac8ddb487946f9944f837272f5e451b0c39b8cd772de8cb290f"
+    },
+    {
+      "path": "11_volume2_chapter9.txt",
+      "sha256": "d6f8d4389bbd2be7f43ac76a1bf4f57d27bf5bd56ab6b76a458f30fc6d9776a0"
+    }
+  ]
+}
