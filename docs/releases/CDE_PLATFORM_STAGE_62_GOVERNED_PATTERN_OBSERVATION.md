@@ -1,5 +1,12 @@
 # CDE Platform Stage 62 — Governed Pattern Observation
 
+Implemented · merged · deployed
+
+Merged through [PR #343](https://github.com/nickdebrief/civic-decision-engine/pull/343)
+at `2026-08-15T12:07:05Z` as canonical main commit
+`cc69ecd19d651f899dff3e7cb26d995fa9f70319`. Railway deployment `5920254970`
+completed successfully at `2026-08-15T12:07:48Z`.
+
 ## Purpose
 
 Stage 62 makes deterministic recurrence in already governed Record–Document
@@ -50,3 +57,13 @@ Stage 62 does not expand the Stage 60 contract, change Stage 61 relationship
 authority, or alter Stage 61.1/61.2 inspection and correction semantics. No
 historical backfill or production observation was performed by this
 implementation.
+
+## Deployment verification
+
+The deployed service returned HTTP 200 for `/` and `/records`. The
+administrative pattern-observation surface returned HTTP 401 without an admin
+session. `/api/pattern-observations`, `/pattern-observations`, and
+`/api/admin/pattern-observations` returned HTTP 404, confirming that no public
+Stage 62 route was introduced. Deployment verification performed no correction,
+created no pattern observation, and modified no association or other production
+data. No migration or Stage 62 persistence initialization was performed.
