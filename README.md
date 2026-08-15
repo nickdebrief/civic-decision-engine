@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 62 — Governed Pattern Observation
+Current release: CDE Platform Stage 62.1 — Administrative Navigation & Header Refinement
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
