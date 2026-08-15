@@ -45002,7 +45002,7 @@ def _render_admin_console_navigation(
         'style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;width:100%;color:#555">'
         f'<strong style="color:#143a52">{escape(PLATFORM_NAME)}</strong>'
         f'<span>{escape(PLATFORM_TAGLINE)}</span>'
-        f'<span style="font-family:ui-monospace,monospace;color:#143a52">Platform version {escape(PLATFORM_VERSION_LABEL)}</span>'
+        f'<span style="font-family:ui-monospace,monospace;color:#143a52">{escape(PLATFORM_VERSION_LABEL)}</span>'
         '</div>'
     )
     return f"""{platform_identity}<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
@@ -45014,6 +45014,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/transmissions#new-transmission">Transmission Intake</a>
       <a style="color:#245d61;font-weight:650" href="/admin/transmissions#transmission-management">Transmission Management</a>
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/pattern-observations">Pattern Observations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
