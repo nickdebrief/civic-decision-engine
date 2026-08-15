@@ -75,6 +75,7 @@ from api import public_transmissions as trm
 from api import record_document_associations as rda
 from api import record_document_association_decisions as rdd
 from api import record_document_association_corrections as rdc
+from api import record_pattern_observations as rpo
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -48856,6 +48857,126 @@ def admin_association_correction_page(association_id: int, request: Request):
             admin_session=session,
         )
     )
+
+
+def _render_pattern_observations_page(
+    diagnostic: dict[str, Any],
+    *,
+    admin_session: dict[str, Any],
+    observation: dict[str, Any] | None = None,
+) -> str:
+    def cell(value: Any) -> str:
+        return escape(str(value if value not in (None, "") else "—"))
+
+    candidate_rows = "".join(
+        f"<tr><td>{cell(item['record_reference'])}</td>"
+        f"<td>{cell(item['relationship_type'])}</td>"
+        f"<td>{cell(item['source_count'])}</td>"
+        f"<td>{cell(item['first_observed_at'])}</td>"
+        f"<td>{cell(item['last_observed_at'])}</td></tr>"
+        for item in diagnostic.get("candidates", [])
+    ) or '<tr><td colspan="5">No deterministic recurrence candidates are available.</td></tr>'
+    observation_rows = ""
+    if observation:
+        bindings = "".join(
+            f"<li>Association {cell(row['association_id'])} · {cell(row['record_reference'])} · "
+            f"{cell(row['relationship_type'])} · {cell(row['source_created_at'])}</li>"
+            for row in observation.get("bindings", [])
+        ) or "<li>No source bindings are recorded.</li>"
+        reviews = "".join(
+            f"<li>{cell(row['status'])} · {cell(row['reviewed_at'])} · {cell(row['reviewed_by'])}: "
+            f"{cell(row['rationale'])}</li>"
+            for row in observation.get("reviews", [])
+        ) or "<li>No review decision recorded.</li>"
+        observation_rows = (
+            f"<h2>Pattern observation</h2><table><tr><th>Observation identity</th><td>{cell(observation['id'])}</td></tr>"
+            f"<tr><th>Type</th><td>{cell(observation['observation_type'])}</td></tr>"
+            f"<tr><th>Status</th><td>{cell(observation['status'])}</td></tr>"
+            f"<tr><th>Title</th><td>{cell(observation['title'])}</td></tr>"
+            f"<tr><th>Description</th><td>{cell(observation['description'])}</td></tr>"
+            f"<tr><th>Rule/version</th><td>{cell(observation['rule_version'])}</td></tr>"
+            f"<tr><th>Source count</th><td>{cell(observation['source_count'])}</td></tr>"
+            f"<tr><th>First observed</th><td>{cell(observation['first_observed_at'])}</td></tr>"
+            f"<tr><th>Last observed</th><td>{cell(observation['last_observed_at'])}</td></tr></table>"
+            f"<h3>Underlying governed associations</h3><ul>{bindings}</ul>"
+            f"<h3>Review history</h3><ul>{reviews}</ul>"
+            f"<p class=\"notice\">Repetition is recorded as an observation only. No intent, motive, causation, wrongdoing, or legal conclusion is recorded.</p>"
+            f"<form method=\"post\" action=\"/api/admin/session/pattern-observations/{int(observation['id'])}/review\">"
+            f"<label>Review status<select name=\"status\" required><option value=\"accepted\">Accepted as observation</option><option value=\"rejected\">Rejected</option><option value=\"deferred\">Deferred</option></select></label>"
+            f"<label>Review rationale<textarea name=\"rationale\" required></textarea></label><button type=\"submit\">Record review</button></form>"
+        )
+    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Pattern Observation</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.notice{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:720px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin/associations\">Back to associations</a></p><h1>Governed Pattern Observation</h1><p class=\"notice\"><strong>Repetition may reveal pattern.</strong> This administrative surface identifies recurring governed facts or relationships. It does not determine intent, motive, causation, wrongdoing, or legal significance.</p>{observation_rows}<h2>Deterministic recurrence candidates</h2><table><thead><tr><th>Record reference</th><th>Relationship type</th><th>Occurrences</th><th>First recorded</th><th>Last recorded</th></tr></thead><tbody>{candidate_rows}</tbody></table>{'' if observation else '<h2>Record a candidate observation</h2><form method="post" action="/api/admin/session/pattern-observations"><label>Exact canonical record reference<input name="record_reference" required></label><label>Exact governed relationship type<input name="relationship_type" required></label><label>Administrative rationale<textarea name="rationale" required></textarea><label>Idempotency key (optional)<input name="idempotency_key"></label><button type="submit">Record candidate observation</button></form>'}</main></body></html>"""
+
+
+@router.get("/admin/pattern-observations", response_class=HTMLResponse)
+def admin_pattern_observations_page(request: Request):
+    session = require_admin_session(request)
+    diagnostic = rpo.read_observation_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_render_pattern_observations_page(diagnostic, admin_session=session))
+
+
+@router.get("/admin/pattern-observations/{observation_id}", response_class=HTMLResponse)
+def admin_pattern_observation_detail(observation_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rpo.read_observation_diagnostic(observation_id, db_path=DB_PATH)
+    if diagnostic.get("status") == "observation_not_found":
+        raise _http_error(404, "pattern_observation_not_found")
+    observation = (diagnostic.get("observations") or [None])[0]
+    return HTMLResponse(content=_render_pattern_observations_page(diagnostic, admin_session=session, observation=observation))
+
+
+@router.post("/api/admin/session/pattern-observations", response_class=HTMLResponse)
+def admin_pattern_observation_create(
+    request: Request,
+    record_reference: str = Form(...),
+    relationship_type: str = Form(...),
+    rationale: str = Form(...),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        observation = rpo.create_candidate_observation(
+            conn,
+            record_reference=record_reference,
+            relationship_type=relationship_type,
+            actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            rationale=rationale,
+            idempotency_key=idempotency_key,
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rpo.read_observation_diagnostic(observation["id"], db_path=DB_PATH)
+    return HTMLResponse(content=_render_pattern_observations_page(diagnostic, admin_session=session, observation=observation), status_code=201)
+
+
+@router.post("/api/admin/session/pattern-observations/{observation_id}/review", response_class=HTMLResponse)
+def admin_pattern_observation_review(
+    observation_id: int,
+    request: Request,
+    status: str = Form(...),
+    rationale: str = Form(...),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        observation = rpo.review_observation(
+            conn,
+            observation_id,
+            status=status,
+            actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            rationale=rationale,
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rpo.read_observation_diagnostic(observation_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_pattern_observations_page(diagnostic, admin_session=session, observation=observation))
 
 
 @router.post("/api/admin/session/associations", response_class=HTMLResponse)
