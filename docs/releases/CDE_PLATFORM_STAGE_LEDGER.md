@@ -37,7 +37,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 61 | Relationship-Domain Governed Decision Recording | relationship-governed-decisions | — | 2026-08-11 | `b28e6c7bde5bf78062f400641deea19fe7d40f8f` | [#336](https://github.com/nickdebrief/civic-decision-engine/pull/336) | [Stage 61](CDE_PLATFORM_STAGE_61_RELATIONSHIP_DOMAIN_GOVERNED_DECISION_RECORDING.md) | Implemented · merged · deployed |
 | 61.1 | Relationship Governed Decision Administrative Inspection | relationship-governed-decisions | 61 | 2026-08-11 | `12879cc00ed3bc1493e1ba205bc5820fdfcc6b98` | [#337](https://github.com/nickdebrief/civic-decision-engine/pull/337) | [Stage 61.1](CDE_PLATFORM_STAGE_61_1_RELATIONSHIP_GOVERNED_DECISION_ADMINISTRATIVE_INSPECTION.md) | Implemented · merged · deployed |
 | 61.2 | Governed Relationship Correction | relationship-governed-decisions | 61 | 2026-08-11 | `58b72bdb3eeff4222accc9f66c500d7a795bd9d5` | [#339](https://github.com/nickdebrief/civic-decision-engine/pull/339) | [Stage 61.2](CDE_PLATFORM_STAGE_61_2_GOVERNED_RELATIONSHIP_CORRECTION.md) | Implemented · merged · deployed |
-| 62 | Governed Pattern Observation | governed-pattern-observation | — | — | `—` | — | [Stage 62](CDE_PLATFORM_STAGE_62_GOVERNED_PATTERN_OBSERVATION.md) | Implemented · pending merge · pending deployment |
+| 62 | Governed Pattern Observation | governed-pattern-observation | — | 2026-08-15 | `cc69ecd19d651f899dff3e7cb26d995fa9f70319` | [#343](https://github.com/nickdebrief/civic-decision-engine/pull/343) | [Stage 62](CDE_PLATFORM_STAGE_62_GOVERNED_PATTERN_OBSERVATION.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 
