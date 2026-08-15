@@ -148,6 +148,12 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn('href="/archive"', content)
         self.assertIn("Public Document Library", content)
         self.assertNotIn(">Public Library</a>", content)
+        self.assertIn("Civic Decision Engine", content)
+        self.assertIn("Independent · Transparent · Traceable", content)
+        self.assertIn(">v13.0</span>", content)
+        self.assertNotIn("Platform version v13.0", content)
+        self.assertIn("Pattern Observations", content)
+        self.assertIn('href="/admin/pattern-observations"', content)
         self.assertIn("Signed in as:", content)
         self.assertIn("<strong>admin-user</strong>", content)
 
