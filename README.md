@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 64 — Governed Allegation
+Current release: CDE Platform Stage 64.1 — Governed Allegation Source Selection
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
