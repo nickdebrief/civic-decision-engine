@@ -77,6 +77,7 @@ from api import record_document_association_decisions as rdd
 from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
 from api import record_governed_inferences as rgi
+from api import record_governed_allegations as rga
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45017,6 +45018,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/pattern-observations">Pattern Observations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-inferences">Governed Inferences</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-allegations">Governed Allegations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -53033,3 +53035,236 @@ def soft_delete_attachment_route(reference: str, attachment_id: int, request: Re
         event_type="attachment_soft_deleted",
         is_deleted=1,
     )
+
+
+def _render_governed_allegation_page(
+    diagnostic: dict[str, Any],
+    *,
+    admin_session: dict[str, Any],
+    allegation: dict[str, Any] | None = None,
+) -> str:
+    def cell(value: Any) -> str:
+        return escape(str(value if value not in (None, "") else "—"))
+
+    rows = "".join(
+        f'<tr><td><a href="/admin/governed-allegations/{int(item["id"])}">{cell(item["id"])}</a></td>'
+        f"<td>{cell(item['allegation_category'])}</td><td>{cell(item['status'])}</td>"
+        f"<td>{cell(item['attributed_source_label'])}</td><td>{cell(item['created_by'])}</td>"
+        f"<td>{cell(item['created_at'])}</td></tr>"
+        for item in diagnostic.get("allegations", [])
+    ) or '<tr><td colspan="6">No governed allegations recorded.</td></tr>'
+    detail = ""
+    if allegation:
+        bindings = "".join(
+            f"<li>{cell(item['binding_role'])} · {cell(item['source_type'])} · "
+            f"{cell(item['source_id'])} · {cell(item.get('source_version') or item.get('source_timestamp') or 'context unavailable')}</li>"
+            for item in allegation.get("bindings", [])
+        ) or "<li>No bindings recorded.</li>"
+        reviews = "".join(
+            f"<li>{cell(item['disposition'])} · {cell(item['reviewed_at'])} · "
+            f"{cell(item['reviewed_by'])} · self-review={cell(item['is_self_review'])}: {cell(item['rationale'])}</li>"
+            for item in allegation.get("reviews", [])
+        ) or "<li>No review events recorded.</li>"
+        supersessions = "".join(
+            f"<li>{cell(item['occurred_at'])} · replacement {cell(item['replacement_allegation_id'])}: {cell(item['rationale'])}</li>"
+            for item in allegation.get("supersessions", [])
+        ) or "<li>No supersession events recorded.</li>"
+        withdrawals = "".join(
+            f"<li>{cell(item['occurred_at'])} · {cell(item['withdrawal_type'])} · {cell(item['actor'])}: {cell(item['rationale'])}</li>"
+            for item in allegation.get("withdrawals", [])
+        ) or "<li>No withdrawal events recorded.</li>"
+        detail = f"""
+        <h2>Governed allegation</h2>
+        <p class="boundary"><strong>ATTRIBUTION IS NOT CONFIRMATION.</strong> This proposition is preserved as an allegation attributed to an identified person or source. It is not itself evidence, proof, confirmation, a finding, or a legal determination.</p>
+        <table>
+          <tr><th>Allegation identity</th><td>{cell(allegation['id'])}</td></tr>
+          <tr><th>Category</th><td>{cell(allegation['allegation_category'])}</td></tr>
+          <tr><th>Current status</th><td>{cell(allegation['status'])}</td></tr>
+          <tr><th>Allegation</th><td>{cell(allegation['allegation_text'])}</td></tr>
+          <tr><th>Representation</th><td>{cell(allegation['representation_mode'])}</td></tr>
+          <tr><th>Attributed source</th><td>{cell(allegation['attributed_source_label'])}</td></tr>
+          <tr><th>Attribution context</th><td>{cell(allegation['attribution_context'])}</td></tr>
+          <tr><th>Subject</th><td>{cell(allegation['subject_label'])}</td></tr>
+          <tr><th>Alleged period</th><td>{cell(allegation.get('alleged_period'))}</td></tr>
+          <tr><th>Made or recorded</th><td>{cell(allegation.get('made_or_recorded_at'))}</td></tr>
+          <tr><th>Qualification</th><td>{cell(allegation['qualification'])}</td></tr>
+          <tr><th>Limitations</th><td>{cell(allegation['limitations'])}</td></tr>
+          <tr><th>Author</th><td>{cell(allegation['created_by'])} · {cell(allegation['created_by_role'])}</td></tr>
+          <tr><th>Created</th><td>{cell(allegation['created_at'])}</td></tr>
+          <tr><th>Schema/version</th><td>{cell(allegation['schema_version'])}</td></tr>
+        </table>
+        <h3>Governed source bindings</h3><ul>{bindings}</ul>
+        <h3>Review history</h3><ul>{reviews}</ul>
+        <h3>Supersession history</h3><ul>{supersessions}</ul>
+        <h3>Withdrawal history</h3><ul>{withdrawals}</ul>
+        <h3>Record allegation review</h3>
+        <form method="post" action="/api/admin/session/governed-allegations/{int(allegation['id'])}/review">
+          <label>Disposition<select name="disposition" required><option value="accepted_as_attributed_allegation">Accepted as attributed allegation</option><option value="requires_attribution_correction">Requires attribution correction</option><option value="not_accepted_as_attributed">Not accepted as attributed</option></select></label>
+          <label>Review rationale<textarea name="rationale" required></textarea></label>
+          <label>Reviewer boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this reviews attribution and faithful representation only, not truth</label>
+          <button type="submit">Record allegation review</button>
+        </form>
+        <h3>Supersede allegation</h3>
+        <form method="post" action="/api/admin/session/governed-allegations/{int(allegation['id'])}/supersede">
+          <label>Replacement allegation ID<input name="replacement_allegation_id" required></label>
+          <label>Rationale<textarea name="rationale" required></textarea></label>
+          <button type="submit">Record supersession</button>
+        </form>
+        <h3>Withdraw allegation</h3>
+        <form method="post" action="/api/admin/session/governed-allegations/{int(allegation['id'])}/withdraw">
+          <label>Withdrawal basis<select name="withdrawal_type" required><option value="attributed_source_withdrawal">Withdrawal by or on behalf of attributed source</option><option value="administrative_attribution_correction">Administrative attribution correction</option></select></label>
+          <label>Withdrawal source bindings JSON<textarea name="withdrawal_bindings_json" required>[{{"source_type":"record_document_association","source_id":"1","binding_role":"withdrawal_source"}}]</textarea></label>
+          <label>Rationale<textarea name="rationale" required></textarea></label>
+          <button type="submit">Record withdrawal</button>
+        </form>
+        """
+    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Allegations</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:800px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED ALLEGATION</h1><p class=\"boundary\"><strong>ATTRIBUTION IS NOT CONFIRMATION.</strong> The record may establish that something was said. It does not thereby establish that what was said is true.</p>{detail}<h2>Recorded allegations</h2><table><thead><tr><th>Identity</th><th>Category</th><th>Status</th><th>Attributed source</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record allegation</h2><form method=\"post\" action=\"/api/admin/session/governed-allegations\"><label>Category<select name=\"allegation_category\" required><option value=\"reported_conduct\">Reported conduct</option><option value=\"reported_omission\">Reported omission</option><option value=\"reported_statement\">Reported statement</option><option value=\"reported_condition\">Reported condition</option><option value=\"reported_responsibility\">Reported responsibility</option></select></label><label>Allegation text<textarea name=\"allegation_text\" required></textarea></label><label>Representation mode<select name=\"representation_mode\" required><option value=\"verbatim\">Verbatim</option><option value=\"faithful_paraphrase\">Faithful paraphrase</option></select></label><label>Attributed source label<textarea name=\"attributed_source_label\" required></textarea></label><label>Attribution context<textarea name=\"attribution_context\" required></textarea></label><label>Subject or subjects<textarea name=\"subject_label\" required></textarea></label><label>Alleged period<input name=\"alleged_period\"></label><label>Made or recorded date/period<input name=\"made_or_recorded_at\"></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is preserved as an allegation attributed to the identified person or source. Its recording establishes attribution and provenance only. It does not establish fact, proof, confirmation, corroboration, intent, motive, causation, wrongdoing, legal significance, a finding, or a determination.</textarea></label><label>Limitations<textarea name=\"limitations\" required>The allegation may remain disputed or unresolved. Responses, denials, contrary material, and alternative accounts may coexist.</textarea></label><label>Attribution source bindings JSON<textarea name=\"bindings_json\" required>[{{\"source_type\":\"record_document_association\",\"source_id\":\"1\",\"binding_role\":\"attribution_source\"}}]</textarea></label><label>Representation verification <input type=\"checkbox\" name=\"representation_acknowledged\" value=\"1\" required> I confirm the stored text exactly preserves the source wording when verbatim, or faithfully represents it when paraphrased</label><label>Author boundary declaration <input type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required> I confirm this is human-recorded, source-bound, and does not establish the truth of the proposition</label><button type=\"submit\">Record allegation</button></form></main></body></html>"""
+
+
+@router.get("/admin/governed-allegations", response_class=HTMLResponse)
+def admin_governed_allegations_page(request: Request):
+    session = require_admin_session(request)
+    diagnostic = rga.read_allegation_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session))
+
+
+@router.get("/admin/governed-allegations/{allegation_id}", response_class=HTMLResponse)
+def admin_governed_allegation_detail(allegation_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
+    if diagnostic.get("status") == "allegation_not_found":
+        raise _http_error(404, "governed_allegation_not_found")
+    allegation = (diagnostic.get("allegations") or [None])[0]
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+
+
+@router.post("/api/admin/session/governed-allegations", response_class=HTMLResponse)
+def admin_governed_allegation_create(
+    request: Request,
+    allegation_category: str = Form(...),
+    allegation_text: str = Form(...),
+    representation_mode: str = Form(...),
+    attributed_source_label: str = Form(...),
+    attribution_context: str = Form(...),
+    subject_label: str = Form(...),
+    alleged_period: str | None = Form(None),
+    made_or_recorded_at: str | None = Form(None),
+    representation_acknowledged: str | None = Form(None),
+    rationale: str = Form(...),
+    qualification: str = Form(...),
+    limitations: str = Form(...),
+    bindings_json: str = Form(...),
+    boundary_acknowledged: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        allegation = rga.create_allegation(
+            conn,
+            allegation_category=allegation_category,
+            allegation_text=allegation_text,
+            representation_mode=representation_mode,
+            representation_contract={
+                "human_verified": representation_acknowledged == "1",
+                "exact_source_wording": representation_mode == "verbatim" and representation_acknowledged == "1",
+                "faithful_representation": representation_mode == "faithful_paraphrase" and representation_acknowledged == "1",
+            },
+            attributed_source_label=attributed_source_label,
+            attribution_context=attribution_context,
+            subject_label=subject_label,
+            alleged_period=alleged_period,
+            made_or_recorded_at=made_or_recorded_at,
+            rationale=rationale,
+            qualification=qualification,
+            limitations=limitations,
+            qualification_contract={"epistemic_label": "allegation", "attribution_present": True, "source_basis_present": True, "not_evidence": True, "not_observation": True, "not_inference": True, "not_determination": True, "not_confirmation": True, "alternatives_possible": True},
+            bindings=_json_form(bindings_json, "governed_allegation_bindings_invalid"),
+            actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            author_declaration={"acknowledged": boundary_acknowledged == "1"},
+            idempotency_key=idempotency_key,
+            document_root=intake_root(),
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rga.read_allegation_diagnostic(allegation["id"], db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation), status_code=201)
+
+
+@router.post("/api/admin/session/governed-allegations/{allegation_id}/review", response_class=HTMLResponse)
+def admin_governed_allegation_review(
+    allegation_id: int,
+    request: Request,
+    disposition: str = Form(...),
+    rationale: str = Form(...),
+    boundary_acknowledged: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        allegation = rga.review_allegation(
+            conn, allegation_id, disposition=disposition, rationale=rationale,
+            boundary_declaration={"acknowledged": boundary_acknowledged == "1"},
+            actor=_admin_session_actor(session), actor_role=_admin_session_role(session),
+            idempotency_key=idempotency_key,
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+
+
+@router.post("/api/admin/session/governed-allegations/{allegation_id}/supersede", response_class=HTMLResponse)
+def admin_governed_allegation_supersede(
+    allegation_id: int,
+    request: Request,
+    replacement_allegation_id: int = Form(...),
+    rationale: str = Form(...),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        allegation = rga.supersede_allegation(
+            conn, allegation_id, replacement_allegation_id=replacement_allegation_id,
+            rationale=rationale, actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session), idempotency_key=idempotency_key,
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+
+
+@router.post("/api/admin/session/governed-allegations/{allegation_id}/withdraw", response_class=HTMLResponse)
+def admin_governed_allegation_withdraw(
+    allegation_id: int,
+    request: Request,
+    withdrawal_type: str = Form(...),
+    withdrawal_bindings_json: str = Form(...),
+    rationale: str = Form(...),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        allegation = rga.withdraw_allegation(
+            conn, allegation_id, withdrawal_type=withdrawal_type, rationale=rationale,
+            withdrawal_bindings=_json_form(withdrawal_bindings_json, "governed_allegation_withdrawal_bindings_invalid"),
+            actor=_admin_session_actor(session), actor_role=_admin_session_role(session),
+            idempotency_key=idempotency_key, document_root=intake_root(),
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
