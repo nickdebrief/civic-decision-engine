@@ -83,6 +83,9 @@ def _canonical_bindings(bindings: Any, *, creation: bool = True) -> list[dict[st
     for item in bindings:
         if not isinstance(item, Mapping):
             raise ValueError("governed_allegation_binding_invalid")
+        allowed_keys = {"source_type", "source_id", "binding_role", "source_version", "source_timestamp"}
+        if set(item) - allowed_keys:
+            raise ValueError("governed_allegation_binding_unknown_field")
         source_type = _required(item.get("source_type"), "governed_allegation_source_type_required")
         if source_type not in SOURCE_TYPES:
             raise ValueError("governed_allegation_source_type_invalid")
@@ -310,6 +313,121 @@ def _source_binding(
         "source_version": str(version).strip() if version not in (None, "") else None,
         "source_timestamp": str(timestamp).strip() if timestamp not in (None, "") else None,
     }
+
+
+def _source_candidate(
+    source_type: str,
+    source_id: Any,
+    label: Any,
+    status: Any,
+    description: Any = "",
+) -> dict[str, str]:
+    return {
+        "source_type": str(source_type),
+        "source_id": str(source_id),
+        "label": str(label or source_id),
+        "status": str(status or "Governed"),
+        "description": str(description or ""),
+    }
+
+
+def read_source_candidates(
+    db_path: str | Path,
+    *,
+    document_root: Path | None = None,
+    query: str | None = None,
+) -> list[dict[str, str]]:
+    """Return eligible source metadata without initializing Stage 64 storage."""
+    candidates: list[dict[str, str]] = []
+    try:
+        path = Path(db_path).resolve()
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+    except (OSError, sqlite3.Error):
+        conn = None
+
+    try:
+        if conn is not None:
+            tables = {
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            if "records" in tables:
+                columns = {
+                    str(row[1])
+                    for row in conn.execute("PRAGMA table_info(records)").fetchall()
+                }
+                latest = " AND is_latest = 1" if "is_latest" in columns else ""
+                selected = [
+                    column for column in ("reference", "title", "record_title", "finding", "version")
+                    if column in columns
+                ]
+                if "reference" in selected:
+                    for row in conn.execute(
+                        f"SELECT {', '.join(selected)} FROM records WHERE reference IS NOT NULL{latest} ORDER BY reference"
+                    ).fetchall():
+                        value = dict(row)
+                        reference = str(value.get("reference") or "")
+                        title = value.get("title") or value.get("record_title") or value.get("finding") or reference
+                        candidates.append(_source_candidate(
+                            "canonical_record", reference, reference, f"Version {value.get('version')}" if value.get("version") else "Canonical record", title
+                        ))
+            if "record_document_associations" in tables:
+                for row in conn.execute(
+                    """SELECT id, public_reference, record_reference, document_id,
+                              relationship_type, is_active
+                       FROM record_document_associations
+                       WHERE COALESCE(is_active, 1) = 1
+                       ORDER BY id"""
+                ).fetchall():
+                    value = dict(row)
+                    ident = str(value["id"])
+                    label = value.get("public_reference") or f"Association {ident}"
+                    description = (
+                        f"Record {value.get('record_reference') or '—'} · "
+                        f"Document {value.get('document_id') or '—'} · "
+                        f"{value.get('relationship_type') or 'governed relationship'}"
+                    )
+                    candidates.append(_source_candidate(
+                        "record_document_association", ident, label, "Active association", description
+                    ))
+            if "record_pattern_observations" in tables:
+                for row in conn.execute(
+                    "SELECT * FROM record_pattern_observations WHERE status = 'accepted' ORDER BY id"
+                ).fetchall():
+                    value = dict(row)
+                    ident = str(value.get("id"))
+                    label = value.get("title") or value.get("observation_type") or f"Observation {ident}"
+                    candidates.append(_source_candidate(
+                        "accepted_pattern_observation", ident, f"Observation {ident} — {label}", "Accepted observation", value.get("description") or "Stage 62 governed observation"
+                    ))
+    finally:
+        if conn is not None:
+            conn.close()
+
+    try:
+        from api.document_intake import list_published_documents, intake_root
+
+        for document in list_published_documents(root=document_root or intake_root()):
+            ident = str(document.get("document_identifier") or document.get("intake_id") or "").strip()
+            if not ident:
+                continue
+            candidates.append(_source_candidate(
+                "published_document", ident, f"{ident} — {document.get('title') or 'Untitled document'}", "Published document", document.get("description") or document.get("institution_source") or ""
+            ))
+    except (OSError, ValueError):
+        pass
+
+    tokens = [token.casefold() for token in str(query or "").split() if token.strip()]
+    if tokens:
+        candidates = [
+            item for item in candidates
+            if all(token in " ".join(item.values()).casefold() for token in tokens)
+        ]
+    candidates.sort(key=lambda item: (item["source_type"], item["source_id"], item["label"]))
+    return candidates
 
 
 def _key(prefix: str, payload: Mapping[str, Any]) -> str:

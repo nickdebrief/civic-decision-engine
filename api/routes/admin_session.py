@@ -53037,11 +53037,50 @@ def soft_delete_attachment_route(reference: str, attachment_id: int, request: Re
     )
 
 
+def _render_governed_allegation_source_selector(
+    candidates: list[dict[str, str]], *, hidden_name: str, prefix: str, withdrawal: bool = False
+) -> str:
+    roles = [("withdrawal_source", "Withdrawal source")] if withdrawal else [
+        ("attribution_source", "Attribution source"),
+        ("contextual_source", "Contextual source"),
+        ("response_source", "Response source"),
+        ("contrary_source", "Contrary source"),
+    ]
+    role_options = "".join(f'<option value="{escape(value)}">{escape(label)}</option>' for value, label in roles)
+    options = '<option value="" selected>Choose an eligible governed source</option>' + "".join(
+        f'<option value="{escape(item["source_type"])}::{escape(item["source_id"])}" data-source-type="{escape(item["source_type"])}" data-source-id="{escape(item["source_id"])}" data-label="{escape(item["label"])}" data-status="{escape(item["status"])}" data-description="{escape(item["description"])}">{escape(item["label"])} — {escape(item["status"])} ({escape(item["source_type"])})</option>'
+        for item in candidates
+    )
+    role_help = (
+        "Withdrawal source — identifies the governed source for this withdrawal event."
+        if withdrawal else
+        "Attribution source — identifies where the allegation was made or preserved. Contextual source — provides context without confirming the allegation. Response source — preserves a response or denial without treating it as disproof. Contrary source — preserves contrary material without automatically resolving the allegation."
+    )
+    heading = "Select withdrawal source" if withdrawal else "Select governed sources"
+    instruction = "Select the governed source for this withdrawal event." if withdrawal else "Select the governed source in which the allegation was made or preserved. Source selection establishes attribution and provenance only. It does not confirm the truth of the allegation."
+    return f'''<section class="governed-source-selector" id="{prefix}-selector" aria-labelledby="{prefix}-heading">
+      <h3 id="{prefix}-heading">{heading}</h3><p class="field-help">{instruction}</p>
+      <label for="{prefix}-type">Source type<select id="{prefix}-type"><option value="">All eligible source types</option><option value="published_document">Published Document</option><option value="canonical_record">Canonical Record</option><option value="record_document_association">Record–Document Association</option><option value="accepted_pattern_observation">Accepted Stage 62 Observation</option></select></label>
+      <label for="{prefix}-search">Search eligible sources<input id="{prefix}-search" type="search" autocomplete="off" placeholder="Identifier, title, label, or status"></label>
+      <label for="{prefix}-candidate">Eligible governed source<select id="{prefix}-candidate" size="6">{options}</select></label>
+      <p id="{prefix}-context" class="field-help" aria-live="polite">Choose a source to inspect its governed metadata.</p>
+      <label for="{prefix}-role">Binding role<select id="{prefix}-role" required>{role_options}</select></label><p class="field-help">{escape(role_help)}</p>
+      <button type="button" id="{prefix}-add">Add selected source</button><h4>Selected sources</h4><ul id="{prefix}-selected"><li class="field-help" data-empty>No sources selected yet.</li></ul>
+      <input type="hidden" name="{hidden_name}" id="{prefix}-payload" value="">
+    </section><script>
+    (() => {{ const type=document.getElementById('{prefix}-type'), search=document.getElementById('{prefix}-search'), candidate=document.getElementById('{prefix}-candidate'), role=document.getElementById('{prefix}-role'), add=document.getElementById('{prefix}-add'), list=document.getElementById('{prefix}-selected'), payload=document.getElementById('{prefix}-payload'), context=document.getElementById('{prefix}-context'); if (!candidate) return; const options=Array.from(candidate.options).slice(1), selected=[];
+      const render=()=>{{ const term=search.value.trim().toLocaleLowerCase(); const kind=type.value; let count=0; options.forEach(option=>{{ const text=[option.dataset.sourceType,option.dataset.sourceId,option.dataset.label,option.dataset.status,option.dataset.description].join(' ').toLocaleLowerCase(); const show=(!kind||option.dataset.sourceType===kind)&&(!term||text.includes(term)); option.hidden=!show; if(show) count++; }}); const option=candidate.selectedOptions[0]; context.textContent=option&&option.value ? `${{option.dataset.sourceType}} · ${{option.dataset.sourceId}} · ${{option.dataset.status}} — ${{option.dataset.description||option.dataset.label}}` : `${{count}} eligible governed source(s) available.`; }};
+      const sync=()=>{{ payload.value=JSON.stringify(selected); list.innerHTML=''; if(!selected.length){{list.innerHTML='<li class="field-help" data-empty>No sources selected yet.</li>';return;}} selected.forEach((item,index)=>{{const li=document.createElement('li'); li.textContent=`${{item.source_type}} · ${{item.source_id}} · ${{item.binding_role}} — ${{item.label}} (${{item.status}})`; const remove=document.createElement('button'); remove.type='button'; remove.textContent='Remove'; remove.setAttribute('aria-label',`Remove ${{item.source_type}} ${{item.source_id}} as ${{item.binding_role}}`); remove.addEventListener('click',()=>{{selected.splice(index,1);sync();}}); li.appendChild(document.createTextNode(' ')); li.appendChild(remove); list.appendChild(li);}});}};
+      add.addEventListener('click',()=>{{const option=candidate.selectedOptions[0]; if(!option||!option.value)return; const item={{source_type:option.dataset.sourceType,source_id:option.dataset.sourceId,binding_role:role.value,label:option.dataset.label,status:option.dataset.status}}; if(selected.some(existing=>existing.source_type===item.source_type&&existing.source_id===item.source_id&&existing.binding_role===item.binding_role))return; selected.push(item);sync();}}); [type,search,candidate].forEach(element=>element.addEventListener('input',render)); render(); sync(); }})();
+    </script>'''
+
+
 def _render_governed_allegation_page(
     diagnostic: dict[str, Any],
     *,
     admin_session: dict[str, Any],
     allegation: dict[str, Any] | None = None,
+    source_candidates: list[dict[str, str]] | None = None,
 ) -> str:
     def cell(value: Any) -> str:
         return escape(str(value if value not in (None, "") else "—"))
@@ -53053,6 +53092,13 @@ def _render_governed_allegation_page(
         f"<td>{cell(item['created_at'])}</td></tr>"
         for item in diagnostic.get("allegations", [])
     ) or '<tr><td colspan="6">No governed allegations recorded.</td></tr>'
+    source_candidates = source_candidates or []
+    creation_selector = _render_governed_allegation_source_selector(
+        source_candidates, hidden_name="bindings_json", prefix="allegation-source"
+    )
+    withdrawal_selector = _render_governed_allegation_source_selector(
+        source_candidates, hidden_name="withdrawal_bindings_json", prefix="withdrawal-source", withdrawal=True
+    )
     detail = ""
     if allegation:
         bindings = "".join(
@@ -53113,19 +53159,20 @@ def _render_governed_allegation_page(
         <h3>Withdraw allegation</h3>
         <form method="post" action="/api/admin/session/governed-allegations/{int(allegation['id'])}/withdraw">
           <label>Withdrawal basis<select name="withdrawal_type" required><option value="attributed_source_withdrawal">Withdrawal by or on behalf of attributed source</option><option value="administrative_attribution_correction">Administrative attribution correction</option></select></label>
-          <label>Withdrawal source bindings JSON<textarea name="withdrawal_bindings_json" required>[{{"source_type":"record_document_association","source_id":"1","binding_role":"withdrawal_source"}}]</textarea></label>
+          {withdrawal_selector}
           <label>Rationale<textarea name="rationale" required></textarea></label>
           <button type="submit">Record withdrawal</button>
         </form>
         """
-    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Allegations</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:800px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED ALLEGATION</h1><p class=\"boundary\"><strong>ATTRIBUTION IS NOT CONFIRMATION.</strong> The record may establish that something was said. It does not thereby establish that what was said is true.</p>{detail}<h2>Recorded allegations</h2><table><thead><tr><th>Identity</th><th>Category</th><th>Status</th><th>Attributed source</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record allegation</h2><form method=\"post\" action=\"/api/admin/session/governed-allegations\"><label>Category<select name=\"allegation_category\" required><option value=\"reported_conduct\">Reported conduct</option><option value=\"reported_omission\">Reported omission</option><option value=\"reported_statement\">Reported statement</option><option value=\"reported_condition\">Reported condition</option><option value=\"reported_responsibility\">Reported responsibility</option></select></label><label>Allegation text<textarea name=\"allegation_text\" required></textarea></label><label>Representation mode<select name=\"representation_mode\" required><option value=\"verbatim\">Verbatim</option><option value=\"faithful_paraphrase\">Faithful paraphrase</option></select></label><label>Attributed source label<textarea name=\"attributed_source_label\" required></textarea></label><label>Attribution context<textarea name=\"attribution_context\" required></textarea></label><label>Subject or subjects<textarea name=\"subject_label\" required></textarea></label><label>Alleged period<input name=\"alleged_period\"></label><label>Made or recorded date/period<input name=\"made_or_recorded_at\"></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is preserved as an allegation attributed to the identified person or source. Its recording establishes attribution and provenance only. It does not establish fact, proof, confirmation, corroboration, intent, motive, causation, wrongdoing, legal significance, a finding, or a determination.</textarea></label><label>Limitations<textarea name=\"limitations\" required>The allegation may remain disputed or unresolved. Responses, denials, contrary material, and alternative accounts may coexist.</textarea></label><label>Attribution source bindings JSON<textarea name=\"bindings_json\" required>[{{\"source_type\":\"record_document_association\",\"source_id\":\"1\",\"binding_role\":\"attribution_source\"}}]</textarea></label><label>Representation verification <input type=\"checkbox\" name=\"representation_acknowledged\" value=\"1\" required> I confirm the stored text exactly preserves the source wording when verbatim, or faithfully represents it when paraphrased</label><label>Author boundary declaration <input type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required> I confirm this is human-recorded, source-bound, and does not establish the truth of the proposition</label><button type=\"submit\">Record allegation</button></form></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Allegations</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:800px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED ALLEGATION</h1><p class=\"boundary\"><strong>ATTRIBUTION IS NOT CONFIRMATION.</strong> The record may establish that something was said. It does not thereby establish that what was said is true.</p>{detail}<h2>Recorded allegations</h2><table><thead><tr><th>Identity</th><th>Category</th><th>Status</th><th>Attributed source</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record allegation</h2><form method=\"post\" action=\"/api/admin/session/governed-allegations\"><label>Category<select name=\"allegation_category\" required><option value=\"reported_conduct\">Reported conduct</option><option value=\"reported_omission\">Reported omission</option><option value=\"reported_statement\">Reported statement</option><option value=\"reported_condition\">Reported condition</option><option value=\"reported_responsibility\">Reported responsibility</option></select></label><label>Allegation text<textarea name=\"allegation_text\" required></textarea></label><label>Representation mode<select name=\"representation_mode\" required><option value=\"verbatim\">Verbatim</option><option value=\"faithful_paraphrase\">Faithful paraphrase</option></select></label><label>Attributed source label<textarea name=\"attributed_source_label\" required></textarea></label><label>Attribution context<textarea name=\"attribution_context\" required></textarea></label><label>Subject or subjects<textarea name=\"subject_label\" required></textarea></label><label>Alleged period<input name=\"alleged_period\"></label><label>Made or recorded date/period<input name=\"made_or_recorded_at\"></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is preserved as an allegation attributed to the identified person or source. Its recording establishes attribution and provenance only. It does not establish fact, proof, confirmation, corroboration, intent, motive, causation, wrongdoing, legal significance, a finding, or a determination.</textarea></label><label>Limitations<textarea name=\"limitations\" required>The allegation may remain disputed or unresolved. Responses, denials, contrary material, and alternative accounts may coexist.</textarea></label>{creation_selector}<label>Representation verification <input type=\"checkbox\" name=\"representation_acknowledged\" value=\"1\" required> I confirm the stored text exactly preserves the source wording when verbatim, or faithfully represents it when paraphrased</label><label>Author boundary declaration <input type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required> I confirm this is human-recorded, source-bound, and does not establish the truth of the proposition</label><button type=\"submit\">Record allegation</button></form></main></body></html>"""
 
 
 @router.get("/admin/governed-allegations", response_class=HTMLResponse)
 def admin_governed_allegations_page(request: Request):
     session = require_admin_session(request)
     diagnostic = rga.read_allegation_diagnostic(db_path=DB_PATH)
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session))
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, source_candidates=candidates))
 
 
 @router.get("/admin/governed-allegations/{allegation_id}", response_class=HTMLResponse)
@@ -53135,7 +53182,8 @@ def admin_governed_allegation_detail(allegation_id: int, request: Request):
     if diagnostic.get("status") == "allegation_not_found":
         raise _http_error(404, "governed_allegation_not_found")
     allegation = (diagnostic.get("allegations") or [None])[0]
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates))
 
 
 @router.post("/api/admin/session/governed-allegations", response_class=HTMLResponse)
@@ -53191,7 +53239,8 @@ def admin_governed_allegation_create(
     finally:
         conn.close()
     diagnostic = rga.read_allegation_diagnostic(allegation["id"], db_path=DB_PATH)
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation), status_code=201)
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates), status_code=201)
 
 
 @router.post("/api/admin/session/governed-allegations/{allegation_id}/review", response_class=HTMLResponse)
@@ -53217,7 +53266,8 @@ def admin_governed_allegation_review(
     finally:
         conn.close()
     diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates))
 
 
 @router.post("/api/admin/session/governed-allegations/{allegation_id}/supersede", response_class=HTMLResponse)
@@ -53241,7 +53291,8 @@ def admin_governed_allegation_supersede(
     finally:
         conn.close()
     diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates))
 
 
 @router.post("/api/admin/session/governed-allegations/{allegation_id}/withdraw", response_class=HTMLResponse)
@@ -53267,4 +53318,5 @@ def admin_governed_allegation_withdraw(
     finally:
         conn.close()
     diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
-    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation))
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates))
