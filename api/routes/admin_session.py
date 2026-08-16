@@ -78,6 +78,7 @@ from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
 from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
+from api import record_governed_responses as rgr
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45019,6 +45020,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/pattern-observations">Pattern Observations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-inferences">Governed Inferences</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-allegations">Governed Allegations</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-responses">Governed Responses</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -53320,3 +53322,126 @@ def admin_governed_allegation_withdraw(
     diagnostic = rga.read_allegation_diagnostic(allegation_id, db_path=DB_PATH)
     candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
     return HTMLResponse(content=_render_governed_allegation_page(diagnostic, admin_session=session, allegation=allegation, source_candidates=candidates))
+
+
+def _render_governed_response_source_selector(candidates: list[dict[str, str]], *, withdrawal: bool = False) -> str:
+    if withdrawal:
+        return _render_governed_response_withdrawal_selector(candidates)
+    options = ''.join(
+        f'<option value="{escape(item["source_type"])}::{escape(item["source_id"])}" '
+        f'data-source-type="{escape(item["source_type"])}" data-source-id="{escape(item["source_id"])}" '
+        f'data-label="{escape(item["label"])}" data-status="{escape(item["status"])}">'
+        f'{escape(item["label"])} — {escape(item["status"])} ({escape(item["source_type"])})</option>'
+        for item in candidates
+    )
+    return f'''<section class="governed-source-selector" aria-labelledby="response-source-heading">
+      <h3 id="response-source-heading">Select governed response sources</h3>
+      <p class="field-help">Select the governed source in which the response was made or preserved. This establishes attribution and provenance only; it does not resolve the allegation.</p>
+      <label for="response-source-candidate">Eligible governed source<select id="response-source-candidate" size="6"><option value="" selected>Choose a source</option>{options}</select></label>
+      <label for="response-source-role">Binding role<select id="response-source-role" required>
+        <option value="response_source">Response source</option><option value="notice_source">Notice source</option>
+        <option value="contextual_source">Contextual source</option><option value="contrary_source">Contrary source</option>
+      </select></label>
+      <p class="field-help">Response source identifies where the response was made. Notice source records notice or opportunity without proving receipt or adequacy. Contextual and contrary sources do not resolve the response.</p>
+      <button type="button" id="response-source-add">Add selected source</button>
+      <ul id="response-source-selected"><li data-empty>No sources selected yet.</li></ul>
+      <input type="hidden" name="response_bindings_json" id="response-source-payload" value="">
+    </section><script>
+    (() => {{ const candidate=document.getElementById('response-source-candidate'), role=document.getElementById('response-source-role'), add=document.getElementById('response-source-add'), list=document.getElementById('response-source-selected'), payload=document.getElementById('response-source-payload'), selected=[]; if(!candidate)return;
+      const sync=()=>{{payload.value=JSON.stringify(selected);list.innerHTML='';if(!selected.length){{list.innerHTML='<li data-empty>No sources selected yet.</li>';return;}} selected.forEach((item,index)=>{{const li=document.createElement('li');li.textContent=`${{item.source_type}} · ${{item.source_id}} · ${{item.binding_role}} — ${{item.label}} (${{item.status}})`;const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.setAttribute('aria-label',`Remove response source ${{item.source_id}} as ${{item.binding_role}}`);remove.onclick=()=>{{selected.splice(index,1);sync();}};li.appendChild(document.createTextNode(' '));li.appendChild(remove);list.appendChild(li);}});}};
+      add.onclick=()=>{{const option=candidate.selectedOptions[0];if(!option||!option.value)return;const item={{source_type:option.dataset.sourceType,source_id:option.dataset.sourceId,binding_role:role.value,label:option.dataset.label,status:option.dataset.status}};if(selected.some(x=>x.source_type===item.source_type&&x.source_id===item.source_id&&x.binding_role===item.binding_role))return;selected.push(item);sync();}};sync(); }})();
+    </script>'''
+
+
+def _render_governed_response_withdrawal_selector(candidates: list[dict[str, str]]) -> str:
+    options = ''.join(
+        f'<option value="{escape(item["source_type"])}::{escape(item["source_id"])}" data-source-type="{escape(item["source_type"])}" data-source-id="{escape(item["source_id"])}" data-label="{escape(item["label"])}" data-status="{escape(item["status"])}">{escape(item["label"])} — {escape(item["status"])}</option>'
+        for item in candidates
+    )
+    return f'''<section class="governed-source-selector" aria-labelledby="response-withdrawal-source-heading"><h3 id="response-withdrawal-source-heading">Select withdrawal source</h3><p class="field-help">Withdrawal source identifies the governed source recording the withdrawal or attribution correction. It does not prove the response false or resolve the allegation.</p><label for="response-withdrawal-candidate">Eligible withdrawal source<select id="response-withdrawal-candidate" size="5"><option value="">Choose a source</option>{options}</select></label><button type="button" id="response-withdrawal-add">Add withdrawal source</button><ul id="response-withdrawal-selected"><li>No withdrawal source selected.</li></ul><input type="hidden" name="withdrawal_bindings_json" id="response-withdrawal-payload" value=""></section><script>
+    (() => {{const c=document.getElementById('response-withdrawal-candidate'),b=document.getElementById('response-withdrawal-add'),l=document.getElementById('response-withdrawal-selected'),p=document.getElementById('response-withdrawal-payload'),s=[];if(!c)return; b.onclick=()=>{{const o=c.selectedOptions[0];if(!o||!o.value||s.length)return;s.push({{source_type:o.dataset.sourceType,source_id:o.dataset.sourceId,binding_role:'withdrawal_source',label:o.dataset.label,status:o.dataset.status}});p.value=JSON.stringify(s);l.innerHTML='';const li=document.createElement('li');li.textContent=`${{s[0].source_type}} · ${{s[0].source_id}} · withdrawal_source — ${{s[0].label}} (${{s[0].status}})`;l.appendChild(li);}};}})();
+    </script>'''
+
+
+def _render_governed_response_page(diagnostic: dict[str, Any], *, admin_session: dict[str, Any], candidates: list[dict[str, str]], allegations_list: list[dict[str, Any]], response: dict[str, Any] | None = None) -> str:
+    def cell(value: Any) -> str:
+        return escape(str(value if value not in (None, "") else "—"))
+    rows = ''.join(
+        f'<tr><td><a href="/admin/governed-responses/{int(item["id"])}">{cell(item["id"])}</a></td><td>{cell(item["response_category"])}</td><td>{cell(item["status"])}</td><td>{cell(item["allegation_id"])}</td><td>{cell(item["attributed_respondent_label"])}</td><td>{cell(item["created_at"])}</td></tr>'
+        for item in diagnostic.get("responses", [])
+    ) or '<tr><td colspan="6">No governed responses recorded.</td></tr>'
+    target_options = '<option value="" selected>Choose an allegation</option>' + ''.join(
+        f'<option value="{int(item["id"])}">Allegation {int(item["id"])} — {cell(item.get("allegation_category"))} · {cell(item.get("status"))} · {cell(item.get("attributed_source_label"))}</option>'
+        for item in allegations_list
+    )
+    detail = ''
+    if response:
+        bindings = ''.join(f'<li>{cell(x["binding_role"])} · {cell(x["source_type"])} · {cell(x["source_id"])}</li>' for x in response.get("bindings", [])) or '<li>No bindings recorded.</li>'
+        reviews = ''.join(f'<li>{cell(x["disposition"])} · {cell(x["reviewed_at"])} · {cell(x["reviewed_by"])} · self-review={cell(x["is_self_review"])}: {cell(x["rationale"])}</li>' for x in response.get("reviews", [])) or '<li>No review events recorded.</li>'
+        detail = f'''<section class="boundary"><strong>RESPONSE IS NOT RESOLUTION.</strong> This proposition is preserved as a response attributed to an identified person or source. It is not itself proof, disproof, admission, exoneration, resolution, finding, or legal determination.</section><table><tr><th>Response identity</th><td>{cell(response["id"])}</td></tr><tr><th>Target allegation</th><td>{cell(response["allegation_id"])} · current allegation state {cell(response.get("allegation", {}).get("status"))}</td></tr><tr><th>Category</th><td>{cell(response["response_category"])}</td></tr><tr><th>Status</th><td>{cell(response["status"])}</td></tr><tr><th>Attributed respondent</th><td>{cell(response["attributed_respondent_label"])}</td></tr><tr><th>Capacity</th><td>{cell(response["respondent_capacity"])}</td></tr><tr><th>Representation</th><td>{cell(response["representation_mode"])}</td></tr><tr><th>Response</th><td>{cell(response["response_text"])}</td></tr><tr><th>Notice/opportunity</th><td>{cell(response.get("notice_details"))}</td></tr><tr><th>Qualification</th><td>{cell(response["qualification"])}</td></tr><tr><th>Limitations</th><td>{cell(response["limitations"])}</td></tr></table><h3>Source bindings</h3><ul>{bindings}</ul><h3>Review history</h3><ul>{reviews}</ul><h3>Review response</h3><form method="post" action="/api/admin/session/governed-responses/{int(response["id"])}/review"><label>Disposition<select name="disposition" required><option value="accepted_as_attributed_response">Accepted as attributed response</option><option value="requires_attribution_correction">Requires attribution correction</option><option value="not_accepted_as_attributed">Not accepted as attributed</option></select></label><label>Rationale<textarea name="rationale" required></textarea></label><label>Reviewer boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this reviews attribution and faithful representation only, not truth or resolution</label><button type="submit">Record response review</button></form><h3>Supersede response</h3><form method="post" action="/api/admin/session/governed-responses/{int(response["id"])}/supersede"><label>Replacement response ID<input name="replacement_response_id" required></label><label>Rationale<textarea name="rationale" required></textarea></label><button type="submit">Record response supersession</button></form><h3>Withdraw response</h3><form method="post" action="/api/admin/session/governed-responses/{int(response["id"])}/withdraw"><label>Withdrawal type<select name="withdrawal_type" required><option value="attributed_respondent_withdrawal">Attributed respondent withdrawal</option><option value="administrative_attribution_correction">Administrative attribution correction</option></select></label>{_render_governed_response_source_selector(candidates, withdrawal=True)}<label>Rationale<textarea name="rationale" required></textarea></label><button type="submit">Record response withdrawal</button></form>'''
+    selector = _render_governed_response_source_selector(candidates) + '<label>Express-declination source declaration <input type="checkbox" name="express_declination_source_acknowledged" value="1"> I confirm that, when this category is selected, the response source expressly records the declination</label>'
+    return f'''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Governed Responses</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1160px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:230px;background:#faf9f5}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:860px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}.field-help{{font:.9rem system-ui,sans-serif;text-transform:none;color:#555;line-height:1.45}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href="/admin">Back to administration</a></p><h1>GOVERNED RESPONSE</h1><p class="boundary"><strong>RESPONSE IS NOT RESOLUTION.</strong> A response may dispute, qualify, or contextualise an allegation. Its preservation does not resolve the matter.</p>{detail}<h2>Recorded responses</h2><table><thead><tr><th>Identity</th><th>Category</th><th>Status</th><th>Target allegation</th><th>Respondent</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record response</h2><form method="post" action="/api/admin/session/governed-responses"><label for="response-target">Target Stage 64 allegation<select id="response-target" name="allegation_id" required>{target_options}</select></label><label>Category<select name="response_category" required><option value="substantive_response">Substantive response</option><option value="partial_response">Partial response</option><option value="contextual_response">Contextual response</option><option value="procedural_objection">Procedural objection</option><option value="request_for_particulars">Request for particulars</option><option value="correction_of_attribution">Correction of attribution</option><option value="express_declination">Express declination</option></select></label><label>Response text<textarea name="response_text" required></textarea></label><label>Representation mode<select name="representation_mode" required><option value="verbatim">Verbatim</option><option value="faithful_paraphrase">Faithful paraphrase</option></select></label><label>Attributed respondent label<textarea name="attributed_respondent_label" required></textarea></label><label>Attribution context<textarea name="attribution_context" required></textarea></label><label>Subject of allegation<textarea name="subject_label" required></textarea></label><label>Respondent capacity<textarea name="respondent_capacity" required></textarea></label><label>Response date or period<input name="response_period"></label><label>Recorded date or period<input name="recorded_at"></label><label>Notice or opportunity details<textarea name="notice_details"></textarea></label><label>Rationale<textarea name="rationale" required></textarea></label><label>Qualification<textarea name="qualification" required>This proposition is preserved as a response attributed to the identified person or source. Its recording establishes attribution, provenance, and participation only. It does not establish fact, proof, disproof, confirmation, admission, exoneration, credibility, legal significance, a finding, a resolution, or a determination.</textarea></label><label>Limitations<textarea name="limitations" required>The response may dispute, qualify, contextualise, or address the allegation without resolving it. The allegation, response, contrary material, and alternative accounts may coexist.</textarea></label>{selector}<label>Representation declaration <input type="checkbox" name="representation_acknowledged" value="1" required> I confirm the text exactly preserves source wording when verbatim, or faithfully represents it when paraphrased</label><label>Recorder boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this is human-recorded, source-bound, and does not establish truth, falsity, or resolution</label><button type="submit">Record response</button></form></main></body></html>'''
+
+
+def _response_page_data(response_id: int | None = None):
+    diagnostic = rgr.read_response_diagnostic(response_id, db_path=DB_PATH)
+    targets = rga.read_allegation_diagnostic(db_path=DB_PATH).get("allegations", [])
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root())
+    response = (diagnostic.get("responses") or [None])[0] if response_id is not None else None
+    return diagnostic, targets, candidates, response
+
+
+@router.get("/admin/governed-responses", response_class=HTMLResponse)
+def admin_governed_responses_page(request: Request):
+    session = require_admin_session(request)
+    diagnostic, targets, candidates, _ = _response_page_data()
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets))
+
+
+@router.get("/admin/governed-responses/{response_id}", response_class=HTMLResponse)
+def admin_governed_response_detail(response_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic, targets, candidates, response = _response_page_data(response_id)
+    if diagnostic.get("status") == "response_not_found": raise _http_error(404, "governed_response_not_found")
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response))
+
+
+@router.post("/api/admin/session/governed-responses", response_class=HTMLResponse)
+def admin_governed_response_create(request: Request, allegation_id: int = Form(...), response_category: str = Form(...), response_text: str = Form(...), representation_mode: str = Form(...), attributed_respondent_label: str = Form(...), attribution_context: str = Form(...), subject_label: str = Form(...), respondent_capacity: str = Form(...), response_period: str | None = Form(None), recorded_at: str | None = Form(None), notice_details: str | None = Form(None), rationale: str = Form(...), qualification: str = Form(...), limitations: str = Form(...), response_bindings_json: str = Form(...), representation_acknowledged: str | None = Form(None), boundary_acknowledged: str | None = Form(None), express_declination_source_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        response = rgr.create_response(conn, allegation_id=allegation_id, response_category=response_category, response_text=response_text, representation_mode=representation_mode, representation_contract={"human_verified": representation_acknowledged == "1", "exact_source_wording": representation_mode == "verbatim" and representation_acknowledged == "1", "faithful_representation": representation_mode == "faithful_paraphrase" and representation_acknowledged == "1", "express_declination_source": express_declination_source_acknowledged == "1"}, attributed_respondent_label=attributed_respondent_label, attribution_context=attribution_context, subject_label=subject_label, respondent_capacity=respondent_capacity, response_period=response_period, recorded_at=recorded_at, notice_details=notice_details, rationale=rationale, qualification=qualification, limitations=limitations, qualification_contract={"epistemic_label":"response","attribution_present":True,"source_basis_present":True,"not_evidence":True,"not_observation":True,"not_inference":True,"not_determination":True,"not_confirmation":True,"not_resolution":True,"not_admission":True,"alternatives_possible":True}, bindings=_json_form(response_bindings_json, "governed_response_bindings_invalid"), recorder_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, targets, candidates, response = _response_page_data(response["id"])
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response), status_code=201)
+
+
+@router.post("/api/admin/session/governed-responses/{response_id}/review", response_class=HTMLResponse)
+def admin_governed_response_review(response_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: response = rgr.review_response(conn, response_id, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, targets, candidates, response = _response_page_data(response_id)
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response))
+
+
+@router.post("/api/admin/session/governed-responses/{response_id}/supersede", response_class=HTMLResponse)
+def admin_governed_response_supersede(response_id: int, request: Request, replacement_response_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: response = rgr.supersede_response(conn, response_id, replacement_response_id=replacement_response_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, targets, candidates, response = _response_page_data(response_id)
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response))
+
+
+@router.post("/api/admin/session/governed-responses/{response_id}/withdraw", response_class=HTMLResponse)
+def admin_governed_response_withdraw(response_id: int, request: Request, withdrawal_type: str = Form(...), withdrawal_bindings_json: str = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: response = rgr.withdraw_response(conn, response_id, withdrawal_type=withdrawal_type, rationale=rationale, withdrawal_bindings=_json_form(withdrawal_bindings_json, "governed_response_withdrawal_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, targets, candidates, response = _response_page_data(response_id)
+    return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response))
