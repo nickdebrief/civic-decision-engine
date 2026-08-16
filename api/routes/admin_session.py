@@ -76,6 +76,7 @@ from api import record_document_associations as rda
 from api import record_document_association_decisions as rdd
 from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
+from api import record_governed_inferences as rgi
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45015,6 +45016,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/transmissions#transmission-management">Transmission Management</a>
       <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/pattern-observations">Pattern Observations</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-inferences">Governed Inferences</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -48858,6 +48860,181 @@ def admin_association_correction_page(association_id: int, request: Request):
             admin_session=session,
         )
     )
+
+
+def _render_governed_inference_page(
+    diagnostic: dict[str, Any],
+    *,
+    admin_session: dict[str, Any],
+    inference: dict[str, Any] | None = None,
+) -> str:
+    def cell(value: Any) -> str:
+        return escape(str(value if value not in (None, "") else "—"))
+
+    rows = "".join(
+        f'<tr><td><a href="/admin/governed-inferences/{int(item["id"])}">{cell(item["id"])}</a></td>'
+        f"<td>{cell(item['inference_type'])}</td><td>{cell(item['status'])}</td>"
+        f"<td>{cell(item['created_by'])}</td><td>{cell(item['created_at'])}</td></tr>"
+        for item in diagnostic.get("inferences", [])
+    ) or '<tr><td colspan="5">No governed inferences recorded.</td></tr>'
+    detail = ""
+    if inference:
+        bindings = "".join(
+            f"<li>{cell(item['source_type'])} · {cell(item['source_id'])} · "
+            f"{cell(item['binding_role'])} · {cell(item.get('source_version') or item.get('source_timestamp') or 'context unavailable')}</li>"
+            for item in inference.get("bindings", [])
+        ) or "<li>No bindings recorded.</li>"
+        reviews = "".join(
+            f"<li>{cell(item['status'])} · {cell(item['reviewed_at'])} · "
+            f"{cell(item['reviewed_by'])} · self-review={cell(item['is_self_review'])}: {cell(item['rationale'])}</li>"
+            for item in inference.get("reviews", [])
+        ) or "<li>No review events recorded.</li>"
+        supersessions = "".join(
+            f"<li>{cell(item['occurred_at'])} · replacement {cell(item.get('replacement_inference_id'))}: {cell(item['rationale'])}</li>"
+            for item in inference.get("supersessions", [])
+        ) or "<li>No supersession events recorded.</li>"
+        detail = f"""
+        <h2>Governed inference</h2>
+        <table>
+          <tr><th>Inference identity</th><td>{cell(inference['id'])}</td></tr>
+          <tr><th>Type</th><td>{cell(inference['inference_type'])}</td></tr>
+          <tr><th>Status</th><td>{cell(inference['status'])}</td></tr>
+          <tr><th>Proposition</th><td>{cell(inference['proposition'])}</td></tr>
+          <tr><th>Rationale</th><td>{cell(inference['rationale'])}</td></tr>
+          <tr><th>Qualification</th><td>{cell(inference['qualification'])}</td></tr>
+          <tr><th>Author</th><td>{cell(inference['created_by'])} · {cell(inference['created_by_role'])}</td></tr>
+          <tr><th>Created</th><td>{cell(inference['created_at'])}</td></tr>
+          <tr><th>Method/version</th><td>{cell(inference['method_version'])}</td></tr>
+          <tr><th>Author boundary declaration</th><td>{cell(inference['author_boundary_declaration'])}</td></tr>
+        </table>
+        <p class="boundary"><strong>INFERENCE IS NOT EVIDENCE.</strong> This proposition is a reasoned interpretation of governed evidence or observation. It is not itself evidence, an observation, a finding, or a legal determination.</p>
+        <h3>Bound governed sources</h3><ul>{bindings}</ul>
+        <h3>Review history</h3><ul>{reviews}</ul>
+        <h3>Supersession history</h3><ul>{supersessions}</ul>
+        <h3>Record review</h3>
+        <form method="post" action="/api/admin/session/governed-inferences/{int(inference['id'])}/review">
+          <label>Review state<select name="status" required><option value="accepted_as_inference">Accepted as inference</option><option value="rejected">Rejected</option><option value="deferred">Deferred</option></select></label>
+          <label>Review rationale<textarea name="rationale" required></textarea></label>
+          <label>Contrary-evidence note<textarea name="contrary_evidence_note"></textarea></label>
+          <label>Boundary assessment <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this remains within the Stage 63 boundary</label>
+          <button type="submit">Record review</button>
+        </form>
+        <h3>Supersede inference</h3>
+        <form method="post" action="/api/admin/session/governed-inferences/{int(inference['id'])}/supersede">
+          <label>Replacement inference ID (optional)<input name="replacement_inference_id"></label>
+          <label>Rationale<textarea name="rationale" required></textarea></label>
+          <label>Evidence references JSON<textarea name="evidence_references_json">[]</textarea></label>
+          <button type="submit">Record supersession</button>
+        </form>
+        """
+    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Inference</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.boundary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:760px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED INFERENCE</h1><p class=\"boundary\">This proposition represents a reasoned interpretation of governed evidence or observation. It is not itself evidence, an observation, a finding, or a legal determination.</p>{detail}<h2>Recorded inferences</h2><table><thead><tr><th>Identity</th><th>Type</th><th>Status</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record proposed inference</h2><form method=\"post\" action=\"/api/admin/session/governed-inferences\"><label>Inference type<select name=\"inference_type\" required><option value=\"contextual\">Contextual</option><option value=\"temporal\">Temporal</option><option value=\"relational\">Relational</option><option value=\"procedural\">Procedural</option></select></label><label>Proposition<textarea name=\"proposition\" required></textarea></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is a reasoned inference from the governed sources identified below. It does not establish fact, intent, motive, causation, wrongdoing, or legal significance, and alternative interpretations may remain possible.</textarea></label><label>Limitations<textarea name=\"limitations\" required>Alternative interpretations may remain possible.</textarea></label><label>Bindings JSON<textarea name=\"bindings_json\" required>[{{\"source_type\":\"record_document_association\",\"source_id\":\"1\",\"binding_role\":\"primary_support\"}}]</textarea></label><label>Boundary declaration <input type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required> I confirm this is human-authored, qualified, source-bound, and does not assert a prohibited class</label><button type=\"submit\">Record proposed inference</button></form></main></body></html>"""
+
+
+def _json_form(value: str, error: str) -> Any:
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise _http_error(400, error) from exc
+
+
+@router.get("/admin/governed-inferences", response_class=HTMLResponse)
+def admin_governed_inferences_page(request: Request):
+    session = require_admin_session(request)
+    diagnostic = rgi.read_inference_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_inference_page(diagnostic, admin_session=session))
+
+
+@router.get("/admin/governed-inferences/{inference_id}", response_class=HTMLResponse)
+def admin_governed_inference_detail(inference_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rgi.read_inference_diagnostic(inference_id, db_path=DB_PATH)
+    if diagnostic.get("status") == "inference_not_found":
+        raise _http_error(404, "governed_inference_not_found")
+    inference = (diagnostic.get("inferences") or [None])[0]
+    return HTMLResponse(content=_render_governed_inference_page(diagnostic, admin_session=session, inference=inference))
+
+
+@router.post("/api/admin/session/governed-inferences", response_class=HTMLResponse)
+def admin_governed_inference_create(
+    request: Request,
+    inference_type: str = Form(...),
+    proposition: str = Form(...),
+    rationale: str = Form(...),
+    qualification: str = Form(...),
+    limitations: str = Form(...),
+    bindings_json: str = Form(...),
+    boundary_acknowledged: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        actor = _admin_session_actor(session)
+        role = _admin_session_role(session)
+        inference = rgi.create_inference(
+            conn,
+            inference_type=inference_type,
+            proposition=proposition,
+            rationale=rationale,
+            qualification=qualification,
+            qualification_contract={"epistemic_label": "inference", "source_basis_present": True, "alternatives_possible": True, "not_evidence": True, "not_determination": True, "limitations": limitations},
+            bindings=_json_form(bindings_json, "governed_inference_bindings_invalid"),
+            actor=actor,
+            actor_role=role,
+            author_declaration={"acknowledged": boundary_acknowledged == "1"},
+            idempotency_key=idempotency_key,
+            document_root=intake_root(),
+        )
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rgi.read_inference_diagnostic(inference["id"], db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_inference_page(diagnostic, admin_session=session, inference=inference), status_code=201)
+
+
+@router.post("/api/admin/session/governed-inferences/{inference_id}/review", response_class=HTMLResponse)
+def admin_governed_inference_review(
+    inference_id: int,
+    request: Request,
+    status: str = Form(...),
+    rationale: str = Form(...),
+    contrary_evidence_note: str | None = Form(None),
+    boundary_acknowledged: str | None = Form(None),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        assessment = {"within_stage63_boundary": boundary_acknowledged == "1", "qualification_adequate": boundary_acknowledged == "1", "no_prohibited_class_asserted": boundary_acknowledged == "1"}
+        inference = rgi.review_inference(conn, inference_id, status=status, rationale=rationale, qualification_assessment=assessment, prohibited_class_assessment=assessment, contrary_evidence_note=contrary_evidence_note or "", actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rgi.read_inference_diagnostic(inference_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_inference_page(diagnostic, admin_session=session, inference=inference))
+
+
+@router.post("/api/admin/session/governed-inferences/{inference_id}/supersede", response_class=HTMLResponse)
+def admin_governed_inference_supersede(
+    inference_id: int,
+    request: Request,
+    rationale: str = Form(...),
+    replacement_inference_id: str | None = Form(None),
+    evidence_references_json: str = Form("[]"),
+    idempotency_key: str | None = Form(None),
+):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        inference = rgi.supersede_inference(conn, inference_id, replacement_inference_id=int(replacement_inference_id) if str(replacement_inference_id or "").strip() else None, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), evidence_references=_json_form(evidence_references_json, "governed_inference_supersession_evidence_invalid"), idempotency_key=idempotency_key)
+    except ValueError as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally:
+        conn.close()
+    diagnostic = rgi.read_inference_diagnostic(inference_id, db_path=DB_PATH)
+    return HTMLResponse(content=_render_governed_inference_page(diagnostic, admin_session=session, inference=inference))
 
 
 def _render_pattern_observations_page(
