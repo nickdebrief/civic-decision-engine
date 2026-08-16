@@ -1,6 +1,22 @@
 # CDE Platform Stage 64.1 — Governed Allegation Source Selection
 
-Status: Implemented · pending merge · pending deployment
+Status: Implemented · merged · deployed
+
+Implementation PR: [#352](https://github.com/nickdebrief/civic-decision-engine/pull/352)
+
+Canonical implementation and deployed revision: `3a6ed578e3e8ff366f845ea60aa9f89c1d965b88`
+
+Railway deployment: `5930698486`
+
+Deployment started: `2026-08-16T11:58:01Z`
+
+Deployment completed successfully: `2026-08-16T11:58:30Z`
+
+Production verification confirmed `/` and `/records` returned HTTP 200,
+unauthenticated `/admin/governed-allegations` returned HTTP 401, and
+plausible public Stage 64 endpoints returned HTTP 404 without Stage 64
+content. No production allegation, binding, review, supersession, withdrawal,
+or other production-data mutation was performed.
 
 ## Source-integrity boundary
 
