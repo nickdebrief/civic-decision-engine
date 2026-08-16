@@ -40,6 +40,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 62 | Governed Pattern Observation | governed-pattern-observation | — | 2026-08-15 | `cc69ecd19d651f899dff3e7cb26d995fa9f70319` | [#343](https://github.com/nickdebrief/civic-decision-engine/pull/343) | [Stage 62](CDE_PLATFORM_STAGE_62_GOVERNED_PATTERN_OBSERVATION.md) | Implemented · merged · deployed |
 | 62.1 | Administrative Navigation & Header Refinement | governed-pattern-observation | 62 | 2026-08-15 | `00e0e966d572c02ff6f9dbe713247c0c149f39ab` | [#345](https://github.com/nickdebrief/civic-decision-engine/pull/345) | [Stage 62.1](CDE_PLATFORM_STAGE_62_1_ADMINISTRATIVE_NAVIGATION_HEADER_REFINEMENT.md) | Implemented · merged · deployed · production verified |
 | 63 | Governed Inference | governed-inference | — | 2026-08-16 | `1206470a6df9b55e83e9fda04a318e2f1fc4b604` | [#348](https://github.com/nickdebrief/civic-decision-engine/pull/348) | [Stage 63](CDE_PLATFORM_STAGE_63_GOVERNED_INFERENCE.md) | Implemented · merged · deployed |
+| 64 | Governed Allegation | governed-allegation | — | — | — | — | [Stage 64](CDE_PLATFORM_STAGE_64_GOVERNED_ALLEGATION.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 
