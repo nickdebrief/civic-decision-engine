@@ -42,7 +42,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 63 | Governed Inference | governed-inference | — | 2026-08-16 | `1206470a6df9b55e83e9fda04a318e2f1fc4b604` | [#348](https://github.com/nickdebrief/civic-decision-engine/pull/348) | [Stage 63](CDE_PLATFORM_STAGE_63_GOVERNED_INFERENCE.md) | Implemented · merged · deployed |
 | 64 | Governed Allegation | governed-allegation | — | 2026-08-16 | `b5e776cfe8018550f52e7158a34b35cd604a7da5` | [#350](https://github.com/nickdebrief/civic-decision-engine/pull/350) | [Stage 64](CDE_PLATFORM_STAGE_64_GOVERNED_ALLEGATION.md) | Implemented · merged · deployed |
 | 64.1 | Governed Allegation Source Selection | governed-allegation | 64 | 2026-08-16 | `3a6ed578e3e8ff366f845ea60aa9f89c1d965b88` | [#352](https://github.com/nickdebrief/civic-decision-engine/pull/352) | [Stage 64.1](CDE_PLATFORM_STAGE_64_1_GOVERNED_ALLEGATION_SOURCE_SELECTION.md) | Implemented · merged · deployed |
-| 65 | Governed Response and Contestation | governed-response | — | — | — | — | [Stage 65](CDE_PLATFORM_STAGE_65_GOVERNED_RESPONSE_AND_CONTESTATION.md) | Implemented · pending merge · pending deployment |
+| 65 | Governed Response and Contestation | governed-response | — | 2026-08-16 | `4668be7be355119dc08ac6ef6ab96c0dab9cc829` | [#354](https://github.com/nickdebrief/civic-decision-engine/pull/354) | [Stage 65](CDE_PLATFORM_STAGE_65_GOVERNED_RESPONSE_AND_CONTESTATION.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 

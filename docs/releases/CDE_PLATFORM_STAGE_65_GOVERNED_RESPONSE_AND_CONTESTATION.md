@@ -1,6 +1,23 @@
 # CDE Platform Stage 65 — Governed Response and Contestation
 
-Status: Implemented · pending merge · pending deployment
+Status: Implemented · merged · deployed
+
+Implementation PR: [#354](https://github.com/nickdebrief/civic-decision-engine/pull/354)
+
+Canonical implementation and deployed revision: `4668be7be355119dc08ac6ef6ab96c0dab9cc829`
+
+Railway deployment: `5931547008`
+
+Deployment started: `2026-08-16T13:41:36Z`
+
+Deployment completed successfully: `2026-08-16T13:42:24Z`
+
+Production verification confirmed `/` and `/records` returned HTTP 200,
+unauthenticated `/admin/governed-responses` and `/admin/governed-allegations`
+returned HTTP 401, and plausible public Stage 65 endpoints returned HTTP 404
+without Stage 65 content. No production response, allegation mutation,
+binding, review, supersession, withdrawal, or other production-data mutation
+was performed.
 
 ## Governing principle
 
