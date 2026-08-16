@@ -1,6 +1,18 @@
 # CDE Platform Stage 64 — Governed Allegation
 
-Status: Implemented · pending merge · pending deployment
+Status: Implemented · merged · deployed
+
+Implementation PR: [#350](https://github.com/nickdebrief/civic-decision-engine/pull/350)
+
+Canonical implementation revision: `b5e776cfe8018550f52e7158a34b35cd604a7da5`
+
+Automatic Railway deployment: `5930384616` — successful, completed
+`2026-08-16T11:17:38Z` for the production environment.
+
+Production verification: `/` and `/records` returned HTTP 200; unauthenticated
+`/admin/governed-allegations` returned HTTP 401; plausible public Stage 64
+paths returned HTTP 404. No production allegation, review, supersession, or
+withdrawal was created.
 
 ## Governance boundary
 
