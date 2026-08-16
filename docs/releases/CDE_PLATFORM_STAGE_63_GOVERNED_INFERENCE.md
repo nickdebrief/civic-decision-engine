@@ -1,6 +1,23 @@
 # CDE Platform Stage 63 — Governed Inference
 
-Status: Implemented · pending merge · pending deployment
+Status: Implemented · merged · deployed
+
+## Closure evidence
+
+Stage 63 was merged through PR #348 as commit
+`1206470a6df9b55e83e9fda04a318e2f1fc4b604` using the repository's linear
+rebase workflow. Railway automatically deployed that canonical revision to the
+production environment in deployment `5929581078`, created at
+`2026-08-16T09:26:56Z`, with a successful deployment status recorded at
+`2026-08-16T09:27:23Z`.
+
+Read-only production verification returned HTTP 200 for `/` and `/records`,
+HTTP 401 for unauthenticated `/admin/governed-inferences`, and HTTP 404 for
+`/api/governed-inferences`, `/governed-inferences`, and
+`/pattern-observations`. The public root response contains no Stage 63
+navigation or inference serialization. No production inference, review,
+supersession, association, observation, or other production data was created
+or modified during deployment verification.
 
 ## Governance boundary
 
