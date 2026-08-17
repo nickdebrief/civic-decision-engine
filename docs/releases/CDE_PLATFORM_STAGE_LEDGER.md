@@ -44,6 +44,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 64.1 | Governed Allegation Source Selection | governed-allegation | 64 | 2026-08-16 | `3a6ed578e3e8ff366f845ea60aa9f89c1d965b88` | [#352](https://github.com/nickdebrief/civic-decision-engine/pull/352) | [Stage 64.1](CDE_PLATFORM_STAGE_64_1_GOVERNED_ALLEGATION_SOURCE_SELECTION.md) | Implemented · merged · deployed |
 | 65 | Governed Response and Contestation | governed-response | — | 2026-08-16 | `4668be7be355119dc08ac6ef6ab96c0dab9cc829` | [#354](https://github.com/nickdebrief/civic-decision-engine/pull/354) | [Stage 65](CDE_PLATFORM_STAGE_65_GOVERNED_RESPONSE_AND_CONTESTATION.md) | Implemented · merged · deployed |
 | 66 | Governed Decision Authority and Mandate | governed-decision-authority | — | 2026-08-17 | `c8db5cfde62ee95d4db422903016a696f523becc` | [#356](https://github.com/nickdebrief/civic-decision-engine/pull/356) | [Stage 66](CDE_PLATFORM_STAGE_66_GOVERNED_DECISION_AUTHORITY_AND_MANDATE.md) | Implemented · merged · deployed |
+| 66.1 | Deliberate Authority Classification and Conditional Declarations | governed-decision-authority | 66 | — | — | — | [Stage 66.1](CDE_PLATFORM_STAGE_66_1_DELIBERATE_AUTHORITY_CLASSIFICATION_AND_CONDITIONAL_DECLARATIONS.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

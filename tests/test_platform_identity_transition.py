@@ -85,7 +85,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 66 — Governed Decision Authority and Mandate",
+            "Current release: CDE Platform Stage 66.1 — Deliberate Authority Classification and Conditional Declarations",
             readme,
         )
         self.assertIn("## Stage Numbering", readme)
