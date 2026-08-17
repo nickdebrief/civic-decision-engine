@@ -211,10 +211,19 @@ class Stage66AuthorityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "self_reference"):
             authority.supersede_authority_record(self.conn, object_type="authority", object_id=first["id"], replacement_id=first["id"], rationale="x", actor="admin", actor_role="administrator")
         authority.supersede_authority_record(self.conn, object_type="authority", object_id=first["id"], replacement_id=second["id"], rationale="More precise record", actor="admin", actor_role="administrator", idempotency_key="s1")
+        replay = authority.supersede_authority_record(self.conn, object_type="authority", object_id=first["id"], replacement_id=second["id"], rationale="More precise record", actor="admin", actor_role="administrator", idempotency_key="s1")
+        self.assertEqual(replay["status"], "superseded")
         with self.assertRaisesRegex(ValueError, "cycle_rejected"):
             authority.supersede_authority_record(self.conn, object_type="authority", object_id=second["id"], replacement_id=first["id"], rationale="cycle", actor="admin", actor_role="administrator")
         self.assertEqual(authority.get_authority(self.conn, first["id"])["status"], "superseded")
         self.assertEqual(len(authority.get_authority(self.conn, first["id"])["bindings"]), 1)
+
+    def test_terminal_events_override_earlier_reviews(self):
+        first = self.create(idempotency_key="a1", mandate_idempotency_key="m1")
+        replacement = self.create(holder_label="Replacement", idempotency_key="a2", mandate_idempotency_key="m2")
+        authority.review_authority(self.conn, authority_id=first["id"], mandate_id=None, disposition="accepted_as_source_backed_authority_record", rationale="retain as representation", boundary_declaration={"acknowledged": True}, actor="admin", actor_role="administrator", idempotency_key="review-before-terminal")
+        authority.supersede_authority_record(self.conn, object_type="authority", object_id=first["id"], replacement_id=replacement["id"], rationale="later correction", actor="admin", actor_role="administrator", idempotency_key="terminal-after-review")
+        self.assertEqual(authority.get_authority(self.conn, first["id"])["status"], "superseded")
 
     def test_cessation_requires_source_is_idempotent_and_terminal_orders_are_deterministic(self):
         item = self.create(idempotency_key="a1", mandate_idempotency_key="m1")
