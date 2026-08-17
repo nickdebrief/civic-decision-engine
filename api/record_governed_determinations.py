@@ -83,6 +83,16 @@ def _declaration(value: Any, error: str, boundary: str) -> dict[str, Any]:
     return {"human_recorded": True, "acknowledged": True, "boundary": boundary}
 
 
+def _linking_declaration(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or value.get("acknowledged") is not True:
+        raise ValueError("governed_determination_linking_declaration_required")
+    return {
+        "human_recorded": True,
+        "acknowledged": True,
+        "boundary": "connection_is_not_reliance",
+    }
+
+
 def _qualification(value: Any, limitations: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError("governed_determination_qualification_contract_required")
@@ -150,9 +160,15 @@ def _canonical_objects(conn: sqlite3.Connection, links: Any) -> list[dict[str, A
         table = OBJECT_TYPES[object_type]
         if not _table_exists(conn, table):
             raise ValueError("governed_determination_object_not_found")
-        row = conn.execute(f"SELECT id FROM {table} WHERE id=?", (int(object_id),)).fetchone()
+        row = conn.execute(f"SELECT * FROM {table} WHERE id=?", (int(object_id),)).fetchone()
         if row is None:
             raise ValueError("governed_determination_object_not_found")
+        if object_type == "accepted_pattern_observation" and row["status"] != "accepted":
+            raise ValueError("governed_determination_object_not_accepted")
+        if object_type == "governed_inference" and row["status"] != "accepted_as_inference":
+            raise ValueError("governed_determination_object_not_accepted")
+        if object_type == "decision_authority" and authorities.get_authority(conn, object_id)["status"] != "accepted_as_source_backed_authority_record":
+            raise ValueError("governed_determination_object_not_accepted")
         result.append({"object_type": object_type, "object_id": int(object_id), "relationship_role": role})
     result.sort(key=lambda item: (item["object_type"], item["object_id"], item["relationship_role"]))
     if len({(x["object_type"], x["object_id"], x["relationship_role"]) for x in result}) != len(result):
@@ -341,7 +357,7 @@ def read_determination_diagnostic(determination_id: int | str | None = None, *, 
         conn.close()
 
 
-def create_determination(conn: sqlite3.Connection, *, determination_category: str, title_label: str, formal_outcome: str, representation_mode: str, issues_determined: str, reasons: str, reasons_status: str, decision_date_or_period: str | None, recorded_date: str | None, affected_subject_or_class: str, finality_description: str | None, implementation_or_remedy: str | None, qualification: str, limitations: str, qualification_contract: Mapping[str, Any], authority_id: int | str, mandate_id: int | str, authority_mandate_declaration: Mapping[str, Any], scope_declaration: Mapping[str, Any], representation_declaration: Mapping[str, Any], recorder_declaration: Mapping[str, Any], bindings: list[Mapping[str, Any]], governed_objects: list[Mapping[str, Any]] | None, actor: str, actor_role: str, idempotency_key: str | None = None, created_at: str | None = None, document_root: Path | None = None, _commit: bool = True) -> dict[str, Any]:
+def create_determination(conn: sqlite3.Connection, *, determination_category: str, title_label: str, formal_outcome: str, representation_mode: str, issues_determined: str, reasons: str, reasons_status: str, decision_date_or_period: str | None, recorded_date: str | None, affected_subject_or_class: str, finality_description: str | None, implementation_or_remedy: str | None, qualification: str, limitations: str, qualification_contract: Mapping[str, Any], authority_id: int | str, mandate_id: int | str, authority_mandate_declaration: Mapping[str, Any], scope_declaration: Mapping[str, Any], representation_declaration: Mapping[str, Any], recorder_declaration: Mapping[str, Any], bindings: list[Mapping[str, Any]], governed_objects: list[Mapping[str, Any]] | None, actor: str, actor_role: str, idempotency_key: str | None = None, created_at: str | None = None, document_root: Path | None = None, linking_declaration: Mapping[str, Any] | None = None, _commit: bool = True) -> dict[str, Any]:
     category = _required(determination_category, "governed_determination_category_required").lower()
     if category not in DETERMINATION_CATEGORIES: raise ValueError("governed_determination_category_invalid")
     mode = _required(representation_mode, "governed_determination_representation_mode_required").lower()
@@ -352,6 +368,7 @@ def create_determination(conn: sqlite3.Connection, *, determination_category: st
         if str(reasons or "").strip() or not isinstance(authority_mandate_declaration, Mapping) or authority_mandate_declaration.get("no_reasons_acknowledged") is not True: raise ValueError("governed_determination_no_reasons_declaration_required")
     authority_decl = _declaration(authority_mandate_declaration, "governed_determination_authority_mandate_declaration_required", "authority_mandate_not_legally_validated")
     scope_decl = _declaration(scope_declaration, "governed_determination_scope_declaration_required", "scope_not_legally_validated")
+    scope_decl["linking_declaration"] = _linking_declaration(linking_declaration)
     authority, mandate = _authority_mandate(conn, authority_id, mandate_id, decision_date_or_period, scope_decl)
     representation_decl = _declaration(representation_declaration, "governed_determination_representation_declaration_required", "representation_not_machine_verified")
     recorder_decl = _declaration(recorder_declaration, "governed_determination_recorder_declaration_required", "determination_not_made_by_cde")
