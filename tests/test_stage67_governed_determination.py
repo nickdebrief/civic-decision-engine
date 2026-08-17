@@ -54,7 +54,7 @@ class Stage67DeterminationTests(unittest.TestCase):
             qualification_contract=self.q(), authority_id=authority_id, mandate_id=mandate_id,
             authority_mandate_declaration={"acknowledged":True}, scope_declaration={"acknowledged":True},
             representation_declaration={"acknowledged":True, "mode":"faithful_paraphrase"}, recorder_declaration={"acknowledged":True},
-            bindings=self.source(), governed_objects=[], actor="admin", actor_role="administrator",
+            linking_declaration={"acknowledged":True}, bindings=self.source(), governed_objects=[], actor="admin", actor_role="administrator",
         )
         values.update(overrides)
         return determination.create_determination(self.conn, **values)
