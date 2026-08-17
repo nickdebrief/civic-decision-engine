@@ -80,6 +80,7 @@ from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
 from api import record_governed_responses as rgr
 from api import record_governed_decision_authorities as rgauth
+from api import record_governed_determinations as rgdet
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45023,6 +45024,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-allegations">Governed Allegations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-responses">Governed Responses</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-decision-authorities">Decision Authorities &amp; Mandates</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-determinations">Governed Determinations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -53649,3 +53651,94 @@ def admin_governed_mandate_supersede(mandate_id: int, request: Request, replacem
 @router.post("/api/admin/session/governed-decision-authorities/mandates/{mandate_id}/cessation", response_class=HTMLResponse)
 def admin_governed_mandate_cessation(mandate_id: int, request: Request, cessation_type: str = Form(...), cessation_date_or_period: str = Form(...), rationale: str = Form(...), cessation_bindings_json: str = Form(...), idempotency_key: str | None = Form(None)):
     return _stage66_mandate_mutation(mandate_id, request, "cessation", cessation_type=cessation_type, cessation_date_or_period=cessation_date_or_period, rationale=rationale, cessation_bindings_json=cessation_bindings_json, idempotency_key=idempotency_key)
+
+
+# Stage 67: preserve attributed formal conclusions without making or evaluating
+# determinations. All writes remain authenticated administrator operations.
+def _stage67_source_selector(candidates: list[dict[str, str]], field_name: str = "determination_bindings_json") -> str:
+    options = ''.join(f'<option value="{escape(x["source_type"])}::{escape(x["source_id"])}" data-source-type="{escape(x["source_type"])}" data-source-id="{escape(x["source_id"])}" data-label="{escape(x["label"])}" data-status="{escape(x["status"])}">{escape(x["label"])} — {escape(x["status"])}</option>' for x in candidates)
+    roles = ''.join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgdet.BINDING_ROLES))
+    return f'''<section aria-labelledby="stage67-source-heading"><h3 id="stage67-source-heading">Determination sources</h3><p class="field-help">Select a governed source deliberately. Source selection preserves provenance; it does not validate the determination.</p><label for="stage67-source-candidate">Governed source<select id="stage67-source-candidate" size="5"><option value="">Choose a source</option>{options}</select></label><label for="stage67-binding-role">Binding role<select id="stage67-binding-role"><option value="" selected disabled>Choose binding role</option>{roles}</select></label><button type="button" id="stage67-source-add">Add selected source</button><ul id="stage67-selected-sources"><li>No source selected.</li></ul><input type="hidden" id="stage67-source-payload" name="{field_name}" value=""></section><script>(function(){{const c=document.getElementById('stage67-source-candidate'),r=document.getElementById('stage67-binding-role'),a=document.getElementById('stage67-source-add'),p=document.getElementById('stage67-source-payload'),l=document.getElementById('stage67-selected-sources'),items=[];function render(){{p.value=JSON.stringify(items);l.replaceChildren();if(!items.length){{const e=document.createElement('li');e.textContent='No source selected.';l.appendChild(e);return;}}items.forEach((x,i)=>{{const li=document.createElement('li');li.textContent=x.source_type+' · '+x.source_id+' · '+x.binding_role+' — '+x.label+' ('+x.status+')';const b=document.createElement('button');b.type='button';b.textContent='Remove';b.setAttribute('aria-label','Remove '+x.source_id);b.onclick=()=>{{items.splice(i,1);render();}};li.append(' ',b);l.appendChild(li);}})}}a.onclick=()=>{{const o=c.selectedOptions[0];if(!o||!o.value||!r.value)return;const x={{source_type:o.dataset.sourceType,source_id:o.dataset.sourceId,binding_role:r.value,label:o.dataset.label,status:o.dataset.status}};if(!items.some(y=>y.source_type===x.source_type&&y.source_id===x.source_id&&y.binding_role===x.binding_role))items.push(x);render();}};render();}})();</script>'''
+
+
+def _stage67_page_data(determination_id: int | None = None, query: str | None = None):
+    diagnostic = rgdet.read_determination_diagnostic(determination_id, db_path=DB_PATH)
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200]
+    authority_data = rgauth.read_authority_diagnostic(db_path=DB_PATH)
+    authorities_list = authority_data.get("authorities", [])
+    pairs = [(a, m) for a in authorities_list for m in a.get("mandates", []) if a.get("status") == "accepted_as_source_backed_authority_record" and m.get("status") == "accepted_as_source_backed_authority_record"]
+    determination = (diagnostic.get("determinations") or [None])[0] if determination_id is not None else None
+    return diagnostic, candidates, pairs, determination
+
+
+def _stage67_html(diagnostic: dict[str, Any], *, admin_session: dict[str, Any], candidates: list[dict[str, str]], pairs: list[tuple[dict[str, Any], dict[str, Any]]], determination: dict[str, Any] | None = None) -> str:
+    cell = lambda value: escape(str(value if value not in (None, "") else "—"))
+    rows = ''.join(f'<tr><td><a href="/admin/governed-determinations/{int(x["id"])}">{cell(x["id"])}</a></td><td>{cell(x["determination_category"])}</td><td>{cell(x["status"])}</td><td>{cell(x["formal_outcome"])}</td><td>{cell(x["decision_date_or_period"])}</td><td>{cell(x["created_by"])}</td></tr>' for x in diagnostic.get("determinations", [])) or '<tr><td colspan="6">No governed determinations.</td></tr>'
+    authority_options = '<option value="" selected disabled>Choose authority and mandate</option>' + ''.join(f'<option value="{int(a["id"])}::{int(m["id"])}">Authority {cell(a["id"])} — {cell(a["holder_label"])} · Mandate {cell(m["id"])} — {cell(m["title_label"])} · {cell(a["status"])} / {cell(m["status"])}</option>' for a, m in pairs)
+    detail = ''
+    if determination:
+        events = ''.join(f'<li>{cell(x["event_type"])} · {cell(x["represented_date_or_period"])} · {cell(x["rationale"])}</li>' for x in determination.get("effect_events", [])) or '<li>No effect events.</li>'
+        detail = f'<section class="boundary"><strong>DETERMINATION REQUIRES AUTHORITY, MANDATE AND REASONS.</strong> This record preserves a source-bound determination attributed to an identified decision authority and governed mandate. It does not establish factual or legal correctness, jurisdiction, lawfulness, enforceability or finality.</section><table><tr><th>Outcome</th><td>{cell(determination["formal_outcome"])}</td></tr><tr><th>Issues</th><td>{cell(determination["issues_determined"])}</td></tr><tr><th>Reasons as represented</th><td>{cell(determination["reasons"])}</td></tr><tr><th>Status</th><td>{cell(determination["status"])}</td></tr><tr><th>Authority / mandate</th><td>{cell(determination["authority_mandate"]["authority_id"])} / {cell(determination["authority_mandate"]["mandate_id"])}</td></tr></table><h2>Effect-event timeline</h2><ul>{events}</ul>'
+    form = f'''<h2>Record determination</h2><form method="post" action="/api/admin/session/governed-determinations"><label for="stage67-category">Determination category<select id="stage67-category" name="determination_category" required><option value="" selected disabled>Choose determination category</option>{''.join(f'<option value="{x}">{x}</option>' for x in sorted(rgdet.DETERMINATION_CATEGORIES))}</select></label><label>Title or label<input name="title_label" required></label><label>Formal outcome or operative conclusion<textarea name="formal_outcome" required></textarea></label><label for="stage67-representation">Representation mode<select id="stage67-representation" name="representation_mode" required><option value="" selected disabled>Choose representation mode</option><option value="verbatim">Verbatim</option><option value="faithful_paraphrase">Faithful paraphrase</option></select></label><label>Issues determined<textarea name="issues_determined" required></textarea></label><label>Reasons as represented<textarea name="reasons"></textarea></label><label>Reasons status<select name="reasons_status" required><option value="" selected disabled>Choose reasons status</option><option value="reasons_recorded">Reasons recorded</option><option value="no_reasons_recorded_in_source">No reasons recorded in source</option></select></label><label class="confirmation"><input type="checkbox" name="no_reasons_acknowledged" value="1"> I confirm the source records no reasons; the CDE will preserve that limitation and invent none.</label><label>Decision date or period<input name="decision_date_or_period"></label><label>Recorded date<input name="recorded_date"></label><label>Affected subject or proceeding<input name="affected_subject_or_class" required></label><label>Finality description as represented<input name="finality_description"></label><label>Implementation or remedy, where present<textarea name="implementation_or_remedy"></textarea></label><label>Qualification<textarea name="qualification" required>This record preserves a source-bound determination attributed to the identified decision authority under the identified governed mandate. Its recording does not validate the authority or mandate, establish jurisdiction, confirm factual or legal correctness, determine lawfulness, or establish enforceability or finality.</textarea></label><label>Limitations<textarea name="limitations" required>The represented conclusion may be subject to appeal, review, variation, stay, revocation, setting aside, replacement, or incomplete source context.</textarea></label><label for="stage67-authority-mandate">Authority and mandate<select id="stage67-authority-mandate" name="authority_mandate" required>{authority_options}</select></label><label class="confirmation"><input type="checkbox" name="representation_acknowledged" value="1" required> I confirm the selected representation mode is human-declared and not machine-verified.</label><label class="confirmation"><input type="checkbox" name="authority_mandate_acknowledged" value="1" required> I confirm the source represents the selected authority and mandate as applicable; this is attribution, not legal validation.</label><label class="confirmation"><input type="checkbox" name="scope_acknowledged" value="1" required> I confirm the recorded date and represented scope are preserved as source-backed declarations, not legal findings.</label><label class="confirmation"><input type="checkbox" name="recorder_acknowledged" value="1" required> I confirm this is human-recorded and the CDE is not making the determination.</label>{_stage67_source_selector(candidates)}<input type="hidden" name="governed_objects_json" value=""><input type="hidden" name="temporal_qualification" value=""><button type="submit">Record determination</button></form>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed Determinations</title><style>body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}.boundary,.field-help{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:900px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}label.confirmation{{display:block;text-transform:none;font:1rem system-ui,sans-serif;color:#222}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>GOVERNED DETERMINATIONS</h1><p class="boundary">DETERMINATION REQUIRES AUTHORITY, MANDATE AND REASONS. The CDE preserves a source-bound formal conclusion; it does not make, validate, or calculate the legal effect of a determination.</p>{detail}<h2>Recorded determinations</h2><table><tr><th>Identity</th><th>Category</th><th>Record status</th><th>Outcome</th><th>Date</th><th>Recorder</th></tr>{rows}</table>{form}</main></body></html>'''
+
+
+def _stage67_qualification() -> dict[str, Any]:
+    return {"epistemic_label": "determination", "source_basis_present": True, "not_validation": True, "not_jurisdiction": True, "not_lawfulness": True, "not_correctness": True, "not_enforceability": True, "not_finality": True}
+
+
+@router.get("/admin/governed-determinations", response_class=HTMLResponse)
+def admin_governed_determinations_page(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request); diagnostic, candidates, pairs, _ = _stage67_page_data(query=query)
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs))
+
+
+@router.get("/admin/governed-determinations/{determination_id}", response_class=HTMLResponse)
+def admin_governed_determination_detail(determination_id: int, request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request); diagnostic, candidates, pairs, determination = _stage67_page_data(determination_id, query=query)
+    if diagnostic.get("status") == "determination_not_found": raise _http_error(404, "governed_determination_not_found")
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs, determination=determination))
+
+
+@router.post("/api/admin/session/governed-determinations", response_class=HTMLResponse)
+def admin_governed_determination_create(request: Request, determination_category: str = Form(...), title_label: str = Form(...), formal_outcome: str = Form(...), representation_mode: str = Form(...), issues_determined: str = Form(...), reasons: str = Form(""), reasons_status: str = Form(...), no_reasons_acknowledged: str | None = Form(None), decision_date_or_period: str | None = Form(None), recorded_date: str | None = Form(None), affected_subject_or_class: str = Form(...), finality_description: str | None = Form(None), implementation_or_remedy: str | None = Form(None), qualification: str = Form(...), limitations: str = Form(...), authority_mandate: str = Form(...), authority_mandate_acknowledged: str | None = Form(None), scope_acknowledged: str | None = Form(None), representation_acknowledged: str | None = Form(None), recorder_acknowledged: str | None = Form(None), authority_bindings_json: str = Form(...), governed_objects_json: str = Form(""), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        pair = str(authority_mandate or "").split("::")
+        if len(pair) != 2 or not all(part.strip().isdigit() for part in pair): raise ValueError("governed_determination_authority_mandate_selection_invalid")
+        authority_id, mandate_id = (int(part) for part in pair)
+        item = rgdet.create_determination(conn, determination_category=determination_category, title_label=title_label, formal_outcome=formal_outcome, representation_mode=representation_mode, issues_determined=issues_determined, reasons=reasons, reasons_status=reasons_status, decision_date_or_period=decision_date_or_period, recorded_date=recorded_date, affected_subject_or_class=affected_subject_or_class, finality_description=finality_description, implementation_or_remedy=implementation_or_remedy, qualification=qualification, limitations=limitations, qualification_contract=_stage67_qualification(), authority_id=authority_id, mandate_id=mandate_id, authority_mandate_declaration={"acknowledged": authority_mandate_acknowledged == "1", "no_reasons_acknowledged": no_reasons_acknowledged == "1"}, scope_declaration={"acknowledged": scope_acknowledged == "1"}, representation_declaration={"acknowledged": representation_acknowledged == "1", "mode": representation_mode}, recorder_declaration={"acknowledged": recorder_acknowledged == "1"}, bindings=_json_form(authority_bindings_json, "governed_determination_bindings_invalid"), governed_objects=_json_form(governed_objects_json, "governed_determination_objects_invalid") if governed_objects_json.strip() else [], actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, pairs, determination = _stage67_page_data(int(item["id"]))
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs, determination=determination), status_code=201)
+
+
+@router.post("/api/admin/session/governed-determinations/{determination_id}/review", response_class=HTMLResponse)
+def admin_governed_determination_review(determination_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgdet.review_determination(conn, determination_id=determination_id, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, pairs, determination = _stage67_page_data(determination_id)
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs, determination=determination))
+
+
+@router.post("/api/admin/session/governed-determinations/{determination_id}/supersede", response_class=HTMLResponse)
+def admin_governed_determination_supersede(determination_id: int, request: Request, replacement_determination_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgdet.supersede_determination(conn, determination_id=determination_id, replacement_determination_id=replacement_determination_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, pairs, determination = _stage67_page_data(determination_id)
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs, determination=determination))
+
+
+@router.post("/api/admin/session/governed-determinations/{determination_id}/effect-event", response_class=HTMLResponse)
+def admin_governed_determination_effect_event(determination_id: int, request: Request, event_type: str = Form(...), represented_date_or_period: str = Form(...), rationale: str = Form(...), qualification: str = Form(...), effect_bindings_json: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgdet.record_effect_event(conn, determination_id=determination_id, event_type=event_type, represented_date_or_period=represented_date_or_period, rationale=rationale, qualification=qualification, effect_bindings=_json_form(effect_bindings_json, "governed_determination_effect_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, pairs, determination = _stage67_page_data(determination_id)
+    return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, pairs=pairs, determination=determination))
