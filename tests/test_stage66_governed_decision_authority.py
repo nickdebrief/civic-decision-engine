@@ -169,6 +169,23 @@ class Stage66AuthorityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "delegation_status_invalid"):
             self.create(mandate=self.mandate(delegation_status="unknown"))
 
+    def test_self_and_recursive_delegation_are_rejected(self):
+        parent = self.create(idempotency_key="parent-authority", mandate_idempotency_key="parent-mandate")
+        child = self.create(holder_label="Child Office", idempotency_key="child-authority", mandate_idempotency_key="child-mandate")
+        delegated_bindings = self.bindings(("canonical_record", "REC-1", "authority_basis_source"), ("canonical_record", "REC-2", "delegation_source"))
+        delegated_values = self.mandate(
+            mandate_basis_category="delegation_instrument",
+            delegation_status="delegated",
+            delegating_authority_id=parent["id"],
+            delegating_mandate_id=parent["mandates"][0]["id"],
+        )
+        with self.assertRaisesRegex(ValueError, "delegation_self_reference"):
+            authority.create_mandate(self.conn, authority_id=child["id"], **{**delegated_values, "delegating_authority_id": child["id"], "delegating_mandate_id": child["mandates"][0]["id"]}, qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=delegated_bindings, actor="admin", actor_role="administrator")
+        delegated = authority.create_mandate(self.conn, authority_id=child["id"], **delegated_values, qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=delegated_bindings, actor="admin", actor_role="administrator", idempotency_key="child-delegated-mandate")
+        grandchild = self.create(holder_label="Grandchild Office", idempotency_key="grandchild-authority", mandate_idempotency_key="grandchild-mandate")
+        with self.assertRaisesRegex(ValueError, "delegation_cycle_rejected"):
+            authority.create_mandate(self.conn, authority_id=grandchild["id"], **self.mandate(mandate_basis_category="delegation_instrument", delegation_status="delegated", delegating_authority_id=child["id"], delegating_mandate_id=delegated["id"]), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=delegated_bindings, actor="admin", actor_role="administrator")
+
     def test_dates_are_representation_not_indefinite_validity(self):
         item = self.create(holder_effective_period="from source", mandate=self.mandate(effective_to=None))
         self.assertEqual(item["mandates"][0]["effective_to"], None)
@@ -219,6 +236,16 @@ class Stage66AuthorityTests(unittest.TestCase):
         authority.supersede_authority_record(self.conn, object_type="authority", object_id=first["id"], replacement_id=second["id"], rationale="replace", actor="admin", actor_role="administrator")
         with self.assertRaisesRegex(ValueError, "cessation_terminal"):
             authority.cease_authority_record(self.conn, object_type="authority", object_id=first["id"], cessation_type="expiry_recorded", cessation_date_or_period="2027", rationale="late", cessation_bindings=self.bindings(("canonical_record", "REC-2", "cessation_source")), actor="admin", actor_role="administrator")
+
+    def test_mandate_cessation_does_not_cascade_to_parent_or_rewrite_history(self):
+        parent = self.create(idempotency_key="parent-authority", mandate_idempotency_key="parent-mandate")
+        child = self.create(holder_label="Child Office", idempotency_key="child-authority", mandate_idempotency_key="child-mandate")
+        delegated_bindings = self.bindings(("canonical_record", "REC-1", "authority_basis_source"), ("canonical_record", "REC-2", "delegation_source"))
+        delegated = authority.create_mandate(self.conn, authority_id=child["id"], **self.mandate(mandate_basis_category="delegation_instrument", delegation_status="delegated", delegating_authority_id=parent["id"], delegating_mandate_id=parent["mandates"][0]["id"]), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=delegated_bindings, actor="admin", actor_role="administrator", idempotency_key="child-delegated-mandate")
+        authority.cease_authority_record(self.conn, object_type="mandate", object_id=delegated["id"], cessation_type="expiry_recorded", cessation_date_or_period="2027", rationale="represented cessation", cessation_bindings=self.bindings(("canonical_record", "REC-2", "cessation_source")), actor="admin", actor_role="administrator", idempotency_key="child-cessation")
+        self.assertEqual(authority.get_mandate(self.conn, parent["mandates"][0]["id"])["status"], "recorded")
+        self.assertEqual(authority.get_mandate(self.conn, delegated["id"])["status"], "ceased")
+        self.assertEqual(authority.get_mandate(self.conn, delegated["id"])["subject_matter_scope"], self.mandate()["subject_matter_scope"])
 
     def test_read_only_diagnostic_does_not_initialize_tables(self):
         import tempfile
