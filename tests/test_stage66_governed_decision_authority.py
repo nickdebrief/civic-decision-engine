@@ -186,6 +186,15 @@ class Stage66AuthorityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "delegation_cycle_rejected"):
             authority.create_mandate(self.conn, authority_id=grandchild["id"], **self.mandate(mandate_basis_category="delegation_instrument", delegation_status="delegated", delegating_authority_id=child["id"], delegating_mandate_id=delegated["id"]), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=delegated_bindings, actor="admin", actor_role="administrator")
 
+    def test_missing_authority_or_parent_mandate_fails_without_orphans(self):
+        with self.assertRaisesRegex(ValueError, "authority_table_absent"):
+            authority.create_mandate(self.conn, authority_id=999, **self.mandate(), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, bindings=self.bindings(), actor="admin", actor_role="administrator")
+        parent = self.create(idempotency_key="parent-authority", mandate_idempotency_key="parent-mandate")
+        child = self.create(holder_label="Child Office", idempotency_key="child-authority", mandate_idempotency_key="child-mandate")
+        with self.assertRaisesRegex(ValueError, "mandate_not_found"):
+            authority.create_mandate(self.conn, authority_id=child["id"], **self.mandate(mandate_basis_category="delegation_instrument", delegation_status="delegated", delegating_authority_id=parent["id"], delegating_mandate_id=999), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=self.bindings(("canonical_record", "REC-1", "authority_basis_source"), ("canonical_record", "REC-2", "delegation_source")), actor="admin", actor_role="administrator")
+        self.assertEqual(self.conn.execute("select count(*) from record_governed_decision_authority_mandates").fetchone()[0], 2)
+
     def test_dates_are_representation_not_indefinite_validity(self):
         item = self.create(holder_effective_period="from source", mandate=self.mandate(effective_to=None))
         self.assertEqual(item["mandates"][0]["effective_to"], None)
@@ -255,6 +264,14 @@ class Stage66AuthorityTests(unittest.TestCase):
         self.assertEqual(authority.get_mandate(self.conn, parent["mandates"][0]["id"])["status"], "recorded")
         self.assertEqual(authority.get_mandate(self.conn, delegated["id"])["status"], "ceased")
         self.assertEqual(authority.get_mandate(self.conn, delegated["id"])["subject_matter_scope"], self.mandate()["subject_matter_scope"])
+
+    def test_parent_cessation_does_not_rewrite_delegated_child(self):
+        parent = self.create(idempotency_key="parent-authority", mandate_idempotency_key="parent-mandate")
+        child = self.create(holder_label="Child Office", idempotency_key="child-authority", mandate_idempotency_key="child-mandate")
+        delegated = authority.create_mandate(self.conn, authority_id=child["id"], **self.mandate(mandate_basis_category="delegation_instrument", delegation_status="delegated", delegating_authority_id=parent["id"], delegating_mandate_id=parent["mandates"][0]["id"]), qualification_contract=self.qualification(), recorder_declaration={"acknowledged": True}, delegation_source_declaration={"acknowledged": True}, bindings=self.bindings(("canonical_record", "REC-1", "authority_basis_source"), ("canonical_record", "REC-2", "delegation_source")), actor="admin", actor_role="administrator", idempotency_key="child-delegated-mandate")
+        authority.cease_authority_record(self.conn, object_type="authority", object_id=parent["id"], cessation_type="revocation_recorded", cessation_date_or_period="2027", rationale="represented parent cessation", cessation_bindings=self.bindings(("canonical_record", "REC-2", "cessation_source")), actor="admin", actor_role="administrator", idempotency_key="parent-cessation")
+        self.assertEqual(authority.get_authority(self.conn, parent["id"])["status"], "ceased")
+        self.assertEqual(authority.get_mandate(self.conn, delegated["id"])["status"], "recorded")
 
     def test_read_only_diagnostic_does_not_initialize_tables(self):
         import tempfile
