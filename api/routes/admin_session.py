@@ -79,6 +79,7 @@ from api import record_pattern_observations as rpo
 from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
 from api import record_governed_responses as rgr
+from api import record_governed_decision_authorities as rgauth
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45021,6 +45022,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-inferences">Governed Inferences</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-allegations">Governed Allegations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-responses">Governed Responses</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-decision-authorities">Decision Authorities &amp; Mandates</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -53445,3 +53447,201 @@ def admin_governed_response_withdraw(response_id: int, request: Request, withdra
     finally: conn.close()
     diagnostic, targets, candidates, response = _response_page_data(response_id)
     return HTMLResponse(content=_render_governed_response_page(diagnostic, admin_session=session, candidates=candidates, allegations_list=targets, response=response))
+
+
+# Stage 66: source-backed authority and mandate inspection.  This surface is
+# deliberately separate from determination workflows and has no public route.
+def _stage66_source_selector(candidates: list[dict[str, str]], *, field_name: str = "authority_bindings_json") -> str:
+    options = ''.join(
+        f'<option value="{escape(item["source_type"])}::{escape(item["source_id"])}" '
+        f'data-source-type="{escape(item["source_type"])}" data-source-id="{escape(item["source_id"])}" '
+        f'data-label="{escape(item["label"])}" data-status="{escape(item["status"])}">'
+        f'{escape(item["label"])} — {escape(item["status"])}</option>'
+        for item in candidates
+    )
+    roles = ''.join(
+        f'<option value="{role}">{role.replace("_", " ").title()}</option>'
+        for role in sorted(rgauth.CREATION_BINDING_ROLES)
+    )
+    return f'''<section class="stage66-source-selector" aria-labelledby="stage66-source-heading">
+      <h3 id="stage66-source-heading">Governed authority and mandate sources</h3>
+      <p class="field-help">Select a governed source deliberately. Source selection preserves provenance and does not confer authority, validate an appointment, or establish jurisdiction.</p>
+      <label for="stage66-source-candidate">Governed source<select id="stage66-source-candidate" size="5"><option value="">Choose a source</option>{options}</select></label>
+      <label for="stage66-binding-role">Binding role<select id="stage66-binding-role">{roles}</select></label>
+      <button type="button" id="stage66-source-add">Add selected source</button>
+      <ul id="stage66-selected-sources"><li>No source selected.</li></ul>
+      <input type="hidden" name="{field_name}" id="stage66-source-payload" value="">
+    </section>
+    <script>
+    (() => {{
+      const candidate = document.getElementById('stage66-source-candidate');
+      const role = document.getElementById('stage66-binding-role');
+      const add = document.getElementById('stage66-source-add');
+      const list = document.getElementById('stage66-selected-sources');
+      const payload = document.getElementById('stage66-source-payload');
+      const selected = [];
+      const render = () => {{
+        payload.value = JSON.stringify(selected);
+        list.replaceChildren();
+        if (!selected.length) {{ const empty = document.createElement('li'); empty.textContent = 'No source selected.'; list.appendChild(empty); return; }}
+        selected.forEach((item, index) => {{
+          const li = document.createElement('li');
+          li.textContent = `${{item.source_type}} · ${{item.source_id}} · ${{item.binding_role}} — ${{item.label}} (${{item.status}})`;
+          const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
+          remove.setAttribute('aria-label', `Remove ${{item.source_type}} ${{item.source_id}} as ${{item.binding_role}}`);
+          remove.addEventListener('click', () => {{ selected.splice(index, 1); render(); }});
+          li.appendChild(document.createTextNode(' ')); li.appendChild(remove); list.appendChild(li);
+        }});
+      }};
+      add.addEventListener('click', () => {{
+        const option = candidate.selectedOptions[0]; if (!option || !option.value) return;
+        const item = {{source_type: option.dataset.sourceType, source_id: option.dataset.sourceId, binding_role: role.value, label: option.dataset.label, status: option.dataset.status}};
+        if (selected.some(x => x.source_type === item.source_type && x.source_id === item.source_id && x.binding_role === item.binding_role)) return;
+        selected.push(item); render();
+      }});
+      render();
+    }})();
+    </script>'''
+
+
+def _stage66_html(diagnostic: dict[str, Any], *, admin_session: dict[str, Any], candidates: list[dict[str, str]], authority: dict[str, Any] | None = None) -> str:
+    def cell(value: Any) -> str:
+        return escape(str(value if value not in (None, "") else "—"))
+
+    rows = ''.join(
+        f'<tr><td><a href="/admin/governed-decision-authorities/{int(item["id"])}">{cell(item["id"])}</a></td>'
+        f'<td>{cell(item["holder_kind"])}</td><td>{cell(item["holder_label"])}</td>'
+        f'<td>{cell(item["office_role_capacity"])}</td><td>{cell(item["status"])}</td>'
+        f'<td>{cell(item.get("holder_effective_period"))}</td><td>{cell(item["created_by"])}</td></tr>'
+        for item in diagnostic.get("authorities", [])
+    ) or '<tr><td colspan="7">No governed authority records.</td></tr>'
+    detail = ''
+    if authority:
+        bindings = ''.join(f'<li>{cell(x["binding_role"])} · {cell(x["source_type"])} · {cell(x["source_id"])}</li>' for x in authority.get("bindings", [])) or '<li>No bindings.</li>'
+        mandates = ''.join(
+            f'<li>Mandate {cell(m["id"])} · {cell(m["mandate_basis_category"])} · {cell(m["title_label"])} · status {cell(m["status"])} · represented period {cell(m.get("effective_from"))} to {cell(m.get("effective_to"))}</li>'
+            for m in authority.get("mandates", [])
+        ) or '<li>No mandates.</li>'
+        reviews = ''.join(f'<li>{cell(x["disposition"])} · {cell(x["reviewed_by"])} · self-review={cell(x["is_self_review"])} · {cell(x["rationale"])}</li>' for x in authority.get("reviews", [])) or '<li>No review events.</li>'
+        detail = f'''<section class="boundary"><strong>AUTHORITY PRECEDES DETERMINATION.</strong> This record preserves a source-bound representation of decision authority and mandate. It does not confer authority, validate appointment or delegation, establish jurisdiction, or determine that any act was lawfully authorised.</section>
+        <table><tr><th>Authority identity</th><td>{cell(authority["id"])}</td></tr><tr><th>Holder</th><td>{cell(authority["holder_kind"])} · {cell(authority["holder_label"])} · {cell(authority.get("named_holder"))}</td></tr><tr><th>Institution / capacity</th><td>{cell(authority["institution_context"])} · {cell(authority["office_role_capacity"])}</td></tr><tr><th>Status</th><td>{cell(authority["status"])}</td></tr><tr><th>Represented period</th><td>{cell(authority.get("holder_effective_period"))}</td></tr><tr><th>Qualification</th><td>{cell(authority["qualification"])}</td></tr><tr><th>Limitations</th><td>{cell(authority["limitations"])}</td></tr></table>
+        <h2>Mandates</h2><ul>{mandates}</ul><h2>Source bindings</h2><ul>{bindings}</ul><h2>Review history</h2><ul>{reviews}</ul>
+        <h2>Review authority record</h2><form method="post" action="/api/admin/session/governed-decision-authorities/{int(authority["id"])}/review"><label>Disposition<select name="disposition" required>{''.join(f'<option value="{x}">{x}</option>' for x in sorted(rgauth.REVIEW_DISPOSITIONS))}</select></label><label>Rationale<textarea name="rationale" required></textarea></label><label class="confirmation"><input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this reviews source-backed representation only; it does not confer authority or validate legality.</label><button type="submit">Record review</button></form>
+        <h2>Record cessation</h2><form method="post" action="/api/admin/session/governed-decision-authorities/{int(authority["id"])}/cessation"><label>Cessation type<select name="cessation_type" required>{''.join(f'<option value="{x}">{x}</option>' for x in sorted(rgauth.CESSATION_TYPES))}</select></label><label>Represented cessation date or period<input name="cessation_date_or_period" required></label><label>Rationale<textarea name="rationale" required></textarea></label>{_stage66_source_selector(candidates, field_name="cessation_bindings_json")}<button type="submit">Record cessation</button></form>'''
+    mandate_defaults = {
+        "qualification": "This record preserves a source-bound representation of decision authority and mandate. Its recording does not confer authority, validate appointment or delegation, establish jurisdiction, or determine that any act was lawfully authorised.",
+        "limitations": "The represented scope and effective period may be incomplete, contested, or subject to later correction.",
+    }
+    form = f'''<h2>Record authority and mandate</h2><form method="post" action="/api/admin/session/governed-decision-authorities">
+      <label>Holder kind<select name="holder_kind" required>{''.join(f'<option value="{x}">{x}</option>' for x in sorted(rgauth.HOLDER_KINDS))}</select></label>
+      <label>Authority-holder label<input name="holder_label" required></label><label>Institution or organisational context<input name="institution_context" required></label><label>Office, role, panel, or capacity<input name="office_role_capacity" required></label><label>Named holder, if applicable<input name="named_holder"></label><label>Represented holder-effective period<input name="holder_effective_period"></label><label>Attribution context<textarea name="attribution_context" required></textarea></label><label>Rationale<textarea name="rationale" required></textarea></label><label>Qualification<textarea name="qualification" required>{mandate_defaults["qualification"]}</textarea></label><label>Limitations<textarea name="limitations" required>{mandate_defaults["limitations"]}</textarea></label>
+      <label>Mandate basis category<select name="mandate_basis_category" required>{''.join(f'<option value="{x}">{x}</option>' for x in sorted(rgauth.MANDATE_BASIS_CATEGORIES))}</select></label><label>Mandate title or label<input name="title_label" required></label><label>Subject-matter scope<textarea name="subject_matter_scope" required></textarea></label><label>Procedural scope<textarea name="procedural_scope" required></textarea></label><label>Territorial or organisational scope<input name="territorial_organisational_scope"></label><label>Affected record, proceeding, programme, or decision class<input name="affected_class"></label><label>Mandate effective from<input name="effective_from"></label><label>Mandate effective to<input name="effective_to"></label><label>Express mandate limitations<textarea name="express_limitations" required></textarea></label><label>Conditions or prerequisites<textarea name="conditions_prerequisites" required></textarea></label><label>Mandate rationale<textarea name="mandate_rationale" required></textarea></label><label>Mandate qualification<textarea name="mandate_qualification" required>{mandate_defaults["qualification"]}</textarea></label><label>Mandate limitations<textarea name="mandate_limitations" required>{mandate_defaults["limitations"]}</textarea></label>
+      {_stage66_source_selector(candidates)}<label class="confirmation"><input type="checkbox" name="recorder_acknowledged" value="1" required> I confirm this is a human-recorded, source-bound representation and does not confer authority.</label><label class="confirmation"><input type="checkbox" name="appointment_acknowledged" value="1"> For a named person, I confirm the selected source is represented as recording appointment or occupancy; this is not machine-verified.</label><button type="submit">Record authority and mandate</button></form>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Governed Decision Authority</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}.boundary,.field-help{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}.field-help{{padding:0;border-left:0;background:transparent;color:#555;font-size:.92rem}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#faf9f5}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:900px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}label.confirmation{{display:block;text-transform:none;font:1rem system-ui,sans-serif;color:#222}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>GOVERNED DECISION AUTHORITY AND MANDATE</h1><p class="boundary">AUTHORITY PRECEDES DETERMINATION. This record preserves a source-bound representation of decision authority and mandate. Its recording does not confer authority, validate an appointment or delegation, establish jurisdiction, or determine that any act was lawfully authorised.</p>{detail}<h2>Recorded authorities</h2><table><thead><tr><th>Identity</th><th>Holder kind</th><th>Label</th><th>Office / capacity</th><th>Record status</th><th>Represented period</th><th>Recorder</th></tr></thead><tbody>{rows}</tbody></table>{form}</main></body></html>'''
+
+
+def _stage66_page_data(authority_id: int | None = None, query: str | None = None):
+    diagnostic = rgauth.read_authority_diagnostic(authority_id, db_path=DB_PATH)
+    # Keep the administrative selector bounded; source identity is still
+    # revalidated by the persistence layer at submission time.
+    candidates = rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200]
+    authority = (diagnostic.get("authorities") or [None])[0] if authority_id is not None else None
+    return diagnostic, candidates, authority
+
+
+@router.get("/admin/governed-decision-authorities", response_class=HTMLResponse)
+def admin_governed_decision_authorities_page(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    diagnostic, candidates, _ = _stage66_page_data(query=query)
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates))
+
+
+@router.get("/admin/governed-decision-authorities/{authority_id}", response_class=HTMLResponse)
+def admin_governed_decision_authority_detail(authority_id: int, request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    diagnostic, candidates, authority = _stage66_page_data(authority_id, query=query)
+    if diagnostic.get("status") == "authority_not_found": raise _http_error(404, "governed_authority_not_found")
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority))
+
+
+def _stage66_qualification() -> dict[str, Any]:
+    return {"epistemic_label": "authority", "source_basis_present": True, "not_conferral": True, "not_appointment_validation": True, "not_jurisdiction": True, "not_lawfulness": True, "not_determination": True, "alternatives_possible": True}
+
+
+@router.post("/api/admin/session/governed-decision-authorities", response_class=HTMLResponse)
+def admin_governed_decision_authority_create(request: Request, holder_kind: str = Form(...), holder_label: str = Form(...), institution_context: str = Form(...), office_role_capacity: str = Form(...), named_holder: str | None = Form(None), holder_effective_period: str | None = Form(None), attribution_context: str = Form(...), rationale: str = Form(...), qualification: str = Form(...), limitations: str = Form(...), mandate_basis_category: str = Form(...), title_label: str = Form(...), subject_matter_scope: str = Form(...), procedural_scope: str = Form(...), territorial_organisational_scope: str | None = Form(None), affected_class: str | None = Form(None), effective_from: str | None = Form(None), effective_to: str | None = Form(None), express_limitations: str = Form(...), conditions_prerequisites: str = Form(...), mandate_rationale: str = Form(...), mandate_qualification: str = Form(...), mandate_limitations: str = Form(...), authority_bindings_json: str = Form(...), recorder_acknowledged: str | None = Form(None), appointment_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        bindings = _json_form(authority_bindings_json, "governed_authority_bindings_invalid")
+        declaration = {"acknowledged": recorder_acknowledged == "1"}
+        authority = rgauth.create_authority(conn, holder_kind=holder_kind, holder_label=holder_label, institution_context=institution_context, office_role_capacity=office_role_capacity, named_holder=named_holder, holder_effective_period=holder_effective_period, attribution_context=attribution_context, rationale=rationale, qualification=qualification, limitations=limitations, qualification_contract=_stage66_qualification(), recorder_declaration=declaration, appointment_declaration={"acknowledged": appointment_acknowledged == "1"}, bindings=bindings, mandate={"mandate_basis_category": mandate_basis_category, "title_label": title_label, "subject_matter_scope": subject_matter_scope, "procedural_scope": procedural_scope, "territorial_organisational_scope": territorial_organisational_scope, "affected_class": affected_class, "effective_from": effective_from, "effective_to": effective_to, "express_limitations": express_limitations, "conditions_prerequisites": conditions_prerequisites, "rationale": mandate_rationale, "qualification": mandate_qualification, "limitations": mandate_limitations}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, authority = _stage66_page_data(int(authority["id"]))
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority), status_code=201)
+
+
+@router.post("/api/admin/session/governed-decision-authorities/{authority_id}/review", response_class=HTMLResponse)
+def admin_governed_decision_authority_review(authority_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgauth.review_authority(conn, authority_id=authority_id, mandate_id=None, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, authority = _stage66_page_data(authority_id)
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority))
+
+
+@router.post("/api/admin/session/governed-decision-authorities/{authority_id}/cessation", response_class=HTMLResponse)
+def admin_governed_decision_authority_cessation(authority_id: int, request: Request, cessation_type: str = Form(...), cessation_date_or_period: str = Form(...), rationale: str = Form(...), cessation_bindings_json: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgauth.cease_authority_record(conn, object_type="authority", object_id=authority_id, cessation_type=cessation_type, cessation_date_or_period=cessation_date_or_period, rationale=rationale, cessation_bindings=_json_form(cessation_bindings_json, "governed_authority_cessation_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, authority = _stage66_page_data(authority_id)
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority))
+
+
+@router.post("/api/admin/session/governed-decision-authorities/{authority_id}/supersede", response_class=HTMLResponse)
+def admin_governed_decision_authority_supersede(authority_id: int, request: Request, replacement_authority_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgauth.supersede_authority_record(conn, object_type="authority", object_id=authority_id, replacement_id=replacement_authority_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, authority = _stage66_page_data(authority_id)
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority))
+
+
+def _stage66_mandate_mutation(mandate_id: int, request: Request, operation: str, **values: Any) -> HTMLResponse:
+    session = require_admin_session(request); conn = get_db()
+    try:
+        if operation == "review":
+            mandate = rgauth.get_mandate(conn, mandate_id)
+            rgauth.review_authority(conn, authority_id=int(mandate["authority_id"]), mandate_id=mandate_id, disposition=values["disposition"], rationale=values["rationale"], boundary_declaration={"acknowledged": values.get("boundary_acknowledged") == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=values.get("idempotency_key"))
+            authority_id = int(mandate["authority_id"])
+        elif operation == "supersede":
+            mandate = rgauth.get_mandate(conn, mandate_id)
+            rgauth.supersede_authority_record(conn, object_type="mandate", object_id=mandate_id, replacement_id=values["replacement_mandate_id"], rationale=values["rationale"], actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=values.get("idempotency_key"))
+            authority_id = int(mandate["authority_id"])
+        else:
+            mandate = rgauth.get_mandate(conn, mandate_id)
+            rgauth.cease_authority_record(conn, object_type="mandate", object_id=mandate_id, cessation_type=values["cessation_type"], cessation_date_or_period=values["cessation_date_or_period"], rationale=values["rationale"], cessation_bindings=_json_form(values["cessation_bindings_json"], "governed_authority_cessation_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=values.get("idempotency_key"), document_root=intake_root())
+            authority_id = int(mandate["authority_id"])
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic, candidates, authority = _stage66_page_data(authority_id)
+    return HTMLResponse(content=_stage66_html(diagnostic, admin_session=session, candidates=candidates, authority=authority))
+
+
+@router.post("/api/admin/session/governed-decision-authorities/mandates/{mandate_id}/review", response_class=HTMLResponse)
+def admin_governed_mandate_review(mandate_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    return _stage66_mandate_mutation(mandate_id, request, "review", disposition=disposition, rationale=rationale, boundary_acknowledged=boundary_acknowledged, idempotency_key=idempotency_key)
+
+
+@router.post("/api/admin/session/governed-decision-authorities/mandates/{mandate_id}/supersede", response_class=HTMLResponse)
+def admin_governed_mandate_supersede(mandate_id: int, request: Request, replacement_mandate_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    return _stage66_mandate_mutation(mandate_id, request, "supersede", replacement_mandate_id=replacement_mandate_id, rationale=rationale, idempotency_key=idempotency_key)
+
+
+@router.post("/api/admin/session/governed-decision-authorities/mandates/{mandate_id}/cessation", response_class=HTMLResponse)
+def admin_governed_mandate_cessation(mandate_id: int, request: Request, cessation_type: str = Form(...), cessation_date_or_period: str = Form(...), rationale: str = Form(...), cessation_bindings_json: str = Form(...), idempotency_key: str | None = Form(None)):
+    return _stage66_mandate_mutation(mandate_id, request, "cessation", cessation_type=cessation_type, cessation_date_or_period=cessation_date_or_period, rationale=rationale, cessation_bindings_json=cessation_bindings_json, idempotency_key=idempotency_key)
