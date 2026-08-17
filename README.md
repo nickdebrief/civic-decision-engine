@@ -56,7 +56,10 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 66 — Governed Decision Authority and Mandate
+Current release: CDE Platform Stage 66.1 — Deliberate Authority Classification and Conditional Declarations
+
+Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_66_1_DELIBERATE_AUTHORITY_CLASSIFICATION_AND_CONDITIONAL_DECLARATIONS.md`](docs/releases/CDE_PLATFORM_STAGE_66_1_DELIBERATE_AUTHORITY_CLASSIFICATION_AND_CONDITIONAL_DECLARATIONS.md)
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**

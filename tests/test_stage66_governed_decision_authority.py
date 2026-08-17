@@ -56,6 +56,7 @@ class Stage66AuthorityTests(unittest.TestCase):
             "effective_to": None,
             "express_limitations": "No substantive determination.",
             "conditions_prerequisites": "Source-backed inspection only.",
+            "delegation_status": "not_delegated",
             "rationale": "Preserve the represented mandate.",
             "qualification": "A source-backed representation only.",
             "limitations": "The source may be incomplete or contested.",
