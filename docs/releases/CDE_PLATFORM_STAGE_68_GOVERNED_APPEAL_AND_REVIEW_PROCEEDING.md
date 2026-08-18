@@ -1,6 +1,13 @@
 # CDE Platform Stage 68 — Governed Appeal and Review Proceeding
 
-**Status:** Implemented · pending merge · pending deployment
+**Status:** Implemented · merged · deployed
+
+Implementation PR [#367](https://github.com/nickdebrief/civic-decision-engine/pull/367)
+was rebase-merged as canonical main revision
+`d5cfdd4a1f64f6af1031b757b1c481e88cd1cdb2` at `2026-08-18T09:58:57Z`.
+Railway deployment `5960372306` deployed that exact revision to
+`precious-gentleness / production`, with creation at `2026-08-18T09:59:01Z`
+and successful completion at `2026-08-18T09:59:50Z`.
 
 Stage 68 introduces a narrow, human-recorded, administrator-only record of an
 appeal or review proceeding connected to exactly one governed Stage 67
