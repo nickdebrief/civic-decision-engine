@@ -82,6 +82,7 @@ from api import record_governed_responses as rgr
 from api import record_governed_decision_authorities as rgauth
 from api import record_governed_determinations as rgdet
 from api import record_governed_challenges as rgch
+from api import record_governed_remedies as rgrm
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45027,6 +45028,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-decision-authorities">Decision Authorities &amp; Mandates</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-determinations">Governed Determinations</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-challenges">Appeal and Review Proceedings</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-remedies">Remedies and Directions</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -53892,3 +53894,70 @@ def admin_governed_challenge_supersede(challenge_id: int, request: Request, repl
     except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
     finally: conn.close()
     return admin_governed_challenge_detail(challenge_id, request)
+
+
+# Stage 69: preserve remedies and directions as represented, never implementation.
+def _stage69_sources(query: str | None = None) -> list[dict[str, Any]]:
+    return rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200]
+
+
+def _stage69_determinations(query: str | None = None) -> list[dict[str, Any]]:
+    diagnostic = rgdet.read_determination_diagnostic(db_path=DB_PATH)
+    items = diagnostic.get("determinations", [])
+    if query:
+        q = query.casefold()
+        items = [x for x in items if q in f'{x.get("id")} {x.get("title_label")} {x.get("status")}'.casefold()]
+    return [x for x in items if x.get("status") == "accepted_as_attributed_determination_record"][:200]
+
+
+def _stage69_html(*, admin_session: dict[str, Any], diagnostic: dict[str, Any], determinations_: list[dict[str, Any]], sources: list[dict[str, Any]], remedy: dict[str, Any] | None = None) -> str:
+    cell = lambda value: escape(str(value if value not in (None, "") else "—"))
+    rows = "".join(f'<tr><td><a href="/admin/governed-remedies/{int(x["id"])}">{cell(x["id"])}</a></td><td>{cell(x["remedy_category"])}</td><td>{cell(x["direction_type"])}</td><td>{cell(x["status"])}</td><td>{cell(x.get("determination", {}).get("determination_id"))}</td><td>{cell(x["created_at"])}</td></tr>' for x in diagnostic.get("remedies", [])) or '<tr><td colspan="6">No governed remedies or directions.</td></tr>'
+    determination_options = '<option value="" selected disabled>Choose represented determination</option>' + "".join(f'<option value="{cell(x["id"])}">Determination {cell(x["id"])} — {cell(x.get("title_label"))} · record status {cell(x.get("status"))}</option>' for x in determinations_)
+    source_options = "".join(f'<option value="{cell(x["source_type"])}::{cell(x["source_id"])}" data-label="{cell(x.get("label"))}" data-status="{cell(x.get("status"))}">{cell(x.get("label"))} · {cell(x.get("status"))}</option>' for x in sources)
+    detail = ""
+    if remedy:
+        detail = f'<h2>Remedy {cell(remedy.get("id"))}</h2><p class="boundary">DIRECTION IS NOT IMPLEMENTATION. This record preserves a remedy or direction as represented in an identified determination. It does not establish that the direction was implemented, complied with, enforced or legally effective.</p><dl><dt>Linked determination</dt><dd>{cell(remedy.get("determination", {}).get("determination_id"))}</dd><dt>Category and direction type</dt><dd>{cell(remedy.get("remedy_category"))} / {cell(remedy.get("direction_type"))}</dd><dt>Representation</dt><dd>{cell(remedy.get("remedy_text"))}</dd><dt>Record status</dt><dd>{cell(remedy.get("status"))}</dd></dl>'
+    form = f'''<h2>Record remedy or direction</h2><form method="post" action="/api/admin/session/governed-remedies"><h3>1. Remedy classification and content</h3><label for="stage69-category">Remedy category<select id="stage69-category" name="remedy_category" required><option value="" selected disabled>Choose remedy category</option>{"".join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgrm.REMEDY_CATEGORIES))}</select></label><label for="stage69-direction">Direction type<select id="stage69-direction" name="direction_type" required><option value="" selected disabled>Choose direction type</option>{"".join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgrm.DIRECTION_TYPES))}</select></label><label>Title or restrained label<input name="title_label" required></label><label>Remedy or direction text<textarea name="remedy_text"></textarea></label><label for="stage69-representation">Representation mode<select id="stage69-representation" name="representation_mode" required><option value="" selected disabled>Choose representation mode</option>{"".join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgrm.REPRESENTATION_MODES))}</select></label><h3>2. Linked determination</h3><label for="stage69-determination">Represented determination<select id="stage69-determination" name="determination_id" required>{determination_options}</select></label><h3>3. Represented parties, amount, timing and conditions</h3><label>Beneficiary or affected party<input name="beneficiary_or_affected_party"></label><label>Obligated party<input name="obligated_party"></label><label>Amount as represented<input name="amount"></label><label>Currency as represented<input name="currency"></label><label>Performance period or deadline as represented<input name="performance_period_or_deadline"></label><label>Conditions or prerequisites<textarea name="conditions_prerequisites"></textarea></label><label>Scope and limitations as represented<textarea name="scope"></textarea></label><h3>4. Governed sources</h3><label for="stage69-source">Governed source<select id="stage69-source" size="5"><option value="">Choose governed source</option>{source_options}</select></label><label for="stage69-role">Binding role<select id="stage69-role"><option value="" selected disabled>Choose binding role</option>{"".join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgrm.BINDING_ROLES))}</select></label><button type="button" id="stage69-source-add">Add source</button><ul id="stage69-selected-sources"><li>No source selected.</li></ul><input type="hidden" id="stage69-source-payload" name="bindings_json" value=""><h3>5. Qualification and limitations</h3><label>Qualification<textarea name="qualification" required>{escape(rgrm.QUALIFICATION_BOUNDARY)}</textarea></label><label>Limitations<textarea name="limitations" required>{escape(rgrm.LIMITATIONS_BOUNDARY)}</textarea></label><label>Rationale for governed preservation<textarea name="rationale" required></textarea></label><label>Implementation description as represented, if present<textarea name="implementation_description"></textarea></label><h3>6. Human declarations</h3><label class="confirmation"><input type="checkbox" name="author_acknowledged" value="1" required> I confirm that this is a human-recorded, determination-linked and source-bound representation of a remedy or direction. Recording it does not establish implementation, compliance, enforcement or legal effect.</label><label class="confirmation"><input type="checkbox" name="representation_acknowledged" value="1" required> I confirm the selected representation mode is human-declared and not machine-verified.</label><label class="confirmation"><input type="checkbox" name="no_remedy_acknowledged" value="1"> I confirm the selected source expressly represents that no remedy or direction was made. This is not inferred from silence or missing material.</label><h3>7. Submission</h3><button type="submit">Record remedy or direction</button></form><p class="boundary">DIRECTION IS NOT IMPLEMENTATION. The record may establish what an authorised determination directed. It does not thereby establish that the direction was carried out.</p><script>(function(){{const s=document.getElementById('stage69-source'),r=document.getElementById('stage69-role'),a=document.getElementById('stage69-source-add'),p=document.getElementById('stage69-source-payload'),l=document.getElementById('stage69-selected-sources'),items=[];function render(){{p.value=JSON.stringify(items);l.replaceChildren();if(!items.length){{const e=document.createElement('li');e.textContent='No source selected.';l.appendChild(e);return;}}items.forEach((x,i)=>{{const li=document.createElement('li');li.textContent=x.source_type+' · '+x.source_id+' · '+x.binding_role+' — '+x.label+' ('+x.status+')';const b=document.createElement('button');b.type='button';b.textContent='Remove';b.setAttribute('aria-label','Remove '+x.source_id);b.onclick=()=>{{items.splice(i,1);render();}};li.append(' ',b);l.appendChild(li);}})}}a.onclick=()=>{{const o=s.selectedOptions[0];if(!o||!o.value||!r.value)return;const parts=o.value.split('::');const x={{source_type:parts[0],source_id:parts.slice(1).join('::'),binding_role:r.value,label:o.dataset.label,status:o.dataset.status}};if(!items.some(y=>y.source_type===x.source_type&&y.source_id===x.source_id&&y.binding_role===x.binding_role))items.push(x);render();}};render();}})();</script>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed Remedies and Directions</title><style>body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#faf9f5}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:900px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}label.confirmation{{display:block;text-transform:none;font:1rem system-ui,sans-serif;color:#222}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff}}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{{outline:2px solid #245d61;outline-offset:2px}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>GOVERNED REMEDIES AND DIRECTIONS</h1><p class="boundary">DIRECTION IS NOT IMPLEMENTATION. This record preserves a remedy or direction as represented in an identified determination. It does not establish that the direction was implemented, complied with, enforced or legally effective.</p>{detail}<h2>Recorded remedies and directions</h2><table><tr><th>Identity</th><th>Category</th><th>Direction type</th><th>Record status</th><th>Determination</th><th>Recorded</th></tr>{rows}</table>{form}</main></body></html>'''
+
+
+@router.get("/admin/governed-remedies", response_class=HTMLResponse)
+def admin_governed_remedies_page(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    return HTMLResponse(content=_stage69_html(admin_session=session, diagnostic=rgrm.read_remedy_diagnostic(db_path=DB_PATH), determinations_=_stage69_determinations(query), sources=_stage69_sources(query)))
+
+
+@router.get("/admin/governed-remedies/{remedy_id}", response_class=HTMLResponse)
+def admin_governed_remedy_detail(remedy_id: int, request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request); diagnostic = rgrm.read_remedy_diagnostic(remedy_id, db_path=DB_PATH)
+    if diagnostic.get("status") == "remedy_not_found": raise _http_error(404, "governed_remedy_not_found")
+    return HTMLResponse(content=_stage69_html(admin_session=session, diagnostic=diagnostic, remedy=(diagnostic.get("remedies") or [None])[0], determinations_=_stage69_determinations(query), sources=_stage69_sources(query)))
+
+
+@router.post("/api/admin/session/governed-remedies", response_class=HTMLResponse)
+def admin_governed_remedy_create(request: Request, remedy_category: str = Form(...), direction_type: str = Form(...), title_label: str = Form(...), remedy_text: str = Form(""), representation_mode: str = Form(...), determination_id: str = Form(...), beneficiary_or_affected_party: str | None = Form(None), obligated_party: str | None = Form(None), amount: str | None = Form(None), currency: str | None = Form(None), performance_period_or_deadline: str | None = Form(None), conditions_prerequisites: str | None = Form(None), scope: str | None = Form(None), qualification: str = Form(...), limitations: str = Form(...), rationale: str = Form(...), implementation_description: str | None = Form(None), bindings_json: str = Form(...), author_acknowledged: str | None = Form(None), representation_acknowledged: str | None = Form(None), no_remedy_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        item = rgrm.create_remedy(conn, remedy_category=remedy_category, direction_type=direction_type, title_label=title_label, remedy_text=remedy_text, representation_mode=representation_mode, beneficiary_or_affected_party=beneficiary_or_affected_party, obligated_party=obligated_party, amount=amount, currency=currency, performance_period_or_deadline=performance_period_or_deadline, conditions_prerequisites=conditions_prerequisites, scope=scope, limitations=limitations, implementation_description=implementation_description, rationale=rationale, qualification=qualification, determination_id=int(determination_id), qualification_contract={"epistemic_label":"remedy_or_direction","determination_link_present":True,"source_basis_present":True,"not_implementation":True,"not_compliance":True,"not_enforcement":True,"not_legal_effect":True}, author_declaration={"acknowledged": author_acknowledged == "1"}, representation_declaration={"acknowledged": representation_acknowledged == "1"}, no_remedy_declaration={"acknowledged": no_remedy_acknowledged == "1"}, bindings=_json_form(bindings_json, "governed_remedy_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return HTMLResponse(content=_stage69_html(admin_session=session, diagnostic=rgrm.read_remedy_diagnostic(int(item["id"]), db_path=DB_PATH), remedy=item, determinations_=_stage69_determinations(), sources=_stage69_sources()), status_code=201)
+
+
+@router.post("/api/admin/session/governed-remedies/{remedy_id}/review", response_class=HTMLResponse)
+def admin_governed_remedy_review(remedy_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgrm.review_remedy(conn, remedy_id=remedy_id, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_remedy_detail(remedy_id, request)
+
+
+@router.post("/api/admin/session/governed-remedies/{remedy_id}/supersede", response_class=HTMLResponse)
+def admin_governed_remedy_supersede(remedy_id: int, request: Request, replacement_remedy_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgrm.supersede_remedy(conn, remedy_id=remedy_id, replacement_remedy_id=replacement_remedy_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_remedy_detail(remedy_id, request)
