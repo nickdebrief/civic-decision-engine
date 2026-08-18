@@ -81,6 +81,7 @@ from api import record_governed_allegations as rga
 from api import record_governed_responses as rgr
 from api import record_governed_decision_authorities as rgauth
 from api import record_governed_determinations as rgdet
+from api import record_governed_challenges as rgch
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -53790,3 +53791,103 @@ def admin_governed_determination_effect_event(determination_id: int, request: Re
     finally: conn.close()
     diagnostic, candidates, object_candidates, pairs, determination = _stage67_page_data(determination_id)
     return HTMLResponse(content=_stage67_html(diagnostic, admin_session=session, candidates=candidates, object_candidates=object_candidates, pairs=pairs, determination=determination))
+
+
+def _stage68_targets(query: str | None = None) -> list[dict[str, str]]:
+    diagnostic = rgdet.read_determination_diagnostic(db_path=DB_PATH)
+    result = []
+    for item in diagnostic.get("determinations", []):
+        label = f"Determination {item.get('id')} — {item.get('title_label') or item.get('formal_outcome') or '—'}"
+        status = str(item.get("status") or "record status unavailable")
+        if query and query.lower() not in f"{label} {status}".lower():
+            continue
+        result.append({"id": str(item.get("id")), "label": label, "status": status})
+    return sorted(result, key=lambda item: int(item["id"]))[:200]
+
+
+def _stage68_authority_pairs() -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    diagnostic = rgauth.read_authority_diagnostic(db_path=DB_PATH)
+    return [
+        (authority, mandate)
+        for authority in diagnostic.get("authorities", [])
+        for mandate in authority.get("mandates", [])
+        if authority.get("status") == "accepted_as_source_backed_authority_record"
+        and mandate.get("status") == "accepted_as_source_backed_authority_record"
+    ][:200]
+
+
+def _stage68_html(*, admin_session: dict[str, Any], diagnostic: dict[str, Any], targets: list[dict[str, str]], sources: list[dict[str, str]], pairs: list[tuple[dict[str, Any], dict[str, Any]]], challenge: dict[str, Any] | None = None) -> str:
+    cell = lambda value: escape(str(value if value not in (None, "") else "—"))
+    rows = "".join(f'<tr><td><a href="/admin/governed-challenges/{int(item["id"])}">{cell(item["id"])}</a></td><td>{cell(item["challenge_form"])}</td><td>{cell(item["status"])}</td><td>{cell(item["applicant_label"])}</td><td>{cell(item["created_at"])}</td></tr>' for item in diagnostic.get("challenges", [])) or '<tr><td colspan="5">No governed challenge proceedings.</td></tr>'
+    target_options = '<option value="" selected disabled>Choose challenged determination</option>' + "".join(f'<option value="{cell(item["id"])}">{cell(item["label"])} · {cell(item["status"])}</option>' for item in targets)
+    source_options = "".join(f'<option value="{cell(item["source_type"])}::{cell(item["source_id"])}" data-source-type="{cell(item["source_type"])}" data-source-id="{cell(item["source_id"])}" data-label="{cell(item["label"])}" data-status="{cell(item["status"])}">{cell(item["label"])} · {cell(item["status"])}</option>' for item in sources)
+    authority_options = '<option value="" selected disabled>Choose reviewing authority and mandate</option>' + "".join(f'<option value="{int(a["id"])}::{int(m["id"])}">Represented authority {cell(a["id"])} — {cell(a.get("holder_label"))} · represented mandate {cell(m["id"])} — {cell(m.get("title_label"))} · record status {cell(a.get("status"))} / {cell(m.get("status"))}</option>' for a, m in pairs)
+    detail = ""
+    if challenge:
+        detail = f'<h2>Challenge {cell(challenge.get("id"))}</h2><p class="boundary">CHALLENGE IS NOT REVERSAL. Recording this proceeding does not suspend, vary, overturn or invalidate the determination being challenged.</p><dl><dt>Target determination</dt><dd>{cell(challenge.get("target_determination", {}).get("determination_id"))}</dd><dt>Applicant</dt><dd>{cell(challenge.get("applicant_label"))}</dd><dt>Reviewing authority and mandate</dt><dd>{cell(challenge.get("reviewing_authority", {}).get("authority_id"))} / {cell(challenge.get("reviewing_authority", {}).get("mandate_id"))}</dd><dt>Status</dt><dd>{cell(challenge.get("status"))}</dd></dl>'
+    form = f'''<h2>Record governed challenge</h2><form method="post" action="/api/admin/session/governed-challenges"><label for="stage68-form">Challenge form<select id="stage68-form" name="challenge_form" required><option value="" selected disabled>Choose challenge form</option>{''.join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgch.CHALLENGE_FORMS))}</select></label><label>Title or label<input name="title_label" required></label><label>Challenged determination<select name="target_determination_id" required>{target_options}</select></label><label>Applicant or appellant label<input name="applicant_label" required></label><label>Applicant kind<select name="applicant_kind" required><option value="" selected disabled>Choose applicant kind</option>{''.join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgch.APPLICANT_KINDS))}</select></label><label>Applicant capacity or represented role<input name="applicant_capacity"></label><label>Reviewing authority and mandate<select name="reviewing_authority_mandate" required>{authority_options}</select></label><label>Grounds as stated<textarea name="grounds" required></textarea></label><label>Filing date or period<input name="filing_date_or_period"></label><label>Recorded date<input name="recorded_date"></label><label>Affected subject or proceeding<input name="affected_subject_or_proceeding" required></label><label>Procedural status at creation<input name="procedural_status_at_creation" required value="initiated as recorded"></label><label>Rationale<textarea name="rationale" required></textarea></label><label>Limitations<textarea name="limitations" required>The challenge may remain pending, contested, procedurally incomplete, withdrawn, dismissed, superseded, or subject to later determination. Absence of a later event from the governed record does not establish abandonment, refusal, finality or outcome.</textarea></label><label>Initiation or filing source<select id="stage68-source-candidate" size="5"><option value="">Choose governed source</option>{source_options}</select></label><label>Binding role<select id="stage68-binding-role"><option value="" selected disabled>Choose binding role</option>{''.join(f'<option value="{x}">{x.replace("_", " ").title()}</option>' for x in sorted(rgch.BINDING_ROLES))}</select></label><button type="button" id="stage68-source-add">Add source</button><ul id="stage68-selected-sources"><li>No source selected.</li></ul><input type="hidden" id="stage68-source-payload" name="bindings_json" value=""><p class="field-help">Recording a challenge establishes that a challenge proceeding was initiated or preserved in an identified source. It does not suspend, vary, overturn or invalidate the determination being challenged.</p><label class="confirmation"><input type="checkbox" name="recorder_acknowledged" value="1" required> I confirm that this is a human-recorded, source-bound challenge proceeding. Recording it does not suspend, vary, overturn or invalidate the determination being challenged.</label><button type="submit">Record challenge proceeding</button></form><script>(function(){{const c=document.getElementById('stage68-source-candidate'),r=document.getElementById('stage68-binding-role'),a=document.getElementById('stage68-source-add'),p=document.getElementById('stage68-source-payload'),l=document.getElementById('stage68-selected-sources'),items=[];function render(){{p.value=JSON.stringify(items);l.replaceChildren();if(!items.length){{const e=document.createElement('li');e.textContent='No source selected.';l.appendChild(e);return;}}items.forEach((x,i)=>{{const li=document.createElement('li');li.textContent=x.source_type+' · '+x.source_id+' · '+x.binding_role+' — '+x.label+' ('+x.status+')';const b=document.createElement('button');b.type='button';b.textContent='Remove';b.setAttribute('aria-label','Remove '+x.source_id);b.onclick=()=>{{items.splice(i,1);render();}};li.append(' ',b);l.appendChild(li);}})}}a.onclick=()=>{{const o=c.selectedOptions[0];if(!o||!o.value||!r.value)return;const parts=o.value.split('::');const x={{source_type:parts[0],source_id:parts.slice(1).join('::'),binding_role:r.value,label:o.dataset.label,status:o.dataset.status}};if(!items.some(y=>y.source_type===x.source_type&&y.source_id===x.source_id&&y.binding_role===x.binding_role))items.push(x);render();}};render();}})();</script>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed Challenge Proceedings</title><style>body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}.boundary,.field-help{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:900px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}label.confirmation{{display:block;text-transform:none;font:1rem system-ui,sans-serif;color:#222}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>GOVERNED APPEAL AND REVIEW PROCEEDING</h1><p class="boundary">CHALLENGE IS NOT REVERSAL. Recording an appeal, review application or other governed challenge does not establish admissibility, merit, suspension, variation, reversal, invalidity, remedy or legal effect.</p>{detail}<h2>Recorded challenge proceedings</h2><table><tr><th>Identity</th><th>Form</th><th>Record status</th><th>Applicant</th><th>Recorded</th></tr>{rows}</table>{form}</main></body></html>'''
+
+
+@router.get("/admin/governed-challenges", response_class=HTMLResponse)
+def admin_governed_challenges_page(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    diagnostic = rgch.read_challenge_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_stage68_html(admin_session=session, diagnostic=diagnostic, targets=_stage68_targets(query), sources=rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200], pairs=_stage68_authority_pairs()))
+
+
+@router.get("/admin/governed-challenges/{challenge_id}", response_class=HTMLResponse)
+def admin_governed_challenge_detail(challenge_id: int, request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    diagnostic = rgch.read_challenge_diagnostic(challenge_id, db_path=DB_PATH)
+    if diagnostic.get("status") == "challenge_not_found": raise _http_error(404, "governed_challenge_not_found")
+    return HTMLResponse(content=_stage68_html(admin_session=session, diagnostic=diagnostic, challenge=(diagnostic.get("challenges") or [None])[0], targets=_stage68_targets(query), sources=rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200], pairs=_stage68_authority_pairs()))
+
+
+@router.post("/api/admin/session/governed-challenges", response_class=HTMLResponse)
+def admin_governed_challenge_create(request: Request, challenge_form: str = Form(...), title_label: str = Form(...), target_determination_id: str = Form(...), applicant_label: str = Form(...), applicant_kind: str = Form(...), applicant_capacity: str | None = Form(None), reviewing_authority_mandate: str = Form(...), grounds: str = Form(...), filing_date_or_period: str | None = Form(None), recorded_date: str | None = Form(None), affected_subject_or_proceeding: str = Form(...), procedural_status_at_creation: str = Form(...), rationale: str = Form(...), limitations: str = Form(...), bindings_json: str = Form(...), recorder_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        pair = str(reviewing_authority_mandate or "").split("::")
+        if len(pair) != 2 or not all(part.strip().isdigit() for part in pair): raise ValueError("governed_challenge_authority_mandate_selection_invalid")
+        item = rgch.create_challenge(conn, challenge_form=challenge_form, title_label=title_label, target_determination_id=int(target_determination_id), applicant_label=applicant_label, applicant_kind=applicant_kind, applicant_capacity=applicant_capacity, reviewing_forum_label="Represented reviewing authority", reviewing_authority_id=int(pair[0]), reviewing_mandate_id=int(pair[1]), grounds=grounds, filing_date_or_period=filing_date_or_period, recorded_date=recorded_date, affected_subject_or_proceeding=affected_subject_or_proceeding, procedural_status_at_creation=procedural_status_at_creation, rationale=rationale, limitations=limitations, qualification_contract={"epistemic_label":"challenge_proceeding", "source_basis_present":True, "target_determination_present":True, "not_suspension":True, "not_reversal":True, "not_legal_effect":True}, recorder_declaration={"acknowledged": recorder_acknowledged == "1"}, bindings=_json_form(bindings_json, "governed_challenge_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    diagnostic = rgch.read_challenge_diagnostic(int(item["id"]), db_path=DB_PATH)
+    return HTMLResponse(content=_stage68_html(admin_session=session, diagnostic=diagnostic, challenge=item, targets=_stage68_targets(), sources=rga.read_source_candidates(DB_PATH, document_root=intake_root())[:200], pairs=_stage68_authority_pairs()), status_code=201)
+
+
+@router.post("/api/admin/session/governed-challenges/{challenge_id}/review", response_class=HTMLResponse)
+def admin_governed_challenge_review(challenge_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgch.review_challenge(conn, challenge_id=challenge_id, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_challenge_detail(challenge_id, request)
+
+
+@router.post("/api/admin/session/governed-challenges/{challenge_id}/event", response_class=HTMLResponse)
+def admin_governed_challenge_event(challenge_id: int, request: Request, event_type: str = Form(...), event_description: str = Form(...), event_date_or_period: str | None = Form(None), rationale: str = Form(...), event_bindings_json: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgch.record_event(conn, challenge_id=challenge_id, event_type=event_type, event_description=event_description, event_date_or_period=event_date_or_period, rationale=rationale, event_bindings=_json_form(event_bindings_json, "governed_challenge_event_bindings_invalid"), boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_challenge_detail(challenge_id, request)
+
+
+@router.post("/api/admin/session/governed-challenges/{challenge_id}/outcome", response_class=HTMLResponse)
+def admin_governed_challenge_outcome(challenge_id: int, request: Request, outcome_type: str = Form(...), outcome_text: str = Form(...), outcome_date_or_period: str | None = Form(None), outcome_source_json: str = Form(...), outcome_determination_id: int | None = Form(None), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgch.record_outcome(conn, challenge_id=challenge_id, outcome_type=outcome_type, outcome_text=outcome_text, outcome_date_or_period=outcome_date_or_period, outcome_source=_json_form(outcome_source_json, "governed_challenge_outcome_source_invalid"), outcome_determination_id=outcome_determination_id, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_challenge_detail(challenge_id, request)
+
+
+@router.post("/api/admin/session/governed-challenges/{challenge_id}/supersede", response_class=HTMLResponse)
+def admin_governed_challenge_supersede(challenge_id: int, request: Request, replacement_challenge_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try: rgch.supersede_challenge(conn, challenge_id=challenge_id, replacement_challenge_id=replacement_challenge_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_challenge_detail(challenge_id, request)
