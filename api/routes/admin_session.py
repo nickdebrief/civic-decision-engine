@@ -45026,6 +45026,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-responses">Governed Responses</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-decision-authorities">Decision Authorities &amp; Mandates</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-determinations">Governed Determinations</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-challenges">Appeal and Review Proceedings</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
