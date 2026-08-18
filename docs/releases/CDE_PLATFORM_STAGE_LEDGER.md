@@ -47,7 +47,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 66.1 | Deliberate Authority Classification and Conditional Declarations | governed-decision-authority | 66 | 2026-08-17 | `21d95b71ce50021086ffbe38478feb0394217d85` | [#361](https://github.com/nickdebrief/civic-decision-engine/pull/361) | [Stage 66.1](CDE_PLATFORM_STAGE_66_1_DELIBERATE_AUTHORITY_CLASSIFICATION_AND_CONDITIONAL_DECLARATIONS.md) | Implemented · merged · deployed |
 | 67 | Governed Determination | governed-determination | — | 2026-08-17 | `b8296cb9487a766efa01ba5fa7d917f490becc1d` | [#363](https://github.com/nickdebrief/civic-decision-engine/pull/363) | [Stage 67](CDE_PLATFORM_STAGE_67_GOVERNED_DETERMINATION.md) | Implemented · merged · deployed |
 | 67.1 | Deliberate Determination Linking and Source Selection | governed-determination | 67 | 2026-08-18 | `ba47640eb78244b5404e43dd998d80add71fb41b` | [#365](https://github.com/nickdebrief/civic-decision-engine/pull/365) | [Stage 67.1](CDE_PLATFORM_STAGE_67_1_DELIBERATE_DETERMINATION_LINKING_AND_SOURCE_SELECTION.md) | Implemented · merged · deployed |
-| 68 | Governed Appeal and Review Proceeding | governed-appeal-review | — | — | — | — | [Stage 68](CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md) | Implemented · pending merge · pending deployment |
+| 68 | Governed Appeal and Review Proceeding | governed-appeal-review | — | 2026-08-18 | `d5cfdd4a1f64f6af1031b757b1c481e88cd1cdb2` | [#367](https://github.com/nickdebrief/civic-decision-engine/pull/367) | [Stage 68](CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 
