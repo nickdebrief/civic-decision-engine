@@ -87,6 +87,12 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         errors = validate_entries([*self.entries[:-1], pending, self.entries[-1]])
         self.assertIn("pending_stage_not_terminal: 53.2", errors)
 
+    def test_stage_67_1_is_closed_after_verified_deployment(self):
+        entry = next(item for item in self.entries if item.stage == "67.1")
+        self.assertEqual(entry.status, "Implemented · merged · deployed")
+        self.assertEqual(entry.merge_commit, "ba47640eb78244b5404e43dd998d80add71fb41b")
+        self.assertEqual(entry.pull_request, "[#365](https://github.com/nickdebrief/civic-decision-engine/pull/365)")
+
 
 if __name__ == "__main__":
     unittest.main()
