@@ -56,10 +56,10 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 67.1 — Deliberate Determination Linking and Source Selection
+Current release: CDE Platform Stage 68 — Governed Appeal and Review Proceeding
 
 Release documentation:
-- [`docs/releases/CDE_PLATFORM_STAGE_67_1_DELIBERATE_DETERMINATION_LINKING_AND_SOURCE_SELECTION.md`](docs/releases/CDE_PLATFORM_STAGE_67_1_DELIBERATE_DETERMINATION_LINKING_AND_SOURCE_SELECTION.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md`](docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md)
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
