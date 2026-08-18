@@ -77,6 +77,7 @@ class PublicNavigationCompletionTests(unittest.TestCase):
         public_nav = content.split('aria-label="Primary public navigation"', 1)[1].split("</nav>", 1)[0]
         self.assertNotIn("/admin", public_nav)
         self.assertNotIn("Administration", public_nav)
+        self.assertNotIn("Appeal and Review Proceedings", public_nav)
 
 
 if __name__ == "__main__":

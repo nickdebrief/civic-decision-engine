@@ -157,6 +157,29 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn("Signed in as:", content)
         self.assertIn("<strong>admin-user</strong>", content)
 
+    def test_shared_navigation_reaches_stage68_once(self):
+        content = admin_session._render_admin_console_navigation(
+            admin_session={"username": "admin-user"},
+        )
+        self.assertEqual(content.count(">Appeal and Review Proceedings</a>"), 1)
+        self.assertEqual(content.count('href="/admin/governed-challenges"'), 1)
+        self.assertIn("Governed Determinations", content)
+
+    def test_stage68_listing_route_remains_admin_protected(self):
+        with self.assertRaises(FakeHTTPException) as ctx:
+            admin_session.admin_governed_challenges_page(FakeRequest())
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_stage68_navigation_render_does_not_initialize_persistence(self):
+        with patch.object(
+            admin_session,
+            "get_db",
+            side_effect=AssertionError("navigation must not access persistence"),
+        ):
+            admin_session._render_admin_console_navigation(
+                admin_session={"username": "admin-user"},
+            )
+
     def test_intake_and_review_pages_include_shared_navigation(self):
         intake = admin_session.admin_document_intake_page(self.request).content
         review = admin_session.admin_document_intake_preview_page(

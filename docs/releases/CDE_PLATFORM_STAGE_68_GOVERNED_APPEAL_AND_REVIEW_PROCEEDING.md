@@ -34,8 +34,9 @@ revalidated transactionally at write time. Accepted Stage 62 observations may
 provide only an eligible governed source or context under the existing rules;
 silence is never synthesized into a filing, withdrawal, refusal, or outcome.
 
-The administrative interface uses neutral selectors, escaped metadata, explicit
-declarations, and read-only candidate enumeration. It has no public route,
+The administrative interface is reachable from the shared authenticated
+administration navigation and uses neutral selectors, escaped metadata,
+explicit declarations, and read-only candidate enumeration. It has no public route,
 serializer, navigation, search, export, feed, publication eligibility, public
 API, automatic extraction, AI/LLM integration, merits analysis, suspension,
 reversal, or legal-effect calculation. Stage 60–67.1 semantics remain
