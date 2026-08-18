@@ -56,9 +56,10 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 68 — Governed Appeal and Review Proceeding
+Current release: CDE Platform Stage 69 — Governed Remedy and Direction
 
 Release documentation:
+- [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md`](docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md)
 
 Research artefacts:

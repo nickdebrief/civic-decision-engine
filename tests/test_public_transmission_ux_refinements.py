@@ -66,7 +66,7 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 68 — Governed Appeal and Review Proceeding",
+            "Current release: CDE Platform Stage 69 — Governed Remedy and Direction",
             readme,
         )
         self.assertIn("### CDE v13.0.1 — Public Transmission UX Refinements", readme)
