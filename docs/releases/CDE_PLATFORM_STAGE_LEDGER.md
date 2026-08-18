@@ -48,7 +48,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 67 | Governed Determination | governed-determination | — | 2026-08-17 | `b8296cb9487a766efa01ba5fa7d917f490becc1d` | [#363](https://github.com/nickdebrief/civic-decision-engine/pull/363) | [Stage 67](CDE_PLATFORM_STAGE_67_GOVERNED_DETERMINATION.md) | Implemented · merged · deployed |
 | 67.1 | Deliberate Determination Linking and Source Selection | governed-determination | 67 | 2026-08-18 | `ba47640eb78244b5404e43dd998d80add71fb41b` | [#365](https://github.com/nickdebrief/civic-decision-engine/pull/365) | [Stage 67.1](CDE_PLATFORM_STAGE_67_1_DELIBERATE_DETERMINATION_LINKING_AND_SOURCE_SELECTION.md) | Implemented · merged · deployed |
 | 68 | Governed Appeal and Review Proceeding | governed-appeal-review | — | 2026-08-18 | `d5cfdd4a1f64f6af1031b757b1c481e88cd1cdb2` | [#367](https://github.com/nickdebrief/civic-decision-engine/pull/367) | [Stage 68](CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md) | Implemented · merged · deployed |
-| 69 | Governed Remedy and Direction | governed-remedy-direction | — | — | — | — | [Stage 69](CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md) | Implemented · pending merge · pending deployment |
+| 69 | Governed Remedy and Direction | governed-remedy-direction | — | 2026-08-18 | `4f64e2bf046dd88134afe96eea7996826071bc17` | [#370](https://github.com/nickdebrief/civic-decision-engine/pull/370) | [Stage 69](CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 

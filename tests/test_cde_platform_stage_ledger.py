@@ -99,6 +99,12 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         self.assertEqual(entry.merge_commit, "ba47640eb78244b5404e43dd998d80add71fb41b")
         self.assertEqual(entry.pull_request, "[#365](https://github.com/nickdebrief/civic-decision-engine/pull/365)")
 
+    def test_stage_69_is_closed_after_verified_deployment(self):
+        entry = next(item for item in self.entries if item.stage == "69")
+        self.assertEqual(entry.status, "Implemented · merged · deployed")
+        self.assertEqual(entry.merge_commit, "4f64e2bf046dd88134afe96eea7996826071bc17")
+        self.assertEqual(entry.pull_request, "[#370](https://github.com/nickdebrief/civic-decision-engine/pull/370)")
+
 
 if __name__ == "__main__":
     unittest.main()

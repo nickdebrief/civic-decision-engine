@@ -37,3 +37,20 @@ no-remedy safeguards, administrative navigation and the public boundary.
 
 Deployment remains separately governed. No production remedy is created by
 Stage 69 implementation or tests.
+
+## Deployment and production verification
+
+Stage 69 was merged through [PR #370](https://github.com/nickdebrief/civic-decision-engine/pull/370)
+using the rebase method as canonical main revision
+`4f64e2bf046dd88134afe96eea7996826071bc17`. Railway deployment `5966599864`
+targeted that exact revision in the `precious-gentleness / production`
+environment. It was created at `2026-08-18T16:04:35Z` and reached successful
+status at `2026-08-18T16:06:28Z`.
+
+Non-mutating public smoke verification returned HTTP 200 for `/` and
+`/records`, HTTP 401 for unauthenticated `/admin/governed-remedies` and
+`/admin/governed-determinations`, and HTTP 404 for plausible public Stage 69
+paths. Public root and records responses contained no Stage 69 content.
+Authenticated inspection was not available. No production form was submitted
+and no production remedy, review, supersession, binding, or other data was
+created or modified.
