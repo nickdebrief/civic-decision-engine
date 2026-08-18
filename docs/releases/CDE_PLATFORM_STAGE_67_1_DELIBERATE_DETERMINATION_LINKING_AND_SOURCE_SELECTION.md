@@ -1,6 +1,8 @@
 # CDE Platform Stage 67.1 — Deliberate Determination Linking and Source Selection
 
-**Status:** Implemented · pending merge · pending deployment
+**Status:** Implemented · merged · deployed
+
+The implementation was merged through [PR #365](https://github.com/nickdebrief/civic-decision-engine/pull/365) using the rebase method as canonical main revision `ba47640eb78244b5404e43dd998d80add71fb41b`. Railway deployment `5946047974` for that exact revision was reported ACTIVE and successful in the Railway interface, and production inspection confirmed the deployed workflow. The GitHub deployment callback created during the documented GitHub incident remained stale at `in_progress`/pending; no replacement deployment was triggered. The accessible callback metadata does not expose a reliable Railway completion timestamp.
 
 Stage 67.1 refines the authenticated Stage 67 administrative creation workflow. Its governing invariant is:
 
@@ -15,4 +17,4 @@ The workflow has separate sections for determination content, authority and mand
 
 Stage 67.1 remains administrator-only and non-public. It adds no public route, serializer, search, export, publication eligibility, recommendation, ranking, automation, AI/LLM integration, legal-effect calculation, migration, or production mutation. The repository’s existing signed, expiring, `HttpOnly`, `Secure`, `SameSite=Strict` administrative-session boundary remains in force; no CSRF-token or Origin/Referer protection is claimed.
 
-Focused tests cover neutral defaults, deliberate payloads, read-only candidate enumeration, source/object separation, validation and rollback, idempotency compatibility, escaping, accessible controls, public absence, and epistemically restrained language. Production deployment remains a separately authorised operation.
+Focused tests cover neutral defaults, deliberate payloads, read-only candidate enumeration, source/object separation, validation and rollback, idempotency compatibility, escaping, accessible controls, public absence, and epistemically restrained language. Production inspection was non-mutating: no determination was recorded and no production form was submitted. No public exposure, automated link, inferred reliance, automated determination, or production data mutation occurred.
