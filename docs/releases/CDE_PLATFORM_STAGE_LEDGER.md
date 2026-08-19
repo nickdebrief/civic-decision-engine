@@ -50,6 +50,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 68 | Governed Appeal and Review Proceeding | governed-appeal-review | — | 2026-08-18 | `d5cfdd4a1f64f6af1031b757b1c481e88cd1cdb2` | [#367](https://github.com/nickdebrief/civic-decision-engine/pull/367) | [Stage 68](CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md) | Implemented · merged · deployed |
 | 69 | Governed Remedy and Direction | governed-remedy-direction | — | 2026-08-18 | `4f64e2bf046dd88134afe96eea7996826071bc17` | [#370](https://github.com/nickdebrief/civic-decision-engine/pull/370) | [Stage 69](CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md) | Implemented · merged · deployed |
 | 70 | Governed Implementation and Compliance Event | governed-implementation-compliance-event | — | 2026-08-19 | `92dad4ab9669c44431af759f6791141988c74844` | [#372](https://github.com/nickdebrief/civic-decision-engine/pull/372) | [Stage 70](CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md) | Implemented · merged · deployed |
+| 71 | Governed Procedural Deadline and Notice | governed-procedural-time | — | — | `—` | — | [Stage 71](CDE_PLATFORM_STAGE_71_GOVERNED_PROCEDURAL_DEADLINE_AND_NOTICE.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 
