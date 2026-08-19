@@ -66,6 +66,7 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn('href="/admin/document-intake#intake-management"', content)
         self.assertIn('href="/admin#open-record-evidence"', content)
         self.assertIn('href="/documents"', content)
+        self.assertIn('href="/admin/governed-implementation-events">Implementation and Compliance Events</a>', content)
         self.assertIn('/api/admin/session/logout', content)
 
     def test_unauthenticated_dashboard_renders_login_ui(self):

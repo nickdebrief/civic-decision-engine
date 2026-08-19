@@ -56,10 +56,11 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 69 — Governed Remedy and Direction
+Current release: CDE Platform Stage 70 — Governed Implementation and Compliance Event
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md`](docs/releases/CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md`](docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md)
 
 Research artefacts:
