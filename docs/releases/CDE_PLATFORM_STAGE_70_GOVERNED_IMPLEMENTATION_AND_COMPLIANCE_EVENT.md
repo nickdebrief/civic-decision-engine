@@ -118,3 +118,16 @@ Authenticated inspection was unavailable; no production form was submitted.
 Stage 70 is registered as **Implemented · merged · deployed**. No production
 event or production mutation was created by implementation, validation or
 verification.
+
+## Local maintenance correction: conditional declarations
+
+The deployed Stage 70 form previously used generic conditional-declaration
+wording after category selection. The local maintenance correction replaces
+that presentation with a disabled neutral control before selection and the
+server-owned, category-specific declaration after selection. The server now
+rejects category mismatches, unknown declaration fields, malformed values and
+inapplicable declarations, while preserving transactional creation and
+idempotency. Direct submissions remain governed by the submitted event
+category, independent of JavaScript. This correction is local and remains
+**pending merge · pending deployment**; it must not be read as production
+verified until separately integrated and deployed.
