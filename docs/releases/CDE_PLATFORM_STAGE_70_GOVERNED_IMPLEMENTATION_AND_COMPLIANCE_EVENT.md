@@ -102,6 +102,19 @@ Focused tests cover event creation, remedy linkage, closed vocabularies,
 declarations, source and object separation, rollback, idempotency, reviews,
 supersession, read-only inspection and administrative/public boundaries.
 Compatibility, ledger, platform-identity, navigation and full regression tests
-cover preservation of Stages 60–69. Stage 70 is registered as
-**Implemented · pending merge · pending deployment**. No production event or
-production mutation is created by implementation or tests.
+cover preservation of Stages 60–69. The implementation was rebase-merged as
+PR [#372](https://github.com/nickdebrief/civic-decision-engine/pull/372), with
+local commit `d73d60321e6602b9319a6ffec8b52f490351316c` and canonical merge
+revision `92dad4ab9669c44431af759f6791141988c74844`.
+
+The automatic Railway deployment was recorded by GitHub as deployment
+`5978226149` in `precious-gentleness / production`, created at
+`2026-08-19T07:43:33Z` and reaching terminal success at
+`2026-08-19T07:44:13Z` for the canonical revision. Non-mutating public smoke
+checks returned 200 for `/` and `/records`, 401 for the protected Stage 70
+and Stage 69 administration routes, and 404 for plausible public Stage 70
+paths. Public root and records responses contained no Stage 70 content.
+Authenticated inspection was unavailable; no production form was submitted.
+Stage 70 is registered as **Implemented · merged · deployed**. No production
+event or production mutation was created by implementation, validation or
+verification.

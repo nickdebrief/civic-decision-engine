@@ -105,11 +105,11 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         self.assertEqual(entry.merge_commit, "4f64e2bf046dd88134afe96eea7996826071bc17")
         self.assertEqual(entry.pull_request, "[#370](https://github.com/nickdebrief/civic-decision-engine/pull/370)")
 
-    def test_stage_70_is_pending_merge_and_deployment(self):
+    def test_stage_70_is_merged_and_deployed(self):
         entry = next(item for item in self.entries if item.stage == "70")
-        self.assertEqual(entry.status, "Implemented · pending merge · pending deployment")
-        self.assertEqual(entry.merge_commit, "—")
-        self.assertEqual(entry.pull_request, "—")
+        self.assertEqual(entry.status, "Implemented · merged · deployed")
+        self.assertEqual(entry.merge_commit, "92dad4ab9669c44431af759f6791141988c74844")
+        self.assertEqual(entry.pull_request, "[#372](https://github.com/nickdebrief/civic-decision-engine/pull/372)")
 
 
 if __name__ == "__main__":
