@@ -122,12 +122,32 @@ verification.
 ## Local maintenance correction: conditional declarations
 
 The deployed Stage 70 form previously used generic conditional-declaration
-wording after category selection. The local maintenance correction replaces
-that presentation with a disabled neutral control before selection and the
+wording after category selection. The maintenance correction replaces that
+presentation with a disabled neutral control before selection and the
 server-owned, category-specific declaration after selection. The server now
 rejects category mismatches, unknown declaration fields, malformed values and
 inapplicable declarations, while preserving transactional creation and
 idempotency. Direct submissions remain governed by the submitted event
-category, independent of JavaScript. This correction is local and remains
-**pending merge · pending deployment**; it must not be read as production
-verified until separately integrated and deployed.
+category, independent of JavaScript.
+
+The correction was committed locally as
+`2fd4389bae3de64402718736dd5e3783e2990ed8`, merged by rebase through PR #374,
+and deployed in canonical revision
+`d2ccf9d6ec87b41892cc24fc540978d5809af539`. Automatic deployment `5979696698`
+targeted `precious-gentleness / production`, was created at
+`2026-08-19T09:28:07Z`, and reached successful terminal status at
+`2026-08-19T09:28:37Z`.
+
+Non-mutating public smoke verification passed: `/` and `/records` returned
+HTTP 200; `/admin/governed-implementation-events` and
+`/admin/governed-remedies` returned HTTP 401; plausible public Stage 70 paths
+returned HTTP 404; and public root and records responses contained no Stage 70
+content. Authenticated production inspection was unavailable. No production
+form was submitted and no production event, review, supersession, source
+binding, governed-object link or other data was created or changed.
+
+The reverse-order HTMLResponse.content result remains Classification C: the
+canonical baseline and Stage 70 comparison fail identically because older test
+modules replace FastAPI response classes globally at import time without
+restoring them. Stage 70 does not contribute to that contamination, and no
+unrelated harness correction was made.
