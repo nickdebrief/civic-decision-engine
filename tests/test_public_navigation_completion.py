@@ -78,6 +78,7 @@ class PublicNavigationCompletionTests(unittest.TestCase):
         self.assertNotIn("/admin", public_nav)
         self.assertNotIn("Administration", public_nav)
         self.assertNotIn("Appeal and Review Proceedings", public_nav)
+        self.assertNotIn("Implementation and Compliance Events", public_nav)
 
 
 if __name__ == "__main__":
