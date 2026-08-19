@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 70 — Governed Implementation and Compliance Event
+Current release: CDE Platform Stage 71 — Governed Procedural Deadline and Notice
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)

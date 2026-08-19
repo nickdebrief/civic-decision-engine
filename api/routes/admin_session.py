@@ -84,6 +84,7 @@ from api import record_governed_determinations as rgdet
 from api import record_governed_challenges as rgch
 from api import record_governed_remedies as rgrm
 from api import record_governed_implementation_events as rg70
+from api import record_governed_procedural_time as rg71
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45031,6 +45032,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-challenges">Appeal and Review Proceedings</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-remedies">Remedies and Directions</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-implementation-events">Implementation and Compliance Events</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-procedural-time">Procedural Deadlines and Notices</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -54085,3 +54087,158 @@ def admin_governed_implementation_event_supersede(event_id: int, request: Reques
     finally:
         conn.close()
     return admin_governed_implementation_event_detail(event_id, request)
+
+
+# Stage 71: preserve procedural time without inferring receipt, lateness or legal effect.
+def _stage71_sources(query: str | None = None) -> list[dict[str, Any]]:
+    return rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200]
+
+
+def _stage71_objects(query: str | None = None) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    try:
+        conn = sqlite3.connect(f"file:{Path(DB_PATH).resolve()}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+    except (sqlite3.Error, OSError):
+        return result
+    for kind, table in (("governed_allegation", "record_governed_allegations"), ("governed_response", "record_governed_responses"), ("governed_determination", "record_governed_determinations"), ("governed_challenge", "record_governed_challenges"), ("governed_remedy", "record_governed_remedies"), ("governed_implementation_event", "record_governed_implementation_events")):
+        try:
+            if not rg71._table_exists(conn, table):
+                continue
+            rows = conn.execute(f"SELECT * FROM {table} ORDER BY id DESC LIMIT 200").fetchall()
+        except (sqlite3.Error, OSError):
+            continue
+        for row in rows:
+            item = dict(row); label = item.get("title_label") or item.get("event_description") or item.get("notice_description") or item.get("id")
+            value = str(item.get("id")); text = f"{kind} {value} {label} {item.get('status','')}"
+            if not query or query.casefold() in text.casefold(): result.append({"object_type": kind, "object_id": value, "label": str(label), "status": str(item.get("status", "recorded"))})
+    try:
+        conn.close()
+    except sqlite3.Error:
+        pass
+    return result[:200]
+
+
+def _stage71_html(*, admin_session: dict[str, Any], diagnostic: dict[str, Any], sources: list[dict[str, Any]], objects: list[dict[str, Any]], record: dict[str, Any] | None = None, form_error: str | None = None) -> str:
+    esc = lambda value: escape(str(value if value is not None else ""))
+    records = diagnostic.get("records", [])
+    rows = "".join(f'<tr><td>{esc(x.get("record_kind"))}</td><td><a href="/admin/governed-procedural-time/{esc(x.get("record_kind"))}/{esc(x.get("id"))}">{esc(x.get("id"))}</a></td><td>{esc(x.get("notice_category") or x.get("deadline_category"))}</td><td>{esc(x.get("status"))}</td><td>{esc(x.get("procedural_subject"))}</td><td>{esc(x.get("issue_date_or_period") or x.get("deadline_date_or_period"))}</td><td>{esc(x.get("created_at"))}</td></tr>' for x in records) or '<tr><td colspan="7">No procedural notices or deadlines recorded.</td></tr>'
+    notice_categories = ''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg71.NOTICE_CATEGORIES))
+    deadline_categories = ''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg71.DEADLINE_CATEGORIES))
+    source_options = ''.join(f'<option value="{esc(x["source_type"])}::{esc(x["source_id"])}" data-label="{esc(x.get("label"))}">{esc(x["source_type"])} · {esc(x["source_id"])} · {esc(x.get("label"))} · {esc(x.get("status"))}</option>' for x in sources)
+    object_options = ''.join(f'<option value="{esc(x["object_type"])}::{esc(x["object_id"])}" data-label="{esc(x.get("label"))}">{esc(x["object_type"])} · {esc(x["object_id"])} · {esc(x.get("label"))} · {esc(x.get("status"))}</option>' for x in objects)
+    detail = ""
+    if record:
+        detail = f'<h2>{esc(record.get("record_kind")).title()} {esc(record.get("id"))}</h2><p class="boundary">NOTICE ISSUED IS NOT NOTICE RECEIVED. TIME CALCULATED IS NOT LATENESS DETERMINED.</p><dl><dt>Category</dt><dd>{esc(record.get("notice_category") or record.get("deadline_category"))}</dd><dt>Record status</dt><dd>{esc(record.get("status"))}</dd><dt>Procedural subject</dt><dd>{esc(record.get("procedural_subject"))}</dd><dt>Source bindings</dt><dd>{esc(record.get("bindings"))}</dd><dt>Governed-object links</dt><dd>{esc(record.get("subject_links"))}</dd></dl>'
+    error = f'<p class="error">{esc(form_error)}</p>' if form_error else ''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Procedural Deadlines and Notices</title><style>body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}.error{{color:#8b1e1e;background:#fff0f0;padding:10px}}table{{width:100%;border-collapse:collapse;background:#fff}}th,td{{padding:9px;border:1px solid #ddd;text-align:left;overflow-wrap:anywhere}}form{{display:grid;gap:10px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:960px}}label{{display:grid;gap:5px}}input,select,textarea{{padding:9px;font:1rem system-ui,sans-serif}}textarea{{min-height:70px}}button{{width:max-content;padding:10px 14px;background:#245d61;color:#fff;border:0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>PROCEDURAL DEADLINES AND NOTICES</h1><p class="boundary"><strong>NOTICE ISSUED IS NOT NOTICE RECEIVED.</strong> Recording a notice, receipt as evidenced, deadline, extension, dispute or calculation does not establish service, lateness, default, admissibility, waiver, abandonment, jurisdiction or legal effect.</p>{error}{detail}<h2>Record notice</h2><form method="post" action="/api/admin/session/governed-procedural-time/notices"><label>Notice category<select name="notice_category" required><option value="" selected disabled>Choose notice category</option>{notice_categories}</select></label><label>Title<input name="title_label" required></label><label>Description as represented<textarea name="notice_description" required></textarea></label><label>Issuing person, institution or source<input name="issuing_label" required></label><label>Issuing capacity<input name="issuing_capacity" required></label><label>Intended recipient or class<input name="intended_recipient" required></label><label>Issue date or period<input name="issue_date_or_period"></label><label>Dispatch or availability method<input name="dispatch_method"></label><label>Procedural subject label<input name="procedural_subject" required></label><label>Rationale<textarea name="rationale" required></textarea><label>Qualification<textarea name="qualification" required>{esc(rg71.NOTICE_BOUNDARY)}</textarea></label><label>Limitations<textarea name="limitations" required>{esc(rg71.LIMITATIONS_BOUNDARY)}</textarea></label><label>Source<select id="stage71-source"><option value="" selected>Choose governed source</option>{source_options}</select></label><label>Binding role<select id="stage71-role"><option value="" selected disabled>Choose binding role</option>{''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg71.NOTICE_BINDING_ROLES))}</select></label><ul id="stage71-selected-sources"><li>No source selected.</li></ul><input type="hidden" id="stage71-binding-payload" name="bindings_json" value=""><label>Procedural subject<select id="stage71-object"><option value="" selected>Choose governed object</option>{object_options}</select></label><label>Relationship role<select id="stage71-object-role"><option value="" selected disabled>Choose relationship role</option>{''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg71.OBJECT_ROLES))}</select></label><ul id="stage71-selected-objects"><li>No subject selected.</li></ul><input type="hidden" id="stage71-object-payload" name="subject_links_json" value=""><label>Declaration for applicable category<input type="checkbox" name="declaration_acknowledged" value="1" disabled> Select a category to display any category-specific declaration required.</label><button type="submit">Record notice</button></form><h2>Record deadline</h2><form method="post" action="/api/admin/session/governed-procedural-time/deadlines"><label>Deadline category<select name="deadline_category" required><option value="" selected disabled>Choose deadline category</option>{deadline_categories}</select></label><label>Title<input name="title_label" required></label><label>Procedural subject label<input name="procedural_subject" required></label><label>Represented trigger event<input name="trigger_event" required></label><label>Trigger date or period<input name="trigger_date_or_period"></label><label>Deadline date or period<input name="deadline_date_or_period"></label><label>Date precision<input name="date_precision" placeholder="date, month or period" required></label><label>Time precision<input name="time_precision"></label><label>Time zone<input name="time_zone"></label><label>Calculation rule as represented<input name="calculation_rule"></label><label>Counting convention<input name="counting_convention"></label><label>Inclusivity or exclusivity<input name="inclusivity"></label><label>Rationale<textarea name="rationale" required></textarea><label>Qualification<textarea name="qualification" required>{esc(rg71.DEADLINE_BOUNDARY)}</textarea></label><label>Limitations<textarea name="limitations" required>{esc(rg71.LIMITATIONS_BOUNDARY)}</textarea></label><label>Source<select name="deadline_source"><option value="" selected disabled>Choose governed source</option>{source_options}</select></label><input type="hidden" name="bindings_json" value=""><input type="hidden" name="subject_links_json" value=""><button type="submit">Record deadline</button></form><h2>Recorded procedural time</h2><table><tr><th>Kind</th><th>Identity</th><th>Category</th><th>Status</th><th>Subject</th><th>Represented date</th><th>Recorded</th></tr>{rows}</table><p class="boundary"><strong>TIME CALCULATED IS NOT LATENESS DETERMINED.</strong> A deterministic date calculation is not a legal conclusion.</p><script>const s=document.getElementById('stage71-source'),r=document.getElementById('stage71-role'),p=document.getElementById('stage71-binding-payload'),o=document.getElementById('stage71-object'),q=document.getElementById('stage71-object-role'),u=document.getElementById('stage71-object-payload');let bs=[],os=[];function render71(){{p.value=JSON.stringify(bs);u.value=JSON.stringify(os)}}render71();s?.addEventListener('change',render71);r?.addEventListener('change',render71);o?.addEventListener('change',render71);q?.addEventListener('change',render71);</script></main></body></html>'''
+
+
+_stage71_html_original = _stage71_html
+
+
+def _stage71_html(*args: Any, **kwargs: Any) -> str:
+    html = _stage71_html_original(*args, **kwargs)
+    record = kwargs.get("record")
+    if record:
+        kind = escape(str(record.get("record_kind", "")))
+        ident = escape(str(record.get("id", "")))
+        actions = f'''<h3>Append-only procedural actions</h3><form method="post" action="/api/admin/session/governed-procedural-time/{kind}/{ident}/review"><label>Review disposition<select name="disposition" required><option value="" selected disabled>Choose review disposition</option><option value="accepted_as_source_bound_procedural_record">Accepted as source-bound procedural record</option><option value="requires_procedural_correction">Requires procedural correction</option><option value="not_accepted_as_procedural_record">Not accepted as procedural record</option></select></label><label>Review rationale<textarea name="rationale" required></textarea></label><label><input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm review preserves procedural representation only.</label><button type="submit">Record review</button></form><form method="post" action="/api/admin/session/governed-procedural-time/{kind}/{ident}/supersede"><label>Replacement {kind} identity<input name="replacement_id" required></label><label>Supersession rationale<textarea name="rationale" required></textarea></label><button type="submit">Record supersession</button></form>'''
+        if kind == "deadline":
+            actions += f'''<form method="post" action="/api/admin/session/governed-procedural-time/deadlines/{ident}/calculate"><label>Calculation mode<select name="calculation_mode" required><option value="" selected disabled>Choose calculation mode</option><option value="explicit_deadline_comparison">Explicit deadline comparison</option><option value="calendar_days_after_explicit_trigger">Calendar days after explicit trigger</option></select></label><label>Explicit trigger<input name="trigger_input" required></label><label>Interval days<input name="interval_days" type="number"></label><label>Inclusivity<select name="inclusivity" required><option value="inclusive">Inclusive</option><option value="exclusive">Exclusive</option></select></label><label>Calculated as of<input name="calculated_as_of" required></label><label>Time zone<input name="time_zone" value="UTC" required></label><button type="submit">Record calculation</button></form>'''
+        html = html.replace("</dl>", "</dl>" + actions, 1)
+    html = html.replace(
+        '<select name="deadline_source">',
+        '<select id="stage71-deadline-source" name="deadline_source">',
+    )
+    html = html.replace(
+        '</select></label><input type="hidden" name="bindings_json" value=""><input type="hidden" name="subject_links_json"',
+        '</select></label><label>Binding role<select name="deadline_binding_role" required><option value="" selected disabled>Choose binding role</option><option value="deadline_source">Deadline source</option><option value="trigger_source">Trigger source</option><option value="contextual_source">Contextual source</option><option value="contrary_source">Contrary source</option></select></label><input type="hidden" id="stage71-deadline-bindings" name="bindings_json" value=""><input type="hidden" name="subject_links_json"',
+        1,
+    )
+    return html.replace(
+        '</body></html>',
+        '<script>document.querySelectorAll("form[action$=\\"/deadlines\\"]").forEach(function(form){form.addEventListener("submit",function(){const source=form.querySelector("[name=deadline_source]");const role=form.querySelector("[name=deadline_binding_role]");const payload=form.querySelector("#stage71-deadline-bindings");payload.value=source&&role&&source.value&&role.value?JSON.stringify([{source_type:source.value.split("::")[0],source_id:source.value.split("::").slice(1).join("::"),binding_role:role.value}]):"";});});</script></body></html>',
+    )
+
+
+@router.get("/admin/governed-procedural-time", response_class=HTMLResponse)
+def admin_governed_procedural_time(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    return HTMLResponse(content=_stage71_html(admin_session=session, diagnostic=rg71.read_procedural_time_diagnostic(db_path=DB_PATH), sources=_stage71_sources(query), objects=_stage71_objects(query)))
+
+
+@router.get("/admin/governed-procedural-time/{record_kind}/{record_id}", response_class=HTMLResponse)
+def admin_governed_procedural_time_detail(record_kind: str, record_id: int, request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    if record_kind not in {"notice", "deadline"}:
+        raise _http_error(404, "governed_procedural_time_record_not_found")
+    diagnostic = rg71.read_procedural_time_diagnostic(db_path=DB_PATH, record_kind=record_kind, record_id=record_id)
+    return HTMLResponse(content=_stage71_html(admin_session=session, diagnostic=diagnostic, record=(diagnostic.get("records") or [None])[0], sources=_stage71_sources(query), objects=_stage71_objects(query)))
+
+
+@router.post("/api/admin/session/governed-procedural-time/notices", response_class=HTMLResponse)
+def admin_governed_procedural_notice_create(request: Request, notice_category: str = Form(...), title_label: str = Form(...), notice_description: str = Form(...), issuing_label: str = Form(...), issuing_capacity: str = Form(...), intended_recipient: str = Form(...), issue_date_or_period: str | None = Form(None), dispatch_method: str | None = Form(None), procedural_subject: str = Form(...), rationale: str = Form(...), qualification: str = Form(...), limitations: str = Form(...), bindings_json: str = Form(...), subject_links_json: str = Form(...), declaration_acknowledged: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        rg71.create_notice(conn, notice_category=notice_category, title_label=title_label, notice_description=notice_description, issuing_label=issuing_label, issuing_capacity=issuing_capacity, intended_recipient=intended_recipient, issue_date_or_period=issue_date_or_period, dispatch_method=dispatch_method, procedural_subject=procedural_subject, rationale=rationale, qualification=qualification, limitations=limitations, qualification_contract={"epistemic_label":"notice", "source_bound":True, "not_legal_effect":True}, declaration={"acknowledged": declaration_acknowledged == "1", "category": notice_category}, bindings=_json_form(bindings_json, "governed_procedural_time_bindings_invalid"), subject_links=_json_form(subject_links_json, "governed_procedural_time_subject_links_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        return HTMLResponse(content=_stage71_html(admin_session=session, diagnostic={"records": []}, sources=_stage71_sources(), objects=_stage71_objects(), form_error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_procedural_time(request)
+
+
+@router.post("/api/admin/session/governed-procedural-time/deadlines", response_class=HTMLResponse)
+def admin_governed_procedural_deadline_create(request: Request, deadline_category: str = Form(...), title_label: str = Form(...), procedural_subject: str = Form(...), trigger_event: str = Form(...), trigger_date_or_period: str | None = Form(None), deadline_date_or_period: str | None = Form(None), date_precision: str = Form(...), time_precision: str | None = Form(None), time_zone: str | None = Form(None), calculation_rule: str | None = Form(None), counting_convention: str | None = Form(None), inclusivity: str | None = Form(None), rationale: str = Form(...), qualification: str = Form(...), limitations: str = Form(...), bindings_json: str = Form(""), subject_links_json: str = Form(""), deadline_source: str | None = Form(None), deadline_binding_role: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        binding_payload = _json_form(bindings_json, "governed_procedural_time_bindings_invalid") if bindings_json else ([{"source_type": deadline_source.split("::", 1)[0], "source_id": deadline_source.split("::", 1)[1], "binding_role": deadline_binding_role}] if deadline_source and deadline_binding_role else [])
+        rg71.create_deadline(conn, deadline_category=deadline_category, title_label=title_label, procedural_subject=procedural_subject, trigger_event=trigger_event, trigger_date_or_period=trigger_date_or_period, deadline_date_or_period=deadline_date_or_period, date_precision=date_precision, time_precision=time_precision, time_zone=time_zone, calculation_rule=calculation_rule, counting_convention=counting_convention, inclusivity=inclusivity, conditions=None, affected_participant=None, rationale=rationale, qualification=qualification, limitations=limitations, qualification_contract={"epistemic_label":"deadline", "source_bound":True, "not_legal_effect":True}, bindings=binding_payload, subject_links=_json_form(subject_links_json, "governed_procedural_time_subject_links_invalid") if subject_links_json else [], actor=_admin_session_actor(session), actor_role=_admin_session_role(session), document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        return HTMLResponse(content=_stage71_html(admin_session=session, diagnostic={"records": []}, sources=_stage71_sources(), objects=_stage71_objects(), form_error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_procedural_time(request)
+
+
+@router.post("/api/admin/session/governed-procedural-time/events", response_class=HTMLResponse)
+def admin_governed_procedural_time_event_create(request: Request, parent_kind: str = Form(...), parent_id: int = Form(...), event_category: str = Form(...), actor_label: str = Form(...), actor_capacity: str = Form(...), represented_date_or_period: str | None = Form(None), represented_value: str | None = Form(None), rationale: str = Form(...), qualification: str = Form(...), limitations: str = Form(...), bindings_json: str = Form(...), subject_links_json: str | None = Form(None), declaration_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        rg71.record_event(conn, parent_kind=parent_kind, parent_id=parent_id, event_category=event_category, actor_label=actor_label, actor_capacity=actor_capacity, represented_date_or_period=represented_date_or_period, represented_value=represented_value, rationale=rationale, qualification=qualification, limitations=limitations, declaration={"acknowledged": declaration_acknowledged == "1", "category": event_category}, bindings=_json_form(bindings_json, "governed_procedural_time_bindings_invalid"), subject_links=_json_form(subject_links_json, "governed_procedural_time_subject_links_invalid") if subject_links_json else None, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_procedural_time_detail(parent_kind, parent_id, request)
+
+
+@router.post("/api/admin/session/governed-procedural-time/deadlines/{deadline_id}/calculate", response_class=HTMLResponse)
+def admin_governed_deadline_calculate(deadline_id: int, request: Request, calculation_mode: str = Form(...), trigger_input: str = Form(...), interval_days: int | None = Form(None), inclusivity: str = Form(...), calculated_as_of: str = Form(...), time_zone: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        rg71.calculate_deadline(conn, deadline_id=deadline_id, calculation_mode=calculation_mode, trigger_input=trigger_input, interval_days=interval_days, inclusivity=inclusivity, calculated_as_of=calculated_as_of, time_zone=time_zone, requested_by=_admin_session_actor(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_procedural_time_detail("deadline", deadline_id, request)
+
+
+@router.post("/api/admin/session/governed-procedural-time/{target_kind}/{target_id}/review", response_class=HTMLResponse)
+def admin_governed_procedural_time_review(target_kind: str, target_id: int, request: Request, disposition: str = Form(...), rationale: str = Form(...), boundary_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        rg71.review_procedural_time(conn, target_kind=target_kind, target_id=target_id, disposition=disposition, rationale=rationale, boundary_declaration={"acknowledged": boundary_acknowledged == "1"}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_procedural_time_detail(target_kind, target_id, request)
+
+
+@router.post("/api/admin/session/governed-procedural-time/{target_kind}/{target_id}/supersede", response_class=HTMLResponse)
+def admin_governed_procedural_time_supersede(target_kind: str, target_id: int, request: Request, replacement_id: int = Form(...), rationale: str = Form(...), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        rg71.supersede_procedural_time(conn, target_kind=target_kind, target_id=target_id, replacement_kind=target_kind, replacement_id=replacement_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _http_error(409, str(exc)) from exc
+    finally: conn.close()
+    return admin_governed_procedural_time_detail(target_kind, target_id, request)
