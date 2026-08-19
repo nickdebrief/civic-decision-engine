@@ -54139,6 +54139,55 @@ _stage71_html_original = _stage71_html
 
 def _stage71_html(*args: Any, **kwargs: Any) -> str:
     html = _stage71_html_original(*args, **kwargs)
+    declaration_text = json.dumps(rg71.DECLARATIONS["notice_received_as_evidenced"], ensure_ascii=False)
+    html = html.replace('</textarea><label>Qualification', '</textarea></label><label>Qualification')
+    html = html.replace(
+        "</style>",
+        """.stage71-panel{margin:24px 0;padding:20px;background:#fff;border:1px solid #d8d4ca;min-width:0}
+.stage71-panel form{width:100%;max-width:none;box-sizing:border-box;min-width:0;background:transparent;border:0;padding:0}
+.stage71-panel label{min-width:0}
+.stage71-panel input,.stage71-panel select,.stage71-panel textarea{box-sizing:border-box;width:100%;max-width:100%;min-width:0}
+.stage71-declaration{margin-top:8px;padding:12px;background:#f4f3ef;border-left:4px solid #8a5a2b}
+.stage71-declaration[hidden]{display:none}
+.stage71-declaration label{display:flex;align-items:flex-start;gap:8px}
+.stage71-declaration input{width:auto;margin-top:3px;flex:0 0 auto}
+.stage71-table-wrap{max-width:100%;overflow-x:auto;margin:24px 0}
+.stage71-table-wrap table{width:100%;min-width:720px;table-layout:fixed}
+.stage71-panel h2{margin-top:0}
+@media (max-width:700px){main{width:calc(100% - 20px);margin-top:20px}.stage71-panel{padding:14px}.stage71-table-wrap{margin-left:0;margin-right:0}}
+</style>""",
+        1,
+    )
+    html = html.replace(
+        '<h2>Record notice</h2><form method="post" action="/api/admin/session/governed-procedural-time/notices">',
+        '<section class="stage71-panel" aria-labelledby="stage71-notice-heading"><h2 id="stage71-notice-heading">Record notice</h2><form method="post" action="/api/admin/session/governed-procedural-time/notices">',
+        1,
+    )
+    html = html.replace(
+        '<h2>Record deadline</h2><form method="post" action="/api/admin/session/governed-procedural-time/deadlines">',
+        '</section><section class="stage71-panel" aria-labelledby="stage71-deadline-heading"><h2 id="stage71-deadline-heading">Record deadline</h2><form method="post" action="/api/admin/session/governed-procedural-time/deadlines">',
+        1,
+    )
+    html = html.replace(
+        '<h2>Recorded procedural time</h2><table>',
+        '</section><h2>Recorded procedural time</h2><div class="stage71-table-wrap" role="region" aria-label="Recorded procedural time"><table>',
+        1,
+    )
+    html = html.replace(
+        '</table><p class="boundary"><strong>TIME CALCULATED IS NOT LATENESS DETERMINED.</strong>',
+        '</table></div><p class="boundary"><strong>TIME CALCULATED IS NOT LATENESS DETERMINED.</strong>',
+        1,
+    )
+    html = html.replace(
+        '<label>Declaration for applicable category<input type="checkbox" name="declaration_acknowledged" value="1" disabled> Select a category to display any category-specific declaration required.</label>',
+        '<div id="stage71-notice-declaration" class="stage71-declaration" hidden><label for="stage71-notice-declaration-checkbox"><input id="stage71-notice-declaration-checkbox" type="checkbox" name="declaration_acknowledged" value="1" disabled><span id="stage71-notice-declaration-text"></span></label></div>',
+        1,
+    )
+    html = html.replace(
+        '</body></html>',
+        f'''<script>(function(){{const category=document.querySelector('select[name="notice_category"]'),box=document.getElementById("stage71-notice-declaration-checkbox"),panel=document.getElementById("stage71-notice-declaration"),text=document.getElementById("stage71-notice-declaration-text");if(!category||!box||!panel||!text)return;function updateDeclaration(){{const applicable=category.value==="notice_received_as_evidenced";panel.hidden=!applicable;box.disabled=!applicable;box.checked=false;text.textContent=applicable?{declaration_text}:"No additional category-specific declaration applies.";}}category.addEventListener("change",updateDeclaration);updateDeclaration();}})();</script></body></html>''',
+        1,
+    )
     record = kwargs.get("record")
     if record:
         kind = escape(str(record.get("record_kind", "")))
