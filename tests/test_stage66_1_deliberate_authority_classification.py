@@ -1,12 +1,13 @@
 import unittest
 
 from api import record_governed_decision_authorities as authority
-from api.routes.admin_session import _stage66_html
 from tests.test_stage66_governed_decision_authority import Stage66AuthorityTests
 
 
 class Stage661ClassificationTests(Stage66AuthorityTests):
     def test_form_classifications_begin_neutral_and_source_payload_is_empty(self):
+        from api.routes.admin_session import _stage66_html
+
         html = _stage66_html({"authorities": []}, admin_session={"username": "admin"}, candidates=[])
         self.assertIn('Choose holder kind', html)
         self.assertIn('Choose mandate basis', html)
@@ -63,6 +64,8 @@ class Stage661ClassificationTests(Stage66AuthorityTests):
         self.assertEqual(self.conn.execute("select count(*) from record_governed_decision_authorities").fetchone()[0], 1)
 
     def test_accessible_conditional_controls_and_boundary_language(self):
+        from api.routes.admin_session import _stage66_html
+
         html = _stage66_html({"authorities": []}, admin_session={"username": "admin"}, candidates=[])
         for control in ("stage66-holder-kind", "stage66-mandate-basis", "stage66-delegation-status", "stage66-appointment-controls", "stage66-delegation-controls", "stage66-role-guidance"):
             self.assertIn(control, html)
