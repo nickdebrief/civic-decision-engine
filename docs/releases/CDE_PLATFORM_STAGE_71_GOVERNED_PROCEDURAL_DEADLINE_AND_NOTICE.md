@@ -62,5 +62,22 @@ allegation boundaries, declarations, rollback, idempotency, review,
 supersession, read-only inspection, authentication, navigation and public
 absence. Compatibility, order, ledger, compilation, diff and conflict checks
 are run before integration. This local implementation is registered as
-**Implemented · pending merge · pending deployment**; no deployment or
-production mutation is part of this implementation task.
+## Closure evidence
+
+Stage 71 was merged through [PR #377](https://github.com/nickdebrief/civic-decision-engine/pull/377)
+using rebase merge. The canonical merged revision is
+`d4e5a39d0e7e67bc03ec4297bf508d087d3e4463`.
+
+Automatic Railway deployment `5989012391` targeted that exact revision in the
+`precious-gentleness / production` environment. It was created at
+`2026-08-19T18:53:41Z` and reached successful terminal status at
+`2026-08-19T18:54:10Z`.
+
+Non-mutating smoke verification returned HTTP 200 for `/` and `/records`,
+HTTP 401 for unauthenticated `/admin/governed-procedural-time`, and HTTP 404
+for plausible public Stage 71 paths. Public root and records responses did not
+contain Stage 71 content. No authenticated production inspection was
+performed, no form was submitted, and no procedural object or other production
+data was created or changed.
+
+The Stage Ledger status is now **Implemented · merged · deployed**.
