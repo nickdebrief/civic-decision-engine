@@ -69,6 +69,34 @@ class Stage70ImplementationEventTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "conditional_declaration_inapplicable"):
             self.base(conditional_declaration={"acknowledged": True})
 
+    def test_conditional_declarations_are_category_bound_and_strict(self):
+        with self.assertRaisesRegex(ValueError, "category_mismatch"):
+            self.base(event_category="verification_performed", epistemic_basis="independent_verification_record", verification_method="Interview", verification_conclusion="verification_inconclusive", conditional_declaration={"acknowledged": True, "category": "deadline_extension_recorded"}, bindings=self.source() + self.source("verification_source", "VER-70"))
+        with self.assertRaisesRegex(ValueError, "declaration_malformed"):
+            self.base(event_category="verification_performed", epistemic_basis="independent_verification_record", verification_method="Interview", verification_conclusion="verification_inconclusive", conditional_declaration={"acknowledged": True, "unexpected": True}, bindings=self.source() + self.source("verification_source", "VER-70"))
+        item = self.base(conditional_declaration={"acknowledged": False})
+        self.assertEqual(item["conditional_declaration"]["boundary"], "not_applicable")
+
+    def test_rendered_form_has_neutral_and_exact_conditional_declaration_states(self):
+        from api.routes import admin_session
+
+        html = admin_session._stage70_html(admin_session={"username": "admin-user"}, diagnostic={"events": []}, remedies_=[], sources=[], objects=[])
+        self.assertIn("Select an event category to display any additional declaration required for that category.", html)
+        self.assertIn("conditional_acknowledged", html)
+        self.assertNotIn("I confirm the applicable conditional declaration for this event category, if required.", html)
+        self.assertIn('id="stage70-conditional" type="checkbox" name="conditional_acknowledged" value="1" disabled', html)
+        for boundary in events.CONDITIONAL_DECLARATION_BOUNDARIES.values():
+            self.assertIn(boundary, html)
+        self.assertIn("checkbox.disabled=!boundary", html)
+
+    def test_rendered_validation_failure_preserves_category_and_boundary_guidance(self):
+        from api.routes import admin_session
+
+        html = admin_session._stage70_html(admin_session={"username": "admin-user"}, diagnostic={"events": []}, remedies_=[], sources=[], objects=[], form_error="governed_implementation_event_verification_declaration_required", form_state={"event_category": "verification_performed"})
+        self.assertIn('value="verification_performed" selected', html)
+        self.assertIn("Validation error: governed_implementation_event_verification_declaration_required.", html)
+        self.assertIn(events.VERIFICATION_BOUNDARY, html)
+
     def test_source_roles_and_conditional_requirements_are_strict(self):
         with self.assertRaisesRegex(ValueError, "source_required"):
             self.base(bindings=self.source("contextual_source"))

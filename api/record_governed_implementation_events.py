@@ -41,10 +41,16 @@ LIMITATIONS_BOUNDARY = "Reports, submissions, disputes, verification records and
 AUTHOR_BOUNDARY = "I confirm that this is a human-recorded, remedy-linked and source-bound event. Recording it does not convert a report, submission, allegation or verification activity into an implementation or compliance determination."
 REPRESENTATION_BOUNDARY = "The selected representation mode is a human declaration and is not machine-verified."
 REVIEW_BOUNDARY = "Acceptance confirms only faithful representation, attribution and source connection. It does not confirm implementation, compliance, breach or evidential sufficiency."
-FORMAL_COMPLETION_BOUNDARY = "I confirm that completion is expressly represented in the linked distinct Stage 67 determination. This record does not independently verify correctness, jurisdiction, enforceability or legal effect."
-VERIFICATION_BOUNDARY = "I confirm that the identified source records the verifier, represented capacity, verification activity and attributed conclusion. This event is not itself verified implementation."
-NON_COMPLIANCE_BOUNDARY = "I confirm that this event preserves an attributed allegation of non-compliance and is not a finding or remedy status."
-EXTENSION_BOUNDARY = "I confirm that the source expressly records the represented deadline extension. Recording it does not validate its authorisation or legal effect."
+FORMAL_COMPLETION_BOUNDARY = "I confirm that the linked, distinct and eligible governed determination expressly represents implementation as completed. The CDE is preserving that formal determination and is not independently determining completion or compliance."
+VERIFICATION_BOUNDARY = "I confirm that the identified governed source records a verification activity, including the represented verifier or verifying body, capacity, method and conclusion. Recording this activity does not mean that the CDE performed the verification or independently adopts its conclusion."
+NON_COMPLIANCE_BOUNDARY = "I confirm that the linked governed allegation expressly preserves an attributed allegation of non-compliance. Recording this event does not establish breach, non-performance, wrongdoing, liability or a finding of non-compliance."
+EXTENSION_BOUNDARY = "I confirm that the identified governed source expressly records the represented deadline extension. Recording the extension does not establish that it was validly authorised, legally effective, accepted or complied with."
+CONDITIONAL_DECLARATION_BOUNDARIES = {
+    "verification_performed": VERIFICATION_BOUNDARY,
+    "implementation_completed_as_formally_determined": FORMAL_COMPLETION_BOUNDARY,
+    "non_compliance_alleged": NON_COMPLIANCE_BOUNDARY,
+    "deadline_extension_recorded": EXTENSION_BOUNDARY,
+}
 
 
 def utc_now() -> str:
@@ -66,10 +72,19 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
-def _declaration(value: Any, error: str, boundary: str) -> dict[str, Any]:
-    if not isinstance(value, Mapping) or value.get("acknowledged") is not True:
+def _declaration(value: Any, error: str, boundary: str, *, category: str | None = None, required: bool = True) -> dict[str, Any]:
+    if not required:
+        if value is not None and value != {"acknowledged": False}:
+            raise ValueError("governed_implementation_event_conditional_declaration_inapplicable")
+        return {"human_recorded": True, "acknowledged": False, "boundary": "not_applicable"}
+    if not isinstance(value, Mapping) or set(value) - {"acknowledged", "category"}:
+        raise ValueError("governed_implementation_event_conditional_declaration_malformed")
+    if value.get("acknowledged") not in (True, "1"):
         raise ValueError(error)
-    return {"human_recorded": True, "acknowledged": True, "boundary": boundary}
+    submitted_category = value.get("category")
+    if submitted_category is not None and submitted_category != category:
+        raise ValueError("governed_implementation_event_conditional_declaration_category_mismatch")
+    return {"human_recorded": True, "acknowledged": True, "boundary": boundary, "category": category}
 
 
 def _qualification(value: Any, limitations: str) -> dict[str, Any]:
@@ -302,18 +317,16 @@ def create_implementation_event(conn: sqlite3.Connection, *, event_category: str
     author = _declaration(author_declaration, "governed_implementation_event_author_declaration_required", AUTHOR_BOUNDARY)
     representation = _declaration(representation_declaration, "governed_implementation_event_representation_declaration_required", REPRESENTATION_BOUNDARY)
     representation["mode"] = mode
-    if category == "verification_performed":
-        conditional = _declaration(conditional_declaration, "governed_implementation_event_verification_declaration_required", VERIFICATION_BOUNDARY)
-    elif category == "implementation_completed_as_formally_determined":
-        conditional = _declaration(conditional_declaration, "governed_implementation_event_formal_completion_declaration_required", FORMAL_COMPLETION_BOUNDARY)
-    elif category == "non_compliance_alleged":
-        conditional = _declaration(conditional_declaration, "governed_implementation_event_non_compliance_declaration_required", NON_COMPLIANCE_BOUNDARY)
-    elif category == "deadline_extension_recorded":
-        conditional = _declaration(conditional_declaration, "governed_implementation_event_extension_declaration_required", EXTENSION_BOUNDARY)
-    elif conditional_declaration is not None and isinstance(conditional_declaration, Mapping) and conditional_declaration.get("acknowledged") is True:
-        raise ValueError("governed_implementation_event_conditional_declaration_inapplicable")
+    conditional_error = {
+        "verification_performed": "governed_implementation_event_verification_declaration_required",
+        "implementation_completed_as_formally_determined": "governed_implementation_event_formal_completion_declaration_required",
+        "non_compliance_alleged": "governed_implementation_event_non_compliance_declaration_required",
+        "deadline_extension_recorded": "governed_implementation_event_extension_declaration_required",
+    }.get(category)
+    if conditional_error:
+        conditional = _declaration(conditional_declaration, conditional_error, CONDITIONAL_DECLARATION_BOUNDARIES[category], category=category)
     else:
-        conditional = {"human_recorded": True, "acknowledged": False, "boundary": "not_applicable"}
+        conditional = _declaration(conditional_declaration, "", "", required=False)
     if category == "verification_performed" and not _required(represented_capacity, "governed_implementation_event_verifier_capacity_required"):
         raise ValueError("governed_implementation_event_verifier_capacity_required")
     if category == "verification_performed" and not _required(verification_method, "governed_implementation_event_verification_method_required"):
