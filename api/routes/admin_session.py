@@ -86,6 +86,29 @@ from api import record_governed_remedies as rgrm
 from api import record_governed_implementation_events as rg70
 from api import record_governed_procedural_time as rg71
 from api import record_governed_pathway as rg72
+
+
+GOVERNED_DECLARATION_CONTROL_CSS = """
+.governed-declaration-control {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #222;
+  font: 1rem system-ui, sans-serif;
+  line-height: 1.45;
+  text-transform: none;
+}
+.governed-declaration-control input[type=\"checkbox\"] {
+  width: auto;
+  min-width: 1rem;
+  flex: 0 0 auto;
+  margin: .2rem 0 0;
+}
+.governed-declaration-control span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+"""
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -48934,7 +48957,7 @@ def _render_governed_inference_page(
           <label>Review state<select name="status" required><option value="accepted_as_inference">Accepted as inference</option><option value="rejected">Rejected</option><option value="deferred">Deferred</option></select></label>
           <label>Review rationale<textarea name="rationale" required></textarea></label>
           <label>Contrary-evidence note<textarea name="contrary_evidence_note"></textarea></label>
-          <label>Boundary assessment <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this remains within the Stage 63 boundary</label>
+          <label for="stage63-review-boundary" class="governed-declaration-control"><input id="stage63-review-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm this remains within the Stage 63 boundary</span></label>
           <button type="submit">Record review</button>
         </form>
         <h3>Supersede inference</h3>
@@ -48945,7 +48968,7 @@ def _render_governed_inference_page(
           <button type="submit">Record supersession</button>
         </form>
         """
-    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Inference</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.boundary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:760px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED INFERENCE</h1><p class=\"boundary\">This proposition represents a reasoned interpretation of governed evidence or observation. It is not itself evidence, an observation, a finding, or a legal determination.</p>{detail}<h2>Recorded inferences</h2><table><thead><tr><th>Identity</th><th>Type</th><th>Status</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record proposed inference</h2><form method=\"post\" action=\"/api/admin/session/governed-inferences\"><label>Inference type<select name=\"inference_type\" required><option value=\"contextual\">Contextual</option><option value=\"temporal\">Temporal</option><option value=\"relational\">Relational</option><option value=\"procedural\">Procedural</option></select></label><label>Proposition<textarea name=\"proposition\" required></textarea></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is a reasoned inference from the governed sources identified below. It does not establish fact, intent, motive, causation, wrongdoing, or legal significance, and alternative interpretations may remain possible.</textarea></label><label>Limitations<textarea name=\"limitations\" required>Alternative interpretations may remain possible.</textarea></label><label>Bindings JSON<textarea name=\"bindings_json\" required>[{{\"source_type\":\"record_document_association\",\"source_id\":\"1\",\"binding_role\":\"primary_support\"}}]</textarea></label><label>Boundary declaration <input type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required> I confirm this is human-authored, qualified, source-bound, and does not assert a prohibited class</label><button type=\"submit\">Record proposed inference</button></form></main></body></html>"""
+    return f"""<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Governed Inference</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1120px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}.boundary{{padding:14px 16px;border-left:4px solid #2e8b9a;background:#fff;line-height:1.5}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:10px;border:1px solid #e1dfd8;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{width:220px;background:#faf9f5;color:#555}}form{{display:grid;gap:12px;background:#fff;border:1px solid #d8d4ca;padding:16px;max-width:760px;margin:12px 0 24px}}label{{display:grid;gap:6px;color:#555;font:.78rem ui-monospace,monospace;text-transform:uppercase}}input,select,textarea{{padding:9px;border:1px solid #c9c6bd;background:#fff;font:1rem system-ui,sans-serif}}textarea{{min-height:90px}}button{{width:max-content;padding:10px 14px;border:0;background:#245d61;color:#fff;cursor:pointer}}li{{margin:6px 0}}{GOVERNED_DECLARATION_CONTROL_CSS}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<p><a href=\"/admin\">Back to administration</a></p><h1>GOVERNED INFERENCE</h1><p class=\"boundary\">This proposition represents a reasoned interpretation of governed evidence or observation. It is not itself evidence, an observation, a finding, or a legal determination.</p>{detail}<h2>Recorded inferences</h2><table><thead><tr><th>Identity</th><th>Type</th><th>Status</th><th>Author</th><th>Created</th></tr></thead><tbody>{rows}</tbody></table><h2>Record proposed inference</h2><form method=\"post\" action=\"/api/admin/session/governed-inferences\"><label>Inference type<select name=\"inference_type\" required><option value=\"contextual\">Contextual</option><option value=\"temporal\">Temporal</option><option value=\"relational\">Relational</option><option value=\"procedural\">Procedural</option></select></label><label>Proposition<textarea name=\"proposition\" required></textarea></label><label>Rationale<textarea name=\"rationale\" required></textarea></label><label>Qualification<textarea name=\"qualification\" required>This proposition is a reasoned inference from the governed sources identified below. It does not establish fact, intent, motive, causation, wrongdoing, or legal significance, and alternative interpretations may remain possible.</textarea></label><label>Limitations<textarea name=\"limitations\" required>Alternative interpretations may remain possible.</textarea></label><label>Bindings JSON<textarea name=\"bindings_json\" required>[{{\"source_type\":\"record_document_association\",\"source_id\":\"1\",\"binding_role\":\"primary_support\"}}]</textarea></label><label for=\"stage63-boundary\" class=\"governed-declaration-control\"><input id=\"stage63-boundary\" type=\"checkbox\" name=\"boundary_acknowledged\" value=\"1\" required><span>I confirm this is human-authored, qualified, source-bound, and does not assert a prohibited class</span></label><button type=\"submit\">Record proposed inference</button></form></main></body></html>"""
 
 
 def _json_form(value: str, error: str) -> Any:
@@ -54373,3 +54396,55 @@ def admin_governed_pathway_create(request: Request, relationship_type: str = For
         return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic={"links": []}, candidates=_stage72_candidates(), sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH), form_error=str(exc)), status_code=409)
     finally: conn.close()
     return admin_governed_pathway_detail(int(item["id"]), request)
+
+
+def _apply_governed_declaration_controls(html: str) -> str:
+    replacements = {
+        '<label>Reviewer boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this reviews attribution and faithful representation only, not truth</label>':
+            '<label for="stage64-review-boundary" class="governed-declaration-control"><input id="stage64-review-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm this reviews attribution and faithful representation only, not truth</span></label>',
+        '<label>Representation verification <input type="checkbox" name="representation_acknowledged" value="1" required> I confirm the stored text exactly preserves the source wording when verbatim, or faithfully represents it when paraphrased</label>':
+            '<label for="stage64-representation" class="governed-declaration-control"><input id="stage64-representation" type="checkbox" name="representation_acknowledged" value="1" required><span>I confirm the stored text exactly preserves the source wording when verbatim, or faithfully represents it when paraphrased</span></label>',
+        '<label>Author boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this is human-recorded, source-bound, and does not establish the truth of the proposition</label>':
+            '<label for="stage64-author-boundary" class="governed-declaration-control"><input id="stage64-author-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm this is human-recorded, source-bound, and does not establish the truth of the proposition</span></label>',
+        '<label>Express-declination source declaration <input type="checkbox" name="express_declination_source_acknowledged" value="1"> I confirm that, when this category is selected, the response source expressly records the declination</label>':
+            '<label for="stage65-express-declination" class="governed-declaration-control"><input id="stage65-express-declination" type="checkbox" name="express_declination_source_acknowledged" value="1"><span>I confirm that, when this category is selected, the response source expressly records the declination</span></label>',
+        '<label>Representation declaration <input type="checkbox" name="representation_acknowledged" value="1" required> I confirm the text exactly preserves source wording when verbatim, or faithfully represents it when paraphrased</label>':
+            '<label for="stage65-representation" class="governed-declaration-control"><input id="stage65-representation" type="checkbox" name="representation_acknowledged" value="1" required><span>I confirm the text exactly preserves source wording when verbatim, or faithfully represents it when paraphrased</span></label>',
+        '<label>Recorder boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this is human-recorded, source-bound, and does not establish truth, falsity, or resolution</label>':
+            '<label for="stage65-recorder-boundary" class="governed-declaration-control"><input id="stage65-recorder-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm this is human-recorded, source-bound, and does not establish truth, falsity, or resolution</span></label>',
+        '<label>Reviewer boundary declaration <input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm this reviews attribution and faithful representation only, not truth or resolution</label>':
+            '<label for="stage65-review-boundary" class="governed-declaration-control"><input id="stage65-review-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm this reviews attribution and faithful representation only, not truth or resolution</span></label>',
+        '<label for="stage72-reliance-declaration"><input id="stage72-reliance-declaration" type="checkbox" name="reliance_acknowledged" value="1" required> I confirm that the reliance status is a human representation, not a finding of correctness, sufficiency, reasonableness or legal effect.</label>':
+            '<label for="stage72-reliance-declaration" class="governed-declaration-control"><input id="stage72-reliance-declaration" type="checkbox" name="reliance_acknowledged" value="1" required><span>I confirm that the reliance status is a human representation, not a finding of correctness, sufficiency, reasonableness or legal effect.</span></label>',
+        '<label for="stage71-notice-declaration-checkbox"><input id="stage71-notice-declaration-checkbox" type="checkbox" name="declaration_acknowledged" value="1" disabled><span id="stage71-notice-declaration-text"></span></label>':
+            '<label for="stage71-notice-declaration-checkbox" class="governed-declaration-control"><input id="stage71-notice-declaration-checkbox" type="checkbox" name="declaration_acknowledged" value="1" disabled><span id="stage71-notice-declaration-text"></span></label>',
+        '<label><input type="checkbox" name="boundary_acknowledged" value="1" required> I confirm review preserves procedural representation only.</label>':
+            '<label for="stage71-review-boundary" class="governed-declaration-control"><input id="stage71-review-boundary" type="checkbox" name="boundary_acknowledged" value="1" required><span>I confirm review preserves procedural representation only.</span></label>',
+    }
+    for original, replacement in replacements.items():
+        html = html.replace(original, replacement)
+    if 'class="governed-declaration-control"' in html and ".governed-declaration-control" not in html:
+        html = html.replace("</style>", f"{GOVERNED_DECLARATION_CONTROL_CSS}</style>", 1)
+    return html
+
+
+_render_governed_allegation_page_original = _render_governed_allegation_page
+_render_governed_response_page_original = _render_governed_response_page
+_stage71_html_original_with_declaration_controls = _stage71_html
+_stage72_html_original_with_declaration_controls = _stage72_html
+
+
+def _render_governed_allegation_page(*args: Any, **kwargs: Any) -> str:
+    return _apply_governed_declaration_controls(_render_governed_allegation_page_original(*args, **kwargs))
+
+
+def _render_governed_response_page(*args: Any, **kwargs: Any) -> str:
+    return _apply_governed_declaration_controls(_render_governed_response_page_original(*args, **kwargs))
+
+
+def _stage71_html(*args: Any, **kwargs: Any) -> str:
+    return _apply_governed_declaration_controls(_stage71_html_original_with_declaration_controls(*args, **kwargs))
+
+
+def _stage72_html(*args: Any, **kwargs: Any) -> str:
+    return _apply_governed_declaration_controls(_stage72_html_original_with_declaration_controls(*args, **kwargs))
