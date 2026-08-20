@@ -23,6 +23,7 @@ AUTHORITY_STATUSES = {"not_inspected", "recorded_and_current", "recorded_with_qu
 REASONS_STATUSES = {"reasons_included", "reasons_referenced_not_reproduced", "reasons_not_provided", "reasons_status_disputed", "reasons_status_unknown_or_incomplete", "reasons_abridged_or_redacted"}
 CHALLENGE_STATUSES = {"no_linked_challenge_shown_in_snapshot", "challenge_pending", "permission_or_admissibility_pending", "review_in_progress", "challenge_determined", "challenge_withdrawn", "challenge_status_disputed", "challenge_information_withheld"}
 EFFECT_STATUSES = {"effect_not_assessed", "represented_as_current", "represented_as_suspended", "represented_as_ceased", "represented_as_superseded", "effect_disputed", "effect_uncertain"}
+NO_LINKED_CHALLENGE_TEXT = "No linked challenge is represented in this publication snapshot."
 LIFECYCLE = {"draft", "eligibility_reviewed", "privacy_reviewed", "redaction_reviewed", "authority_and_mandate_inspected", "awaiting_approval", "approved_for_publication", "published", "withdrawn_from_publication", "superseded"}
 REVIEW_TYPES = {"eligibility", "privacy", "redaction", "authority", "mandate", "publication_context", "publication_approval"}
 EVENT_TYPES = {"created", "eligibility_reviewed", "privacy_reviewed", "redaction_reviewed", "authority_inspected", "mandate_inspected", "publication_context_recorded", "approved_for_publication", "published", "withdrawn_from_publication", "superseded"}
@@ -41,6 +42,23 @@ def _required(value: Any, error: str) -> str:
     if not result:
         raise ValueError(error)
     return result
+
+
+def _validate_challenge_warning(status: str, text: Any) -> str:
+    value = _required(text, "governed_publication_challenge_warning_text_required")
+    lowered = value.casefold()
+    if status == "no_linked_challenge_shown_in_snapshot" and value != NO_LINKED_CHALLENGE_TEXT:
+        raise ValueError("governed_publication_challenge_warning_text_incompatible")
+    incompatible = {
+        "challenge_determined": ("no linked challenge is represented", "pending", "withdrawn"),
+        "challenge_pending": ("no linked challenge is represented", "determined", "withdrawn"),
+        "permission_or_admissibility_pending": ("no linked challenge is represented", "determined", "withdrawn"),
+        "review_in_progress": ("no linked challenge is represented", "determined", "withdrawn"),
+        "challenge_withdrawn": ("no linked challenge is represented", "pending", "determined"),
+    }
+    if any(marker in lowered for marker in incompatible.get(status, ())):
+        raise ValueError("governed_publication_challenge_warning_text_incompatible")
+    return value
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
@@ -262,7 +280,8 @@ def create_publication(conn: sqlite3.Connection, *, determination_id: int | str,
     if reasons_status not in REASONS_STATUSES: raise ValueError("governed_publication_reasons_status_invalid")
     if challenge_warning_status not in CHALLENGE_STATUSES: raise ValueError("governed_publication_challenge_warning_status_invalid")
     if current_effect_status not in EFFECT_STATUSES: raise ValueError("governed_publication_current_effect_status_invalid")
-    for value, error in ((public_title, "governed_publication_public_title_required"), (public_representation, "governed_publication_public_representation_required"), (authority_representation, "governed_publication_authority_representation_required"), (mandate_representation, "governed_publication_mandate_representation_required"), (challenge_warning_text, "governed_publication_challenge_warning_text_required"), (current_effect_rationale, "governed_publication_current_effect_rationale_required"), (effect_as_of, "governed_publication_effect_as_of_required"), (supersession_representation, "governed_publication_supersession_representation_required"), (limitations, "governed_publication_limitations_required"), (actor, "governed_publication_actor_required"), (actor_role, "governed_publication_actor_role_required"), (idempotency_key, "governed_publication_idempotency_key_required")):
+    challenge_warning_text = _validate_challenge_warning(challenge_warning_status, challenge_warning_text)
+    for value, error in ((public_title, "governed_publication_public_title_required"), (public_representation, "governed_publication_public_representation_required"), (authority_representation, "governed_publication_authority_representation_required"), (mandate_representation, "governed_publication_mandate_representation_required"), (current_effect_rationale, "governed_publication_current_effect_rationale_required"), (effect_as_of, "governed_publication_effect_as_of_required"), (supersession_representation, "governed_publication_supersession_representation_required"), (limitations, "governed_publication_limitations_required"), (actor, "governed_publication_actor_required"), (actor_role, "governed_publication_actor_role_required"), (idempotency_key, "governed_publication_idempotency_key_required")):
         _required(value, error)
     payload = {"determination_id": int(determination_id), "representation_mode": mode, "public_title": public_title, "public_representation": public_representation, "authority_representation": authority_representation, "mandate_representation": mandate_representation, "reasons_status": reasons_status, "challenge_warning_status": challenge_warning_status, "challenge_warning_text": challenge_warning_text, "current_effect_status": current_effect_status, "current_effect_rationale": current_effect_rationale, "effect_as_of": effect_as_of, "supersession_representation": supersession_representation, "limitations": limitations, "redaction_notice": redaction_notice}
     existing = _existing_idempotent(conn, "record_governed_determination_publications", idempotency_key, payload)
@@ -316,6 +335,8 @@ def _review(conn: sqlite3.Connection, *, publication_id: int | str, review_type:
                 value = representation[field_name]
                 if field_name.endswith("_status") and value not in (REASONS_STATUSES | CHALLENGE_STATUSES | EFFECT_STATUSES):
                     raise ValueError("governed_publication_context_status_invalid")
+                if field_name == "challenge_warning_text":
+                    value = _validate_challenge_warning(representation.get("challenge_warning_status", ""), value)
                 updates.append((field_name, _required(value, f"governed_publication_{field_name}_required") if field_name not in {"redaction_notice"} else str(value or "")))
     if updates:
         conn.execute(f"UPDATE record_governed_determination_publications SET {', '.join(f'{field}=?' for field, _ in updates)} WHERE id=?", tuple(value for _, value in updates) + (int(publication_id),))

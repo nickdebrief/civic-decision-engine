@@ -1,4 +1,5 @@
 import sqlite3
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -180,6 +181,38 @@ class Stage73PublicationTests(unittest.TestCase):
             self.assertIn("No determination is public by default", content)
             with self.assertRaisesRegex(Exception, "published_determination_not_found"):
                 public_routes.published_determination(999)
+
+    def test_initial_admin_form_has_neutral_stage73_selections(self):
+        from api.routes import admin_session
+
+        html = admin_session._stage73_form(session={"username": "admin", "role": "admin"}, publications=[], candidates=[])
+        expected = {
+            "representation_mode": "Choose representation mode",
+            "reasons_status": "Choose reasons status",
+            "challenge_warning_status": "Choose challenge warning status",
+            "current_effect_status": "Choose current-effect status",
+        }
+        for name, placeholder in expected.items():
+            match = re.search(rf'<select[^>]*name="{name}"[^>]*>(.*?)</select>', html, re.DOTALL)
+            self.assertIsNotNone(match, name)
+            body = match.group(1)
+            self.assertIn(f'<option value="" selected disabled>{placeholder}</option>', body)
+            self.assertNotRegex(body, r'<option value="(?!")([^"]+)"[^>]*selected')
+        self.assertNotIn("No linked challenge is represented in this publication snapshot.</textarea>", html)
+        self.assertIn('name="challenge_warning_text" required data-stage73-challenge-text></textarea>', html)
+
+    def test_contradictory_challenge_warning_is_rejected_server_side(self):
+        payload = dict(self.create, challenge_warning_status="challenge_determined")
+        with patch.object(publications.determinations, "get_determination", return_value=self.determination):
+            with self.assertRaisesRegex(ValueError, "challenge_warning_text_incompatible"):
+                publications.create_publication(self.conn, **payload)
+
+    def test_neutral_or_placeholder_classifications_are_rejected(self):
+        for field in ("representation_mode", "reasons_status", "challenge_warning_status", "current_effect_status"):
+            payload = dict(self.create, **{field: ""})
+            with patch.object(publications.determinations, "get_determination", return_value=self.determination):
+                with self.assertRaises(ValueError):
+                    publications.create_publication(self.conn, **payload)
 
 
 if __name__ == "__main__":
