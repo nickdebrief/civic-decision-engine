@@ -42,8 +42,7 @@ unknown, stale, or contradictory values.
 
 ## Validation
 
-The implementation is registered as `Implemented · pending merge · pending
-deployment`. Focused persistence, administrative-boundary, public-disclosure,
+The implementation is registered as `Implemented · merged · deployed`. Focused persistence, administrative-boundary, public-disclosure,
 immutable-history, and Stage 60–73 compatibility tests are required before
 integration. The known `test_cases/test_cases.py` manual script remains excluded
 because it performs an import-time request to `127.0.0.1:8000`. The seven
@@ -78,3 +77,37 @@ inspection only. They are not legal-validity conclusions. The digest covers the
 approved public snapshot fields and excludes administrative actors, idempotency
 keys, review rationale, and internal sources. Public output excludes those
 internal fields and all Stage 72 pathway data.
+
+## Closure Evidence
+
+The initial implementation was merged through [PR #383](https://github.com/nickdebrief/civic-decision-engine/pull/383)
+using rebase merge. Its implementation commit was `e43365d`; the canonical
+implementation revision was
+`2ef01b41b03e8370c579a670062159ea8fb8e8c4`.
+
+The deliberate-selection correction was merged through
+[PR #384](https://github.com/nickdebrief/civic-decision-engine/pull/384)
+using rebase merge. Its correction commit was `abebc34`; the corrected
+canonical revision was
+`6c5853c0b40ae748ee6d8e851133199cfdb8b757`.
+
+The corrected revision was deployed to `precious-gentleness / production` as
+Railway deployment `6004245442`, created at `2026-08-20T14:24:34Z` and reaching
+successful terminal status at `2026-08-20T14:25:04Z`. GitHub recorded the
+revision-specific deployment and success status. The Railway CLI remained
+unauthenticated; that operational limitation is retained rather than treated
+as deployment evidence.
+
+Non-mutating production checks returned 200 for `/` and `/records`, 200 with a
+safe empty state for `/determinations`, 404 for synthetic and malformed
+publication details, and 401 for the protected Stage 73 administration route.
+Public navigation contained no Determinations entry and no private canary was
+exposed. Authenticated inspection confirmed all initial publication selectors
+and text fields were empty or neutral, no substantive classification was
+selected, no contradictory challenge representation remained, and no
+publication snapshot existed. No form was submitted and no production data
+was created or changed. Later workflow forms were not opened because no
+production publication record exists; their neutral states remain covered by
+local tests.
+
+The Stage 73 Ledger status is now **Implemented · merged · deployed**.
