@@ -1,7 +1,9 @@
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from api.document_intake import store_pending_document, update_intake_status
@@ -158,6 +160,96 @@ class AdminNavigationConsoleTests(unittest.TestCase):
         self.assertIn('href="/admin/pattern-observations"', content)
         self.assertIn("Signed in as:", content)
         self.assertIn("<strong>admin-user</strong>", content)
+
+    def test_shared_navigation_marks_only_the_rendered_route_as_current(self):
+        route_expectations = (
+            ("/admin", "/admin"),
+            ("/admin/governed-remedies/42/review", "/admin/governed-remedies"),
+            (
+                "/admin/governed-determination-publications",
+                "/admin/governed-determination-publications",
+            ),
+            ("/admin/document-intake/abc", "/admin/document-intake#new-intake"),
+        )
+        session_token = admin_session.create_admin_session("admin-user")
+        for path, expected_href in route_expectations:
+            with self.subTest(path=path):
+                request = FakeRequest(
+                    cookies={admin_session.SESSION_COOKIE_NAME: session_token}
+                )
+                request.url = SimpleNamespace(path=path)
+                session = admin_session.require_admin_session(request)
+                content = admin_session._render_admin_console_navigation(
+                    admin_session=session
+                )
+                active_links = re.findall(
+                    r'<a class="[^"]*admin-console-navigation-link--active[^"]*" '
+                    r'aria-current="page" href="([^"]+)">',
+                    content,
+                )
+                self.assertEqual(active_links, [expected_href])
+                self.assertEqual(content.count('aria-current="page"'), 1)
+
+    def test_dashboard_route_passes_its_rendered_path_to_shared_navigation(self):
+        request = FakeRequest(
+            cookies={
+                admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session(
+                    "admin-user"
+                )
+            }
+        )
+        request.url = SimpleNamespace(path="/admin")
+        content = admin_session.admin_dashboard_page(request).content
+        self.assertEqual(
+            content.count(
+                'class="admin-console-navigation-link admin-console-navigation-link--active"'
+            ),
+            1,
+        )
+        self.assertIn(
+            'aria-current="page" href="/admin">Administration / Dashboard</a>',
+            content,
+        )
+
+    def test_shared_navigation_active_style_is_non_visited_and_accessible(self):
+        content = admin_session._render_admin_console_navigation(
+            admin_session={"username": "admin-user"},
+            current_path="/admin/governed-pathway",
+        )
+        self.assertIn('aria-current="page"', content)
+        self.assertIn("#A65F2A", content)
+        self.assertIn("border-bottom:3px solid #A65F2A", content)
+        self.assertIn(":hover", content)
+        self.assertIn(":focus", content)
+        self.assertIn(":focus-visible", content)
+        self.assertNotIn(":visited", content)
+        self.assertIn("color:#245d61", content)
+        self.assertIn("flex-wrap:wrap", content)
+
+    def test_shared_navigation_is_neutral_for_unmatched_routes(self):
+        content = admin_session._render_admin_console_navigation(
+            admin_session={"username": "admin-user"},
+            current_path="/admin/not-a-navigation-section",
+        )
+        self.assertNotIn('aria-current="page"', content)
+        self.assertEqual(
+            content.count(
+                'class="admin-console-navigation-link admin-console-navigation-link--active"'
+            ),
+            0,
+        )
+
+    def test_shared_navigation_escapes_dynamic_record_evidence_href(self):
+        content = admin_session._render_admin_console_navigation(
+            'record" onclick="alert(1)',
+            admin_session={"username": "admin-user"},
+            current_path="/admin/records/record%22%20onclick%3D%22alert(1)/evidence",
+        )
+        self.assertIn(
+            '/admin/records/record&quot; onclick=&quot;alert(1)/evidence',
+            content,
+        )
+        self.assertNotIn('onclick="alert(1)', content)
 
     def test_shared_navigation_reaches_stage68_once(self):
         content = admin_session._render_admin_console_navigation(

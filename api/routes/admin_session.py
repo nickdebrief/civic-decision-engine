@@ -708,7 +708,12 @@ def require_admin_session(request) -> dict[str, Any]:
     session = cookies.get(SESSION_COOKIE_NAME)
     if not session:
         raise _http_error(401, "admin_session_unauthorized")
-    return verify_admin_session(session)
+    verified = verify_admin_session(session)
+    request_url = getattr(request, "url", None)
+    request_path = getattr(request_url, "path", None)
+    if isinstance(request_path, str) and request_path:
+        verified["_current_path"] = request_path
+    return verified
 
 
 def get_db() -> sqlite3.Connection:
@@ -45016,7 +45021,24 @@ def _render_admin_console_navigation(
     record_reference: str | None = None,
     *,
     admin_session: dict[str, Any] | None = None,
+    current_path: str | None = None,
 ) -> str:
+    def normalized_path(value: str | None) -> str:
+        path = str(value or "").split("?", 1)[0].split("#", 1)[0]
+        return path.rstrip("/") or "/"
+
+    rendered_path = normalized_path(
+        current_path
+        if current_path is not None
+        else (admin_session or {}).get("_current_path")
+    )
+
+    def is_current(href: str) -> bool:
+        target = normalized_path(href)
+        return rendered_path == target or (
+            target != "/admin" and rendered_path.startswith(f"{target}/")
+        )
+
     record_evidence_href = (
         f"/admin/records/{escape(record_reference)}/evidence"
         if record_reference
@@ -45039,31 +45061,51 @@ def _render_admin_console_navigation(
         f'<span style="font-family:ui-monospace,monospace;color:#143a52">{escape(PLATFORM_VERSION_LABEL)}</span>'
         '</div>'
     )
-    return f"""{platform_identity}<nav class="admin-console-navigation" aria-label="Administration Console" style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px">
-      <a style="color:#245d61;font-weight:650" href="/admin">Administration / Dashboard</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/document-intake#new-intake">Document Intake</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/document-intake#intake-management">Intake Management</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/intake-corrections">Intake Corrections</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/audit">Administrative Audit</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/transmissions#new-transmission">Transmission Intake</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/transmissions#transmission-management">Transmission Management</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/associations">Record–Document Associations</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/pattern-observations">Pattern Observations</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-inferences">Governed Inferences</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-allegations">Governed Allegations</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-responses">Governed Responses</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-decision-authorities">Decision Authorities &amp; Mandates</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-determinations">Governed Determinations</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-challenges">Appeal and Review Proceedings</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-remedies">Remedies and Directions</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-implementation-events">Implementation and Compliance Events</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-procedural-time">Procedural Deadlines and Notices</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-pathway">Governed Decision Pathway</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/governed-determination-publications">Determination Publications</a>
-      <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
-      <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
-      <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
-      <a style="color:#245d61;font-weight:650" href="/documents">Public Document Library</a>
+    links = (
+        ("/admin", "Administration / Dashboard"),
+        ("/admin/document-intake#new-intake", "Document Intake"),
+        ("/admin/document-intake#intake-management", "Intake Management"),
+        ("/admin/intake-corrections", "Intake Corrections"),
+        ("/admin/audit", "Administrative Audit"),
+        ("/admin/transmissions#new-transmission", "Transmission Intake"),
+        ("/admin/transmissions#transmission-management", "Transmission Management"),
+        ("/admin/associations", "Record–Document Associations"),
+        ("/admin/pattern-observations", "Pattern Observations"),
+        ("/admin/governed-inferences", "Governed Inferences"),
+        ("/admin/governed-allegations", "Governed Allegations"),
+        ("/admin/governed-responses", "Governed Responses"),
+        ("/admin/governed-decision-authorities", "Decision Authorities &amp; Mandates"),
+        ("/admin/governed-determinations", "Governed Determinations"),
+        ("/admin/governed-challenges", "Appeal and Review Proceedings"),
+        ("/admin/governed-remedies", "Remedies and Directions"),
+        ("/admin/governed-implementation-events", "Implementation and Compliance Events"),
+        ("/admin/governed-procedural-time", "Procedural Deadlines and Notices"),
+        ("/admin/governed-pathway", "Governed Decision Pathway"),
+        ("/admin/governed-determination-publications", "Determination Publications"),
+        ("/admin/collections", "Archive Collections"),
+        (record_evidence_href, "Record Evidence"),
+        ("/archive", "Public Archive Explorer"),
+        ("/documents", "Public Document Library"),
+    )
+    active_index = next(
+        (index for index, (href, _label) in enumerate(links) if is_current(href)),
+        None,
+    )
+    rendered_links = "\n".join(
+        f'      <a class="admin-console-navigation-link{" admin-console-navigation-link--active" if index == active_index else ""}"'
+        f'{" aria-current=\"page\"" if index == active_index else ""} href="{href}">{label}</a>'
+        for index, (href, label) in enumerate(links)
+    )
+    return f"""{platform_identity}<style>
+.admin-console-navigation{{display:flex;flex-wrap:wrap;gap:8px 18px;padding:12px 0;border-bottom:1px solid #d8d4ca;margin-bottom:24px}}
+.admin-console-navigation-link{{display:inline-block;max-width:100%;padding:5px 8px;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:3px;color:#245d61;font-weight:650;line-height:1.35;text-decoration:none;overflow-wrap:anywhere}}
+.admin-console-navigation-link:hover{{color:#17484b;background:#eef6f4;border-bottom-color:#6f9c9b}}
+.admin-console-navigation-link:focus{{outline:2px solid #A65F2A;outline-offset:2px}}
+.admin-console-navigation-link:focus-visible{{box-shadow:0 0 0 3px rgba(166,95,42,.22)}}
+.admin-console-navigation-link--active{{color:#A65F2A;background:#fbf3ed;border-color:#e7cbb7;border-bottom:3px solid #A65F2A}}
+.admin-console-navigation-link--active:hover{{color:#854a20;background:#f7e9dd;border-bottom-color:#854a20}}
+</style><nav class="admin-console-navigation" aria-label="Administration Console">
+{rendered_links}
       {identity}
     </nav>"""
 
