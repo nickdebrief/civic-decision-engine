@@ -86,6 +86,7 @@ from api import record_governed_remedies as rgrm
 from api import record_governed_implementation_events as rg70
 from api import record_governed_procedural_time as rg71
 from api import record_governed_pathway as rg72
+from api import record_governed_determination_publications as rg73
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -45058,6 +45059,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-implementation-events">Implementation and Compliance Events</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-procedural-time">Procedural Deadlines and Notices</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-pathway">Governed Decision Pathway</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-determination-publications">Determination Publications</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -54396,6 +54398,102 @@ def admin_governed_pathway_create(request: Request, relationship_type: str = For
         return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic={"links": []}, candidates=_stage72_candidates(), sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH), form_error=str(exc)), status_code=409)
     finally: conn.close()
     return admin_governed_pathway_detail(int(item["id"]), request)
+
+
+# Stage 73: publication is a governed snapshot, never a default consequence of a determination.
+def _stage73_candidates() -> list[dict[str, Any]]:
+    diagnostic = rgdet.read_determination_diagnostic(db_path=DB_PATH)
+    return [x for x in diagnostic.get("determinations", []) if x.get("status") == "accepted_as_attributed_determination_record"][:200]
+
+
+def _stage73_form(*, session: dict[str, Any], publications: list[dict[str, Any]], candidates: list[dict[str, Any]], item: dict[str, Any] | None = None, error: str = "") -> str:
+    esc = lambda value: escape(str(value if value is not None else ""))
+    rows = "".join(f'<tr><td><a href="/admin/governed-determination-publications/{x["id"]}">{esc(x["id"])}</a></td><td>{esc(x["determination_id"])}</td><td>{esc(x["lifecycle_status"])}</td><td>{esc(x["privacy_status"])}</td><td>{esc(x["redaction_status"])}</td><td>{esc(x["content_digest"][:16])}</td></tr>' for x in publications) or '<tr><td colspan="6">No determination publication records. Determinations are not public by default.</td></tr>'
+    options = "".join(f'<option value="{esc(x["id"])}">{esc(x["id"])} · {esc(x.get("title_label"))} · {esc(x.get("status"))}</option>' for x in candidates)
+    detail = ""
+    if item:
+        detail = f'''<section class="panel"><h2>Publication snapshot {esc(item["id"])}</h2><table><tr><th>Determination</th><td>{esc(item["determination_id"])}</td></tr><tr><th>Lifecycle</th><td>{esc(item["lifecycle_status"])}</td></tr><tr><th>Eligibility</th><td>{esc(item["eligibility_status"])}<br>{esc(item.get("eligibility_rationale"))}</td></tr><tr><th>Privacy</th><td>{esc(item["privacy_status"])}<br>{esc(item.get("privacy_rationale"))}</td></tr><tr><th>Redaction</th><td>{esc(item["redaction_status"])}<br>{esc(item.get("redaction_rationale"))}</td></tr><tr><th>Authority / mandate</th><td>{esc(item["authority_inspection_status"])} / {esc(item["mandate_inspection_status"])}</td></tr><tr><th>Reasons</th><td>{esc(item["reasons_status"])}</td></tr><tr><th>Challenge warning</th><td>{esc(item["challenge_warning_text"])}</td></tr><tr><th>Current effect</th><td>{esc(item["current_effect_status"])} · {esc(item["effect_as_of"])}</td></tr><tr><th>Public preview</th><td><strong>{esc(item["public_title"])}</strong><br>{esc(item["public_representation"])}</td></tr><tr><th>Digest</th><td><code>{esc(item["content_digest"])}</code></td></tr></table><p>Publication makes a governed representation visible. It does not establish the determination correct. Reasons visible is not reasons adequate. Current effect represented is not legal effect established.</p><form method="post" action="/api/admin/session/governed-determination-publications/{esc(item["id"])}/review/eligibility"><label>Status<select name="status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.ELIGIBILITY_STATUSES))}</select></label><label>Rationale<textarea name="rationale" required></textarea></label><input type="hidden" name="idempotency_key" value="eligibility-{esc(item["id"])}"><button>Record eligibility review</button></form><form method="post" action="/api/admin/session/governed-determination-publications/{esc(item["id"])}/review/privacy"><label>Status<select name="status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.PRIVACY_STATUSES))}</select></label><label>Rationale<textarea name="rationale" required></textarea></label><input type="hidden" name="idempotency_key" value="privacy-{esc(item["id"])}"><button>Record privacy review</button></form><form method="post" action="/api/admin/session/governed-determination-publications/{esc(item["id"])}/review/redaction"><label>Status<select name="status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.REDACTION_STATUSES))}</select></label><label>Rationale<textarea name="rationale" required></textarea></label><input type="hidden" name="idempotency_key" value="redaction-{esc(item["id"])}"><button>Record redaction review</button></form><form method="post" action="/api/admin/session/governed-determination-publications/{esc(item["id"])}/approve"><label>Approval rationale<textarea name="rationale" required></textarea></label><input type="hidden" name="idempotency_key" value="approval-{esc(item["id"])}"><button>Approve for publication</button></form><form method="post" action="/api/admin/session/governed-determination-publications/{esc(item["id"])}/publish"><label>Publication rationale<textarea name="rationale" required></textarea></label><input type="hidden" name="idempotency_key" value="publish-{esc(item["id"])}"><button>Publish governed representation</button></form></section>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Determination Publications</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2{{color:#143a52}}a{{color:#245d61}}.notice,.panel{{background:#fff;border:1px solid #d8d4ca;padding:16px;margin:18px 0}}.notice{{border-left:4px solid #8a5a2b;line-height:1.5}}table{{width:100%;border-collapse:collapse;overflow-wrap:anywhere}}th,td{{border:1px solid #ddd;padding:9px;text-align:left;vertical-align:top}}th{{background:#faf9f5}}form{{display:grid;gap:10px;max-width:780px;margin:16px 0}}label{{display:grid;gap:5px}}input,select,textarea{{width:100%;padding:9px;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;background:#245d61;color:white;border:0}}.error{{padding:12px;background:#fee2e2;color:#991b1b}}code{{overflow-wrap:anywhere}}@media(max-width:700px){{main{{width:calc(100% - 20px)}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>Determination Publications</h1><p class="notice"><strong>A DETERMINATION MAY BE PUBLISHABLE. IT IS NOT PUBLISHED BY DEFAULT.</strong><br>PUBLICATION MAKES A GOVERNED REPRESENTATION VISIBLE. IT DOES NOT ESTABLISH THE DETERMINATION CORRECT.<br>REASONS VISIBLE IS NOT REASONS ADEQUATE.<br>CURRENT EFFECT REPRESENTED IS NOT LEGAL EFFECT ESTABLISHED.<br>ABSENCE OF A CHALLENGE FROM THE PUBLISHED VIEW DOES NOT PROVE THAT NO CHALLENGE EXISTS.</p>{f'<p class="error" role="alert">{esc(error)}</p>' if error else ""}<section class="panel"><h2>Recorded publication snapshots</h2><table><thead><tr><th>Publication</th><th>Determination</th><th>Lifecycle</th><th>Privacy</th><th>Redaction</th><th>Digest</th></tr></thead><tbody>{rows}</tbody></table></section>{detail}<section class="panel"><h2>Start publication review</h2><p>No determination is selected by default. Eligibility, privacy, redaction, authority, reasons, challenge and current-effect representations require deliberate human review.</p><form method="post" action="/api/admin/session/governed-determination-publications"><label for="stage73-determination">Eligible Stage 67 determination<select id="stage73-determination" name="determination_id" required><option value="" selected disabled>Choose a determination</option>{options}</select></label><label>Public title<input name="public_title" required></label><label>Approved public representation<textarea name="public_representation" required></textarea></label><label>Representation mode<select name="representation_mode" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.REPRESENTATION_MODES))}</select></label><label>Authority representation<input name="authority_representation" required></label><label>Mandate representation<input name="mandate_representation" required></label><label>Reasons status<select name="reasons_status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.REASONS_STATUSES))}</select></label><label>Challenge warning status<select name="challenge_warning_status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.CHALLENGE_STATUSES))}</select></label><label>Challenge warning text<textarea name="challenge_warning_text" required>No linked challenge is represented in this publication snapshot.</textarea></label><label>Current-effect status<select name="current_effect_status" required>{''.join(f'<option value="{esc(x)}">{esc(x)}</option>' for x in sorted(rg73.EFFECT_STATUSES))}</select></label><label>Current-effect rationale<textarea name="current_effect_rationale" required></textarea></label><label>Effect as of<input name="effect_as_of" required></label><label>Supersession representation<textarea name="supersession_representation" required></textarea></label><label>Limitations<textarea name="limitations" required></textarea></label><label>Redaction notice<textarea name="redaction_notice"></textarea></label><input type="hidden" name="idempotency_key"><button>Start governed publication review</button></form></section></main></body></html>'''
+
+
+_stage73_form_original = _stage73_form
+
+
+def _stage73_form(*, session: dict[str, Any], publications: list[dict[str, Any]], candidates: list[dict[str, Any]], item: dict[str, Any] | None = None, error: str = "") -> str:
+    html = _stage73_form_original(session=session, publications=publications, candidates=candidates, item=item, error=error)
+    declarations = {
+        "eligibility": "eligibility_is_not_approval",
+        "privacy": "privacy_is_not_clearance_of_all_risk",
+        "redaction": "redaction_is_not_completeness",
+    }
+    for review_type, boundary in declarations.items():
+        marker = f'<input type="hidden" name="idempotency_key" value="{review_type}-'
+        hidden = f'<input type="hidden" name="representation_json" value="{{&quot;acknowledged&quot;:true,&quot;human_recorded&quot;:true,&quot;boundary&quot;:&quot;{boundary}&quot;}}"><input type="hidden" name="supporting_sources_json" value="[]">'
+        html = html.replace(marker, hidden + marker)
+    return html
+
+
+@router.get("/admin/governed-determination-publications/diagnostics", response_class=HTMLResponse)
+def admin_governed_determination_publication_diagnostics(request: Request):
+    session = require_admin_session(request)
+    diagnostic = rg73.read_publication_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_stage73_form(session=session, publications=diagnostic.get("publications", []), candidates=[]))
+
+
+@router.get("/admin/governed-determination-publications", response_class=HTMLResponse)
+def admin_governed_determination_publications(request: Request):
+    session = require_admin_session(request)
+    diagnostic = rg73.read_publication_diagnostic(db_path=DB_PATH)
+    return HTMLResponse(content=_stage73_form(session=session, publications=diagnostic.get("publications", []), candidates=_stage73_candidates()))
+
+
+@router.get("/admin/governed-determination-publications/{publication_id}", response_class=HTMLResponse)
+def admin_governed_determination_publication_detail(publication_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rg73.read_publication_diagnostic(publication_id, db_path=DB_PATH)
+    return HTMLResponse(content=_stage73_form(session=session, publications=diagnostic.get("publications", []), candidates=_stage73_candidates(), item=(diagnostic.get("publications") or [None])[0]))
+
+
+@router.post("/api/admin/session/governed-determination-publications", response_class=HTMLResponse)
+def admin_governed_determination_publication_create(request: Request, determination_id: int = Form(...), representation_mode: str = Form(...), public_title: str = Form(...), public_representation: str = Form(...), authority_representation: str = Form(...), mandate_representation: str = Form(...), reasons_status: str = Form(...), challenge_warning_status: str = Form(...), challenge_warning_text: str = Form(...), current_effect_status: str = Form(...), current_effect_rationale: str = Form(...), effect_as_of: str = Form(...), supersession_representation: str = Form(...), limitations: str = Form(...), redaction_notice: str = Form(""), idempotency_key: str = Form("")):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        item = rg73.create_publication(conn, determination_id=determination_id, representation_mode=representation_mode, public_title=public_title, public_representation=public_representation, authority_representation=authority_representation, mandate_representation=mandate_representation, reasons_status=reasons_status, challenge_warning_status=challenge_warning_status, challenge_warning_text=challenge_warning_text, current_effect_status=current_effect_status, current_effect_rationale=current_effect_rationale, effect_as_of=effect_as_of, supersession_representation=supersession_representation, limitations=limitations, redaction_notice=redaction_notice, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key or f"stage73-create-{determination_id}")
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        conn.rollback(); return HTMLResponse(content=_stage73_form(session=session, publications=[], candidates=_stage73_candidates(), error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_determination_publication_detail(int(item["id"]), request)
+
+
+@router.post("/api/admin/session/governed-determination-publications/{publication_id}/review/{review_type}", response_class=HTMLResponse)
+def admin_governed_determination_publication_review(publication_id: int, review_type: str, request: Request, status: str = Form(...), rationale: str = Form(...), representation_json: str = Form("{}"), supporting_sources_json: str = Form("[]"), idempotency_key: str = Form(...)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        fn = {"eligibility": rg73.review_eligibility, "privacy": rg73.review_privacy, "redaction": rg73.review_redaction, "authority": rg73.inspect_authority, "mandate": rg73.inspect_mandate, "publication_context": rg73.record_publication_context}.get(review_type)
+        if fn is None: raise ValueError("governed_publication_review_type_invalid")
+        item = fn(conn, publication_id=publication_id, status=status, rationale=rationale, representation=_json_form(representation_json, "governed_publication_review_representation_invalid"), supporting_sources=_json_form(supporting_sources_json, "governed_publication_review_sources_invalid"), reviewer=_admin_session_actor(session), reviewer_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        conn.rollback(); return HTMLResponse(content=_stage73_form(session=session, publications=[], candidates=_stage73_candidates(), error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_determination_publication_detail(int(item["id"]), request)
+
+
+@router.post("/api/admin/session/governed-determination-publications/{publication_id}/approve", response_class=HTMLResponse)
+def admin_governed_determination_publication_approve(publication_id: int, request: Request, rationale: str = Form(...), idempotency_key: str = Form(...)):
+    session = require_admin_session(request); conn = get_db()
+    try: item = rg73.approve_publication(conn, publication_id=publication_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: conn.rollback(); return HTMLResponse(content=_stage73_form(session=session, publications=[], candidates=_stage73_candidates(), error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_determination_publication_detail(int(item["id"]), request)
+
+
+@router.post("/api/admin/session/governed-determination-publications/{publication_id}/publish", response_class=HTMLResponse)
+def admin_governed_determination_publication_publish(publication_id: int, request: Request, rationale: str = Form(...), idempotency_key: str = Form(...)):
+    session = require_admin_session(request); conn = get_db()
+    try: item = rg73.publish_publication(conn, publication_id=publication_id, rationale=rationale, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error) as exc: conn.rollback(); return HTMLResponse(content=_stage73_form(session=session, publications=[], candidates=_stage73_candidates(), error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_determination_publication_detail(int(item["id"]), request)
 
 
 def _apply_governed_declaration_controls(html: str) -> str:
