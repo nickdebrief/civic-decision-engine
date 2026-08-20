@@ -56,12 +56,13 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 71 — Governed Procedural Deadline and Notice
+Current release: CDE Platform Stage 72 — Governed Decision Pathway
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md`](docs/releases/CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md`](docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md`](docs/releases/CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md)
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**
