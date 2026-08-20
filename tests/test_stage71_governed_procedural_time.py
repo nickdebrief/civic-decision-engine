@@ -98,7 +98,7 @@ class Stage71ProceduralTimeTests(unittest.TestCase):
 
     def test_admin_boundary_and_no_automation(self):
         source = Path("api/routes/admin_session.py").read_text(encoding="utf-8")
-        self.assertEqual(source.count('href="/admin/governed-procedural-time"'), 1)
+        self.assertEqual(source.count('("/admin/governed-procedural-time", "'), 1)
         self.assertIn('@router.get("/admin/governed-procedural-time"', source)
         self.assertIn("NOTICE ISSUED IS NOT NOTICE RECEIVED", source)
         self.assertIn("TIME CALCULATED IS NOT LATENESS DETERMINED", source)
