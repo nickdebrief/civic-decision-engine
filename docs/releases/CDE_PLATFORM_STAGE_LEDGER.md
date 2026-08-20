@@ -51,7 +51,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 69 | Governed Remedy and Direction | governed-remedy-direction | — | 2026-08-18 | `4f64e2bf046dd88134afe96eea7996826071bc17` | [#370](https://github.com/nickdebrief/civic-decision-engine/pull/370) | [Stage 69](CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md) | Implemented · merged · deployed |
 | 70 | Governed Implementation and Compliance Event | governed-implementation-compliance-event | — | 2026-08-19 | `92dad4ab9669c44431af759f6791141988c74844` | [#372](https://github.com/nickdebrief/civic-decision-engine/pull/372) | [Stage 70](CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md) | Implemented · merged · deployed |
 | 71 | Governed Procedural Deadline and Notice | governed-procedural-time | — | 2026-08-19 | `d4e5a39d0e7e67bc03ec4297bf508d087d3e4463` | [#377](https://github.com/nickdebrief/civic-decision-engine/pull/377) | [Stage 71](CDE_PLATFORM_STAGE_71_GOVERNED_PROCEDURAL_DEADLINE_AND_NOTICE.md) | Implemented · merged · deployed |
-| 72 | Governed Decision Pathway | governed-decision-pathway | — | — | — | — | [Stage 72](CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md) | Implemented · pending merge · pending deployment |
+| 72 | Governed Decision Pathway | governed-decision-pathway | — | 2026-08-20 | `365f660257fe80ad539eb2050e4c641cd1bfd923` | [#380](https://github.com/nickdebrief/civic-decision-engine/pull/380) | [Stage 72](CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md) | Implemented · merged · deployed |
 
 ## Historical Numbering Correction
 

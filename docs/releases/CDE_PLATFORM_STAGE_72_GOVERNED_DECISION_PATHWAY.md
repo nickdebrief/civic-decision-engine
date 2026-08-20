@@ -82,5 +82,30 @@ causation, reliance justification or completeness.
 Focused Stage72 tests cover isolated schema creation, controlled directions,
 endpoint and binding validation, deliberate reliance, idempotency, append-only
 review and supersession, canonical projection, read-only diagnostics and the
-authenticated neutral administrative surface. Compatibility, public-boundary,
-ledger and full applicable regression validation is performed before any merge.
+authenticated neutral administrative surface. Compatibility and full
+applicable regression validation passed with 278 tests and 19 subtests in each
+forward, reverse and deterministic mixed order. The full applicable regression
+passed 1,449 tests and 392 subtests; the known manual `test_cases/test_cases.py`
+script was excluded because it performs an import-time request to
+127.0.0.1:8000. The repository has no configured CI workflows.
+
+## Closure Evidence
+
+Stage 72 was merged through [PR #380](https://github.com/nickdebrief/civic-decision-engine/pull/380)
+using rebase merge. The implementation commit was `80d1ce82ef4e5c468a06809accdc088b6687ee86`;
+the canonical merged revision is
+`365f660257fe80ad539eb2050e4c641cd1bfd923`.
+
+Automatic Railway deployment `5999011967` targeted that exact revision in the
+`precious-gentleness / production` environment. It was created at
+`2026-08-20T08:54:07Z` and reached successful terminal status at
+`2026-08-20T08:54:34Z`.
+
+Non-mutating smoke verification returned HTTP 200 for `/` and `/records`,
+HTTP 401 for unauthenticated `/admin/governed-pathway`, and HTTP 404 for
+plausible public Stage 72 paths. Public root and records responses contained
+no Stage 72 pathway content. No authenticated production inspection was
+available, no form was submitted, and no pathway object or other production
+data was created or changed.
+
+The Stage Ledger status is now **Implemented · merged · deployed**.
