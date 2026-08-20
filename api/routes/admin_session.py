@@ -85,6 +85,7 @@ from api import record_governed_challenges as rgch
 from api import record_governed_remedies as rgrm
 from api import record_governed_implementation_events as rg70
 from api import record_governed_procedural_time as rg71
+from api import record_governed_pathway as rg72
 from api.canonical_record_types import (
     RECORD_TYPE_LABELS as ASSOCIATION_RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES as RECORD_TYPE_REFERENCE_PREFIXES,
@@ -45033,6 +45034,7 @@ def _render_admin_console_navigation(
       <a style="color:#245d61;font-weight:650" href="/admin/governed-remedies">Remedies and Directions</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-implementation-events">Implementation and Compliance Events</a>
       <a style="color:#245d61;font-weight:650" href="/admin/governed-procedural-time">Procedural Deadlines and Notices</a>
+      <a style="color:#245d61;font-weight:650" href="/admin/governed-pathway">Governed Decision Pathway</a>
       <a style="color:#245d61;font-weight:650" href="/admin/collections">Archive Collections</a>
       <a style="color:#245d61;font-weight:650" href="{record_evidence_href}">Record Evidence</a>
       <a style="color:#245d61;font-weight:650" href="/archive">Public Archive Explorer</a>
@@ -54291,3 +54293,83 @@ def admin_governed_procedural_time_supersede(target_kind: str, target_id: int, r
         raise _http_error(409, str(exc)) from exc
     finally: conn.close()
     return admin_governed_procedural_time_detail(target_kind, target_id, request)
+
+
+# Stage 72: deliberate pathway inspection and relationship recording only.
+def _stage72_sources(query: str | None = None) -> list[dict[str, Any]]:
+    return rga.read_source_candidates(DB_PATH, document_root=intake_root(), query=query)[:200]
+
+
+def _stage72_candidates(query: str | None = None) -> list[dict[str, Any]]:
+    sources = _stage72_sources(query)
+    candidates = rg72.read_candidates(db_path=DB_PATH, query=query)
+    candidates.extend({"object_kind": x["source_type"], "object_id": x["source_id"], "label": x["label"], "status": x["status"]} for x in sources)
+    return candidates[:500]
+
+
+def _stage72_html(*, admin_session: dict[str, Any], diagnostic: dict[str, Any], candidates: list[dict[str, Any]], canonical: list[dict[str, Any]], sources: list[dict[str, Any]] | None = None, object_kind: str | None = None, object_id: str | None = None, form_error: str | None = None) -> str:
+    esc = lambda value: escape(str(value if value is not None else ""))
+    links = diagnostic.get("links", [])
+    link_rows = "".join(f'<tr><td>{esc(x.get("provenance", "stage72_pathway_link"))}</td><td><a href="/admin/governed-pathway/{esc(x.get("id"))}">{esc(x.get("source_object_kind"))} {esc(x.get("source_object_id"))}</a></td><td>{esc(x.get("relationship_type"))}</td><td>{esc(x.get("target_object_kind"))} {esc(x.get("target_object_id"))}</td><td>{esc(x.get("reliance_status"))}</td><td>{esc(x.get("status"))}</td><td>{esc(x.get("created_by"))}</td><td>{esc(x.get("created_at"))}</td></tr>' for x in links) or '<tr><td colspan="8">No Stage 72 pathway links recorded.</td></tr>'
+    canonical_rows = "".join(f'<tr><td>canonical_existing_relationship</td><td>{esc(x["source_object_kind"])} {esc(x["source_object_id"])}</td><td>{esc(x["relationship_type"])}</td><td>{esc(x["target_object_kind"])} {esc(x["target_object_id"])}</td><td>{esc(x.get("status"))}</td></tr>' for x in canonical) or '<tr><td colspan="5">No existing canonical relationships in this view.</td></tr>'
+    options = "".join(f'<option value="{esc(x["object_kind"])}::{esc(x["object_id"])}" data-kind="{"evidence" if x["object_kind"] in rg72.EVIDENCE_KINDS else esc(x["object_kind"])}">{esc(x["object_kind"])} · {esc(x["object_id"])} · {esc(x["label"])} · {esc(x["status"])}</option>' for x in candidates)
+    source_options = "".join(f'<option value="{esc(x["source_type"])}::{esc(x["source_id"])}">{esc(x["source_type"])} · {esc(x["source_id"])} · {esc(x.get("label"))} · {esc(x.get("status"))}</option>' for x in (sources or []))
+    relationship_options = "".join(f'<option value="{esc(x)}" data-source="{esc(y[0])}" data-target="{esc(y[1])}">{esc(x.replace("_", " ").title())}</option>' for x, y in sorted(rg72.RELATIONSHIPS.items()))
+    error = f'<p class="error" role="alert">{esc(form_error)}</p>' if form_error else ""
+    object_heading = f'<p class="boundary">Object-centred view: {esc(object_kind)} {esc(object_id)}</p>' if object_kind and object_id else ""
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed Decision Pathway</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.boundary{{padding:14px 16px;border-left:4px solid #8a5a2b;background:#fff;line-height:1.5}}.panel{{background:#fff;border:1px solid #d8d4ca;padding:16px;margin:18px 0;min-width:0}}table{{width:100%;border-collapse:collapse;background:#fff;margin:12px 0 24px}}th,td{{padding:9px;border:1px solid #ddd;text-align:left;vertical-align:top;overflow-wrap:anywhere}}form{{display:grid;gap:12px;max-width:960px}}label{{display:grid;gap:6px}}input,select,textarea{{width:100%;max-width:100%;min-width:0;padding:9px;font:1rem system-ui,sans-serif}}textarea{{min-height:80px}}button{{width:max-content;padding:10px 14px;background:#245d61;color:#fff;border:0}}.table-wrap{{max-width:100%;overflow-x:auto}}.empty{{color:#555}}@media(max-width:700px){{main{{width:calc(100% - 20px);margin-top:20px}}.panel{{padding:12px}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=admin_session)}<h1>GOVERNED DECISION PATHWAY</h1><p class="boundary"><strong>A LINK RECORDS A REPRESENTED RELATIONSHIP. IT DOES NOT PROVE THE RELATIONSHIP CORRECT.</strong><br>RELIANCE REPRESENTED IS NOT RELIANCE JUSTIFIED.<br>CHRONOLOGY IS NOT CAUSATION.<br>A PATHWAY VIEW IS NOT A COMPLETENESS CLAIM.</p>{error}{object_heading}<section class="panel" aria-labelledby="stage72-recorded-heading"><h2 id="stage72-recorded-heading">Recorded Stage 72 pathway links</h2><div class="table-wrap"><table><thead><tr><th>Provenance</th><th>Source object</th><th>Relationship</th><th>Target object</th><th>Reliance</th><th>Status</th><th>Creator</th><th>Recorded</th></tr></thead><tbody>{link_rows}</tbody></table></div></section><section class="panel" aria-labelledby="stage72-canonical-heading"><h2 id="stage72-canonical-heading">Existing canonical relationships</h2><p>These relationships are projected from their owning governed stage. Stage 72 does not duplicate or mutate them.</p><div class="table-wrap"><table><thead><tr><th>Provenance</th><th>Source</th><th>Relationship</th><th>Target</th><th>Record status</th></tr></thead><tbody>{canonical_rows}</tbody></table></div></section><section class="panel" aria-labelledby="stage72-create-heading"><h2 id="stage72-create-heading">Record a pathway relationship</h2><p>Selection records a human-represented connection. It does not infer a relationship, reliance, evidential weight, causation, completeness, or legal effect.</p><form method="post" action="/api/admin/session/governed-pathway"><label for="stage72-relationship">Controlled relationship<select id="stage72-relationship" name="relationship_type" required><option value="" selected disabled>Choose relationship type</option>{relationship_options}</select></label><label for="stage72-source">Source object<select id="stage72-source" name="source_endpoint" required><option value="" selected disabled>Choose source object</option>{options}</select></label><label for="stage72-target">Target object<select id="stage72-target" name="target_endpoint" required><option value="" selected disabled>Choose target object</option>{options}</select></label><label for="stage72-rationale">Rationale as represented<textarea id="stage72-rationale" name="rationale" required></textarea></label><label for="stage72-reliance">Reliance status<select id="stage72-reliance" name="reliance_status" required><option value="" selected disabled>Choose reliance status</option>{''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg72.RELIANCE_STATUSES))}</select></label><label for="stage72-reliance-description">Reliance description where applicable<textarea id="stage72-reliance-description" name="reliance_description"></textarea></label><label for="stage72-contestation">Contestation representation<select id="stage72-contestation" name="contestation_status" required><option value="" selected disabled>Choose contestation representation</option>{''.join(f'<option value="{esc(x)}">{esc(x.replace("_", " ").title())}</option>' for x in sorted(rg72.CONTESTATION_STATUSES))}</select></label><label for="stage72-contestation-description">Contestation description where applicable<textarea id="stage72-contestation-description" name="contestation_representation"></textarea></label><label for="stage72-limitations">Limitations<textarea id="stage72-limitations" name="limitations" required>{esc(rg72.LIMITATIONS_BOUNDARY)}</textarea></label><input type="hidden" id="stage72-source-object-kind" name="source_object_kind"><input type="hidden" id="stage72-source-object-id" name="source_object_id"><input type="hidden" id="stage72-target-object-kind" name="target_object_kind"><input type="hidden" id="stage72-target-object-id" name="target_object_id"><input type="hidden" id="stage72-bindings" name="bindings_json" value=""><label for="stage72-source-binding">Relationship source<select id="stage72-source-binding"><option value="" selected disabled>Choose relationship source</option>{source_options}</select></label><button type="button" id="stage72-add-binding">Add supporting source</button><ul id="stage72-pending-bindings"><li>No supporting source selected.</li></ul><label for="stage72-reliance-declaration"><input id="stage72-reliance-declaration" type="checkbox" name="reliance_acknowledged" value="1" required> I confirm that the reliance status is a human representation, not a finding of correctness, sufficiency, reasonableness or legal effect.</label><button type="submit">Record pathway relationship</button></form></section><section class="panel" aria-labelledby="stage72-chronology-heading"><h2 id="stage72-chronology-heading">Chronological position</h2><p>Chronology orders the pathway-link recorded timestamp (<code>created_at</code>) with link identity as the deterministic tie-breaker. It represents recorded sequence, not causation, completeness or legal effect.</p></section><script>(function(){{const rel=document.getElementById("stage72-relationship"),source=document.getElementById("stage72-source"),target=document.getElementById("stage72-target"),sk=document.getElementById("stage72-source-object-kind"),si=document.getElementById("stage72-source-object-id"),tk=document.getElementById("stage72-target-object-kind"),ti=document.getElementById("stage72-target-object-id"),binding=document.getElementById("stage72-source-binding"),payload=document.getElementById("stage72-bindings"),pending=[];function sync(){{const s=source.value.split("::"),t=target.value.split("::");sk.value=s[0]||"";si.value=s.slice(1).join("::")||"";tk.value=t[0]||"";ti.value=t.slice(1).join("::")||"";payload.value=JSON.stringify(pending);}}function filter(){{const option=rel.selectedOptions[0];[source,target].forEach((select,index)=>Array.from(select.options).forEach((item)=>{{if(!item.value)return;const expected=option?option.dataset[index===0?"source":"target"]:"";item.hidden=Boolean(expected&&item.dataset.kind!==expected);if(item.hidden&&item.selected)select.value="";}}));}}rel.addEventListener("change",()=>{{filter();sync();}});source.addEventListener("change",sync);target.addEventListener("change",sync);document.getElementById("stage72-add-binding").addEventListener("click",()=>{{if(!binding.value)return;const p=binding.value.split("::");const item={{source_type:p[0],source_id:p.slice(1).join("::"),binding_role:"relationship_source"}};if(!pending.some(x=>JSON.stringify(x)===JSON.stringify(item)))pending.push(item);sync();}});sync();}})();</script></main></body></html>'''
+
+
+@router.get("/admin/governed-pathway", response_class=HTMLResponse)
+def admin_governed_pathway(request: Request, query: str | None = Query(None, max_length=120)):
+    session = require_admin_session(request)
+    return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic=rg72.read_pathway_diagnostic(db_path=DB_PATH), candidates=_stage72_candidates(query), sources=_stage72_sources(query), canonical=rg72.project_canonical_relationships(db_path=DB_PATH)))
+
+
+@router.get("/admin/governed-pathway/{link_id}", response_class=HTMLResponse)
+def admin_governed_pathway_detail(link_id: int, request: Request):
+    session = require_admin_session(request)
+    diagnostic = rg72.read_pathway_diagnostic(db_path=DB_PATH, link_id=link_id)
+    return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic=diagnostic, candidates=_stage72_candidates(), sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH)))
+
+
+@router.get("/admin/governed-pathway/object/{object_kind}/{object_id}", response_class=HTMLResponse)
+def admin_governed_pathway_object(object_kind: str, object_id: str, request: Request):
+    session = require_admin_session(request)
+    return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic=rg72.read_pathway_diagnostic(db_path=DB_PATH, object_kind=object_kind, object_id=object_id), candidates=_stage72_candidates(), sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH, object_kind=object_kind, object_id=object_id)))
+
+
+@router.get("/admin/governed-pathway/chronology", response_class=HTMLResponse)
+def admin_governed_pathway_chronology(request: Request, object_kind: str | None = Query(None), object_id: str | None = Query(None)):
+    session = require_admin_session(request)
+    links = rg72.chronological_links(db_path=DB_PATH, object_kind=object_kind, object_id=object_id)
+    diagnostic = {"status": "ok", "links": links, "pathway_table_present": True}
+    return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic=diagnostic, candidates=[], sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH, object_kind=object_kind, object_id=object_id), object_kind=object_kind, object_id=object_id))
+
+
+def _stage72_endpoint_payload(endpoint: str | None, object_kind: str | None, object_id: str | None, error: str) -> tuple[str, str]:
+    selected = str(endpoint or "").strip()
+    parsed_kind, separator, parsed_id = selected.partition("::")
+    if separator and parsed_kind.strip() and parsed_id.strip():
+        parsed = (parsed_kind.strip(), parsed_id.strip())
+        supplied = (str(object_kind or "").strip(), str(object_id or "").strip())
+        if any(supplied) and supplied != parsed:
+            raise ValueError(f"{error}_mismatch")
+        return parsed
+    supplied = (str(object_kind or "").strip(), str(object_id or "").strip())
+    if not all(supplied):
+        raise ValueError(error)
+    return supplied
+
+
+@router.post("/api/admin/session/governed-pathway", response_class=HTMLResponse)
+def admin_governed_pathway_create(request: Request, relationship_type: str = Form(...), source_endpoint: str | None = Form(None), target_endpoint: str | None = Form(None), source_object_kind: str | None = Form(None), source_object_id: str | None = Form(None), target_object_kind: str | None = Form(None), target_object_id: str | None = Form(None), rationale: str = Form(...), reliance_status: str = Form(...), reliance_description: str | None = Form(None), contestation_status: str = Form(...), contestation_representation: str | None = Form(None), limitations: str = Form(...), bindings_json: str = Form(...), reliance_acknowledged: str | None = Form(None), idempotency_key: str | None = Form(None)):
+    session = require_admin_session(request); conn = get_db()
+    try:
+        source_kind, source_id = _stage72_endpoint_payload(source_endpoint, source_object_kind, source_object_id, "governed_pathway_source_endpoint_required")
+        target_kind, target_id = _stage72_endpoint_payload(target_endpoint, target_object_kind, target_object_id, "governed_pathway_target_endpoint_required")
+        item = rg72.create_pathway_link(conn, source_object_kind=source_kind, source_object_id=source_id, target_object_kind=target_kind, target_object_id=target_id, relationship_type=relationship_type, rationale=rationale, reliance_status=reliance_status, reliance_description=reliance_description, reliance_declaration={"acknowledged": reliance_acknowledged == "1", "status": reliance_status}, contestation_status=contestation_status, contestation_representation=contestation_representation, limitations=limitations, bindings=_json_form(bindings_json, "governed_pathway_bindings_invalid"), actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key, document_root=intake_root())
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        return HTMLResponse(content=_stage72_html(admin_session=session, diagnostic={"links": []}, candidates=_stage72_candidates(), sources=_stage72_sources(), canonical=rg72.project_canonical_relationships(db_path=DB_PATH), form_error=str(exc)), status_code=409)
+    finally: conn.close()
+    return admin_governed_pathway_detail(int(item["id"]), request)
