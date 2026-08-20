@@ -29,6 +29,17 @@ The existing handbook Publication Engine remains a document-build pipeline;
 Stage 73 owns governed application publication snapshots because no existing
 runtime publication object owns this workflow.
 
+## Deliberate selection boundary
+
+All user-selectable publication classifications begin with an explicit empty
+`Choose ...` option: representation mode, reasons status, challenge-warning
+status, current-effect status, and review statuses. No substantive value is
+selected on the initial administrative GET. Challenge-warning text is empty
+until a status is deliberately selected, and incompatible status/text pairs
+are rejected server-side. Client-side clearing of dependent text is only an
+interface enhancement; the server remains authoritative and rejects empty,
+unknown, stale, or contradictory values.
+
 ## Validation
 
 The implementation is registered as `Implemented · pending merge · pending

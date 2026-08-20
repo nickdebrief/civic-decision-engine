@@ -54406,6 +54406,16 @@ def _stage73_candidates() -> list[dict[str, Any]]:
     return [x for x in diagnostic.get("determinations", []) if x.get("status") == "accepted_as_attributed_determination_record"][:200]
 
 
+def _stage73_select_options(values: set[str], placeholder: str, selected: str = "") -> str:
+    current = str(selected or "")
+    options = [f'<option value="" selected disabled>{escape(placeholder)}</option>']
+    options.extend(
+        f'<option value="{escape(value)}"{" selected" if value == current and current else ""}>{escape(value)}</option>'
+        for value in sorted(values)
+    )
+    return "".join(options)
+
+
 def _stage73_form(*, session: dict[str, Any], publications: list[dict[str, Any]], candidates: list[dict[str, Any]], item: dict[str, Any] | None = None, error: str = "") -> str:
     esc = lambda value: escape(str(value if value is not None else ""))
     rows = "".join(f'<tr><td><a href="/admin/governed-determination-publications/{x["id"]}">{esc(x["id"])}</a></td><td>{esc(x["determination_id"])}</td><td>{esc(x["lifecycle_status"])}</td><td>{esc(x["privacy_status"])}</td><td>{esc(x["redaction_status"])}</td><td>{esc(x["content_digest"][:16])}</td></tr>' for x in publications) or '<tr><td colspan="6">No determination publication records. Determinations are not public by default.</td></tr>'
@@ -54431,6 +54441,36 @@ def _stage73_form(*, session: dict[str, Any], publications: list[dict[str, Any]]
         hidden = f'<input type="hidden" name="representation_json" value="{{&quot;acknowledged&quot;:true,&quot;human_recorded&quot;:true,&quot;boundary&quot;:&quot;{boundary}&quot;}}"><input type="hidden" name="supporting_sources_json" value="[]">'
         html = html.replace(marker, hidden + marker)
     return html
+
+
+_stage73_form_base = _stage73_form
+
+
+def _stage73_form_with_deliberate_defaults(*, session: dict[str, Any], publications: list[dict[str, Any]], candidates: list[dict[str, Any]], item: dict[str, Any] | None = None, error: str = "") -> str:
+    html = _stage73_form_base(session=session, publications=publications, candidates=candidates, item=item, error=error)
+    placeholders = {
+        "representation_mode": "Choose representation mode",
+        "reasons_status": "Choose reasons status",
+        "challenge_warning_status": "Choose challenge warning status",
+        "current_effect_status": "Choose current-effect status",
+        "status": "Choose review status",
+    }
+    for name, placeholder in placeholders.items():
+        pattern = re.compile(rf'(<select[^>]*name="{re.escape(name)}"[^>]*>)(.*?)(</select>)', re.DOTALL)
+
+        def blank_selection(match: re.Match[str]) -> str:
+            body = re.sub(r'\sselected(?=[ >])', '', match.group(2))
+            return f'{match.group(1)}<option value="" selected disabled>{escape(placeholder)}</option>{body}{match.group(3)}'
+
+        html = pattern.sub(blank_selection, html)
+    html = html.replace(
+        'name="challenge_warning_text" required>No linked challenge is represented in this publication snapshot.</textarea>',
+        'name="challenge_warning_text" required data-stage73-challenge-text></textarea><script>document.querySelector("[name=challenge_warning_status]")?.addEventListener("change", function () { const text = document.querySelector("[data-stage73-challenge-text]"); if (text) text.value = ""; });</script>',
+    )
+    return html
+
+
+_stage73_form = _stage73_form_with_deliberate_defaults
 
 
 @router.get("/admin/governed-determination-publications/diagnostics", response_class=HTMLResponse)
