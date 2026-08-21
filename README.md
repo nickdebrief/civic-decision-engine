@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 73 — Governed Publication of Determinations
+Current release: CDE Platform Stage 74 — Governed Terminology Representations and Characterisations
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
@@ -64,6 +64,7 @@ Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md`](docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md`](docs/releases/CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md`](docs/releases/CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md`](docs/releases/CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md)
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**

@@ -53,6 +53,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 71 | Governed Procedural Deadline and Notice | governed-procedural-time | — | 2026-08-19 | `d4e5a39d0e7e67bc03ec4297bf508d087d3e4463` | [#377](https://github.com/nickdebrief/civic-decision-engine/pull/377) | [Stage 71](CDE_PLATFORM_STAGE_71_GOVERNED_PROCEDURAL_DEADLINE_AND_NOTICE.md) | Implemented · merged · deployed |
 | 72 | Governed Decision Pathway | governed-decision-pathway | — | 2026-08-20 | `365f660257fe80ad539eb2050e4c641cd1bfd923` | [#380](https://github.com/nickdebrief/civic-decision-engine/pull/380) | [Stage 72](CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md) | Implemented · merged · deployed |
 | 73 | Governed Publication of Determinations | governed-publication | — | 2026-08-20 | `6c5853c0b40ae748ee6d8e851133199cfdb8b757` | [#384](https://github.com/nickdebrief/civic-decision-engine/pull/384) | [Stage 73](CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md) | Implemented · merged · deployed |
+| 74 | Governed Terminology Representations and Characterisations | governed-terminology-representations | — | — | `—` | — | [Stage 74](CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 
