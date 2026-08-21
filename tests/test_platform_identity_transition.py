@@ -85,7 +85,7 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 74 — Governed Terminology Representations and Characterisations",
+            "Current release: CDE Platform Stage 75 — Governed Report Assembly and Publication-Engine Rendering",
             readme,
         )
         self.assertIn("## Stage Numbering", readme)
