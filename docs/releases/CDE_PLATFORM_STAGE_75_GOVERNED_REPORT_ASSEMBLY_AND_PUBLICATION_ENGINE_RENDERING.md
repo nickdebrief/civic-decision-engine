@@ -2,7 +2,42 @@
 
 ## Status
 
-Implemented · pending merge · pending deployment
+Implemented · merged · deployed
+
+Implementation integration and deployment evidence:
+
+- Implementation branch: `cde-platform-stage-75-governed-report-assembly`
+- Implementation commit: `d1283d52cb570d09777782fbf066609989a7b7e5`
+- Pull request: [#390](https://github.com/nickdebrief/civic-decision-engine/pull/390)
+- Merge method: rebase
+- Canonical implementation revision: `3bcc4b387d9404ce37b35cd024a2d813156c640d`
+- CI/checks: none configured
+- Deployment ID: `6027987948`
+- Deployment revision: `3bcc4b387d9404ce37b35cd024a2d813156c640d`
+- Environment: `precious-gentleness / production`
+- Created: `2026-08-21T19:34:14Z`
+- Successful: `2026-08-21T19:34:43Z`
+- Terminal status: successful
+
+Accepted verification evidence:
+
+- Stage 75 focused: 37 passed, 7 subtests.
+- Affected suite: 101 passed, 7 subtests.
+- Publication Engine v2.0.0 plus Stage 75: 151 passed, 10 subtests.
+- Canonical Stage 60–75 inventory: 23 files; forward, reverse and deterministic mixed runs each passed 353 tests with 26 subtests.
+- Full applicable regression: 1,530 passed, 403 subtests. The only exclusion was `tests/test_cases/test_cases.py`, which performs a documented import-time request to `127.0.0.1:8000`.
+- Stage Ledger validator, compilation, `git diff --check` and conflict scan passed.
+- Public smoke checks returned 200 for `/`, `/records` and `/determinations`; synthetic and malformed determination details returned 404; protected Stage 75 routes returned 401; plausible public report paths returned 404.
+- Authenticated visual verification confirmed the bounded internal interface, empty deliberate selectors, DOCX/HTML-only output, absent PDF, no JSON editor, and exactly one copper Governed Reports navigation marker.
+
+Stage 75 remains internal and authenticated. Its initial report type is
+`canonical_record_report`, with DOCX and HTML outputs only. PDF remains
+excluded. Generation is not approval, printing is not publication, and a
+report is not a determination. Stage 73 remains the separate public
+determination-publication boundary. No public Stage 75 route, navigation or
+artifact serving exists. No report or artifact was created, generated,
+downloaded, distributed, printed or published during verification, and no
+production data changed.
 
 Stage 75 is an authenticated, internal report-specification layer. The CDE
 deliberately selects and freezes a `canonical_record_report`; the documented
