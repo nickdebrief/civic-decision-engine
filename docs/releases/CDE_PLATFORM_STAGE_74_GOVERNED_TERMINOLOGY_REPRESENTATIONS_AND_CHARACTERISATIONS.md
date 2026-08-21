@@ -1,6 +1,6 @@
 # CDE Platform Stage 74 — Governed Terminology Representations and Characterisations
 
-Status: Implemented · pending merge · pending deployment
+Status: Implemented · merged · deployed
 
 ## Boundary
 
@@ -75,3 +75,38 @@ liability, wrongdoing or legal effect. Absence from the governed record proves
 none absent. Future work may separately consider vocabulary governance,
 jurisdiction-specific qualification and explicitly reviewed publication
 representations.
+
+## Integration and deployment record
+
+The implementation was merged through rebase as follows:
+
+* implementation revision: `a257503216f0d8def9e57eacfdc2b44050509b32`;
+* selector correction branch: `maintenance-stage-74-governed-selector-ui`;
+* selector correction commit: `fc0b19c414c09db43f93a7df6738a9bf06334525`;
+* selector correction pull request: `#388`;
+* final deployed implementation revision: `4107f441b2c6d298aa7f072cf99577c796eb1d36`;
+* deployment ID: `6022424210`;
+* environment: `precious-gentleness / production`;
+* deployment created: `2026-08-21T13:32:56Z`;
+* deployment successful: `2026-08-21T13:33:25Z`.
+
+The final validation used the same 22-file Stage 60–74 inventory in forward,
+reverse and deterministic mixed order, with `312` tests passing in each run.
+The full applicable regression passed `1,489` tests, excluding the legacy
+`test_cases/test_cases.py` import-time localhost request. The Stage Ledger
+validator, changed-file compilation, `git diff --check` and conflict scan all
+passed. The earlier reported `495` compatibility count included Stage 49–59
+files and was not the Stage 60–74 inventory; the current 22-file inventory is
+the authoritative compatibility set.
+
+Authenticated visual verification confirmed the governed selector workflow,
+empty defaults, bounded responsive panels, compact declaration control and
+the single copper Governed Terminology navigation marker. Production smoke
+checks returned `200` for `/`, `/records` and `/determinations`; synthetic and
+malformed publication details returned `404`; protected Stage 74 routes
+returned `401`; and plausible public Stage 74 routes returned `404`.
+
+No terminology representation was created in production. No production form
+was submitted and no production data was mutated. Stage 67, Stage 72 and
+Stage 73 persistence and semantics remain unchanged. No Stage 74.1 entry was
+created.

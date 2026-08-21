@@ -72,11 +72,12 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
             ["40", "41", "42", "43", "44", "44.1", "45", "46", "47", "47.1", "48", "49", "51", "52", "53", "53.1", "54", "55", "56", "57", "58", "59", "60", "61", "61.1", "61.2", "62", "62.1", "63", "64", "64.1", "65", "66", "66.1", "67", "67.1", "68", "69", "70", "71", "72", "73", "74"],
         )
 
-    def test_stage_74_is_pending_merge_and_deployment(self):
+    def test_stage_74_is_merged_and_deployed(self):
         entry = next(item for item in self.entries if item.stage == "74")
         self.assertEqual(entry.title, "Governed Terminology Representations and Characterisations")
-        self.assertEqual(entry.status, "Implemented · pending merge · pending deployment")
-        self.assertEqual(entry.merge_commit, "—")
+        self.assertEqual(entry.status, "Implemented · merged · deployed")
+        self.assertEqual(entry.merge_commit, "4107f441b2c6d298aa7f072cf99577c796eb1d36")
+        self.assertEqual(entry.pull_request, "[#388](https://github.com/nickdebrief/civic-decision-engine/pull/388)")
 
     def test_stage_72_is_closed_after_verified_deployment(self):
         entry = next(item for item in self.entries if item.stage == "72")
