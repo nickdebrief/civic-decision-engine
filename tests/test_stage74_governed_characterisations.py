@@ -205,6 +205,73 @@ class Stage74GovernedCharacterisationTests(unittest.TestCase):
         self.assertNotIn('option value="proposed_human_characterisation" selected', html)
         self.assertNotIn("/determinations", html)
 
+    def test_admin_selection_controls_replace_raw_json_editors(self):
+        html = admin_session._stage74_html(
+            admin_session={"username": "admin"},
+            items=[],
+            candidates=[{"object_kind": "governed_allegation", "object_id": "7", "label": "Allegation 7", "status": "recorded"}],
+            source_candidates=[{"source_type": "canonical_record", "source_id": "REC-<7>", "label": "Record <7>", "status": "Current"}],
+            related_candidates=[{"object_kind": "governed_allegation", "object_id": "7", "label": "Allegation 7", "status": "recorded"}],
+        )
+        self.assertNotIn("Supporting source bindings JSON", html)
+        self.assertNotIn("Related object references JSON", html)
+        self.assertNotIn('<textarea id="stage74-bindings"', html)
+        self.assertNotIn('<textarea id="stage74-references"', html)
+        self.assertIn('id="stage74-source-candidate"', html)
+        self.assertIn('id="stage74-source-role"', html)
+        self.assertIn('id="stage74-source-add"', html)
+        self.assertIn('id="stage74-selected-sources"', html)
+        self.assertIn("No supporting source selected.", html)
+        self.assertIn('id="stage74-related-candidate"', html)
+        self.assertIn('id="stage74-related-role"', html)
+        self.assertIn('id="stage74-related-add"', html)
+        self.assertIn('id="stage74-selected-related"', html)
+        self.assertIn("No related governed object selected.", html)
+        self.assertIn("Record &lt;7&gt;", html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertNotIn('value="victimisation" selected', html)
+
+    def test_selection_controls_preserve_distinct_internal_payload_names(self):
+        html = admin_session._stage74_html(admin_session={"username": "admin"}, items=[], candidates=[])
+        self.assertIn('name="bindings_json"', html)
+        self.assertIn('name="references_json"', html)
+        self.assertIn('name="binding_source"', html)
+        self.assertIn('name="binding_role"', html)
+        self.assertIn('name="reference_object"', html)
+        self.assertIn('name="reference_role"', html)
+        self.assertIn("source.removeAttribute(\"name\")", html)
+        self.assertIn("related.removeAttribute(\"name\")", html)
+        self.assertIn("stage74-primary-changed", html)
+        self.assertIn("sources.length=0", html)
+        self.assertIn("relatedItems.length=0", html)
+
+    def test_visible_hidden_selection_conflicts_fail_closed(self):
+        with self.assertRaises(ValueError):
+            admin_session._stage74_submission_lists(
+                bindings_json='[{"source_type":"canonical_record","source_id":"A","binding_role":"supporting_source"}]',
+                references_json="", binding_source="canonical_record::B", binding_role=None,
+                reference_object=None, reference_role=None,
+            )
+        with self.assertRaises(ValueError):
+            admin_session._stage74_submission_lists(
+                bindings_json='[{"source_type":"canonical_record","source_id":"A","binding_role":"supporting_source"}]',
+                references_json="", binding_source=None, binding_role="contrary_source",
+                reference_object=None, reference_role=None,
+            )
+        with self.assertRaises(ValueError):
+            admin_session._stage74_submission_lists(
+                bindings_json="", references_json='[{"object_kind":"governed_allegation","object_id":"7","relationship_role":"contextual_object"}]',
+                binding_source=None, binding_role=None, reference_object="governed_allegation::8", reference_role=None,
+            )
+
+    def test_javascript_independent_selection_payloads_are_structured(self):
+        bindings, references = admin_session._stage74_submission_lists(
+            bindings_json="", references_json="", binding_source="canonical_record::A", binding_role="supporting_source",
+            reference_object="governed_allegation::7", reference_role="contextual_object",
+        )
+        self.assertEqual(bindings, [{"source_type": "canonical_record", "source_id": "A", "binding_role": "supporting_source"}])
+        self.assertEqual(references, [{"object_kind": "governed_allegation", "object_id": "7", "relationship_role": "contextual_object"}])
+
     def test_detail_surface_exposes_only_append_only_neutral_actions(self):
         item = self.create()
         html = admin_session._stage74_html(admin_session={"username": "admin"}, items=[item], candidates=[], detail=item)
