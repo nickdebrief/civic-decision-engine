@@ -50,13 +50,17 @@ class PdfMetadataError(ValueError):
 
 
 class PdfActionError(ValueError):
-    def __init__(self, location: str, reason: str, *, failure_step: str = "recursive_action_tree", failure_structure: str = "unexpected_object", failure_operand: str = "none", failure_operand_kind: str = "none") -> None:
+    def __init__(self, location: str, reason: str, *, failure_step: str = "recursive_action_tree", failure_structure: str = "unexpected_object", failure_operand: str = "none", failure_operand_kind: str = "none", failure_operand_count: str = "not_applicable", failure_operand_kinds: list[str] | None = None, failure_destination_mode: str = "not_applicable", failure_trailing_kinds: list[str] | None = None) -> None:
         self.location = location
         self.reason = reason
         self.failure_step = failure_step
         self.failure_structure = failure_structure
         self.failure_operand = failure_operand
         self.failure_operand_kind = failure_operand_kind
+        self.failure_operand_count = failure_operand_count
+        self.failure_operand_kinds = list(failure_operand_kinds or [])[:6]
+        self.failure_destination_mode = failure_destination_mode
+        self.failure_trailing_kinds = list(failure_trailing_kinds or [])[:5]
         super().__init__("pdf_action_invalid")
 
 
@@ -101,6 +105,10 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
                 "failure_structure": exc.failure_structure,
                 "failure_operand": exc.failure_operand,
                 "failure_operand_kind": exc.failure_operand_kind,
+                "failure_operand_count": exc.failure_operand_count,
+                "failure_operand_kinds": exc.failure_operand_kinds,
+                "failure_destination_mode": exc.failure_destination_mode,
+                "failure_trailing_kinds": exc.failure_trailing_kinds,
             },
         )
     code = str(exc)
@@ -233,26 +241,61 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             raise PdfActionError(location, "executable_action", failure_step="open_action_resolution", failure_structure="action_dictionary")
         if isinstance(value, str):
             raise PdfActionError(location, "external_destination", failure_step="open_action_resolution", failure_structure="unexpected_object")
-        if not isinstance(value, (list, tuple)) or len(value) != 2:
-            raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure, failure_operand="operand_count", failure_operand_kind="array")
+        if not isinstance(value, (list, tuple)):
+            raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure, failure_operand="operand_count", failure_operand_kind="other")
+        def operand_kind(item: object) -> str:
+            if item is None:
+                return "null"
+            if reference_identity(item) is not None:
+                return "indirect_reference"
+            if isinstance(item, bool) or isinstance(item, (int, float)):
+                return "number"
+            if isinstance(item, str):
+                return "name" if item.startswith("/") else "other"
+            if isinstance(item, (list, tuple)):
+                return "array"
+            if isinstance(item, dict):
+                return "dictionary"
+            return "other"
+
+        def count_bucket(count: int) -> str:
+            return str(count) if count <= 6 else "many"
+
+        def destination_mode(items: list | tuple) -> str:
+            if len(items) < 2:
+                return "missing"
+            mode = items[1]
+            if not isinstance(mode, str):
+                return "not_name"
+            return {
+                "/Fit": "fit", "/FitB": "fit_b", "/FitH": "fit_h", "/FitBH": "fit_bh",
+                "/FitV": "fit_v", "/FitBV": "fit_bv", "/FitR": "fit_r", "/XYZ": "xyz",
+            }.get(mode, "other_name")
+
+        operand_kinds = [operand_kind(item) for item in value[:6]]
+        trailing_kinds = [operand_kind(item) for item in value[2:7]]
+        count = count_bucket(len(value))
+        mode = destination_mode(value)
+        if len(value) != 2:
+            raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure, failure_operand="operand_count", failure_operand_kind="array", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
         page_reference = value[0]
         identity = reference_identity(page_reference)
         if identity is None:
             kind = "direct_dictionary" if isinstance(page_reference, dict) else "name" if isinstance(page_reference, str) else "other"
-            raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_identity", failure_structure=structure, failure_operand="operand_one", failure_operand_kind=kind)
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_identity", failure_structure=structure, failure_operand="operand_one", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
         if identity not in page_objects:
-            raise PdfActionError(location, "unsupported_destination", failure_step="page_membership", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference")
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_membership", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
         try:
             if page_reference.get_object() is not page_objects[identity]:
-                raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference")
+                raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
         except PdfActionError:
             raise
         except Exception:
-            raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference") from None
-        mode = value[1]
-        if mode != "/Fit":
-            kind = "name" if isinstance(mode, str) else "other"
-            raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure, failure_operand="operand_two", failure_operand_kind=kind)
+            raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds) from None
+        mode_name = value[1]
+        if mode_name != "/Fit":
+            kind = "name" if isinstance(mode_name, str) else "other"
+            raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure, failure_operand="operand_two", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
 
     def inspect_outline(value: object, active: set[int]) -> None:
         value = resolve_chain(value, active, "outline_action", failure_step="recursive_action_tree")

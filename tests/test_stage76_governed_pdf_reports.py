@@ -276,6 +276,31 @@ class Stage76PdfContractTests(unittest.TestCase):
             self.assertEqual(classified.diagnostic["failure_operand"], operand)
             self.assertEqual(classified.diagnostic["failure_operand_kind"], kind)
 
+    def test_destination_diagnostic_classifies_standard_modes_without_accepting_them(self):
+        page = self.page()
+        modes = (("/Fit", "fit", True), ("/FitB", "fit_b", False), ("/FitH", "fit_h", False), ("/FitBH", "fit_bh", False), ("/FitV", "fit_v", False), ("/FitBV", "fit_bv", False), ("/FitR", "fit_r", False), ("/XYZ", "xyz", False), ("/Custom", "other_name", False), (1, "not_name", False), (None, "missing", False))
+        for mode, expected, accepted in modes:
+            with self.subTest(mode=mode):
+                destination = [page.indirect_reference, mode] if mode is not None else [page.indirect_reference]
+                reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+                failure = report_adapter._pdf_action_failure(reader)
+                if accepted:
+                    self.assertIsNone(failure)
+                else:
+                    self.assertIsNotNone(failure)
+                    classified = report_adapter._classify_pdf_failure(failure)
+                    self.assertEqual(classified.diagnostic["failure_destination_mode"], expected)
+
+    def test_destination_diagnostic_classifies_bounded_trailing_operands(self):
+        page = self.page()
+        destination = [page.indirect_reference, "/Fit", None, 1, page.indirect_reference, {"/X": 1}, ["nested"]]
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+        failure = report_adapter._pdf_action_failure(reader)
+        classified = report_adapter._classify_pdf_failure(failure)
+        self.assertEqual(classified.diagnostic["failure_operand_count"], "many")
+        self.assertEqual(classified.diagnostic["failure_operand_kinds"], ["indirect_reference", "name", "null", "number", "indirect_reference", "dictionary"])
+        self.assertEqual(classified.diagnostic["failure_trailing_kinds"], ["null", "number", "indirect_reference", "dictionary", "array"])
+
     def test_indirect_destination_cycle_fails_closed(self):
         class Cycle:
             idnum = 99
