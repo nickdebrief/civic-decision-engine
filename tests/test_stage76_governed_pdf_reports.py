@@ -214,6 +214,11 @@ class Stage76PdfContractTests(unittest.TestCase):
                 self.assertEqual((classified.phase, classified.code), ("pdf_inspection", "pdf_metadata_invalid"))
                 self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_field": field, "failure_reason": reason})
 
+    def test_ordered_equivalence_failure_keeps_governed_code(self):
+        classified = report_adapter._classify_pdf_failure(ValueError("pdf_ordered_equivalence_failed"))
+        self.assertEqual((classified.phase, classified.code), ("pdf_inspection", "equivalence_failed"))
+        self.assertIsNone(classified.diagnostic)
+
     def test_metadata_failure_does_not_expose_value_or_path(self):
         book = report_adapter.make_book(self.specification())
         failure = report_adapter._pdf_metadata_failure(SimpleNamespace(metadata={"/Producer": "/data/private-canary"}), book)

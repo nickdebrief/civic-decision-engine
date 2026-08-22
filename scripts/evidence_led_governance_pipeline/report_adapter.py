@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -35,9 +34,6 @@ PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
 RESULT_SCHEMA_VERSION = "1"
-PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
-PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
-PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterFailure(RuntimeError):
@@ -109,32 +105,6 @@ def _exception_class(exc: Exception) -> str:
     return "other"
 
 
-def _parity_diagnostics_enabled() -> bool:
-    return (
-        os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1"
-        and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID
-        and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME
-        and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
-    )
-
-
-def _emit_parity_trace(exc: Exception) -> None:
-    if not _parity_diagnostics_enabled():
-        return
-    repository = Path(__file__).resolve().parents[2]
-    frames = []
-    for frame in traceback.extract_tb(exc.__traceback__)[-12:]:
-        try:
-            relative = Path(frame.filename).resolve().relative_to(repository)
-        except (OSError, ValueError):
-            continue
-        relative_text = relative.as_posix()
-        if not (relative_text.startswith("scripts/evidence_led_governance_pipeline/") or relative_text.startswith("api/")):
-            continue
-        frames.append({"file": relative_text, "function": frame.name, "line": frame.lineno})
-    print(json.dumps({"exception_class": _exception_class(exc), "frames": frames[:12]}, separators=(",", ":")), file=sys.stderr, flush=True)
-
-
 def _write_result(path: Path, result: dict) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
@@ -158,7 +128,6 @@ def _run_phase(phase: str, code: str, operation):
 
 
 def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
-    _emit_parity_trace(exc)
     if isinstance(exc, UnexpectedPdfInspectionError):
         return AdapterFailure(
             "pdf_inspection",
@@ -197,6 +166,8 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
     if isinstance(exc, PdfValidationResultError):
         return AdapterFailure("pdf_inspection", "pdf_invalid")
     code = str(exc)
+    if code == "pdf_ordered_equivalence_failed":
+        return AdapterFailure("pdf_inspection", "equivalence_failed")
     if "pypdf" in code or "unavailable" in code:
         return AdapterFailure("pdf_inspection", "pdf_inspection_dependency_unavailable")
     if "metadata" in code:
@@ -577,14 +548,7 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
     return only_boilerplate(raw[cursor:])
 
 
-def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = None, _state: dict[str, str] | None = None) -> dict[str, object]:
-    state = _state if _state is not None else {}
-
-    def mark(operation: str, step: str) -> None:
-        state["operation"] = operation
-        state["inspection_step"] = step
-
-    mark("construct_reader", "reader_construction")
+def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
     if not pdf_path.is_file() or pdf_path.is_symlink() or pdf_path.stat().st_size <= 0:
         raise ValueError("pdf_output_missing_or_empty")
     size = pdf_path.stat().st_size
@@ -603,7 +567,6 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         raise ValueError("pdf_pypdf_unavailable") from None
     except Exception:
         raise ValueError("pdf_structure_invalid") from None
-    mark("validate_page_count", "encryption_and_page_count")
     try:
         encrypted = reader.is_encrypted
         pages = reader.pages
@@ -612,14 +575,12 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         raise UnexpectedPdfInspectionError("pdf_inspection", "validate_page_count", _exception_class(exc), "encryption_and_page_count") from None
     if encrypted or not pages or page_count > PDF_MAX_PAGES:
         raise ValueError("pdf_encryption_or_page_limit_invalid")
-    mark("validate_metadata", "metadata_validation")
     try:
         metadata_failure = _pdf_metadata_failure(reader, book)
     except Exception as exc:
         raise UnexpectedPdfInspectionError("pdf_inspection", "validate_metadata", _exception_class(exc), "metadata_validation") from None
     if metadata_failure is not None:
         raise metadata_failure
-    mark("inspect_actions", "unsafe_action_inspection")
     try:
         action_failure = _pdf_action_failure(reader)
     except (PdfActionError, UnexpectedPdfInspectionError):
@@ -628,7 +589,6 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         raise UnexpectedPdfInspectionError("pdf_inspection", "inspect_actions", _exception_class(exc), "unsafe_action_inspection") from None
     if action_failure is not None:
         raise action_failure
-    mark("parse_pdfinfo", "page_count_validation")
     info = _run_pdf_tool("pdfinfo", [str(pdf_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
     try:
         info_values = {}
@@ -642,14 +602,12 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         page_count = int(info_values.get("Pages", "0"))
     except ValueError:
         raise ValueError("pdf_page_count_invalid") from None
-    mark("validate_page_count", "limit_validation")
     try:
         registered_page_count = len(reader.pages)
     except Exception as exc:
         raise UnexpectedPdfInspectionError("pdf_inspection", "validate_page_count", _exception_class(exc), "limit_validation") from None
     if page_count != registered_page_count or page_count < 1 or page_count > PDF_MAX_PAGES:
         raise ValueError("pdf_page_count_invalid")
-    mark("read_extracted_text", "extracted_text_handling")
     with tempfile.TemporaryDirectory(prefix="cde-pdf-extract-") as extraction_dir:
         extracted_path = Path(extraction_dir) / "text.txt"
         _run_pdf_tool("pdftotext", ["-layout", str(pdf_path), str(extracted_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
@@ -669,7 +627,6 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         raise UnexpectedPdfInspectionError("pdf_inspection", "validate_ordered_equivalence", _exception_class(exc), "ordered_equivalence_validation") from None
     if not equivalent:
         raise ValueError("pdf_ordered_equivalence_failed")
-    mark("read_pdfinfo_version", "validation_result_construction")
     try:
         version = _run_pdf_tool("pdfinfo", ["-v"], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
     except ValueError:
@@ -682,7 +639,6 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         pdfinfo_version = version_lines[0]
     except Exception as exc:
         raise UnexpectedPdfInspectionError("pdf_inspection", "unpack_pdfinfo_version", _exception_class(exc), "validation_result_unpack") from None
-    mark("construct_inspection_result", "validation_result_construction")
     try:
         result = {
             "page_count": page_count,
@@ -718,10 +674,9 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     }
     inspection_step = "validation_body_complete"
     failure_boundary = "function_body"
-    state: dict[str, str] = {}
     try:
         inspection_step = "validation_return_enter"
-        result = _validate_pdf_impl(pdf_path, book, deadline=deadline, _state=state)
+        result = _validate_pdf_impl(pdf_path, book, deadline=deadline)
         inspection_step = "validation_body_complete"
         failure_boundary = "return_finalization"
         inspection_step = "validation_return_enter"
@@ -731,11 +686,9 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     except ValueError as exc:
         if str(exc) in known_failures or str(exc).startswith("pdf_pdfinfo_") or str(exc).startswith("pdf_pdftotext_"):
             raise
-        _emit_parity_trace(exc)
-        raise UnexpectedPdfInspectionError("pdf_inspection", state.get("operation", "validate_pdf"), _exception_class(exc), state.get("inspection_step", inspection_step), failure_boundary) from None
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), inspection_step, failure_boundary) from None
     except Exception as exc:
-        _emit_parity_trace(exc)
-        raise UnexpectedPdfInspectionError("pdf_inspection", state.get("operation", "validate_pdf"), _exception_class(exc), state.get("inspection_step", inspection_step), failure_boundary) from None
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), inspection_step, failure_boundary) from None
 
 
 def canonical(value):
