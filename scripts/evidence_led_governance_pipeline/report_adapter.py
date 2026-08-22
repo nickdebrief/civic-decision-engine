@@ -158,6 +158,7 @@ def _run_phase(phase: str, code: str, operation):
 
 
 def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
+    _emit_parity_trace(exc)
     if isinstance(exc, UnexpectedPdfInspectionError):
         return AdapterFailure(
             "pdf_inspection",
