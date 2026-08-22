@@ -70,6 +70,11 @@ class PdfActionError(ValueError):
         super().__init__("pdf_action_invalid")
 
 
+class PdfValidationResultError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("pdf_validation_result_invalid")
+
+
 class UnexpectedPdfInspectionError(ValueError):
     def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "validation_return") -> None:
         self.failure_step = failure_step
@@ -157,6 +162,8 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
                 "page_reference_attribute": exc.page_reference_attribute,
             },
         )
+    if isinstance(exc, PdfValidationResultError):
+        return AdapterFailure("pdf_inspection", "pdf_invalid")
     code = str(exc)
     if "pypdf" in code or "unavailable" in code:
         return AdapterFailure("pdf_inspection", "pdf_inspection_dependency_unavailable")
@@ -168,6 +175,8 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
         return AdapterFailure("pdf_inspection", "pdf_attachment_invalid")
     if "extract" in code or "pdftotext" in code:
         return AdapterFailure("pdf_inspection", "pdf_extraction_failed")
+    if "pdfinfo" in code:
+        return AdapterFailure("pdf_inspection", "pdf_invalid")
     if "missing" in code:
         return AdapterFailure("pdf_inspection", "pdf_missing")
     if "invalid" in code or "header" in code or "page" in code:
@@ -594,12 +603,43 @@ def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = N
         raise UnexpectedPdfInspectionError("pdf_inspection", "validate_ordered_equivalence", _exception_class(exc), "ordered_equivalence_validation") from None
     if not equivalent:
         raise ValueError("pdf_ordered_equivalence_failed")
-    version = _run_pdf_tool("pdfinfo", ["-v"], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
     try:
-        pdfinfo_version = (version.stdout or version.stderr).splitlines()[0]
-        return {"page_count": page_count, "size_bytes": size, "pdfinfo_version": pdfinfo_version, "ordered_content": "ok", "metadata_attachments_annotations": "ok", "pypdf_version": "5.9.0"}
+        version = _run_pdf_tool("pdfinfo", ["-v"], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
+    except ValueError:
+        raise
     except Exception as exc:
-        raise UnexpectedPdfInspectionError("pdf_inspection", "construct_inspection_result", _exception_class(exc), "result_construction") from None
+        raise UnexpectedPdfInspectionError("pdf_inspection", "read_pdfinfo_version", _exception_class(exc), "validation_result_construction") from None
+    try:
+        version_output = version.stdout or version.stderr
+        version_lines = version_output.splitlines()
+        pdfinfo_version = version_lines[0]
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "unpack_pdfinfo_version", _exception_class(exc), "validation_result_unpack") from None
+    try:
+        result = {
+            "page_count": page_count,
+            "size_bytes": size,
+            "pdfinfo_version": pdfinfo_version,
+            "ordered_content": "ok",
+            "metadata_attachments_annotations": "ok",
+            "pypdf_version": "5.9.0",
+        }
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "construct_inspection_result", _exception_class(exc), "validation_result_construction") from None
+    try:
+        if set(result) != {"page_count", "size_bytes", "pdfinfo_version", "ordered_content", "metadata_attachments_annotations", "pypdf_version"}:
+            raise PdfValidationResultError()
+        if not isinstance(result["page_count"], int) or result["page_count"] < 1:
+            raise PdfValidationResultError()
+        if not isinstance(result["size_bytes"], int) or result["size_bytes"] <= 0:
+            raise PdfValidationResultError()
+        if any(not isinstance(result[key], str) or not result[key] for key in ("pdfinfo_version", "ordered_content", "metadata_attachments_annotations", "pypdf_version")):
+            raise PdfValidationResultError()
+    except PdfValidationResultError:
+        raise
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_inspection_result", _exception_class(exc), "validation_result_validation") from None
+    return result
 
 
 def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
@@ -610,7 +650,7 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     }
     try:
         return _validate_pdf_impl(pdf_path, book, deadline=deadline)
-    except (PdfMetadataError, PdfActionError, UnexpectedPdfInspectionError):
+    except (PdfMetadataError, PdfActionError, PdfValidationResultError, UnexpectedPdfInspectionError):
         raise
     except ValueError as exc:
         if str(exc) in known_failures or str(exc).startswith("pdf_pdfinfo_") or str(exc).startswith("pdf_pdftotext_"):

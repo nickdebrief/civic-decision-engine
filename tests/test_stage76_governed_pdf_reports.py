@@ -408,7 +408,7 @@ class Stage76PdfContractTests(unittest.TestCase):
             "validation_entry", "input_validation", "inspection_dispatch", "inspection_result_unpack",
             "inspection_result_validation", "limit_validation", "equivalence_preparation",
             "equivalence_dispatch", "equivalence_result_validation", "artifact_digest",
-            "validation_result_construction", "validation_return",
+            "validation_result_unpack", "validation_result_construction", "validation_result_validation", "validation_return",
             "reader_construction", "encryption_and_page_count", "metadata_validation",
             "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
             "indirect_reference_resolution", "passive_destination_validation",
@@ -423,6 +423,12 @@ class Stage76PdfContractTests(unittest.TestCase):
                 )
                 self.assertEqual(classified.diagnostic["inspection_step"], step)
                 self.assertNotIn("value", classified.diagnostic)
+
+    def test_invalid_inspection_result_is_a_governed_pdf_failure(self):
+        classified = report_adapter._classify_pdf_failure(report_adapter.PdfValidationResultError())
+        self.assertEqual(classified.phase, "pdf_inspection")
+        self.assertEqual(classified.code, "pdf_invalid")
+        self.assertIsNone(classified.diagnostic)
 
     def test_unclassified_validate_pdf_valueerror_uses_validation_return(self):
         book = report_adapter.make_book(self.specification())
@@ -537,7 +543,7 @@ class Stage76PdfContractTests(unittest.TestCase):
             return original_read_text(self, *args, **kwargs)
 
         self.assertEqual(run(Reader, normal, successful_tool, read_text=broken_read_text).inspection_step, "extracted_text_handling")
-        self.assertEqual(run(Reader, normal, broken_result_tool).inspection_step, "result_construction")
+        self.assertEqual(run(Reader, normal, broken_result_tool).inspection_step, "validation_result_unpack")
 
     def test_validate_pdf_production_shaped_xyz_fixture_completes_without_toolchain(self):
         book = report_adapter.make_book(self.specification())
