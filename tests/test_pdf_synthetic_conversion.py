@@ -25,8 +25,7 @@ class PdfSyntheticConversionTests(unittest.TestCase):
     def test_config_runs_diagnostic_then_synthetic_checker(self):
         config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
         self.assertEqual(config["deploy"]["preDeployCommand"], [
-            "python scripts/check_pdf_runtime.py",
-            "python scripts/check_pdf_synthetic_conversion.py",
+            "python scripts/check_pdf_runtime.py && python scripts/check_pdf_synthetic_conversion.py",
         ])
 
     def test_marker_validation_rejects_omission_reordering_relabeling_and_extra_text(self):
