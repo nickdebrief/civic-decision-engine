@@ -296,6 +296,24 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "failure_boundary": "result_serialization",
             }])
 
+    def test_pdf_classifier_fallback_round_trips_complete_unexpected_shape(self):
+        failure = self.adapter._classify_pdf_failure(RuntimeError())
+        self.assertEqual(failure.code, "unexpected_adapter_failure")
+        self.assertEqual(set(failure.diagnostic), {
+            "format", "failure_step", "failure_operation", "failure_exception_class",
+            "inspection_step", "failure_boundary",
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            self.adapter._write_result(result_path, {
+                "schema_version": "1", "ok": False, "phase": failure.phase,
+                "code": failure.code, "cleanup": "unknown", "specification_digest": "",
+                "diagnostics": [failure.diagnostic], "artifacts": [],
+            })
+            parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
+            self.assertEqual(parsed["diagnostics"], [failure.diagnostic])
+
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
             ("input_load", "adapter_input_missing"),
