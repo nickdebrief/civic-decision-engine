@@ -89,12 +89,11 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     self._assert_valid_railway_config(candidate)
 
-    def test_pypdf_is_pinned_and_stage75_still_excludes_pdf(self):
+    def test_pypdf_is_pinned_and_stage76_controls_pdf(self):
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
         self.assertIn("pypdf==5.9.0", requirements)
         stage75 = (ROOT / "api" / "record_governed_reports.py").read_text(encoding="utf-8")
-        self.assertIn('OUTPUT_FORMATS = {"docx", "html"}', stage75)
-        self.assertNotIn('OUTPUT_FORMATS = {"docx", "html", "pdf"}', stage75)
+        self.assertIn('OUTPUT_FORMATS = {"docx", "html", "pdf"}', stage75)
 
     def test_diagnostic_has_required_commands_and_fonts(self):
         source = DIAGNOSTIC.read_text(encoding="utf-8")
@@ -176,9 +175,9 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertNotIn("check_pdf_runtime", main_source)
         self.assertNotIn("check_pdf_runtime", "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "api" / "routes").glob("*.py")))
 
-    def test_stage76_is_not_registered(self):
+    def test_stage76_is_registered_pending_only(self):
         ledger = (ROOT / "docs" / "releases" / "CDE_PLATFORM_STAGE_LEDGER.md").read_text(encoding="utf-8")
-        self.assertNotRegex(ledger, r"\|\s*76\s*\|")
+        self.assertRegex(ledger, r"\|\s*76\s*\|.*Implemented · pending merge · pending deployment")
 
     def test_diagnostic_output_contains_no_environment_values(self):
         env = os.environ.copy()

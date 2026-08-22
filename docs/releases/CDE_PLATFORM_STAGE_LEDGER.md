@@ -55,6 +55,7 @@ from CDE Platform Stage 40 onward, where monotonic numbering protection begins.
 | 73 | Governed Publication of Determinations | governed-publication | — | 2026-08-20 | `6c5853c0b40ae748ee6d8e851133199cfdb8b757` | [#384](https://github.com/nickdebrief/civic-decision-engine/pull/384) | [Stage 73](CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md) | Implemented · merged · deployed |
 | 74 | Governed Terminology Representations and Characterisations | governed-terminology-representations | — | 2026-08-21 | `4107f441b2c6d298aa7f072cf99577c796eb1d36` | [#388](https://github.com/nickdebrief/civic-decision-engine/pull/388) | [Stage 74](CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md) | Implemented · merged · deployed |
 | 75 | Governed Report Assembly and Publication-Engine Rendering | governed-report-assembly | — | 2026-08-21 | `3bcc4b387d9404ce37b35cd024a2d813156c640d` | [#390](https://github.com/nickdebrief/civic-decision-engine/pull/390) | [Stage 75](CDE_PLATFORM_STAGE_75_GOVERNED_REPORT_ASSEMBLY_AND_PUBLICATION_ENGINE_RENDERING.md) | Implemented · merged · deployed |
+| 76 | Governed PDF Report Rendering and Equivalence | governed-report-rendering | — | — | `—` | — | [Stage 76](CDE_PLATFORM_STAGE_76_GOVERNED_PDF_REPORT_RENDERING_AND_EQUIVALENCE.md) | Implemented · pending merge · pending deployment |
 
 ## Historical Numbering Correction
 

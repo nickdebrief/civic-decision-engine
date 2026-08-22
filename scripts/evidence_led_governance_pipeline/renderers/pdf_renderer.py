@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,19 +49,35 @@ class PdfRenderer:
     def available(self) -> bool:
         return bool(self.soffice_path and self.soffice_path.is_file())
 
-    def version(self) -> str:
+    def version(self, *, deadline: float | None = None) -> str:
         if not self.available:
             return "unavailable"
+        timeout = 30
+        if deadline is not None:
+            timeout = min(timeout, max(0.001, deadline - time.monotonic()))
         completed = subprocess.run(
             [str(self.soffice_path), "--version"],
             check=False,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=timeout,
         )
+        if deadline is not None and completed.returncode != 0:
+            raise RuntimeError("LibreOffice version command failed")
         return (completed.stdout or completed.stderr).strip() or "unknown"
 
-    def render(self, source_docx: Path, output_pdf: Path) -> PdfRenderResult:
+    @staticmethod
+    def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.communicate(timeout=5)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    def render(self, source_docx: Path, output_pdf: Path, *, timeout: int = 300, deadline: float | None = None) -> PdfRenderResult:
         if not self.available:
             raise RuntimeError("LibreOffice executable not found; PDF rendering is unavailable")
         if not source_docx.is_file() or source_docx.stat().st_size == 0:
@@ -79,7 +97,16 @@ class PdfRenderer:
                 str(temp_dir),
                 str(source_docx),
             ]
-            completed = subprocess.run(command, check=False, capture_output=True, text=True, timeout=300)
+            conversion_timeout = timeout
+            if deadline is not None:
+                conversion_timeout = min(conversion_timeout, max(0.001, deadline - time.monotonic()))
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+            try:
+                stdout, stderr = process.communicate(timeout=conversion_timeout)
+            except subprocess.TimeoutExpired:
+                self._terminate_process_group(process)
+                raise
+            completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
             rendered = temp_dir / f"{source_docx.stem}.pdf"
             if completed.returncode != 0 or not rendered.is_file() or rendered.stat().st_size == 0:
                 detail = (completed.stderr or completed.stdout).strip()
@@ -88,5 +115,5 @@ class PdfRenderer:
         return PdfRenderResult(
             path=output_pdf,
             method="LibreOffice headless DOCX-to-PDF",
-            renderer_version=self.version(),
+            renderer_version=self.version(deadline=deadline),
         )
