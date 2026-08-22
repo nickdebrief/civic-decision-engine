@@ -269,6 +269,33 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
             self.assertEqual(parsed["diagnostics"], [diagnostic])
 
+    def test_outer_child_failure_boundary_round_trips_bounded_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            child = (
+                "import importlib.util, sys; "
+                "spec=importlib.util.spec_from_file_location('child_adapter', sys.argv[2]); "
+                "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+                "module._write_result(__import__('pathlib').Path(sys.argv[1]), module._unexpected_failure_result(ValueError()))"
+            )
+            completed = subprocess.run(
+                [sys.executable, "-c", child, str(result_path), str(ADAPTER_PATH)],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(completed.returncode, 0)
+            parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
+            self.assertEqual(parsed["phase"], "result_serialization")
+            self.assertEqual(parsed["code"], "unexpected_adapter_failure")
+            self.assertEqual(parsed["diagnostics"], [{
+                "format": "pdf",
+                "failure_step": "result_serialization",
+                "failure_operation": "unknown",
+                "failure_exception_class": "value_error",
+                "inspection_step": "validation_result_construction",
+                "failure_boundary": "result_serialization",
+            }])
+
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
             ("input_load", "adapter_input_missing"),
