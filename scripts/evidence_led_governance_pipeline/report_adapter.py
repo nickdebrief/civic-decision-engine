@@ -70,6 +70,34 @@ class PdfActionError(ValueError):
         super().__init__("pdf_action_invalid")
 
 
+class UnexpectedPdfInspectionError(ValueError):
+    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str) -> None:
+        self.failure_step = failure_step
+        self.failure_operation = failure_operation
+        self.failure_exception_class = failure_exception_class
+        super().__init__("unexpected_adapter_failure")
+
+
+def _exception_class(exc: Exception) -> str:
+    if isinstance(exc, AttributeError):
+        return "attribute_error"
+    if isinstance(exc, TypeError):
+        return "type_error"
+    if isinstance(exc, ValueError):
+        return "value_error"
+    if isinstance(exc, KeyError):
+        return "key_error"
+    if isinstance(exc, IndexError):
+        return "index_error"
+    if isinstance(exc, RecursionError):
+        return "recursion_error"
+    if isinstance(exc, OSError):
+        return "os_error"
+    if exc.__class__.__module__.startswith("pypdf") and exc.__class__.__name__ == "PdfReadError":
+        return "pdf_read_error"
+    return "other"
+
+
 def _write_result(path: Path, result: dict) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
@@ -93,6 +121,12 @@ def _run_phase(phase: str, code: str, operation):
 
 
 def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
+    if isinstance(exc, UnexpectedPdfInspectionError):
+        return AdapterFailure(
+            "pdf_inspection",
+            "unexpected_adapter_failure",
+            {"format": "pdf", "failure_step": exc.failure_step, "failure_operation": exc.failure_operation, "failure_exception_class": exc.failure_exception_class},
+        )
     if isinstance(exc, PdfMetadataError):
         return AdapterFailure(
             "pdf_inspection",
@@ -137,7 +171,11 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
         return AdapterFailure("pdf_inspection", "pdf_missing")
     if "invalid" in code or "header" in code or "page" in code:
         return AdapterFailure("pdf_inspection", "pdf_invalid")
-    return AdapterFailure("pdf_inspection", "unexpected_adapter_failure")
+    return AdapterFailure(
+        "pdf_inspection",
+        "unexpected_adapter_failure",
+        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "inspect_pdf", "failure_exception_class": _exception_class(exc)},
+    )
 
 
 def ordered_content_is_preserved(book, *, docx_path: Path, html_path: Path) -> bool:
@@ -207,21 +245,46 @@ def _pdf_metadata_is_safe(reader: object, book: Book | None = None) -> bool:
 def _pdf_action_failure(reader: object) -> PdfActionError | None:
     try:
         page_objects = {}
-        for page in reader.pages:
-            reference = getattr(page, "indirect_reference", None)
-            identity = (getattr(reference, "idnum", None), getattr(reference, "generation", None))
+        try:
+            pages = getattr(reader, "pages", ())
+            iterator = iter(pages)
+        except Exception as exc:
+            raise UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", _exception_class(exc)) from None
+        while True:
+            try:
+                page = next(iterator)
+            except StopIteration:
+                break
+            except Exception as exc:
+                raise UnexpectedPdfInspectionError("page_enumeration", "materialize_page", _exception_class(exc)) from None
+            try:
+                reference = getattr(page, "indirect_reference", None)
+            except Exception as exc:
+                raise UnexpectedPdfInspectionError("page_reference_attribute", "read_indirect_reference", _exception_class(exc)) from None
+            if reference is None:
+                return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
+            try:
+                identity = (getattr(reference, "idnum", None), getattr(reference, "generation", None))
+            except Exception as exc:
+                raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc)) from None
             if not all(isinstance(item, int) for item in identity):
                 return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
             if identity in page_objects:
                 return PdfActionError("catalog_open_action", "malformed_destination", failure_step="page_membership", failure_structure="unexpected_object", page_registry_state="duplicate_identity", reference_identity_result="ambiguous", page_reference_attribute="indirect_reference")
             page_objects[identity] = page
-    except Exception:
+    except UnexpectedPdfInspectionError:
+        raise
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("registry_construction", "build_page_registry", _exception_class(exc)) from None
         return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
     page_registry_state = "populated" if page_objects else "empty"
 
     def reference_identity(value: object) -> tuple[int, int] | None:
-        idnum = getattr(value, "idnum", None)
-        generation = getattr(value, "generation", None)
+        try:
+            idnum = getattr(value, "idnum", None)
+            generation = getattr(value, "generation", None)
+        except Exception as exc:
+            raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc)) from None
         if isinstance(idnum, int) and isinstance(generation, int):
             return idnum, generation
         return None

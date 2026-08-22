@@ -46,6 +46,7 @@ DIAGNOSTIC_FIELDS = {
     "failure_step", "failure_structure", "failure_operand", "failure_operand_kind",
     "failure_operand_count", "failure_operand_kinds", "failure_destination_mode", "failure_trailing_kinds",
     "page_registry_state", "reference_identity_result", "resolution_result", "resolved_target_comparison", "page_reference_attribute",
+    "failure_operation", "failure_exception_class",
 }
 
 
@@ -130,6 +131,16 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             if diagnostic["resolved_target_comparison"] not in {"not_applicable", "same_instance", "same_indirect_identity", "different_target", "unavailable"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["page_reference_attribute"] not in {"none", "indirect_reference"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            continue
+        if "failure_operation" in diagnostic or "failure_exception_class" in diagnostic:
+            if set(diagnostic) != {"format", "failure_step", "failure_operation", "failure_exception_class"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_step"] not in {"input_load", "input_validation", "specification_validation", "model_adaptation", "docx_render", "html_render", "pdf_conversion", "pdf_inspection", "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup", "page_enumeration", "page_reference_attribute", "identity_normalization", "registry_construction", "open_action_identity_lookup", "indirect_reference_resolution", "resolved_target_classification", "registered_page_comparison", "destination_acceptance"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_operation"] not in {"read_request", "validate_input", "validate_digest", "adapt_model", "render_docx", "render_html", "convert_pdf", "inspect_pdf", "enumerate_pages", "materialize_page", "read_indirect_reference", "read_reference_identity", "build_page_registry", "lookup_open_action_reference", "resolve_indirect_reference", "classify_resolved_target", "compare_registered_page", "accept_destination", "write_result", "unknown"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_exception_class"] not in {"attribute_error", "type_error", "value_error", "key_error", "index_error", "pdf_read_error", "recursion_error", "os_error", "other"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):
