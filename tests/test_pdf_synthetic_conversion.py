@@ -33,7 +33,9 @@ class PdfSyntheticConversionTests(unittest.TestCase):
         self.assertIn("set -eu", wrapper)
         runtime = wrapper.index("python scripts/check_pdf_runtime.py")
         synthetic = wrapper.index("python scripts/check_pdf_synthetic_conversion.py")
+        adapter = wrapper.index("python scripts/check_stage76_adapter_synthetic.py")
         self.assertLess(runtime, synthetic)
+        self.assertLess(synthetic, adapter)
         self.assertNotIn("|| true", wrapper)
 
     def test_marker_validation_rejects_omission_reordering_relabeling_and_extra_text(self):

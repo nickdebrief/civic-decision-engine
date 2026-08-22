@@ -33,12 +33,18 @@ perform conversion. A missing mandatory prerequisite returns a non-zero exit
 status.
 
 Fresh deployments invoke `sh scripts/check_pdf_predeploy_gate.sh`. The
-wrapper executes two fail-closed checks in this order:
+wrapper executes three fail-closed checks in this order:
 
 1. `python scripts/check_pdf_runtime.py`
 2. `python scripts/check_pdf_synthetic_conversion.py`
+3. `python scripts/check_stage76_adapter_synthetic.py`
 
-Railway does not start the application when either command returns non-zero.
+Railway does not start the application when any command returns non-zero. The
+third check constructs an immutable synthetic `canonical_record_report` in
+memory and invokes the same `api.report_rendering.render_frozen_report` bridge
+used by governed generation. It requests DOCX, HTML and PDF, verifies the
+returned digests and ordered labels, and requires the strict Stage 76 PDF
+validation result. It does not create a persistence row or inspect `/data`.
 The second checker creates a synthetic DOCX and PDF only inside an isolated
 temporary directory, verifies one-page conversion, Poppler extraction,
 ordered markers, metadata, attachments, annotations and cleanup, then removes
@@ -46,13 +52,13 @@ the complete directory. It never reads or writes `/data`, imports the CDE
 application, invokes a route, or uses a report specification.
 
 These are separate evidence levels: package presence in the final image;
-successful execution of the runtime diagnostic; successful synthetic
-conversion; and successful deployment-gate completion. A deployment that
-passes the gate provides execution evidence for that exact image, but does not
-make PDF an available Stage 75 format and does not implement Stage 76. Stage
-76 remains blocked until a gated revision deploys successfully and receives
-the later assurance required for governed PDF rendering. SSH host-key
-verification is not weakened by this mechanism.
+successful execution of the runtime diagnostic; successful low-level synthetic
+conversion; successful synthetic execution of the governed adapter; and
+successful deployment-gate completion. A deployment that passes all three
+checks provides execution evidence for that exact image, but does not make
+PDF an available Stage 75 format, approve a report, or complete Stage 76
+closure. The adapter check uses only confined temporary synthetic files and
+does not weaken SSH host-key verification.
 
 The repository JSON and focused tests validate only the source-controlled
 configuration. They do not prove that a fresh Railway build succeeded, that a
@@ -61,9 +67,10 @@ deployed final container contains the packages, or that
 not be generated because the `railpack` CLI is not installed here. The local
 synthetic checker is expected to fail closed when the host lacks the required
 toolchain; that result is not production evidence. A successful fresh Railway
-deployment that passes both pre-deploy commands is the required execution
+deployment that passes all three pre-deploy commands is the required execution
 evidence for the exact image, but remains a runtime prerequisite rather than
-Stage 76 implementation.
+Stage 76 implementation. The three pre-deploy commands are the runtime
+diagnostic, the low-level synthetic conversion, and the governed adapter gate.
 
 This is only a source-controlled runtime prerequisite. Stage 75 remains DOCX
 and HTML only, and Stage 76 is not implemented or registered.
