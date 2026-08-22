@@ -260,7 +260,7 @@ class Stage76PdfContractTests(unittest.TestCase):
                     "fit_validation", "recursive_action_tree",
                 })
                 self.assertIn(classified.diagnostic["failure_structure"], {"direct_array", "indirect_array", "action_dictionary", "unexpected_object"})
-                self.assertIn(classified.diagnostic["failure_operand"], {"none", "operand_count", "operand_one", "operand_two"})
+                self.assertIn(classified.diagnostic["failure_operand"], {"none", "operand_count", "operand_one", "operand_two", "operand_three", "operand_four", "operand_five"})
                 self.assertIn(classified.diagnostic["failure_operand_kind"], {"none", "array", "indirect_reference", "direct_dictionary", "name", "other"})
 
     def test_direct_array_operand_diagnostic_distinguishes_count_and_fit(self):
@@ -300,6 +300,54 @@ class Stage76PdfContractTests(unittest.TestCase):
         self.assertEqual(classified.diagnostic["failure_operand_count"], "many")
         self.assertEqual(classified.diagnostic["failure_operand_kinds"], ["indirect_reference", "name", "null", "number", "indirect_reference", "dictionary"])
         self.assertEqual(classified.diagnostic["failure_trailing_kinds"], ["null", "number", "indirect_reference", "dictionary", "array"])
+
+    def test_xyz_destinations_accept_only_finite_scalars_or_pdf_null(self):
+        page = self.page()
+        class NullObject:
+            __module__ = "pypdf.generic"
+        valid = (
+            [page.indirect_reference, "/XYZ", NullObject(), NullObject(), 0],
+            [page.indirect_reference, "/XYZ", -12.5, 48, NullObject()],
+        )
+        for destination in valid:
+            with self.subTest(destination=destination):
+                reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+                self.assertIsNone(report_adapter._pdf_action_failure(reader))
+
+        invalid = (
+            ("left string", 2, "operand_three", "other"),
+            ({"/left": 1}, 2, "operand_three", "dictionary"),
+            (["left"], 2, "operand_three", "array"),
+            (page.indirect_reference, 2, "operand_three", "indirect_reference"),
+            (True, 2, "operand_three", "number"),
+            (float("nan"), 2, "operand_three", "number"),
+            (float("inf"), 2, "operand_three", "number"),
+            (-1, 4, "operand_five", "number"),
+            (float("inf"), 4, "operand_five", "number"),
+        )
+        for item, position, operand, expected_kind in invalid:
+            with self.subTest(item=item, position=position):
+                destination = [page.indirect_reference, "/XYZ", 0, 0, 0]
+                destination[position] = item
+                reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+                failure = report_adapter._pdf_action_failure(reader)
+                self.assertIsNotNone(failure)
+                classified = report_adapter._classify_pdf_failure(failure)
+                self.assertEqual(classified.diagnostic["failure_operand"], operand)
+                self.assertEqual(classified.diagnostic["failure_operand_kind"], expected_kind)
+
+    def test_indirect_xyz_array_resolves_without_page_tree_traversal(self):
+        page = self.page()
+        class Reference:
+            idnum = 777
+            generation = 0
+            def __init__(self, value):
+                self.value = value
+            def get_object(self):
+                return self.value
+        destination = [page.indirect_reference, "/XYZ", None, None, 0]
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": Reference(destination)}})
+        self.assertIsNone(report_adapter._pdf_action_failure(reader))
 
     def test_indirect_destination_cycle_fails_closed(self):
         class Cycle:

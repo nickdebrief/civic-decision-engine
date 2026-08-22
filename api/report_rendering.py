@@ -108,7 +108,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_structure"] not in {"direct_array", "indirect_array", "action_dictionary", "unexpected_object"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
-            if diagnostic["failure_operand"] not in {"none", "operand_count", "operand_one", "operand_two"}:
+            if diagnostic["failure_operand"] not in {"none", "operand_count", "operand_one", "operand_two", "operand_three", "operand_four", "operand_five"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_operand_kind"] not in {"none", "array", "indirect_reference", "direct_dictionary", "name", "other"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
