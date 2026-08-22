@@ -191,6 +191,14 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                     self.rendering._read_adapter_result(result_path, root, "a" * 64)
                 self.assertEqual(raised.exception.code, "adapter_return_contract_invalid")
 
+            for value in ("unknown", "raw"):
+                candidate = json.loads(json.dumps(result))
+                candidate["diagnostics"][0]["inspection_step"] = value
+                result_path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaises(self.rendering.AdapterFailure) as raised:
+                    self.rendering._read_adapter_result(result_path, root, "a" * 64)
+                self.assertEqual(raised.exception.code, "adapter_return_contract_invalid")
+
     def test_parent_subprocess_boundary_preserves_unexpected_diagnostic(self):
         specification = {"publication_engine_version": "2.0.0", "requested_formats": []}
         digest = __import__("api.record_governed_reports", fromlist=["canonical_json"]).canonical_json(specification)
