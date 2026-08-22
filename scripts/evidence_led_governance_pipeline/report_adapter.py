@@ -49,6 +49,13 @@ class PdfMetadataError(ValueError):
         super().__init__("pdf_metadata_invalid")
 
 
+class PdfActionError(ValueError):
+    def __init__(self, location: str, reason: str) -> None:
+        self.location = location
+        self.reason = reason
+        super().__init__("pdf_action_invalid")
+
+
 def _write_result(path: Path, result: dict) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
@@ -77,6 +84,12 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
             "pdf_inspection",
             "pdf_metadata_invalid",
             {"format": "pdf", "failure_field": exc.field, "failure_reason": exc.reason},
+        )
+    if isinstance(exc, PdfActionError):
+        return AdapterFailure(
+            "pdf_inspection",
+            "pdf_action_invalid",
+            {"format": "pdf", "failure_location": exc.location, "failure_reason": exc.reason},
         )
     code = str(exc)
     if "pypdf" in code or "unavailable" in code:
@@ -160,37 +173,111 @@ def _pdf_metadata_is_safe(reader: object, book: Book | None = None) -> bool:
     return _pdf_metadata_failure(reader, book) is None
 
 
-def _pdf_has_unsafe_objects(reader: object) -> bool:
-    dangerous = {"/Annots", "/EmbeddedFiles", "/JavaScript", "/JS", "/Launch", "/OpenAction", "/AA", "/URI", "/AcroForm"}
+def _pdf_action_failure(reader: object) -> PdfActionError | None:
+    try:
+        page_objects = {id(page.get_object() if callable(getattr(page, "get_object", None)) else page) for page in reader.pages}
+    except Exception:
+        return PdfActionError("catalog_open_action", "malformed_destination")
 
-    def visit(value: object, seen: set[int]) -> bool:
+    def resolve(value: object, active: set[int]) -> object:
         resolver = getattr(value, "get_object", None)
-        if callable(resolver):
-            try:
-                value = resolver()
-            except Exception:
-                return True
+        if not callable(resolver):
+            return value
         identity = id(value)
-        if identity in seen:
-            return False
-        seen.add(identity)
-        if isinstance(value, dict):
-            for key, child in value.items():
-                name = str(key)
-                if name in dangerous:
-                    return True
-                if visit(child, seen):
-                    return True
-        elif isinstance(value, (list, tuple)):
-            return any(visit(child, seen) for child in value)
-        return False
+        if identity in active:
+            raise PdfActionError("catalog_open_action", "indirect_cycle")
+        active.add(identity)
+        try:
+            resolved = resolver()
+            if resolved is value:
+                raise PdfActionError("catalog_open_action", "indirect_cycle")
+            return resolved
+        except PdfActionError:
+            raise
+        except Exception:
+            raise PdfActionError("catalog_open_action", "malformed_destination") from None
+        finally:
+            active.remove(identity)
 
-    if visit(getattr(reader, "trailer", {}), set()):
-        return True
-    for page in getattr(reader, "pages", ()):
-        if visit(page, set()):
-            return True
-    return False
+    def internal_destination(value: object, location: str, active: set[int]) -> None:
+        value = resolve(value, active)
+        if isinstance(value, dict) and "/S" in value:
+            raise PdfActionError(location, "executable_action")
+        if isinstance(value, str):
+            raise PdfActionError(location, "external_destination")
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            raise PdfActionError(location, "malformed_destination")
+        page = resolve(value[0], active)
+        mode = resolve(value[1], active)
+        if id(page) not in page_objects or mode != "/Fit":
+            raise PdfActionError(location, "unsupported_destination")
+
+    def visit(value: object, location: str, active: set[int], *, outline: bool = False) -> None:
+        value = resolve(value, active)
+        if isinstance(value, (list, tuple)):
+            identity = id(value)
+            if identity in active:
+                raise PdfActionError(location, "indirect_cycle")
+            active.add(identity)
+            try:
+                for child in value:
+                    visit(child, location, active, outline=outline)
+            finally:
+                active.remove(identity)
+            return
+        if not isinstance(value, dict):
+            return
+        identity = id(value)
+        if identity in active:
+            raise PdfActionError(location, "indirect_cycle")
+        active.add(identity)
+        try:
+            _visit_dictionary(value, location, active, outline=outline)
+        finally:
+            active.remove(identity)
+
+    def _visit_dictionary(value: dict, location: str, active: set[int], *, outline: bool = False) -> None:
+        if "/S" in value:
+            raise PdfActionError(location, "executable_action")
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            if key == "/AA":
+                raise PdfActionError(location if location.endswith("additional_actions") else "catalog_additional_actions", "executable_action")
+            if key == "/Annots":
+                raise PdfActionError("annotation_action", "executable_action")
+            if key in {"/EmbeddedFiles", "/Filespec", "/EF", "/AF", "/AcroForm"}:
+                raise PdfActionError(location, "attachment_or_interactive_content")
+            if key == "/OpenAction":
+                internal_destination(child, "catalog_open_action", active)
+                continue
+            if key in {"/A", "/JavaScript", "/JS", "/Launch", "/URI", "/GoToR", "/SubmitForm", "/ImportData", "/Rendition"}:
+                raise PdfActionError("outline_action" if outline else location, "executable_action")
+            if key == "/Dest":
+                if outline:
+                    internal_destination(child, "outline_action", active)
+                else:
+                    raise PdfActionError(location, "unsupported_destination")
+                continue
+            if key == "/Outlines":
+                visit(child, "outline_action", active, outline=True)
+                continue
+            visit(child, location, active, outline=outline)
+
+    trailer = getattr(reader, "trailer", {})
+    try:
+        root = trailer.get("/Root", trailer) if isinstance(trailer, dict) else trailer
+        visit(root, "catalog_open_action", set())
+        for page in reader.pages:
+            visit(page, "page_additional_actions", set())
+    except PdfActionError as exc:
+        return exc
+    except Exception:
+        return PdfActionError("catalog_open_action", "malformed_destination")
+    return None
+
+
+def _pdf_has_unsafe_objects(reader: object) -> bool:
+    return _pdf_action_failure(reader) is not None
 
 
 def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
@@ -241,8 +328,9 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     metadata_failure = _pdf_metadata_failure(reader, book)
     if metadata_failure is not None:
         raise metadata_failure
-    if _pdf_has_unsafe_objects(reader):
-        raise ValueError("pdf_action_invalid")
+    action_failure = _pdf_action_failure(reader)
+    if action_failure is not None:
+        raise action_failure
     info = _run_pdf_tool("pdfinfo", [str(pdf_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
     info_values = {}
     for line in info.stdout.splitlines():

@@ -109,6 +109,8 @@ def _metadata_text(reader: Any) -> str:
 
 
 def validate_pdf_structure(pdf_path: Path, *, temporary_directory: Path) -> int:
+    # This gate validates the toolchain on its own synthetic output; the governed
+    # adapter owns the complete action-tree policy for report PDFs.
     if not pdf_path.is_file() or pdf_path.is_symlink():
         raise SyntheticCheckError("pdf_missing_or_symlinked")
     if pdf_path.resolve().parent != temporary_directory:
