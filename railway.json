@@ -5,7 +5,8 @@
     "buildEnvironment": "V3",
     "variables": {
       "RAILPACK_PYTHON_VERSION": "3.13.13",
-      "MISE_PYTHON_VERSION": "3.13.13"
+      "MISE_PYTHON_VERSION": "3.13.13",
+      "RAILPACK_DEPLOY_APT_PACKAGES": "libreoffice poppler-utils fontconfig fonts-dejavu-core fonts-liberation2"
     }
   },
   "deploy": {
