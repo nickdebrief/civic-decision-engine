@@ -42,7 +42,7 @@ RESULT_FIELDS = {"schema_version", "ok", "phase", "code", "cleanup", "specificat
 DIAGNOSTIC_FIELDS = {
     "format", "libreoffice_version", "pdfinfo_version", "pypdf_version",
     "extraction_backend", "page_count", "size_bytes", "ordered_content",
-    "metadata_attachments_annotations",
+    "metadata_attachments_annotations", "failure_field", "failure_reason",
 }
 
 
@@ -51,6 +51,7 @@ class AdapterFailure(ValueError):
     phase: str
     code: str
     cleanup: str = "unknown"
+    diagnostic: dict[str, Any] | None = None
 
     def __str__(self) -> str:
         return "governed_report_renderer_failed"
@@ -86,6 +87,14 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             raise AdapterFailure("result_serialization", "adapter_result_invalid")
         if diagnostic.get("format") != "pdf":
             raise AdapterFailure("result_serialization", "adapter_result_invalid")
+        if "failure_field" in diagnostic or "failure_reason" in diagnostic:
+            if set(diagnostic) != {"format", "failure_field", "failure_reason"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_field"] not in {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate", "unknown_key"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_reason"] not in {"unexpected_key", "unexpected_value", "identity_mismatch", "non_string_value", "forbidden_value", "missing_required_key"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):
             if key in diagnostic and not isinstance(diagnostic[key], str):
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -153,7 +162,8 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         except AdapterFailure:
             raise
         if not result["ok"]:
-            raise AdapterFailure(result["phase"], result["code"], result["cleanup"])
+            detail = result["diagnostics"][0] if result["diagnostics"] and "failure_field" in result["diagnostics"][0] else None
+            raise AdapterFailure(result["phase"], result["code"], result["cleanup"], detail)
         if process.returncode != 0:
             raise AdapterFailure(result["phase"], result["code"], result["cleanup"])
         output_dir.mkdir(parents=True, exist_ok=True)
