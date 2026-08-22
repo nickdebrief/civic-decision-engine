@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -398,9 +399,164 @@ class Stage76PdfContractTests(unittest.TestCase):
         reader = SimpleNamespace(pages=ExplodingPages(), trailer={"/Root": {}})
         with self.assertRaises(report_adapter.UnexpectedPdfInspectionError):
             report_adapter._pdf_action_failure(reader)
-        classified = report_adapter._classify_pdf_failure(report_adapter.UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", "attribute_error"))
+        classified = report_adapter._classify_pdf_failure(report_adapter.UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", "attribute_error", "page_enumeration"))
         self.assertEqual(classified.code, "unexpected_adapter_failure")
-        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_step": "page_enumeration", "failure_operation": "enumerate_pages", "failure_exception_class": "attribute_error"})
+        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_step": "page_enumeration", "failure_operation": "enumerate_pages", "failure_exception_class": "attribute_error", "inspection_step": "page_enumeration"})
+
+    def test_unexpected_pdf_inspection_steps_are_bounded(self):
+        steps = {
+            "reader_construction", "encryption_and_page_count", "metadata_validation",
+            "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
+            "indirect_reference_resolution", "passive_destination_validation",
+            "outlines_names_traversal", "annotation_inspection", "attachment_inspection",
+            "unsafe_action_inspection", "extracted_text_handling", "ordered_equivalence_validation",
+            "result_construction", "page_count_validation", "unknown",
+        }
+        for step in steps:
+            with self.subTest(step=step):
+                classified = report_adapter._classify_pdf_failure(
+                    report_adapter.UnexpectedPdfInspectionError("pdf_inspection", "inspect_pdf", "value_error", step)
+                )
+                self.assertEqual(classified.diagnostic["inspection_step"], step)
+                self.assertNotIn("value", classified.diagnostic)
+
+    def test_validate_pdf_valueerror_boundaries_are_step_classified(self):
+        book = report_adapter.make_book(self.specification())
+        page = self.page()
+
+        def tool(tool_name, arguments, *, timeout, deadline=None):
+            if tool_name == "pdfinfo" and arguments == ["-v"]:
+                return SimpleNamespace(stdout="pdfinfo version 25.03.0\n", stderr="", returncode=0)
+            if tool_name == "pdfinfo":
+                return SimpleNamespace(stdout="Pages: 1\n", stderr="", returncode=0)
+            Path(arguments[2]).write_text("\n".join(report_adapter.source_text_blocks(book)), encoding="utf-8")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        class Reader:
+            is_encrypted = False
+            pages = [page]
+            metadata = {}
+            trailer = {}
+
+        cases = (
+            ("metadata_validation", patch.object(report_adapter, "_pdf_metadata_failure", side_effect=ValueError("private"))),
+            ("unsafe_action_inspection", patch.object(report_adapter, "_pdf_action_failure", side_effect=ValueError("private"))),
+            ("ordered_equivalence_validation", patch.object(report_adapter, "_pdf_ordered_equivalence", side_effect=ValueError("private"))),
+        )
+        for step, fault in cases:
+            with self.subTest(step=step), tempfile.TemporaryDirectory() as directory:
+                pdf = Path(directory) / "report.pdf"
+                pdf.write_bytes(b"%PDF-1.7\n")
+                fake_pypdf = SimpleNamespace(__version__="5.9.0", PdfReader=lambda _path, strict=True: Reader())
+                with patch.dict(sys.modules, {"pypdf": fake_pypdf}), patch.object(report_adapter, "_run_pdf_tool", side_effect=tool), fault:
+                    with self.assertRaises(report_adapter.UnexpectedPdfInspectionError) as raised:
+                        report_adapter._validate_pdf(pdf, book)
+                self.assertEqual(raised.exception.inspection_step, step)
+                self.assertEqual(raised.exception.failure_exception_class, "value_error")
+
+    def test_validate_pdf_reader_text_and_result_boundaries_are_step_classified(self):
+        book = report_adapter.make_book(self.specification())
+        page = self.page()
+
+        class Reader:
+            is_encrypted = False
+            pages = [page]
+            metadata = {}
+            trailer = {}
+
+        class BrokenLines:
+            def splitlines(self):
+                raise ValueError("private parser detail")
+
+        def run(reader, fake_pypdf, tool, *, read_text=None):
+            with tempfile.TemporaryDirectory() as directory:
+                pdf = Path(directory) / "report.pdf"
+                pdf.write_bytes(b"%PDF-1.7\n")
+                patches = [patch.dict(sys.modules, {"pypdf": fake_pypdf}), patch.object(report_adapter, "_run_pdf_tool", side_effect=tool)]
+                if read_text is not None:
+                    patches.append(patch.object(Path, "read_text", side_effect=read_text))
+                with ExitStack() as stack:
+                    for item in patches:
+                        stack.enter_context(item)
+                    with self.assertRaises(report_adapter.UnexpectedPdfInspectionError) as raised:
+                        report_adapter._validate_pdf(pdf, book)
+                return raised.exception
+
+        def successful_tool(tool_name, arguments, *, timeout, deadline=None):
+            if tool_name == "pdfinfo" and arguments == ["-v"]:
+                return SimpleNamespace(stdout="pdfinfo version 25.03.0\n", stderr="", returncode=0)
+            if tool_name == "pdfinfo":
+                return SimpleNamespace(stdout="Pages: 1\n", stderr="", returncode=0)
+            Path(arguments[2]).write_text("\n".join(report_adapter.source_text_blocks(book)), encoding="utf-8")
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+        def broken_page_count_tool(tool_name, arguments, *, timeout, deadline=None):
+            if tool_name == "pdfinfo":
+                return SimpleNamespace(stdout=BrokenLines(), stderr="", returncode=0)
+            return successful_tool(tool_name, arguments, timeout=timeout, deadline=deadline)
+
+        def broken_result_tool(tool_name, arguments, *, timeout, deadline=None):
+            if tool_name == "pdfinfo" and arguments == ["-v"]:
+                return SimpleNamespace(stdout=BrokenLines(), stderr="", returncode=0)
+            return successful_tool(tool_name, arguments, timeout=timeout, deadline=deadline)
+
+        construction = SimpleNamespace(__version__="5.9.0", PdfReader=lambda _path, strict=True: (_ for _ in ()).throw(ValueError("private reader detail")))
+        self.assertEqual(run(Reader, construction, successful_tool).inspection_step, "reader_construction")
+
+        class BrokenEncryption(Reader):
+            @property
+            def is_encrypted(self):
+                raise ValueError("private encryption detail")
+
+        encryption = SimpleNamespace(__version__="5.9.0", PdfReader=lambda _path, strict=True: BrokenEncryption())
+        self.assertEqual(run(BrokenEncryption, encryption, successful_tool).inspection_step, "encryption_and_page_count")
+
+        normal = SimpleNamespace(__version__="5.9.0", PdfReader=lambda _path, strict=True: Reader())
+        self.assertEqual(run(Reader, normal, broken_page_count_tool).inspection_step, "page_count_validation")
+
+        original_read_text = Path.read_text
+
+        def broken_read_text(self, *args, **kwargs):
+            if self.name == "text.txt":
+                raise ValueError("private extracted text detail")
+            return original_read_text(self, *args, **kwargs)
+
+        self.assertEqual(run(Reader, normal, successful_tool, read_text=broken_read_text).inspection_step, "extracted_text_handling")
+        self.assertEqual(run(Reader, normal, broken_result_tool).inspection_step, "result_construction")
+
+    def test_validate_pdf_production_shaped_xyz_fixture_completes_without_toolchain(self):
+        book = report_adapter.make_book(self.specification())
+        registered = self.page()
+
+        class PageWrapper(dict):
+            indirect_reference = registered.indirect_reference
+
+        class Reference:
+            idnum = registered.indirect_reference.idnum
+            generation = registered.indirect_reference.generation
+
+            def get_object(self):
+                return PageWrapper()
+
+        destination = [Reference(), "/XYZ", type("NullObject", (), {"__module__": "pypdf.generic"})(), type("NullObject", (), {"__module__": "pypdf.generic"})(), 0]
+        reader = SimpleNamespace(is_encrypted=False, pages=[registered], metadata={}, trailer={"/Root": {"/OpenAction": destination}})
+        fake_pypdf = SimpleNamespace(__version__="5.9.0", PdfReader=lambda _path, strict=True: reader)
+        with tempfile.TemporaryDirectory() as directory:
+            pdf = Path(directory) / "report.pdf"
+            pdf.write_bytes(b"%PDF-1.7\n")
+
+            def tool(tool_name, arguments, *, timeout, deadline=None):
+                if tool_name == "pdfinfo" and arguments == ["-v"]:
+                    return SimpleNamespace(stdout="pdfinfo version 25.03.0\n", stderr="", returncode=0)
+                if tool_name == "pdfinfo":
+                    return SimpleNamespace(stdout="Pages: 1\n", stderr="", returncode=0)
+                Path(arguments[2]).write_text("\n".join(report_adapter.source_text_blocks(book)), encoding="utf-8")
+                return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+            with patch.dict(sys.modules, {"pypdf": fake_pypdf}), patch.object(report_adapter, "_run_pdf_tool", side_effect=tool):
+                result = report_adapter._validate_pdf(pdf, book)
+        self.assertEqual(result["page_count"], 1)
+        self.assertEqual(result["ordered_content"], "ok")
 
     def test_duplicate_page_identity_is_rejected_with_bounded_state(self):
         first = self.page(1)

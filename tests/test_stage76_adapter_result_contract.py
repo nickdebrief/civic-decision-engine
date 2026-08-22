@@ -161,12 +161,12 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}],
+                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error"}],
                 "artifacts": [],
             }
             self.adapter._write_result(result_path, result)
             self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
-            for key, value in (("failure_step", "raw"), ("failure_operation", "raw"), ("failure_exception_class", "raw"), ("failure_operation", "read_stderr"), ("failure_exception_class", "RuntimeError")):
+            for key, value in (("failure_step", "raw"), ("failure_operation", "raw"), ("inspection_step", "raw"), ("failure_exception_class", "raw"), ("failure_operation", "read_stderr"), ("failure_exception_class", "RuntimeError")):
                 candidate = json.loads(json.dumps(result))
                 candidate["diagnostics"][0][key] = value
                 result_path.write_text(json.dumps(candidate), encoding="utf-8")
@@ -180,10 +180,10 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}],
+                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error"}],
                 "artifacts": [],
             }
-            for field in ("failure_step", "failure_operation", "failure_exception_class"):
+            for field in ("failure_step", "failure_operation", "inspection_step", "failure_exception_class"):
                 candidate = json.loads(json.dumps(result))
                 del candidate["diagnostics"][0][field]
                 result_path.write_text(json.dumps(candidate), encoding="utf-8")
@@ -195,7 +195,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
         specification = {"publication_engine_version": "2.0.0", "requested_formats": []}
         digest = __import__("api.record_governed_reports", fromlist=["canonical_json"]).canonical_json(specification)
         digest = hashlib.sha256(digest.encode()).hexdigest()
-        diagnostic = {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}
+        diagnostic = {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error"}
 
         class Process:
             returncode = 1

@@ -71,10 +71,11 @@ class PdfActionError(ValueError):
 
 
 class UnexpectedPdfInspectionError(ValueError):
-    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str) -> None:
+    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "unknown") -> None:
         self.failure_step = failure_step
         self.failure_operation = failure_operation
         self.failure_exception_class = failure_exception_class
+        self.inspection_step = inspection_step
         super().__init__("unexpected_adapter_failure")
 
 
@@ -125,7 +126,7 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
         return AdapterFailure(
             "pdf_inspection",
             "unexpected_adapter_failure",
-            {"format": "pdf", "failure_step": exc.failure_step, "failure_operation": exc.failure_operation, "failure_exception_class": exc.failure_exception_class},
+            {"format": "pdf", "failure_step": exc.failure_step, "failure_operation": exc.failure_operation, "failure_exception_class": exc.failure_exception_class, "inspection_step": exc.inspection_step},
         )
     if isinstance(exc, PdfMetadataError):
         return AdapterFailure(
@@ -174,7 +175,7 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
     return AdapterFailure(
         "pdf_inspection",
         "unexpected_adapter_failure",
-        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "inspect_pdf", "failure_exception_class": _exception_class(exc)},
+        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "inspect_pdf", "failure_exception_class": _exception_class(exc), "inspection_step": "unknown"},
     )
 
 
@@ -249,24 +250,24 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             pages = getattr(reader, "pages", ())
             iterator = iter(pages)
         except Exception as exc:
-            raise UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", _exception_class(exc)) from None
+            raise UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", _exception_class(exc), "page_enumeration") from None
         while True:
             try:
                 page = next(iterator)
             except StopIteration:
                 break
             except Exception as exc:
-                raise UnexpectedPdfInspectionError("page_enumeration", "materialize_page", _exception_class(exc)) from None
+                raise UnexpectedPdfInspectionError("page_enumeration", "materialize_page", _exception_class(exc), "page_enumeration") from None
             try:
                 reference = getattr(page, "indirect_reference", None)
             except Exception as exc:
-                raise UnexpectedPdfInspectionError("page_reference_attribute", "read_indirect_reference", _exception_class(exc)) from None
+                raise UnexpectedPdfInspectionError("page_reference_attribute", "read_indirect_reference", _exception_class(exc), "page_reference_registry") from None
             if reference is None:
                 return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
             try:
                 identity = (getattr(reference, "idnum", None), getattr(reference, "generation", None))
             except Exception as exc:
-                raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc)) from None
+                raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc), "page_reference_registry") from None
             if not all(isinstance(item, int) for item in identity):
                 return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
             if identity in page_objects:
@@ -275,7 +276,7 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
     except UnexpectedPdfInspectionError:
         raise
     except Exception as exc:
-        raise UnexpectedPdfInspectionError("registry_construction", "build_page_registry", _exception_class(exc)) from None
+        raise UnexpectedPdfInspectionError("registry_construction", "build_page_registry", _exception_class(exc), "page_reference_registry") from None
         return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
     page_registry_state = "populated" if page_objects else "empty"
 
@@ -284,7 +285,7 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             idnum = getattr(value, "idnum", None)
             generation = getattr(value, "generation", None)
         except Exception as exc:
-            raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc)) from None
+            raise UnexpectedPdfInspectionError("identity_normalization", "read_reference_identity", _exception_class(exc), "page_reference_registry") from None
         if isinstance(idnum, int) and isinstance(generation, int):
             return idnum, generation
         return None
@@ -525,26 +526,45 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
         if getattr(pypdf, "__version__", "") != "5.9.0":
             raise ValueError("pdf_pypdf_version_invalid")
         reader = pypdf.PdfReader(str(pdf_path), strict=True)
-    except ValueError:
-        raise
+    except ValueError as exc:
+        if str(exc) in {"pdf_pypdf_version_invalid", "pdf_pypdf_unavailable"}:
+            raise
+        raise UnexpectedPdfInspectionError("pdf_inspection", "construct_reader", _exception_class(exc), "reader_construction") from None
     except ImportError:
         raise ValueError("pdf_pypdf_unavailable") from None
     except Exception:
         raise ValueError("pdf_structure_invalid") from None
-    if reader.is_encrypted or not reader.pages or len(reader.pages) > PDF_MAX_PAGES:
+    try:
+        encrypted = reader.is_encrypted
+        pages = reader.pages
+        page_count = len(pages)
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_page_count", _exception_class(exc), "encryption_and_page_count") from None
+    if encrypted or not pages or page_count > PDF_MAX_PAGES:
         raise ValueError("pdf_encryption_or_page_limit_invalid")
-    metadata_failure = _pdf_metadata_failure(reader, book)
+    try:
+        metadata_failure = _pdf_metadata_failure(reader, book)
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_metadata", _exception_class(exc), "metadata_validation") from None
     if metadata_failure is not None:
         raise metadata_failure
-    action_failure = _pdf_action_failure(reader)
+    try:
+        action_failure = _pdf_action_failure(reader)
+    except (PdfActionError, UnexpectedPdfInspectionError):
+        raise
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "inspect_actions", _exception_class(exc), "unsafe_action_inspection") from None
     if action_failure is not None:
         raise action_failure
     info = _run_pdf_tool("pdfinfo", [str(pdf_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
-    info_values = {}
-    for line in info.stdout.splitlines():
-        if ":" in line:
-            key, value = line.split(":", 1)
-            info_values[key.strip()] = value.strip()
+    try:
+        info_values = {}
+        for line in info.stdout.splitlines():
+            if ":" in line:
+                key, value = line.split(":", 1)
+                info_values[key.strip()] = value.strip()
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "parse_pdfinfo", _exception_class(exc), "page_count_validation") from None
     try:
         page_count = int(info_values.get("Pages", "0"))
     except ValueError:
@@ -554,14 +574,25 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     with tempfile.TemporaryDirectory(prefix="cde-pdf-extract-") as extraction_dir:
         extracted_path = Path(extraction_dir) / "text.txt"
         _run_pdf_tool("pdftotext", ["-layout", str(pdf_path), str(extracted_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
-        text = extracted_path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = extracted_path.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            raise UnexpectedPdfInspectionError("pdf_inspection", "read_extracted_text", _exception_class(exc), "extracted_text_handling") from None
     lowered_text = text.lower()
     if any(token in lowered_text for token in ("/tmp/", "/private/tmp/", "/app/", "/data/", "private_canary", "stage76_private")):
         raise ValueError("pdf_private_path_or_canary_detected")
-    if not _pdf_ordered_equivalence(book, text):
+    try:
+        equivalent = _pdf_ordered_equivalence(book, text)
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_ordered_equivalence", _exception_class(exc), "ordered_equivalence_validation") from None
+    if not equivalent:
         raise ValueError("pdf_ordered_equivalence_failed")
     version = _run_pdf_tool("pdfinfo", ["-v"], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
-    return {"page_count": page_count, "size_bytes": size, "pdfinfo_version": (version.stdout or version.stderr).splitlines()[0], "ordered_content": "ok", "metadata_attachments_annotations": "ok", "pypdf_version": "5.9.0"}
+    try:
+        pdfinfo_version = (version.stdout or version.stderr).splitlines()[0]
+        return {"page_count": page_count, "size_bytes": size, "pdfinfo_version": pdfinfo_version, "ordered_content": "ok", "metadata_attachments_annotations": "ok", "pypdf_version": "5.9.0"}
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "construct_inspection_result", _exception_class(exc), "result_construction") from None
 
 
 def canonical(value):
