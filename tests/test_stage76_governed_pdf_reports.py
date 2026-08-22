@@ -390,6 +390,18 @@ class Stage76PdfContractTests(unittest.TestCase):
         self.assertEqual(classified.diagnostic["resolved_target_comparison"], "different_target")
         self.assertEqual(classified.diagnostic["page_reference_attribute"], "indirect_reference")
 
+    def test_page_enumeration_exception_is_classified_without_message(self):
+        class ExplodingPages:
+            def __iter__(self):
+                raise AttributeError("private implementation detail")
+
+        reader = SimpleNamespace(pages=ExplodingPages(), trailer={"/Root": {}})
+        with self.assertRaises(report_adapter.UnexpectedPdfInspectionError):
+            report_adapter._pdf_action_failure(reader)
+        classified = report_adapter._classify_pdf_failure(report_adapter.UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", "attribute_error"))
+        self.assertEqual(classified.code, "unexpected_adapter_failure")
+        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_step": "page_enumeration", "failure_operation": "enumerate_pages", "failure_exception_class": "attribute_error"})
+
     def test_duplicate_page_identity_is_rejected_with_bounded_state(self):
         first = self.page(1)
         second = self.page(1)

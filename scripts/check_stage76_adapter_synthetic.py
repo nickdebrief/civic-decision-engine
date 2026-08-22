@@ -299,7 +299,10 @@ def run_check() -> None:
                     if "failure_field" in exc.diagnostic:
                         detail = f":{exc.diagnostic['failure_field']}:{exc.diagnostic['failure_reason']}"
                     else:
-                        detail = (
+                        if "failure_operation" in exc.diagnostic:
+                            detail = f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_operation']}:{exc.diagnostic['failure_exception_class']}"
+                        else:
+                            detail = (
                             f":{exc.diagnostic['failure_location']}:{exc.diagnostic['failure_reason']}"
                             f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_structure']}"
                             f":{exc.diagnostic['failure_operand']}:{exc.diagnostic['failure_operand_kind']}"
@@ -307,7 +310,7 @@ def run_check() -> None:
                             f":{exc.diagnostic['failure_destination_mode']}:{','.join(exc.diagnostic['failure_trailing_kinds'])}"
                             f":{exc.diagnostic['page_registry_state']}:{exc.diagnostic['reference_identity_result']}"
                             f":{exc.diagnostic['resolution_result']}:{exc.diagnostic['resolved_target_comparison']}:{exc.diagnostic['page_reference_attribute']}"
-                        )
+                            )
                 raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}{detail}") from None
             except TimeoutError:
                 raise AdapterGateError("adapter_invocation_failed") from None

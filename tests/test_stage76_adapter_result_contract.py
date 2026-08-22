@@ -153,6 +153,25 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 with self.assertRaises(self.rendering.AdapterFailure):
                     self.rendering._read_adapter_result(result_path, root, "a" * 64)
 
+    def test_unexpected_pdf_diagnostic_is_checkpointed_and_strict(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            result = {
+                "schema_version": "1", "ok": False, "phase": "pdf_inspection",
+                "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
+                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}],
+                "artifacts": [],
+            }
+            self.adapter._write_result(result_path, result)
+            self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
+            for key, value in (("failure_step", "raw"), ("failure_operation", "raw"), ("failure_exception_class", "raw"), ("failure_operation", "read_stderr"), ("failure_exception_class", "RuntimeError")):
+                candidate = json.loads(json.dumps(result))
+                candidate["diagnostics"][0][key] = value
+                result_path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaises(self.rendering.AdapterFailure):
+                    self.rendering._read_adapter_result(result_path, root, "a" * 64)
+
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
             ("input_load", "adapter_input_missing"),
