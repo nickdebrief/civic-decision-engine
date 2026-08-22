@@ -349,6 +349,55 @@ class Stage76PdfContractTests(unittest.TestCase):
         reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": Reference(destination)}})
         self.assertIsNone(report_adapter._pdf_action_failure(reader))
 
+    def test_page_reference_matching_identity_accepts_distinct_page_wrapper(self):
+        page = self.page()
+        registered_identity = page.indirect_reference
+
+        class PageWrapper(dict):
+            indirect_reference = registered_identity
+
+        class Reference:
+            idnum = registered_identity.idnum
+            generation = registered_identity.generation
+
+            def get_object(self):
+                return PageWrapper()
+
+        destination = [Reference(), "/XYZ", None, None, 0]
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+        self.assertIsNone(report_adapter._pdf_action_failure(reader))
+
+    def test_page_reference_resolution_diagnostics_are_bounded(self):
+        page = self.page()
+
+        class ForeignPage(dict):
+            indirect_reference = SimpleNamespace(idnum=900, generation=0)
+
+        class Reference:
+            idnum = page.indirect_reference.idnum
+            generation = page.indirect_reference.generation
+
+            def get_object(self):
+                return ForeignPage()
+
+        destination = [Reference(), "/XYZ", None, None, 0]
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+        failure = report_adapter._pdf_action_failure(reader)
+        classified = report_adapter._classify_pdf_failure(failure)
+        self.assertEqual(classified.diagnostic["page_registry_state"], "populated")
+        self.assertEqual(classified.diagnostic["reference_identity_result"], "registered")
+        self.assertEqual(classified.diagnostic["resolution_result"], "resolved_non_page")
+        self.assertEqual(classified.diagnostic["resolved_target_comparison"], "different_target")
+        self.assertEqual(classified.diagnostic["page_reference_attribute"], "indirect_reference")
+
+    def test_duplicate_page_identity_is_rejected_with_bounded_state(self):
+        first = self.page(1)
+        second = self.page(1)
+        reader = SimpleNamespace(pages=[first, second], trailer={"/Root": {}})
+        failure = report_adapter._pdf_action_failure(reader)
+        self.assertEqual(failure.page_registry_state, "duplicate_identity")
+        self.assertEqual(report_adapter._classify_pdf_failure(failure).diagnostic["reference_identity_result"], "ambiguous")
+
     def test_indirect_destination_cycle_fails_closed(self):
         class Cycle:
             idnum = 99

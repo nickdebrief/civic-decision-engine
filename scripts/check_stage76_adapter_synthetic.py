@@ -305,6 +305,8 @@ def run_check() -> None:
                             f":{exc.diagnostic['failure_operand']}:{exc.diagnostic['failure_operand_kind']}"
                             f":{exc.diagnostic['failure_operand_count']}:{','.join(exc.diagnostic['failure_operand_kinds'])}"
                             f":{exc.diagnostic['failure_destination_mode']}:{','.join(exc.diagnostic['failure_trailing_kinds'])}"
+                            f":{exc.diagnostic['page_registry_state']}:{exc.diagnostic['reference_identity_result']}"
+                            f":{exc.diagnostic['resolution_result']}:{exc.diagnostic['resolved_target_comparison']}:{exc.diagnostic['page_reference_attribute']}"
                         )
                 raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}{detail}") from None
             except TimeoutError:

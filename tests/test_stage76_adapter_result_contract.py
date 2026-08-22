@@ -141,12 +141,12 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "pdf_action_invalid", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [{"format": "pdf", "failure_location": "catalog_open_action", "failure_reason": "executable_action", "failure_step": "open_action_resolution", "failure_structure": "action_dictionary", "failure_operand": "none", "failure_operand_kind": "none", "failure_operand_count": "not_applicable", "failure_operand_kinds": [], "failure_destination_mode": "not_applicable", "failure_trailing_kinds": []}],
+                "diagnostics": [{"format": "pdf", "failure_location": "catalog_open_action", "failure_reason": "executable_action", "failure_step": "open_action_resolution", "failure_structure": "action_dictionary", "failure_operand": "none", "failure_operand_kind": "none", "failure_operand_count": "not_applicable", "failure_operand_kinds": [], "failure_destination_mode": "not_applicable", "failure_trailing_kinds": [], "page_registry_state": "populated", "reference_identity_result": "not_applicable", "resolution_result": "not_applicable", "resolved_target_comparison": "not_applicable", "page_reference_attribute": "indirect_reference"}],
                 "artifacts": [],
             }
             self.adapter._write_result(result_path, result)
             self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
-            for key, value in (("failure_location", "/data/private"), ("failure_reason", "raw object"), ("failure_step", "raw step"), ("failure_structure", "raw structure"), ("failure_operand", "raw operand"), ("failure_operand_kind", "raw kind"), ("failure_operand_count", "seven"), ("failure_operand_kinds", ["raw kind"]), ("failure_destination_mode", "raw mode"), ("failure_trailing_kinds", ["raw kind"])):
+            for key, value in (("failure_location", "/data/private"), ("failure_reason", "raw object"), ("failure_step", "raw step"), ("failure_structure", "raw structure"), ("failure_operand", "raw operand"), ("failure_operand_kind", "raw kind"), ("failure_operand_count", "seven"), ("failure_operand_kinds", ["raw kind"]), ("failure_destination_mode", "raw mode"), ("failure_trailing_kinds", ["raw kind"]), ("page_registry_state", "raw state"), ("reference_identity_result", "raw identity"), ("resolution_result", "raw resolution"), ("resolved_target_comparison", "raw comparison"), ("page_reference_attribute", "raw attribute")):
                 candidate = json.loads(json.dumps(result))
                 candidate["diagnostics"][0][key] = value
                 result_path.write_text(json.dumps(candidate), encoding="utf-8")
