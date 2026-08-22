@@ -71,7 +71,7 @@ class PdfActionError(ValueError):
 
 
 class UnexpectedPdfInspectionError(ValueError):
-    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "unknown") -> None:
+    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "validation_return") -> None:
         self.failure_step = failure_step
         self.failure_operation = failure_operation
         self.failure_exception_class = failure_exception_class
@@ -175,7 +175,7 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
     return AdapterFailure(
         "pdf_inspection",
         "unexpected_adapter_failure",
-        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "inspect_pdf", "failure_exception_class": _exception_class(exc), "inspection_step": "unknown"},
+        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "validate_pdf", "failure_exception_class": _exception_class(exc), "inspection_step": "validation_return"},
     )
 
 
@@ -515,7 +515,7 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
     return only_boilerplate(raw[cursor:])
 
 
-def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
+def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
     if not pdf_path.is_file() or pdf_path.is_symlink() or pdf_path.stat().st_size <= 0:
         raise ValueError("pdf_output_missing_or_empty")
     size = pdf_path.stat().st_size
@@ -569,7 +569,11 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
         page_count = int(info_values.get("Pages", "0"))
     except ValueError:
         raise ValueError("pdf_page_count_invalid") from None
-    if page_count != len(reader.pages) or page_count < 1 or page_count > PDF_MAX_PAGES:
+    try:
+        registered_page_count = len(reader.pages)
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_page_count", _exception_class(exc), "limit_validation") from None
+    if page_count != registered_page_count or page_count < 1 or page_count > PDF_MAX_PAGES:
         raise ValueError("pdf_page_count_invalid")
     with tempfile.TemporaryDirectory(prefix="cde-pdf-extract-") as extraction_dir:
         extracted_path = Path(extraction_dir) / "text.txt"
@@ -578,7 +582,10 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
             text = extracted_path.read_text(encoding="utf-8", errors="replace")
         except Exception as exc:
             raise UnexpectedPdfInspectionError("pdf_inspection", "read_extracted_text", _exception_class(exc), "extracted_text_handling") from None
-    lowered_text = text.lower()
+    try:
+        lowered_text = text.lower()
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "prepare_extracted_text", _exception_class(exc), "equivalence_preparation") from None
     if any(token in lowered_text for token in ("/tmp/", "/private/tmp/", "/app/", "/data/", "private_canary", "stage76_private")):
         raise ValueError("pdf_private_path_or_canary_detected")
     try:
@@ -593,6 +600,24 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
         return {"page_count": page_count, "size_bytes": size, "pdfinfo_version": pdfinfo_version, "ordered_content": "ok", "metadata_attachments_annotations": "ok", "pypdf_version": "5.9.0"}
     except Exception as exc:
         raise UnexpectedPdfInspectionError("pdf_inspection", "construct_inspection_result", _exception_class(exc), "result_construction") from None
+
+
+def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
+    known_failures = {
+        "pdf_output_missing_or_empty", "pdf_output_size_or_header_invalid", "pdf_pypdf_version_invalid",
+        "pdf_pypdf_unavailable", "pdf_structure_invalid", "pdf_encryption_or_page_limit_invalid",
+        "pdf_page_count_invalid", "pdf_private_path_or_canary_detected", "pdf_ordered_equivalence_failed",
+    }
+    try:
+        return _validate_pdf_impl(pdf_path, book, deadline=deadline)
+    except (PdfMetadataError, PdfActionError, UnexpectedPdfInspectionError):
+        raise
+    except ValueError as exc:
+        if str(exc) in known_failures or str(exc).startswith("pdf_pdfinfo_") or str(exc).startswith("pdf_pdftotext_"):
+            raise
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), "validation_return") from None
+    except Exception as exc:
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), "validation_return") from None
 
 
 def canonical(value):

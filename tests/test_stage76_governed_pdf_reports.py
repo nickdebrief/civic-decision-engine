@@ -405,12 +405,16 @@ class Stage76PdfContractTests(unittest.TestCase):
 
     def test_unexpected_pdf_inspection_steps_are_bounded(self):
         steps = {
+            "validation_entry", "input_validation", "inspection_dispatch", "inspection_result_unpack",
+            "inspection_result_validation", "limit_validation", "equivalence_preparation",
+            "equivalence_dispatch", "equivalence_result_validation", "artifact_digest",
+            "validation_result_construction", "validation_return",
             "reader_construction", "encryption_and_page_count", "metadata_validation",
             "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
             "indirect_reference_resolution", "passive_destination_validation",
             "outlines_names_traversal", "annotation_inspection", "attachment_inspection",
             "unsafe_action_inspection", "extracted_text_handling", "ordered_equivalence_validation",
-            "result_construction", "page_count_validation", "unknown",
+            "result_construction", "page_count_validation",
         }
         for step in steps:
             with self.subTest(step=step):
@@ -419,6 +423,17 @@ class Stage76PdfContractTests(unittest.TestCase):
                 )
                 self.assertEqual(classified.diagnostic["inspection_step"], step)
                 self.assertNotIn("value", classified.diagnostic)
+
+    def test_unclassified_validate_pdf_valueerror_uses_validation_return(self):
+        book = report_adapter.make_book(self.specification())
+        with tempfile.TemporaryDirectory() as directory:
+            pdf = Path(directory) / "report.pdf"
+            pdf.write_bytes(b"%PDF-1.7\n")
+            with patch.object(report_adapter, "_validate_pdf_impl", side_effect=ValueError("private validation detail")):
+                with self.assertRaises(report_adapter.UnexpectedPdfInspectionError) as raised:
+                    report_adapter._validate_pdf(pdf, book)
+        self.assertEqual(raised.exception.inspection_step, "validation_return")
+        self.assertEqual(raised.exception.failure_operation, "validate_pdf")
 
     def test_validate_pdf_valueerror_boundaries_are_step_classified(self):
         book = report_adapter.make_book(self.specification())

@@ -379,12 +379,16 @@ def main() -> int:
                 "input_load", "input_validation", "specification_validation", "model_adaptation",
                 "docx_render", "html_render", "pdf_conversion", "pdf_inspection",
                 "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup",
+                "validation_entry", "inspection_dispatch", "inspection_result_unpack",
+                "inspection_result_validation", "limit_validation", "equivalence_preparation",
+                "equivalence_dispatch", "equivalence_result_validation", "validation_result_construction",
+                "validation_return",
                 "reader_construction", "encryption_and_page_count", "metadata_validation",
                 "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
                 "indirect_reference_resolution", "passive_destination_validation",
                 "outlines_names_traversal", "annotation_inspection", "attachment_inspection",
                 "unsafe_action_inspection", "extracted_text_handling", "ordered_equivalence_validation",
-                "result_construction", "page_count_validation", "unknown",
+                "result_construction", "page_count_validation",
             }:
                 detail = f" checkpoint={parts[3]} operation={parts[4]} inspection_step={parts[5]} exception_category={parts[6]}"
             elif len(parts) == 6:
