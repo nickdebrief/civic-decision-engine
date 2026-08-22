@@ -30,6 +30,26 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertEqual(railway_config["deploy"]["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(railway_config["deploy"]["restartPolicyMaxRetries"], 10)
 
+    def test_pre_deploy_gate_is_structural_and_ordered(self):
+        config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
+        self.assertEqual(config["deploy"]["preDeployCommand"], [
+            "python scripts/check_pdf_runtime.py",
+            "python scripts/check_pdf_synthetic_conversion.py",
+        ])
+        self.assertEqual(config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(config["deploy"]["numReplicas"], 1)
+        self.assertEqual(config["deploy"]["restartPolicyType"], "ON_FAILURE")
+        self.assertEqual(config["deploy"]["restartPolicyMaxRetries"], 10)
+
+    def test_pre_deploy_gate_rejects_missing_or_reordered_commands(self):
+        config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
+        expected = config["deploy"]["preDeployCommand"]
+        for candidate in ([], expected[1:], list(reversed(expected)), expected + ["echo unexpected"]):
+            with self.subTest(candidate=candidate):
+                invalid = {**config, "deploy": {**config["deploy"], "preDeployCommand": candidate}}
+                with self.assertRaises(AssertionError):
+                    self._assert_pre_deploy_gate(invalid)
+
     def test_railpack_package_declaration_cannot_omit_a_required_package(self):
         config = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
         packages = set(config["deploy"]["aptPackages"])
@@ -145,6 +165,13 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertNotIn("/data", detail)
 
+    def test_temporary_probe_fails_closed_when_write_fails(self):
+        module = self._load_diagnostic()
+        with patch.object(Path, "write_text", side_effect=OSError("unwritable")):
+            ok, detail = module._temporary_directory_check()
+        self.assertFalse(ok)
+        self.assertIn("temporary directory unavailable", detail)
+
     def test_diagnostic_is_not_imported_by_application_or_public_routes(self):
         main_source = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("check_pdf_runtime", main_source)
@@ -178,6 +205,14 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertEqual(deploy["numReplicas"], 1)
         self.assertEqual(deploy["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(deploy["restartPolicyMaxRetries"], 10)
+
+    @staticmethod
+    def _assert_pre_deploy_gate(config):
+        commands = config.get("deploy", {}).get("preDeployCommand")
+        assert commands == [
+            "python scripts/check_pdf_runtime.py",
+            "python scripts/check_pdf_synthetic_conversion.py",
+        ]
 
     @staticmethod
     def _load_diagnostic():
