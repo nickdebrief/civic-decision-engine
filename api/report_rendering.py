@@ -22,6 +22,9 @@ ADAPTER_TIMEOUT_SECONDS = 210
 ADAPTER = Path(__file__).resolve().parents[1] / "scripts" / "evidence_led_governance_pipeline" / "report_adapter.py"
 RESULT_SCHEMA_VERSION = "1"
 RESULT_MAX_BYTES = 64 * 1024
+PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
+PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
+PARITY_SERVICE_NAME = "stage76-pdf-parity"
 RESULT_PHASES = {
     "input_load", "input_validation", "specification_validation", "model_adaptation",
     "docx_render", "html_render", "pdf_conversion", "pdf_inspection",
@@ -208,6 +211,23 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
             pass
 
 
+def _parity_diagnostics_enabled() -> bool:
+    return (
+        os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1"
+        and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID
+        and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME
+        and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
+    )
+
+
+def _forward_parity_trace(stderr: str) -> None:
+    if not _parity_diagnostics_enabled():
+        return
+    for line in stderr.splitlines():
+        if line.startswith("{") and '"exception_class"' in line and '"frames"' in line:
+            print("stage76_parity_trace=" + line, file=sys.stderr, flush=True)
+
+
 def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path) -> dict[str, Any]:
     if specification.get("publication_engine_version") != ENGINE_VERSION:
         raise ValueError("governed_report_publication_engine_version_invalid")
@@ -234,6 +254,7 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         except subprocess.TimeoutExpired:
             _terminate_process_group(process)
             raise AdapterFailure("cleanup", "governed_report_renderer_timeout") from None
+        _forward_parity_trace(stderr)
         try:
             expected_formats = set(specification["requested_formats"]) if "requested_formats" in specification else None
             result = _read_adapter_result(result_path, staged_output, digest, expected_formats)
