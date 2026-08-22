@@ -114,6 +114,26 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             self.assertEqual(str(failure), "governed_report_renderer_failed")
             self.assertNotIn("metadata", str(failure))
 
+    def test_metadata_failure_diagnostic_is_strictly_bounded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            self.adapter._write_result(result_path, {
+                "schema_version": "1", "ok": False, "phase": "pdf_inspection",
+                "code": "pdf_metadata_invalid", "cleanup": "passed",
+                "specification_digest": "", "diagnostics": [{
+                    "format": "pdf", "failure_field": "/Producer", "failure_reason": "unexpected_value",
+                }], "artifacts": [],
+            })
+            result = self.rendering._read_adapter_result(result_path, root, "a" * 64)
+            self.assertEqual(result["diagnostics"], [{"format": "pdf", "failure_field": "/Producer", "failure_reason": "unexpected_value"}])
+            for bad in ("/data/private", "raw metadata value"):
+                candidate = json.loads(json.dumps(result))
+                candidate["diagnostics"][0]["failure_field"] = bad
+                result_path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaises(self.rendering.AdapterFailure):
+                    self.rendering._read_adapter_result(result_path, root, "a" * 64)
+
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
             ("input_load", "adapter_input_missing"),

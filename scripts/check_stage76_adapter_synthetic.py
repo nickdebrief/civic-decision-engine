@@ -294,7 +294,10 @@ def run_check() -> None:
             try:
                 result = render_frozen_report(specification, digest, root)
             except AdapterFailure as exc:
-                raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}") from None
+                detail = ""
+                if exc.diagnostic:
+                    detail = f":{exc.diagnostic['failure_field']}:{exc.diagnostic['failure_reason']}"
+                raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}{detail}") from None
             except TimeoutError:
                 raise AdapterGateError("adapter_invocation_failed") from None
             except ValueError:
@@ -355,7 +358,8 @@ def main() -> int:
     except AdapterGateError as exc:
         parts = str(exc).split(":")
         if len(parts) >= 3:
-            print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}", file=sys.stderr)
+            detail = f" field={parts[3]} reason={parts[4]}" if len(parts) == 5 else ""
+            print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}{detail}", file=sys.stderr)
         else:
             print(f"stage76_adapter_gate=failed code={parts[0]}", file=sys.stderr)
         return 1

@@ -190,6 +190,21 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         failure = report_adapter._classify_pdf_failure(ValueError("pdf_pypdf_unavailable"))
         self.assertEqual((failure.phase, failure.code), ("pdf_inspection", "pdf_inspection_dependency_unavailable"))
 
+    def test_metadata_failure_emits_only_bounded_field_and_reason(self):
+        checker = load_checker()
+        from api.report_rendering import AdapterFailure
+        with patch("api.report_rendering.render_frozen_report", side_effect=AdapterFailure(
+            "pdf_inspection", "pdf_metadata_invalid", "passed",
+            {"format": "pdf", "failure_field": "/Producer", "failure_reason": "unexpected_value"},
+        )):
+            with patch("builtins.print") as output:
+                self.assertEqual(checker.main(), 1)
+        rendered = " ".join(str(call) for call in output.call_args_list)
+        self.assertIn("phase=pdf_inspection code=pdf_metadata_invalid field=/Producer reason=unexpected_value", rendered)
+        self.assertNotIn("LibreOffice", rendered)
+        self.assertNotIn("/data", rendered)
+        self.assertNotIn("Traceback", rendered)
+
     def test_cleanup_failure_does_not_replace_primary_failure(self):
         checker = load_checker()
 

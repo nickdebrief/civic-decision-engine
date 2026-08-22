@@ -36,9 +36,17 @@ RESULT_SCHEMA_VERSION = "1"
 
 
 class AdapterFailure(RuntimeError):
-    def __init__(self, phase: str, code: str) -> None:
+    def __init__(self, phase: str, code: str, diagnostic: dict | None = None) -> None:
         self.phase = phase
         self.code = code
+        self.diagnostic = diagnostic
+
+
+class PdfMetadataError(ValueError):
+    def __init__(self, field: str, reason: str) -> None:
+        self.field = field if field in PDF_ALLOWED_METADATA_KEYS else "unknown_key"
+        self.reason = reason
+        super().__init__("pdf_metadata_invalid")
 
 
 def _write_result(path: Path, result: dict) -> None:
@@ -64,6 +72,12 @@ def _run_phase(phase: str, code: str, operation):
 
 
 def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
+    if isinstance(exc, PdfMetadataError):
+        return AdapterFailure(
+            "pdf_inspection",
+            "pdf_metadata_invalid",
+            {"format": "pdf", "failure_field": exc.field, "failure_reason": exc.reason},
+        )
     code = str(exc)
     if "pypdf" in code or "unavailable" in code:
         return AdapterFailure("pdf_inspection", "pdf_inspection_dependency_unavailable")
@@ -114,27 +128,36 @@ def _run_pdf_tool(tool: str, arguments: list[str], *, timeout: int, deadline: fl
     return completed
 
 
-def _pdf_metadata_is_safe(reader: object, book: Book | None = None) -> bool:
+def _pdf_metadata_failure(reader: object, book: Book | None = None) -> PdfMetadataError | None:
     metadata = getattr(reader, "metadata", None) or {}
+    if not hasattr(metadata, "items"):
+        return PdfMetadataError("unknown_key", "unexpected_value")
     for key, value in metadata.items():
-        if str(key) not in PDF_ALLOWED_METADATA_KEYS:
-            return False
-        rendered = f"{key}={value}".lower()
+        field = str(key)
+        if field not in PDF_ALLOWED_METADATA_KEYS:
+            return PdfMetadataError(field, "unexpected_key")
+        if not isinstance(value, str):
+            return PdfMetadataError(field, "non_string_value")
+        rendered = f"{field}={value}".lower()
         if any(token in rendered for token in PDF_FORBIDDEN_METADATA):
-            return False
-        if str(key) == "/Author" and str(value) != "Civic Decision Engine":
-            return False
-        if str(key) == "/Title" and book is not None and str(value) != book.title:
-            return False
-        if str(key) == "/Subject" and str(value) not in {"Internal governed report", ""}:
-            return False
-        if str(key) == "/Keywords" and str(value).strip():
-            return False
-        if str(key) == "/Creator" and str(value) not in {"Writer", "LibreOffice"} and not str(value).startswith("LibreOffice "):
-            return False
-        if str(key) == "/Producer" and not str(value).startswith("LibreOffice"):
-            return False
-    return True
+            return PdfMetadataError(field, "forbidden_value")
+        if field == "/Author" and value != "Civic Decision Engine":
+            return PdfMetadataError(field, "identity_mismatch")
+        if field == "/Title" and book is not None and value != book.title:
+            return PdfMetadataError(field, "identity_mismatch")
+        if field == "/Subject" and value not in {"Internal governed report", ""}:
+            return PdfMetadataError(field, "unexpected_value")
+        if field == "/Keywords" and value.strip():
+            return PdfMetadataError(field, "unexpected_value")
+        if field == "/Creator" and value not in {"Writer", "LibreOffice"} and not value.startswith("LibreOffice "):
+            return PdfMetadataError(field, "unexpected_value")
+        if field == "/Producer" and not value.startswith("LibreOffice"):
+            return PdfMetadataError(field, "unexpected_value")
+    return None
+
+
+def _pdf_metadata_is_safe(reader: object, book: Book | None = None) -> bool:
+    return _pdf_metadata_failure(reader, book) is None
 
 
 def _pdf_has_unsafe_objects(reader: object) -> bool:
@@ -215,8 +238,11 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
         raise ValueError("pdf_structure_invalid") from None
     if reader.is_encrypted or not reader.pages or len(reader.pages) > PDF_MAX_PAGES:
         raise ValueError("pdf_encryption_or_page_limit_invalid")
-    if not _pdf_metadata_is_safe(reader, book) or _pdf_has_unsafe_objects(reader):
-        raise ValueError("pdf_metadata_or_action_invalid")
+    metadata_failure = _pdf_metadata_failure(reader, book)
+    if metadata_failure is not None:
+        raise metadata_failure
+    if _pdf_has_unsafe_objects(reader):
+        raise ValueError("pdf_action_invalid")
     info = _run_pdf_tool("pdfinfo", [str(pdf_path)], timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
     info_values = {}
     for line in info.stdout.splitlines():
@@ -364,7 +390,7 @@ if __name__ == "__main__":
     except AdapterFailure as exc:
         if result_path is not None:
             try:
-                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": exc.phase, "code": exc.code, "cleanup": "unknown", "specification_digest": "", "diagnostics": [], "artifacts": []})
+                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": exc.phase, "code": exc.code, "cleanup": "unknown", "specification_digest": "", "diagnostics": [exc.diagnostic] if exc.diagnostic else [], "artifacts": []})
             except AdapterFailure:
                 pass
         raise SystemExit(1)

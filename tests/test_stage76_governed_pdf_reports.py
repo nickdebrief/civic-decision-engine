@@ -165,6 +165,44 @@ class Stage76PdfContractTests(unittest.TestCase):
         self.assertFalse(report_adapter._pdf_metadata_is_safe(SimpleNamespace(metadata={"/Producer": "untrusted renderer"}), book))
         self.assertFalse(report_adapter._pdf_metadata_is_safe(SimpleNamespace(metadata={"/Keywords": "private-canary"}), book))
 
+    def test_realistic_libreoffice_252_metadata_is_allowed_and_optional_fields_may_be_absent(self):
+        book = report_adapter.make_book(self.specification())
+        metadata = {
+            "/Title": book.title,
+            "/Author": "Civic Decision Engine",
+            "/Subject": "Internal governed report",
+            "/Creator": "Writer",
+            "/Producer": "LibreOffice 25.2.3.2",
+            "/CreationDate": "D:20260822140000Z",
+            "/ModDate": "D:20260822140000Z",
+        }
+        self.assertTrue(report_adapter._pdf_metadata_is_safe(SimpleNamespace(metadata=metadata), book))
+        self.assertTrue(report_adapter._pdf_metadata_is_safe(SimpleNamespace(metadata={"/Title": book.title, "/Author": "Civic Decision Engine"}), book))
+
+    def test_metadata_rejection_returns_only_bounded_field_and_reason(self):
+        book = report_adapter.make_book(self.specification())
+        cases = (
+            ({"/Custom": "value"}, "unknown_key", "unexpected_key"),
+            ({"/Title": "wrong title"}, "/Title", "identity_mismatch"),
+            ({"/Author": "reviewer"}, "/Author", "identity_mismatch"),
+            ({"/Producer": "private-canary"}, "/Producer", "forbidden_value"),
+            ({"/Creator": 42}, "/Creator", "non_string_value"),
+            ({"/Subject": "unapproved subject"}, "/Subject", "unexpected_value"),
+        )
+        for metadata, field, reason in cases:
+            with self.subTest(field=field, reason=reason):
+                failure = report_adapter._pdf_metadata_failure(SimpleNamespace(metadata=metadata), book)
+                self.assertIsNotNone(failure)
+                classified = report_adapter._classify_pdf_failure(failure)
+                self.assertEqual((classified.phase, classified.code), ("pdf_inspection", "pdf_metadata_invalid"))
+                self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_field": field, "failure_reason": reason})
+
+    def test_metadata_failure_does_not_expose_value_or_path(self):
+        book = report_adapter.make_book(self.specification())
+        failure = report_adapter._pdf_metadata_failure(SimpleNamespace(metadata={"/Producer": "/data/private-canary"}), book)
+        classified = report_adapter._classify_pdf_failure(failure)
+        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_field": "/Producer", "failure_reason": "forbidden_value"})
+
     def test_indirect_page_annotations_and_catalog_actions_fail_closed(self):
         class Indirect:
             def __init__(self, value):
