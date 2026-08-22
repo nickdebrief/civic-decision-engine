@@ -154,6 +154,55 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
             with self.assertRaisesRegex(checker.AdapterGateError, "prohibited_external_access"):
                 sqlite3.connect(":memory:")
 
+            with self.assertRaisesRegex(checker.AdapterGateError, "prohibited_external_access"):
+                checker.socket.socket()
+
+            with self.assertRaisesRegex(checker.AdapterGateError, "prohibited_route_import"):
+                __import__("api.routes.records")
+
+    def test_external_access_guard_allows_safe_engine_import_and_local_executable(self):
+        checker = load_checker()
+        with checker._prohibit_external_access():
+            from api.report_rendering import render_frozen_report
+
+            self.assertTrue(callable(render_frozen_report))
+            completed = subprocess.run([sys.executable, "-c", "print('ok')"], capture_output=True, text=True, check=True)
+        self.assertEqual(completed.stdout.strip(), "ok")
+
+    def test_phase_failures_use_stable_specific_codes(self):
+        checker = load_checker()
+        with patch.object(checker, "_synthetic_specification", side_effect=ValueError("private details")):
+            with self.assertRaisesRegex(checker.AdapterGateError, "synthetic_specification_failed"):
+                checker.run_check()
+        with patch.object(checker, "_synthetic_specification", return_value=checker._synthetic_specification()), patch.object(checker, "_digest", side_effect=ValueError("private details")):
+            with self.assertRaisesRegex(checker.AdapterGateError, "specification_digest_failed"):
+                checker.run_check()
+        for error, expected in ((ValueError("renderer failed"), "adapter_reported_failure"), (OSError("renderer unavailable"), "adapter_invocation_failed"), (RuntimeError("unexpected"), "unexpected_adapter_error")):
+            with self.subTest(expected=expected), patch("api.report_rendering.render_frozen_report", side_effect=error):
+                with self.assertRaisesRegex(checker.AdapterGateError, expected):
+                    checker.run_check()
+
+    def test_malformed_adapter_return_uses_contract_code(self):
+        checker = load_checker()
+        for result in (None, {"specification_digest": "bad", "artifacts": "not-a-list"}, {"specification_digest": "bad", "artifacts": []}):
+            with self.subTest(result=result):
+                with patch("api.report_rendering.render_frozen_report", return_value=result):
+                    with self.assertRaises(checker.AdapterGateError):
+                        checker.run_check()
+
+    def test_data_path_access_is_not_permitted_by_checker_contract(self):
+        checker = load_checker()
+        original_read_text = Path.read_text
+
+        def guarded_read_text(path, *args, **kwargs):
+            if str(path).startswith("/data"):
+                raise checker.AdapterGateError("prohibited_data_access")
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", guarded_read_text):
+            with self.assertRaisesRegex(checker.AdapterGateError, "prohibited_data_access"):
+                Path("/data/records.db").read_text()
+
     def test_failure_diagnostic_is_bounded_and_does_not_include_paths_or_content(self):
         checker = load_checker()
         with patch.object(checker, "run_check", side_effect=checker.AdapterGateError("temporary_directory_not_confined")):
@@ -163,6 +212,7 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         self.assertIn("stage76_adapter_gate=failed code=temporary_directory_not_confined", rendered)
         self.assertNotIn("/", rendered)
         self.assertNotIn("STAGE76_", rendered)
+        self.assertNotIn("adapter_execution_failed", SCRIPT.read_text(encoding="utf-8"))
 
     def test_no_application_route_or_gate_imports_checker(self):
         main_source = (ROOT / "api" / "main.py").read_text(encoding="utf-8")

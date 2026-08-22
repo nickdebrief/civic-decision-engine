@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -275,6 +276,78 @@ class PublicationEngineStage5Tests(unittest.TestCase):
             Document().save(source)
             with self.assertRaisesRegex(RuntimeError, "LibreOffice"):
                 PdfRenderer(Path(temp) / "missing-soffice").render(source, Path(temp) / "out.pdf")
+
+    def test_pdf_renderer_accepts_libreoffice_alias_when_soffice_is_absent(self) -> None:
+        import renderers.pdf_renderer as pdf_renderer
+
+        with tempfile.TemporaryDirectory() as temp:
+            executable = Path(temp) / "libreoffice"
+            executable.write_text("#!/bin/sh\nprintf 'LibreOffice synthetic\\n'\n", encoding="utf-8")
+            executable.chmod(0o700)
+            with patch.object(pdf_renderer, "discover_tool", side_effect=lambda name: executable if name == "libreoffice" else None):
+                renderer = PdfRenderer()
+                self.assertEqual(renderer.soffice_path, executable)
+                self.assertTrue(renderer.available)
+
+    def test_pdf_renderer_discovery_prefers_usable_entry_point_and_falls_back(self) -> None:
+        import renderers.pdf_renderer as pdf_renderer
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            soffice = root / "soffice"
+            libreoffice = root / "libreoffice"
+            for path in (soffice, libreoffice):
+                path.write_text("#!/bin/sh\nprintf 'LibreOffice synthetic\\n'\n", encoding="utf-8")
+                path.chmod(0o700)
+
+            def discover(name: str):
+                return {"soffice": soffice, "libreoffice": libreoffice}.get(name)
+
+            with patch.object(pdf_renderer, "discover_tool", side_effect=discover):
+                self.assertEqual(PdfRenderer().soffice_path, soffice)
+
+            libreoffice.unlink()
+            with patch.object(pdf_renderer, "discover_tool", side_effect=discover):
+                self.assertEqual(PdfRenderer().soffice_path, soffice)
+
+            libreoffice.write_text("#!/bin/sh\nprintf 'LibreOffice synthetic\\n'\n", encoding="utf-8")
+            libreoffice.chmod(0o700)
+            soffice.chmod(0o600)
+            with patch.object(pdf_renderer, "discover_tool", side_effect=discover):
+                self.assertEqual(PdfRenderer().soffice_path, libreoffice)
+
+            soffice.chmod(0o700)
+            with patch.object(pdf_renderer, "discover_tool", side_effect=discover), patch.object(
+                pdf_renderer.subprocess, "run", side_effect=lambda command, **_: subprocess.CompletedProcess(command, 1 if command[0] == str(soffice) else 0, stdout="", stderr="bad")
+            ):
+                self.assertEqual(PdfRenderer().soffice_path, libreoffice)
+
+    def test_pdf_renderer_accepts_symlink_and_shell_wrapper_when_version_succeeds(self) -> None:
+        import renderers.pdf_renderer as pdf_renderer
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            wrapper = root / "libreoffice-wrapper"
+            wrapper.write_text("#!/bin/sh\nprintf 'LibreOffice synthetic\\n'\n", encoding="utf-8")
+            wrapper.chmod(0o700)
+            symlink = root / "soffice"
+            symlink.symlink_to(wrapper)
+            with patch.object(pdf_renderer, "discover_tool", side_effect=lambda name: symlink if name == "soffice" else None):
+                renderer = PdfRenderer()
+            self.assertEqual(renderer.soffice_path, symlink)
+            self.assertIn("LibreOffice synthetic", renderer.version())
+
+    def test_pdf_renderer_rejects_unusable_entry_points_and_reports_selected_identity(self) -> None:
+        import renderers.pdf_renderer as pdf_renderer
+
+        with tempfile.TemporaryDirectory() as temp:
+            unusable = Path(temp) / "soffice"
+            unusable.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+            unusable.chmod(0o700)
+            with patch.object(pdf_renderer, "discover_tool", side_effect=lambda name: unusable if name in {"soffice", "libreoffice"} else None):
+                renderer = PdfRenderer()
+            self.assertIsNone(renderer.soffice_path)
+            self.assertFalse(renderer.available)
 
     def test_pdf_renderer_and_validation_succeed_when_available(self) -> None:
         renderer = PdfRenderer()
