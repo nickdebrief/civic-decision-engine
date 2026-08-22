@@ -299,7 +299,9 @@ def run_check() -> None:
                     if "failure_field" in exc.diagnostic:
                         detail = f":{exc.diagnostic['failure_field']}:{exc.diagnostic['failure_reason']}"
                     else:
-                        if "failure_operation" in exc.diagnostic:
+                        if "inspection_step" in exc.diagnostic:
+                            detail = f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_operation']}:{exc.diagnostic['inspection_step']}:{exc.diagnostic['failure_exception_class']}"
+                        elif "failure_operation" in exc.diagnostic:
                             detail = f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_operation']}:{exc.diagnostic['failure_exception_class']}"
                         else:
                             detail = (
@@ -373,7 +375,19 @@ def main() -> int:
         parts = str(exc).split(":")
         if len(parts) >= 3:
             detail = ""
-            if len(parts) == 6:
+            if len(parts) == 7 and parts[5] in {
+                "input_load", "input_validation", "specification_validation", "model_adaptation",
+                "docx_render", "html_render", "pdf_conversion", "pdf_inspection",
+                "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup",
+                "reader_construction", "encryption_and_page_count", "metadata_validation",
+                "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
+                "indirect_reference_resolution", "passive_destination_validation",
+                "outlines_names_traversal", "annotation_inspection", "attachment_inspection",
+                "unsafe_action_inspection", "extracted_text_handling", "ordered_equivalence_validation",
+                "result_construction", "page_count_validation", "unknown",
+            }:
+                detail = f" checkpoint={parts[3]} operation={parts[4]} inspection_step={parts[5]} exception_category={parts[6]}"
+            elif len(parts) == 6:
                 detail = f" checkpoint={parts[3]} operation={parts[4]} exception_category={parts[5]}"
             elif len(parts) in {5, 7, 9, 13}:
                 label = "location" if parts[3] in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"} else "field"
