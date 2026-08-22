@@ -185,7 +185,7 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
     return AdapterFailure(
         "pdf_inspection",
         "unexpected_adapter_failure",
-        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "validate_pdf", "failure_exception_class": _exception_class(exc), "inspection_step": "validation_return"},
+        {"format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "validate_pdf", "failure_exception_class": _exception_class(exc), "inspection_step": "validation_return", "failure_boundary": "function_body"},
     )
 
 
