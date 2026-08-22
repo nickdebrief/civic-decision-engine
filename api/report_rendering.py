@@ -86,6 +86,9 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
         raise AdapterFailure("result_serialization", "adapter_result_invalid")
     if not isinstance(result["artifacts"], list) or not isinstance(result["diagnostics"], list):
         raise AdapterFailure("result_serialization", "adapter_result_invalid")
+    if result["code"] == "unexpected_adapter_failure":
+        if result["ok"] or len(result["diagnostics"]) != 1 or set(result["diagnostics"][0]) != {"format", "failure_step", "failure_operation", "failure_exception_class"}:
+            raise AdapterFailure("result_serialization", "adapter_return_contract_invalid")
     for diagnostic in result["diagnostics"]:
         if not isinstance(diagnostic, dict) or not set(diagnostic).issubset(DIAGNOSTIC_FIELDS):
             raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -210,7 +213,7 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         except AdapterFailure:
             raise
         if not result["ok"]:
-            detail = result["diagnostics"][0] if result["diagnostics"] and ("failure_field" in result["diagnostics"][0] or "failure_location" in result["diagnostics"][0]) else None
+            detail = result["diagnostics"][0] if result["diagnostics"] and (result["code"] == "unexpected_adapter_failure" or "failure_field" in result["diagnostics"][0] or "failure_location" in result["diagnostics"][0] or "failure_operation" in result["diagnostics"][0]) else None
             raise AdapterFailure(result["phase"], result["code"], result["cleanup"], detail)
         if process.returncode != 0:
             raise AdapterFailure(result["phase"], result["code"], result["cleanup"])

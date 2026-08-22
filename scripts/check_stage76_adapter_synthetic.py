@@ -372,7 +372,10 @@ def main() -> int:
     except AdapterGateError as exc:
         parts = str(exc).split(":")
         if len(parts) >= 3:
-            if len(parts) in {5, 7, 9, 13}:
+            detail = ""
+            if len(parts) == 6:
+                detail = f" checkpoint={parts[3]} operation={parts[4]} exception_category={parts[5]}"
+            elif len(parts) in {5, 7, 9, 13}:
                 label = "location" if parts[3] in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"} else "field"
                 detail = f" {label}={parts[3]} reason={parts[4]}"
                 if len(parts) == 7:
@@ -381,8 +384,6 @@ def main() -> int:
                     detail += f" step={parts[5]} structure={parts[6]} operand={parts[7]} operand_kind={parts[8]}"
                 if len(parts) == 13:
                     detail += f" step={parts[5]} structure={parts[6]} operand={parts[7]} operand_kind={parts[8]} operand_count={parts[9]} operand_kinds={parts[10]} destination_mode={parts[11]} trailing_kinds={parts[12]}"
-            else:
-                detail = ""
             print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}{detail}", file=sys.stderr)
         else:
             print(f"stage76_adapter_gate=failed code={parts[0]}", file=sys.stderr)

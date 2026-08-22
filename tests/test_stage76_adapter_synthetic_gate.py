@@ -205,6 +205,18 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         self.assertNotIn("/data", rendered)
         self.assertNotIn("Traceback", rendered)
 
+    def test_unexpected_failure_marker_preserves_bounded_diagnostic(self):
+        checker = load_checker()
+        from api.report_rendering import AdapterFailure
+        with patch("api.report_rendering.render_frozen_report", side_effect=AdapterFailure(
+            "pdf_inspection", "unexpected_adapter_failure", "passed",
+            {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"},
+        )):
+            with patch("builtins.print") as output:
+                self.assertEqual(checker.main(), 1)
+        rendered = " ".join(str(call) for call in output.call_args_list)
+        self.assertIn("phase=pdf_inspection code=unexpected_adapter_failure checkpoint=page_reference_attribute operation=read_indirect_reference exception_category=attribute_error", rendered)
+
     def test_cleanup_failure_does_not_replace_primary_failure(self):
         checker = load_checker()
 
