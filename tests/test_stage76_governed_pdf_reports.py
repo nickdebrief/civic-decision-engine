@@ -251,10 +251,20 @@ class Stage76PdfContractTests(unittest.TestCase):
                 failure = report_adapter._pdf_action_failure(reader)
                 self.assertIsNotNone(failure)
                 classified = report_adapter._classify_pdf_failure(failure)
-                self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_location": location, "failure_reason": reason})
+                self.assertEqual(classified.diagnostic["format"], "pdf")
+                self.assertEqual(classified.diagnostic["failure_location"], location)
+                self.assertEqual(classified.diagnostic["failure_reason"], reason)
+                self.assertIn(classified.diagnostic["failure_step"], {
+                    "open_action_wrapper", "open_action_resolution", "destination_array",
+                    "page_reference_identity", "page_reference_resolution", "page_membership",
+                    "fit_validation", "recursive_action_tree",
+                })
+                self.assertIn(classified.diagnostic["failure_structure"], {"direct_array", "indirect_array", "action_dictionary", "unexpected_object"})
 
     def test_indirect_destination_cycle_fails_closed(self):
         class Cycle:
+            idnum = 99
+            generation = 0
             def get_object(self):
                 return self
 
@@ -262,6 +272,83 @@ class Stage76PdfContractTests(unittest.TestCase):
         reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": Cycle()}})
         failure = report_adapter._pdf_action_failure(reader)
         self.assertEqual((failure.location, failure.reason), ("catalog_open_action", "indirect_cycle"))
+        self.assertEqual(failure.failure_step, "open_action_wrapper")
+
+    def test_indirect_array_wrapper_and_self_returning_container_are_passive(self):
+        page = self.page()
+
+        class Array(list):
+            def get_object(self):
+                return self
+
+        class Reference:
+            idnum = 101
+            generation = 0
+            def __init__(self, value):
+                self.value = value
+            def get_object(self):
+                return self.value
+
+        destination = Array([page.indirect_reference, "/Fit"])
+        wrapper = Reference(destination)
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": wrapper}})
+        self.assertFalse(report_adapter._pdf_has_unsafe_objects(reader))
+
+    def test_shared_reference_reuse_is_not_an_active_cycle(self):
+        page = self.page()
+
+        class Reference:
+            idnum = 102
+            generation = 0
+            def __init__(self, value):
+                self.value = value
+            def get_object(self):
+                return self.value
+
+        shared = Reference({"/Kids": []})
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/Names": shared, "/Outlines": [{"/Dest": [page.indirect_reference, "/Fit"]}]}})
+        self.assertFalse(report_adapter._pdf_has_unsafe_objects(reader))
+
+    def test_resolved_array_with_origin_reference_is_not_recursed(self):
+        page = self.page()
+
+        class Array(list):
+            def __init__(self, *values):
+                super().__init__(*values)
+                self.indirect_reference = object()
+            def get_object(self):
+                return self
+
+        class Reference:
+            idnum = 103
+            generation = 0
+            def __init__(self, value):
+                self.value = value
+            def get_object(self):
+                return self.value
+
+        destination = Array([page.indirect_reference, "/Fit"])
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": Reference(destination)}})
+        self.assertFalse(report_adapter._pdf_has_unsafe_objects(reader))
+
+    def test_genuine_indirect_reference_cycle_is_rejected(self):
+        class Reference:
+            def __init__(self, ident):
+                self.idnum = ident
+                self.generation = 0
+                self.value = None
+            def get_object(self):
+                return self.value
+
+        first = Reference(104)
+        second = Reference(105)
+        first.value = second
+        second.value = first
+        page = self.page()
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": first}})
+        failure = report_adapter._pdf_action_failure(reader)
+        self.assertEqual(failure.reason, "indirect_cycle")
+        self.assertEqual(failure.failure_step, "open_action_wrapper")
 
     def test_all_executable_action_families_fail_closed(self):
         page = self.page()
