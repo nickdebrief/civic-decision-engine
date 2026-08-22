@@ -48,6 +48,7 @@ DIAGNOSTIC_FIELDS = {
     "page_registry_state", "reference_identity_result", "resolution_result", "resolved_target_comparison", "page_reference_attribute",
     "failure_operation", "failure_exception_class",
     "inspection_step", "failure_boundary",
+    "contract_step", "contract_reason", "contract_field",
 }
 INSPECTION_STEPS = {
     "validation_entry", "input_validation", "inspection_dispatch", "inspection_result_unpack",
@@ -63,6 +64,8 @@ INSPECTION_STEPS = {
     "unsafe_action_inspection", "extracted_text_handling", "ordered_equivalence_validation",
     "result_construction", "page_count_validation",
 }
+CONTRACT_STEPS = {"json_read", "json_parse", "schema_version", "field_inventory", "required_fields", "field_type", "field_value", "field_combination", "failure_shape", "success_shape"}
+CONTRACT_REASONS = {"missing", "unknown", "invalid", "inconsistent", "missing_or_inconsistent", "oversized", "unexpected_field", "incompatible_shape"}
 
 
 @dataclass(frozen=True)
@@ -108,7 +111,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             or set(result["diagnostics"][0]) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step", "failure_boundary"}
             or result["diagnostics"][0].get("inspection_step") not in INSPECTION_STEPS
         ):
-            raise AdapterFailure("result_serialization", "adapter_return_contract_invalid")
+            raise AdapterFailure("result_serialization", "adapter_return_contract_invalid", diagnostic={"format": "pdf", "contract_step": "failure_shape", "contract_reason": "missing_or_inconsistent"})
     for diagnostic in result["diagnostics"]:
         if not isinstance(diagnostic, dict) or not set(diagnostic).issubset(DIAGNOSTIC_FIELDS):
             raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -158,7 +161,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             continue
         if "failure_operation" in diagnostic or "failure_exception_class" in diagnostic:
             if set(diagnostic) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step", "failure_boundary"}:
-                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+                raise AdapterFailure("result_serialization", "adapter_return_contract_invalid", diagnostic={"format": "pdf", "contract_step": "field_inventory", "contract_reason": "unexpected_field"})
             if diagnostic["failure_step"] not in {"input_load", "input_validation", "specification_validation", "model_adaptation", "docx_render", "html_render", "pdf_conversion", "pdf_inspection", "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup", "page_enumeration", "page_reference_attribute", "identity_normalization", "registry_construction", "open_action_identity_lookup", "indirect_reference_resolution", "resolved_target_classification", "registered_page_comparison", "destination_acceptance", "construct_reader", "validate_page_count", "validate_metadata", "inspect_actions", "parse_pdfinfo", "read_extracted_text", "prepare_extracted_text", "validate_ordered_equivalence", "construct_inspection_result", "read_pdfinfo_version", "unpack_pdfinfo_version", "validate_inspection_result", "validate_pdf"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_operation"] not in {"read_request", "validate_input", "validate_digest", "adapt_model", "render_docx", "render_html", "convert_pdf", "inspect_pdf", "inspect_actions", "enumerate_pages", "materialize_page", "read_indirect_reference", "read_reference_identity", "build_page_registry", "lookup_open_action_reference", "resolve_indirect_reference", "classify_resolved_target", "compare_registered_page", "accept_destination", "construct_reader", "validate_page_count", "validate_metadata", "parse_pdfinfo", "read_extracted_text", "prepare_extracted_text", "validate_ordered_equivalence", "construct_inspection_result", "read_pdfinfo_version", "unpack_pdfinfo_version", "validate_inspection_result", "validate_pdf", "write_result", "unknown"}:
@@ -166,9 +169,9 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             if diagnostic["failure_exception_class"] not in {"attribute_error", "type_error", "value_error", "key_error", "index_error", "pdf_read_error", "recursion_error", "os_error", "other"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["inspection_step"] not in INSPECTION_STEPS:
-                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+                raise AdapterFailure("result_serialization", "adapter_return_contract_invalid", diagnostic={"format": "pdf", "contract_step": "field_value", "contract_reason": "unknown", "contract_field": "inspection_step"})
             if diagnostic["failure_boundary"] not in {"function_body", "return_finalization", "caller_assignment", "caller_post_return", "result_serialization"}:
-                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+                raise AdapterFailure("result_serialization", "adapter_return_contract_invalid", diagnostic={"format": "pdf", "contract_step": "field_value", "contract_reason": "unknown", "contract_field": "failure_boundary"})
             continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):
             if key in diagnostic and not isinstance(diagnostic[key], str):
@@ -237,7 +240,7 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         except AdapterFailure:
             raise
         if not result["ok"]:
-            detail = result["diagnostics"][0] if result["diagnostics"] and (result["code"] == "unexpected_adapter_failure" or "failure_field" in result["diagnostics"][0] or "failure_location" in result["diagnostics"][0] or "failure_operation" in result["diagnostics"][0]) else None
+            detail = result["diagnostics"][0] if result["diagnostics"] and (result["code"] == "unexpected_adapter_failure" or "failure_field" in result["diagnostics"][0] or "failure_location" in result["diagnostics"][0] or "failure_operation" in result["diagnostics"][0] or "contract_step" in result["diagnostics"][0]) else None
             raise AdapterFailure(result["phase"], result["code"], result["cleanup"], detail)
         if process.returncode != 0:
             raise AdapterFailure(result["phase"], result["code"], result["cleanup"])

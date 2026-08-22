@@ -223,6 +223,52 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "unexpected_adapter_failure")
             self.assertEqual(raised.exception.diagnostic, diagnostic)
 
+    def test_parent_accepts_current_child_validation_return_shape(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            diagnostic = {
+                "format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "validate_pdf",
+                "inspection_step": "validation_return_enter", "failure_exception_class": "value_error",
+                "failure_boundary": "function_body",
+            }
+            result = {
+                "schema_version": "1", "ok": False, "phase": "pdf_inspection",
+                "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
+                "diagnostics": [diagnostic], "artifacts": [],
+            }
+            self.adapter._write_result(result_path, result)
+            parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
+            self.assertEqual(parsed["diagnostics"], [diagnostic])
+
+    def test_real_subprocess_child_writer_round_trips_validation_return_shape(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            diagnostic = {
+                "format": "pdf", "failure_step": "pdf_inspection", "failure_operation": "validate_pdf",
+                "inspection_step": "validation_return_enter", "failure_exception_class": "value_error",
+                "failure_boundary": "function_body",
+            }
+            result = {
+                "schema_version": "1", "ok": False, "phase": "pdf_inspection",
+                "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
+                "diagnostics": [diagnostic], "artifacts": [],
+            }
+            child = (
+                "import importlib.util, json, sys; "
+                "spec=importlib.util.spec_from_file_location('child_adapter', sys.argv[2]); "
+                "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+                "module._write_result(__import__('pathlib').Path(sys.argv[1]), json.loads(sys.argv[3]))"
+            )
+            completed = subprocess.run(
+                [sys.executable, "-c", child, str(result_path), str(ADAPTER_PATH), json.dumps(result)],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(completed.returncode, 0)
+            parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
+            self.assertEqual(parsed["diagnostics"], [diagnostic])
+
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
             ("input_load", "adapter_input_missing"),
