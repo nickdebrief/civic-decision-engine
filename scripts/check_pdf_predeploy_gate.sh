@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+export PYTHONUNBUFFERED=1
 
 printf '%s\n' 'stage76_gate_runtime_check=start'
 python scripts/check_pdf_runtime.py

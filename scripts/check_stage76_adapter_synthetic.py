@@ -382,7 +382,7 @@ def main() -> int:
                 "validation_entry", "inspection_dispatch", "inspection_result_unpack",
                 "inspection_result_validation", "limit_validation", "equivalence_preparation",
                 "equivalence_dispatch", "equivalence_result_validation", "validation_result_construction",
-                "validation_return",
+                "validation_result_unpack", "validation_result_validation", "validation_return",
                 "reader_construction", "encryption_and_page_count", "metadata_validation",
                 "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
                 "indirect_reference_resolution", "passive_destination_validation",
