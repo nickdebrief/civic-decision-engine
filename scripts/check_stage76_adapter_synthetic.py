@@ -24,6 +24,8 @@ CHECK_TIMEOUT_SECONDS = 220
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_FORMATS = ("docx", "html", "pdf")
 PRIVATE_TOKENS = ("/tmp", "/private/tmp", "/app", "/data", "secret", "password", "private_canary")
+CONTRACT_STEPS = {"json_read", "json_parse", "schema_version", "field_inventory", "required_fields", "field_type", "field_value", "field_combination", "failure_shape", "success_shape"}
+CONTRACT_REASONS = {"missing", "unknown", "invalid", "inconsistent", "missing_or_inconsistent", "oversized", "unexpected_field", "incompatible_shape"}
 MARKERS = (
     "STAGE76_ADAPTER_TITLE",
     "STAGE76_ADAPTER_PURPOSE",
@@ -296,7 +298,9 @@ def run_check() -> None:
             except AdapterFailure as exc:
                 detail = ""
                 if exc.diagnostic:
-                    if "failure_field" in exc.diagnostic:
+                    if "contract_step" in exc.diagnostic:
+                        detail = f":{exc.diagnostic['contract_step']}:{exc.diagnostic['contract_reason']}:{exc.diagnostic.get('contract_field', 'none')}"
+                    elif "failure_field" in exc.diagnostic:
                         detail = f":{exc.diagnostic['failure_field']}:{exc.diagnostic['failure_reason']}"
                     else:
                         if "inspection_step" in exc.diagnostic:
@@ -375,7 +379,9 @@ def main() -> int:
         parts = str(exc).split(":")
         if len(parts) >= 3:
             detail = ""
-            if len(parts) == 8 and parts[5] in {
+            if len(parts) == 6 and parts[0] == "result_serialization" and parts[1] == "adapter_return_contract_invalid" and parts[3] in CONTRACT_STEPS and parts[4] in CONTRACT_REASONS:
+                detail = f" contract_step={parts[3]} contract_reason={parts[4]} contract_field={parts[5]}"
+            elif len(parts) == 8 and parts[5] in {
                 "input_load", "input_validation", "specification_validation", "model_adaptation",
                 "docx_render", "html_render", "pdf_conversion", "pdf_inspection",
                 "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup",
