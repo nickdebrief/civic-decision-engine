@@ -189,6 +189,27 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
     )
 
 
+def _unexpected_failure_result(exc: Exception) -> dict:
+    """Build the bounded result used by the final child-process failure boundary."""
+    return {
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "ok": False,
+        "phase": "result_serialization",
+        "code": "unexpected_adapter_failure",
+        "cleanup": "unknown",
+        "specification_digest": "",
+        "diagnostics": [{
+            "format": "pdf",
+            "failure_step": "result_serialization",
+            "failure_operation": "unknown",
+            "failure_exception_class": _exception_class(exc),
+            "inspection_step": "validation_result_construction",
+            "failure_boundary": "result_serialization",
+        }],
+        "artifacts": [],
+    }
+
+
 def ordered_content_is_preserved(book, *, docx_path: Path, html_path: Path) -> bool:
     expected = source_text_blocks(book)
     actual_values = (docx_text(docx_path)[0], audit_html(html_path).text)
@@ -807,10 +828,10 @@ if __name__ == "__main__":
             except AdapterFailure:
                 pass
         raise SystemExit(1)
-    except Exception:
+    except Exception as exc:
         if result_path is not None:
             try:
-                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": "result_serialization", "code": "unexpected_adapter_failure", "cleanup": "unknown", "specification_digest": "", "diagnostics": [], "artifacts": []})
+                _write_result(result_path, _unexpected_failure_result(exc))
             except AdapterFailure:
                 pass
         raise SystemExit(1)
