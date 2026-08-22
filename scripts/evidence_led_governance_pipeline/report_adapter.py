@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -243,8 +244,12 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             raise PdfActionError(location, "external_destination", failure_step="open_action_resolution", failure_structure="unexpected_object")
         if not isinstance(value, (list, tuple)):
             raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure, failure_operand="operand_count", failure_operand_kind="other")
+        def is_pdf_null(item: object) -> bool:
+            item_type = type(item)
+            return item is None or (item_type.__name__ == "NullObject" and item_type.__module__.startswith("pypdf."))
+
         def operand_kind(item: object) -> str:
-            if item is None:
+            if is_pdf_null(item):
                 return "null"
             if reference_identity(item) is not None:
                 return "indirect_reference"
@@ -276,7 +281,7 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
         trailing_kinds = [operand_kind(item) for item in value[2:7]]
         count = count_bucket(len(value))
         mode = destination_mode(value)
-        if len(value) != 2:
+        if len(value) != 2 and not (len(value) == 5 and mode == "xyz"):
             raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure, failure_operand="operand_count", failure_operand_kind="array", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
         page_reference = value[0]
         identity = reference_identity(page_reference)
@@ -293,9 +298,25 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
         except Exception:
             raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds) from None
         mode_name = value[1]
-        if mode_name != "/Fit":
-            kind = "name" if isinstance(mode_name, str) else "other"
-            raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure, failure_operand="operand_two", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
+        if mode_name == "/Fit":
+            return
+        if mode_name == "/XYZ" and len(value) == 5:
+            def valid_scalar(item: object, *, non_negative: bool = False) -> bool:
+                if is_pdf_null(item) or isinstance(item, bool) or not isinstance(item, (int, float)):
+                    return is_pdf_null(item)
+                try:
+                    finite = math.isfinite(float(item))
+                except (OverflowError, TypeError, ValueError):
+                    return False
+                return finite and (not non_negative or item >= 0)
+
+            for index, item in enumerate(value[2:], start=3):
+                if not valid_scalar(item, non_negative=index == 5):
+                    operand = {3: "operand_three", 4: "operand_four", 5: "operand_five"}[index]
+                    raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure, failure_operand=operand, failure_operand_kind=operand_kind(item), failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
+            return
+        kind = "name" if isinstance(mode_name, str) else "other"
+        raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure, failure_operand="operand_two", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
 
     def inspect_outline(value: object, active: set[int]) -> None:
         value = resolve_chain(value, active, "outline_action", failure_step="recursive_action_tree")
