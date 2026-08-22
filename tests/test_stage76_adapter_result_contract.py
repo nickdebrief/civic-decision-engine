@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -171,6 +172,48 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 result_path.write_text(json.dumps(candidate), encoding="utf-8")
                 with self.assertRaises(self.rendering.AdapterFailure):
                     self.rendering._read_adapter_result(result_path, root, "a" * 64)
+
+    def test_unexpected_failure_requires_all_bounded_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result_path = root / "adapter-result.json"
+            result = {
+                "schema_version": "1", "ok": False, "phase": "pdf_inspection",
+                "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
+                "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}],
+                "artifacts": [],
+            }
+            for field in ("failure_step", "failure_operation", "failure_exception_class"):
+                candidate = json.loads(json.dumps(result))
+                del candidate["diagnostics"][0][field]
+                result_path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaises(self.rendering.AdapterFailure) as raised:
+                    self.rendering._read_adapter_result(result_path, root, "a" * 64)
+                self.assertEqual(raised.exception.code, "adapter_return_contract_invalid")
+
+    def test_parent_subprocess_boundary_preserves_unexpected_diagnostic(self):
+        specification = {"publication_engine_version": "2.0.0", "requested_formats": []}
+        digest = __import__("api.record_governed_reports", fromlist=["canonical_json"]).canonical_json(specification)
+        digest = hashlib.sha256(digest.encode()).hexdigest()
+        diagnostic = {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "failure_exception_class": "attribute_error"}
+
+        class Process:
+            returncode = 1
+
+            def communicate(self, timeout=None):
+                result_path = Path(command[-1])
+                result_path.write_text(json.dumps({"schema_version": "1", "ok": False, "phase": "pdf_inspection", "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "", "diagnostics": [diagnostic], "artifacts": []}), encoding="utf-8")
+                return "", ""
+
+        with tempfile.TemporaryDirectory() as temp:
+            command = []
+            def spawn(arguments, **kwargs):
+                command[:] = arguments
+                return Process()
+            with self.assertRaises(self.rendering.AdapterFailure) as raised, patch.object(self.rendering.subprocess, "Popen", side_effect=spawn):
+                self.rendering.render_frozen_report(specification, digest, Path(temp) / "out")
+            self.assertEqual(raised.exception.code, "unexpected_adapter_failure")
+            self.assertEqual(raised.exception.diagnostic, diagnostic)
 
     def test_all_controlled_failure_phases_and_codes_round_trip(self):
         cases = (
