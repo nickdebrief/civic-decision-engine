@@ -32,6 +32,54 @@ PDF_SUBPROCESS_TIMEOUT = 120
 PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
+RESULT_SCHEMA_VERSION = "1"
+
+
+class AdapterFailure(RuntimeError):
+    def __init__(self, phase: str, code: str) -> None:
+        self.phase = phase
+        self.code = code
+
+
+def _write_result(path: Path, result: dict) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        os.replace(temporary, path)
+    except Exception:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise AdapterFailure("result_serialization", "adapter_result_write_failed") from None
+
+
+def _run_phase(phase: str, code: str, operation):
+    try:
+        return operation()
+    except AdapterFailure:
+        raise
+    except Exception:
+        raise AdapterFailure(phase, code) from None
+
+
+def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
+    code = str(exc)
+    if "pypdf" in code or "unavailable" in code:
+        return AdapterFailure("pdf_inspection", "pdf_inspection_dependency_unavailable")
+    if "metadata" in code:
+        return AdapterFailure("pdf_inspection", "pdf_metadata_invalid")
+    if "action" in code:
+        return AdapterFailure("pdf_inspection", "pdf_action_invalid")
+    if "attachment" in code or "annotation" in code:
+        return AdapterFailure("pdf_inspection", "pdf_attachment_invalid")
+    if "extract" in code or "pdftotext" in code:
+        return AdapterFailure("pdf_inspection", "pdf_extraction_failed")
+    if "missing" in code:
+        return AdapterFailure("pdf_inspection", "pdf_missing")
+    if "invalid" in code or "header" in code or "page" in code:
+        return AdapterFailure("pdf_inspection", "pdf_invalid")
+    return AdapterFailure("pdf_inspection", "unexpected_adapter_failure")
 
 
 def ordered_content_is_preserved(book, *, docx_path: Path, html_path: Path) -> bool:
@@ -234,59 +282,96 @@ def make_book(spec):
 
 
 def main():
-    started = __import__("time").monotonic()
-    request, output = map(Path, sys.argv[1:3])
-    payload = json.loads(request.read_text(encoding="utf-8"))
-    spec = payload["specification"]
-    digest = payload["digest"]
+    started = time.monotonic()
+    if len(sys.argv) != 4:
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
+    request, output, result_path = map(Path, sys.argv[1:4])
+    try:
+        payload = json.loads(request.read_text(encoding="utf-8"))
+        spec = payload["specification"]
+        digest = payload["digest"]
+    except Exception:
+        raise AdapterFailure("input_load", "adapter_input_invalid") from None
+    if not isinstance(spec, dict) or not isinstance(digest, str):
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
     if spec.get("publication_engine_version") != ENGINE_VERSION or hashlib.sha256(canonical(spec).encode()).hexdigest() != digest:
-        raise ValueError("specification validation failed")
+        raise AdapterFailure("specification_validation", "specification_digest_mismatch")
     requested = set(spec.get("requested_formats", []))
     if "pdf" in requested and not {"docx", "html"}.issubset(requested):
-        raise ValueError("pdf_companion_formats_required")
-    book = make_book(spec)
+        raise AdapterFailure("specification_validation", "adapter_input_invalid")
+    book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec))
     effective = EffectiveTheme(theme=HANDBOOK_THEME, publication_profile=PUBLICATION_PROFILES["digital"], page=HANDBOOK_THEME.page, title_page=HANDBOOK_THEME.title_page, volume_page=HANDBOOK_THEME.volume_page, chapter_opening=HANDBOOK_THEME.chapter_opening)
     artifacts = []
     html_path = output / "report.html"
     docx_path = output / "report.docx"
     if "docx" in requested or "pdf" in requested:
-        DocxRenderer(effective).render(book, docx_path)
-        validation, _ = validate_docx_output(docx_path, book)
-        if not validation.ok:
-            raise ValueError("docx validation failed")
-        artifacts.append(docx_path)
+        def render_docx():
+            DocxRenderer(effective).render(book, docx_path)
+            validation, _ = validate_docx_output(docx_path, book)
+            if not validation.ok:
+                raise RuntimeError("docx validation failed")
+            return docx_path
+        artifacts.append(_run_phase("docx_render", "docx_render_failed", render_docx))
     if "html" in requested or "pdf" in requested:
-        HtmlRenderer(effective, HtmlOutputConfig()).render(book, html_path)
-        validation, _ = validate_html_output(html_path, "en")
-        if not validation.ok:
-            raise ValueError("html validation failed")
-        artifacts.append(html_path)
+        def render_html():
+            HtmlRenderer(effective, HtmlOutputConfig()).render(book, html_path)
+            validation, _ = validate_html_output(html_path, "en")
+            if not validation.ok:
+                raise RuntimeError("html validation failed")
+            return html_path
+        artifacts.append(_run_phase("html_render", "html_render_failed", render_html))
     diagnostics = []
     if len(artifacts) == 2:
-        equivalence, _ = validate_cross_format_equivalence(book, docx_path=docx_path, html_path=html_path)
-        if not equivalence.ok or not ordered_content_is_preserved(book, docx_path=docx_path, html_path=html_path):
-            raise ValueError("cross-format validation failed")
+        def check_equivalence():
+            equivalence, _ = validate_cross_format_equivalence(book, docx_path=docx_path, html_path=html_path)
+            if not equivalence.ok or not ordered_content_is_preserved(book, docx_path=docx_path, html_path=html_path):
+                raise RuntimeError("cross-format validation failed")
+        _run_phase("cross_format_equivalence", "equivalence_failed", check_equivalence)
     if "pdf" in requested:
-        if __import__("time").monotonic() - started > PDF_TOTAL_TIMEOUT:
-            raise ValueError("pdf_total_timeout")
+        if time.monotonic() - started > PDF_TOTAL_TIMEOUT:
+            raise AdapterFailure("pdf_conversion", "pdf_conversion_failed")
         pdf_path = output / "report.pdf"
         deadline = started + PDF_TOTAL_TIMEOUT
-        renderer_result = PdfRenderer().render(docx_path, pdf_path, timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
-        if __import__("time").monotonic() - started > PDF_TOTAL_TIMEOUT:
-            raise ValueError("pdf_total_timeout")
-        pdf_diagnostics = _validate_pdf(pdf_path, book, deadline=deadline)
+        try:
+            renderer_result = PdfRenderer().render(docx_path, pdf_path, timeout=PDF_SUBPROCESS_TIMEOUT, deadline=deadline)
+        except AdapterFailure:
+            raise
+        except Exception:
+            raise AdapterFailure("pdf_conversion", "pdf_conversion_failed") from None
+        if time.monotonic() - started > PDF_TOTAL_TIMEOUT:
+            raise AdapterFailure("pdf_conversion", "pdf_conversion_failed")
+        try:
+            pdf_diagnostics = _validate_pdf(pdf_path, book, deadline=deadline)
+        except Exception as exc:
+            raise _classify_pdf_failure(exc) from None
         pdf_diagnostics.update({"libreoffice_version": renderer_result.renderer_version, "extraction_backend": "pdftotext"})
         diagnostics.append({"format": "pdf", **pdf_diagnostics})
         artifacts.append(pdf_path)
-    result = {"specification_digest": digest, "diagnostics": diagnostics, "artifacts": []}
-    for path in artifacts:
-        result["artifacts"].append({"format": path.suffix[1:], "path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size, "renderer_version": ENGINE_VERSION})
-    print(json.dumps(result, sort_keys=True))
+    descriptors = []
+    try:
+        for path in artifacts:
+            descriptors.append({"format": path.suffix[1:], "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size, "renderer_version": ENGINE_VERSION})
+    except Exception:
+        raise AdapterFailure("artifact_digest", "artifact_digest_failed") from None
+    result = {"schema_version": RESULT_SCHEMA_VERSION, "ok": True, "phase": "result_serialization", "code": "completed", "cleanup": "passed", "specification_digest": digest, "diagnostics": diagnostics, "artifacts": descriptors}
+    _write_result(result_path, result)
 
 
 if __name__ == "__main__":
+    result_path = Path(sys.argv[3]) if len(sys.argv) == 4 else None
     try:
         main()
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
+    except AdapterFailure as exc:
+        if result_path is not None:
+            try:
+                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": exc.phase, "code": exc.code, "cleanup": "unknown", "specification_digest": "", "diagnostics": [], "artifacts": []})
+            except AdapterFailure:
+                pass
+        raise SystemExit(1)
+    except Exception:
+        if result_path is not None:
+            try:
+                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": "result_serialization", "code": "unexpected_adapter_failure", "cleanup": "unknown", "specification_digest": "", "diagnostics": [], "artifacts": []})
+            except AdapterFailure:
+                pass
         raise SystemExit(1)

@@ -516,7 +516,7 @@ class Stage75BoundaryTests(unittest.TestCase):
             process.returncode = fake_process.returncode
             process.communicate.return_value = (fake_process.stdout, fake_process.stderr)
             with patch("api.report_rendering.subprocess.Popen", return_value=process) as popen:
-                with self.assertRaisesRegex(ValueError, "path_invalid"):
+                with self.assertRaisesRegex(ValueError, "governed_report_renderer_failed"):
                     render_frozen_report(specification, digest, Path(directory) / "private")
             self.assertTrue(popen.call_args.kwargs["start_new_session"])
 
@@ -526,7 +526,7 @@ class Stage75BoundaryTests(unittest.TestCase):
         process = Mock()
         process.communicate.side_effect = subprocess.TimeoutExpired("adapter", 210)
         with tempfile.TemporaryDirectory() as directory, patch("api.report_rendering.subprocess.Popen", return_value=process), patch("api.report_rendering._terminate_process_group") as terminate:
-            with self.assertRaisesRegex(ValueError, "renderer_timeout"):
+            with self.assertRaisesRegex(ValueError, "governed_report_renderer_failed"):
                 render_frozen_report(specification, digest, Path(directory) / "private")
         terminate.assert_called_once_with(process)
 

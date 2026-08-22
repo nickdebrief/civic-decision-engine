@@ -42,6 +42,9 @@ class AdapterGateError(RuntimeError):
     """A stable, safe diagnostic for a failed adapter gate."""
 
 
+ADAPTER_CLEANUP_STATUS = "failed"
+
+
 def _canonical(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
@@ -258,6 +261,8 @@ def _validate_result(result: dict[str, Any], specification: dict[str, Any], dige
 
 
 def run_check() -> None:
+    global ADAPTER_CLEANUP_STATUS
+    ADAPTER_CLEANUP_STATUS = "failed"
     if not REPOSITORY_ROOT.is_dir() or not (REPOSITORY_ROOT / "api").is_dir() or not (REPOSITORY_ROOT / "scripts").is_dir():
         raise AdapterGateError("repository_root_invalid")
     try:
@@ -274,6 +279,7 @@ def run_check() -> None:
         raise AdapterGateError("specification_digest_failed") from None
     holder, root = _confined_temporary_directory()
     deadline = time.monotonic() + CHECK_TIMEOUT_SECONDS
+    primary_exception: BaseException | None = None
     try:
         if time.monotonic() >= deadline:
             raise AdapterGateError("adapter_gate_timeout")
@@ -281,12 +287,14 @@ def run_check() -> None:
             if str(REPOSITORY_ROOT) not in sys.path:
                 sys.path.insert(0, str(REPOSITORY_ROOT))
             try:
-                from api.report_rendering import render_frozen_report
+                from api.report_rendering import AdapterFailure, render_frozen_report
             except Exception:
                 raise AdapterGateError("adapter_import_failed") from None
 
             try:
                 result = render_frozen_report(specification, digest, root)
+            except AdapterFailure as exc:
+                raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}") from None
             except TimeoutError:
                 raise AdapterGateError("adapter_invocation_failed") from None
             except ValueError:
@@ -309,13 +317,28 @@ def run_check() -> None:
             raise AdapterGateError("adapter_return_contract_invalid") from None
         except Exception:
             raise AdapterGateError("unexpected_adapter_error") from None
-    finally:
+    except BaseException as exc:
+        primary_exception = exc
+
+    cleanup_failed = False
+    try:
         try:
             holder.cleanup()
         except Exception:
-            raise AdapterGateError("cleanup_failed") from None
+            cleanup_failed = True
         if root.exists():
-            raise AdapterGateError("cleanup_failed")
+            cleanup_failed = True
+    except BaseException:
+        cleanup_failed = True
+
+    if cleanup_failed:
+        ADAPTER_CLEANUP_STATUS = "failed"
+        if primary_exception is None:
+            raise AdapterGateError("cleanup_failed") from None
+    else:
+        ADAPTER_CLEANUP_STATUS = "passed"
+    if primary_exception is not None:
+        raise primary_exception
 
 
 def _timeout_handler(_signum: int, _frame: object) -> None:
@@ -330,12 +353,17 @@ def main() -> int:
         print("stage76_adapter_gate=passed")
         return 0
     except AdapterGateError as exc:
-        print(f"stage76_adapter_gate=failed code={str(exc).split(':', 1)[0]}", file=sys.stderr)
+        parts = str(exc).split(":")
+        if len(parts) >= 3:
+            print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}", file=sys.stderr)
+        else:
+            print(f"stage76_adapter_gate=failed code={parts[0]}", file=sys.stderr)
         return 1
     except Exception:
         print("stage76_adapter_gate=failed code=unexpected_failure", file=sys.stderr)
         return 1
     finally:
+        print(f"stage76_adapter_gate_cleanup={ADAPTER_CLEANUP_STATUS}", file=sys.stderr)
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
 

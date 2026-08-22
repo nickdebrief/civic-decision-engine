@@ -110,7 +110,7 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
     def test_direct_invocation_fails_closed_without_traceback(self):
         completed = subprocess.run([sys.executable, str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, check=False)
         self.assertEqual(completed.returncode, 1)
-        self.assertRegex(completed.stderr, r"^stage76_adapter_gate=failed code=[a-z_]+$")
+        self.assertRegex(completed.stderr, r"^stage76_adapter_gate=failed phase=[a-z_]+ code=[a-z_]+\nstage76_adapter_gate_cleanup=(passed|failed)$")
         self.assertNotIn("Traceback", completed.stderr)
 
     def test_adapter_input_mutation_is_rejected(self):
@@ -181,6 +181,29 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
             with self.subTest(expected=expected), patch("api.report_rendering.render_frozen_report", side_effect=error):
                 with self.assertRaisesRegex(checker.AdapterGateError, expected):
                     checker.run_check()
+
+    def test_pdf_dependency_failure_is_phase_specific(self):
+        pipeline = ROOT / "scripts" / "evidence_led_governance_pipeline"
+        if str(pipeline) not in sys.path:
+            sys.path.insert(0, str(pipeline))
+        import report_adapter
+        failure = report_adapter._classify_pdf_failure(ValueError("pdf_pypdf_unavailable"))
+        self.assertEqual((failure.phase, failure.code), ("pdf_inspection", "pdf_inspection_dependency_unavailable"))
+
+    def test_cleanup_failure_does_not_replace_primary_failure(self):
+        checker = load_checker()
+
+        class FailingHolder:
+            def cleanup(self):
+                raise OSError("private cleanup detail")
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(checker, "_confined_temporary_directory", return_value=(FailingHolder(), root)):
+                with patch("api.report_rendering.render_frozen_report", side_effect=ValueError("private renderer detail")):
+                    with self.assertRaisesRegex(checker.AdapterGateError, "adapter_reported_failure"):
+                        checker.run_check()
+            self.assertEqual(checker.ADAPTER_CLEANUP_STATUS, "failed")
 
     def test_malformed_adapter_return_uses_contract_code(self):
         checker = load_checker()
