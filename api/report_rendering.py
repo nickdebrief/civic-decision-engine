@@ -43,7 +43,7 @@ DIAGNOSTIC_FIELDS = {
     "format", "libreoffice_version", "pdfinfo_version", "pypdf_version",
     "extraction_backend", "page_count", "size_bytes", "ordered_content",
     "metadata_attachments_annotations", "failure_field", "failure_location", "failure_reason",
-    "failure_step", "failure_structure",
+    "failure_step", "failure_structure", "failure_operand", "failure_operand_kind",
 }
 
 
@@ -97,7 +97,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         if "failure_location" in diagnostic or "failure_reason" in diagnostic:
-            if set(diagnostic) != {"format", "failure_location", "failure_reason", "failure_step", "failure_structure"}:
+            if set(diagnostic) != {"format", "failure_location", "failure_reason", "failure_step", "failure_structure", "failure_operand", "failure_operand_kind"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_location"] not in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -106,6 +106,10 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             if diagnostic["failure_step"] not in {"open_action_wrapper", "open_action_resolution", "destination_array", "page_reference_identity", "page_reference_resolution", "page_membership", "fit_validation", "recursive_action_tree"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_structure"] not in {"direct_array", "indirect_array", "action_dictionary", "unexpected_object"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_operand"] not in {"none", "operand_count", "operand_one", "operand_two"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_operand_kind"] not in {"none", "array", "indirect_reference", "direct_dictionary", "name", "other"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):

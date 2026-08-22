@@ -260,6 +260,21 @@ class Stage76PdfContractTests(unittest.TestCase):
                     "fit_validation", "recursive_action_tree",
                 })
                 self.assertIn(classified.diagnostic["failure_structure"], {"direct_array", "indirect_array", "action_dictionary", "unexpected_object"})
+                self.assertIn(classified.diagnostic["failure_operand"], {"none", "operand_count", "operand_one", "operand_two"})
+                self.assertIn(classified.diagnostic["failure_operand_kind"], {"none", "array", "indirect_reference", "direct_dictionary", "name", "other"})
+
+    def test_direct_array_operand_diagnostic_distinguishes_count_and_fit(self):
+        page = self.page()
+        for destination, operand, kind in (
+            ([page.indirect_reference, "/FitH", 0], "operand_count", "array"),
+            ([page.indirect_reference, "/FitH"], "operand_two", "name"),
+        ):
+            reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": destination}})
+            failure = report_adapter._pdf_action_failure(reader)
+            self.assertIsNotNone(failure)
+            classified = report_adapter._classify_pdf_failure(failure)
+            self.assertEqual(classified.diagnostic["failure_operand"], operand)
+            self.assertEqual(classified.diagnostic["failure_operand_kind"], kind)
 
     def test_indirect_destination_cycle_fails_closed(self):
         class Cycle:
