@@ -76,11 +76,12 @@ class PdfValidationResultError(ValueError):
 
 
 class UnexpectedPdfInspectionError(ValueError):
-    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "validation_return") -> None:
+    def __init__(self, failure_step: str, failure_operation: str, failure_exception_class: str, inspection_step: str = "validation_return", failure_boundary: str = "function_body") -> None:
         self.failure_step = failure_step
         self.failure_operation = failure_operation
         self.failure_exception_class = failure_exception_class
         self.inspection_step = inspection_step
+        self.failure_boundary = failure_boundary
         super().__init__("unexpected_adapter_failure")
 
 
@@ -131,7 +132,7 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
         return AdapterFailure(
             "pdf_inspection",
             "unexpected_adapter_failure",
-            {"format": "pdf", "failure_step": exc.failure_step, "failure_operation": exc.failure_operation, "failure_exception_class": exc.failure_exception_class, "inspection_step": exc.inspection_step},
+            {"format": "pdf", "failure_step": exc.failure_step, "failure_operation": exc.failure_operation, "failure_exception_class": exc.failure_exception_class, "inspection_step": exc.inspection_step, "failure_boundary": exc.failure_boundary},
         )
     if isinstance(exc, PdfMetadataError):
         return AdapterFailure(
@@ -648,16 +649,23 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
         "pdf_pypdf_unavailable", "pdf_structure_invalid", "pdf_encryption_or_page_limit_invalid",
         "pdf_page_count_invalid", "pdf_private_path_or_canary_detected", "pdf_ordered_equivalence_failed",
     }
+    inspection_step = "validation_body_complete"
+    failure_boundary = "function_body"
     try:
-        return _validate_pdf_impl(pdf_path, book, deadline=deadline)
+        inspection_step = "validation_return_enter"
+        result = _validate_pdf_impl(pdf_path, book, deadline=deadline)
+        inspection_step = "validation_body_complete"
+        failure_boundary = "return_finalization"
+        inspection_step = "validation_return_enter"
+        return result
     except (PdfMetadataError, PdfActionError, PdfValidationResultError, UnexpectedPdfInspectionError):
         raise
     except ValueError as exc:
         if str(exc) in known_failures or str(exc).startswith("pdf_pdfinfo_") or str(exc).startswith("pdf_pdftotext_"):
             raise
-        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), "validation_return") from None
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), inspection_step, failure_boundary) from None
     except Exception as exc:
-        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), "validation_return") from None
+        raise UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), inspection_step, failure_boundary) from None
 
 
 def canonical(value):
@@ -758,12 +766,25 @@ def main():
             raise AdapterFailure("pdf_conversion", "pdf_conversion_failed") from None
         if time.monotonic() - started > PDF_TOTAL_TIMEOUT:
             raise AdapterFailure("pdf_conversion", "pdf_conversion_failed")
+        caller_step = "caller_result_received"
+        caller_boundary = "caller_assignment"
         try:
             pdf_diagnostics = _validate_pdf(pdf_path, book, deadline=deadline)
+            caller_step = "caller_result_received"
         except Exception as exc:
             raise _classify_pdf_failure(exc) from None
-        pdf_diagnostics.update({"libreoffice_version": renderer_result.renderer_version, "extraction_backend": "pdftotext"})
-        diagnostics.append({"format": "pdf", **pdf_diagnostics})
+        try:
+            caller_step = "caller_result_validation"
+            if not isinstance(pdf_diagnostics, dict):
+                raise TypeError("pdf_diagnostics_not_mapping")
+            caller_boundary = "caller_post_return"
+            caller_step = "caller_result_serialization"
+            pdf_diagnostics.update({"libreoffice_version": renderer_result.renderer_version, "extraction_backend": "pdftotext"})
+            diagnostics.append({"format": "pdf", **pdf_diagnostics})
+        except AdapterFailure:
+            raise
+        except Exception as exc:
+            raise _classify_pdf_failure(UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), caller_step, caller_boundary)) from None
         artifacts.append(pdf_path)
     descriptors = []
     try:

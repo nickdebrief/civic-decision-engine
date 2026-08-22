@@ -401,13 +401,15 @@ class Stage76PdfContractTests(unittest.TestCase):
             report_adapter._pdf_action_failure(reader)
         classified = report_adapter._classify_pdf_failure(report_adapter.UnexpectedPdfInspectionError("page_enumeration", "enumerate_pages", "attribute_error", "page_enumeration"))
         self.assertEqual(classified.code, "unexpected_adapter_failure")
-        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_step": "page_enumeration", "failure_operation": "enumerate_pages", "failure_exception_class": "attribute_error", "inspection_step": "page_enumeration"})
+        self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_step": "page_enumeration", "failure_operation": "enumerate_pages", "failure_exception_class": "attribute_error", "inspection_step": "page_enumeration", "failure_boundary": "function_body"})
 
     def test_unexpected_pdf_inspection_steps_are_bounded(self):
         steps = {
             "validation_entry", "input_validation", "inspection_dispatch", "inspection_result_unpack",
             "inspection_result_validation", "limit_validation", "equivalence_preparation",
             "equivalence_dispatch", "equivalence_result_validation", "artifact_digest",
+            "validation_body_complete", "validation_return_enter", "validation_return_complete",
+            "caller_result_received", "caller_result_validation", "caller_result_serialization",
             "validation_result_unpack", "validation_result_construction", "validation_result_validation", "validation_return",
             "reader_construction", "encryption_and_page_count", "metadata_validation",
             "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
@@ -424,6 +426,18 @@ class Stage76PdfContractTests(unittest.TestCase):
                 self.assertEqual(classified.diagnostic["inspection_step"], step)
                 self.assertNotIn("value", classified.diagnostic)
 
+    def test_validation_boundary_diagnostic_is_bounded_and_preserved(self):
+        boundaries = {"function_body", "return_finalization", "caller_assignment", "caller_post_return", "result_serialization"}
+        for boundary in boundaries:
+            with self.subTest(boundary=boundary):
+                classified = report_adapter._classify_pdf_failure(
+                    report_adapter.UnexpectedPdfInspectionError(
+                        "pdf_inspection", "validate_pdf", "value_error", "validation_return_enter", boundary
+                    )
+                )
+                self.assertEqual(classified.diagnostic["failure_boundary"], boundary)
+                self.assertNotIn("private", str(classified.diagnostic))
+
     def test_invalid_inspection_result_is_a_governed_pdf_failure(self):
         classified = report_adapter._classify_pdf_failure(report_adapter.PdfValidationResultError())
         self.assertEqual(classified.phase, "pdf_inspection")
@@ -438,7 +452,8 @@ class Stage76PdfContractTests(unittest.TestCase):
             with patch.object(report_adapter, "_validate_pdf_impl", side_effect=ValueError("private validation detail")):
                 with self.assertRaises(report_adapter.UnexpectedPdfInspectionError) as raised:
                     report_adapter._validate_pdf(pdf, book)
-        self.assertEqual(raised.exception.inspection_step, "validation_return")
+        self.assertEqual(raised.exception.inspection_step, "validation_return_enter")
+        self.assertEqual(raised.exception.failure_boundary, "function_body")
         self.assertEqual(raised.exception.failure_operation, "validate_pdf")
 
     def test_validate_pdf_valueerror_boundaries_are_step_classified(self):
