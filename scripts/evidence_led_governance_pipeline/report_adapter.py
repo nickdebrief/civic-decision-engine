@@ -51,7 +51,7 @@ class PdfMetadataError(ValueError):
 
 
 class PdfActionError(ValueError):
-    def __init__(self, location: str, reason: str, *, failure_step: str = "recursive_action_tree", failure_structure: str = "unexpected_object", failure_operand: str = "none", failure_operand_kind: str = "none", failure_operand_count: str = "not_applicable", failure_operand_kinds: list[str] | None = None, failure_destination_mode: str = "not_applicable", failure_trailing_kinds: list[str] | None = None) -> None:
+    def __init__(self, location: str, reason: str, *, failure_step: str = "recursive_action_tree", failure_structure: str = "unexpected_object", failure_operand: str = "none", failure_operand_kind: str = "none", failure_operand_count: str = "not_applicable", failure_operand_kinds: list[str] | None = None, failure_destination_mode: str = "not_applicable", failure_trailing_kinds: list[str] | None = None, page_registry_state: str = "not_applicable", reference_identity_result: str = "not_applicable", resolution_result: str = "not_applicable", resolved_target_comparison: str = "not_applicable", page_reference_attribute: str = "none") -> None:
         self.location = location
         self.reason = reason
         self.failure_step = failure_step
@@ -62,6 +62,11 @@ class PdfActionError(ValueError):
         self.failure_operand_kinds = list(failure_operand_kinds or [])[:6]
         self.failure_destination_mode = failure_destination_mode
         self.failure_trailing_kinds = list(failure_trailing_kinds or [])[:5]
+        self.page_registry_state = page_registry_state
+        self.reference_identity_result = reference_identity_result
+        self.resolution_result = resolution_result
+        self.resolved_target_comparison = resolved_target_comparison
+        self.page_reference_attribute = page_reference_attribute
         super().__init__("pdf_action_invalid")
 
 
@@ -110,6 +115,11 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
                 "failure_operand_kinds": exc.failure_operand_kinds,
                 "failure_destination_mode": exc.failure_destination_mode,
                 "failure_trailing_kinds": exc.failure_trailing_kinds,
+                "page_registry_state": exc.page_registry_state,
+                "reference_identity_result": exc.reference_identity_result,
+                "resolution_result": exc.resolution_result,
+                "resolved_target_comparison": exc.resolved_target_comparison,
+                "page_reference_attribute": exc.page_reference_attribute,
             },
         )
     code = str(exc)
@@ -201,10 +211,13 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             reference = getattr(page, "indirect_reference", None)
             identity = (getattr(reference, "idnum", None), getattr(reference, "generation", None))
             if not all(isinstance(item, int) for item in identity):
-                return PdfActionError("catalog_open_action", "malformed_destination")
+                return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
+            if identity in page_objects:
+                return PdfActionError("catalog_open_action", "malformed_destination", failure_step="page_membership", failure_structure="unexpected_object", page_registry_state="duplicate_identity", reference_identity_result="ambiguous", page_reference_attribute="indirect_reference")
             page_objects[identity] = page
     except Exception:
-        return PdfActionError("catalog_open_action", "malformed_destination")
+        return PdfActionError("catalog_open_action", "malformed_destination", page_registry_state="empty", page_reference_attribute="indirect_reference")
+    page_registry_state = "populated" if page_objects else "empty"
 
     def reference_identity(value: object) -> tuple[int, int] | None:
         idnum = getattr(value, "idnum", None)
@@ -287,16 +300,28 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
         identity = reference_identity(page_reference)
         if identity is None:
             kind = "direct_dictionary" if isinstance(page_reference, dict) else "name" if isinstance(page_reference, str) else "other"
-            raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_identity", failure_structure=structure, failure_operand="operand_one", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_identity", failure_structure=structure, failure_operand="operand_one", failure_operand_kind=kind, failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds, page_registry_state=page_registry_state, reference_identity_result="not_registered", page_reference_attribute="indirect_reference")
         if identity not in page_objects:
-            raise PdfActionError(location, "unsupported_destination", failure_step="page_membership", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_membership", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds, page_registry_state=page_registry_state, reference_identity_result="not_registered", page_reference_attribute="indirect_reference")
         try:
-            if page_reference.get_object() is not page_objects[identity]:
-                raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds)
+            resolved_page = page_reference.get_object()
+            if resolved_page is page_objects[identity]:
+                comparison = "same_instance"
+            else:
+                resolved_reference = getattr(resolved_page, "indirect_reference", None)
+                resolved_identity = reference_identity(resolved_reference)
+                if resolved_identity == identity:
+                    comparison = "same_indirect_identity"
+                elif resolved_identity is None:
+                    comparison = "unavailable"
+                else:
+                    comparison = "different_target"
+            if comparison not in {"same_instance", "same_indirect_identity"}:
+                raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds, page_registry_state=page_registry_state, reference_identity_result="registered", resolution_result="resolved_non_page" if comparison == "different_target" else "resolution_failed", resolved_target_comparison=comparison, page_reference_attribute="indirect_reference")
         except PdfActionError:
             raise
         except Exception:
-            raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds) from None
+            raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure, failure_operand="operand_one", failure_operand_kind="indirect_reference", failure_operand_count=count, failure_operand_kinds=operand_kinds, failure_destination_mode=mode, failure_trailing_kinds=trailing_kinds, page_registry_state=page_registry_state, reference_identity_result="registered", resolution_result="resolution_failed", resolved_target_comparison="unavailable", page_reference_attribute="indirect_reference") from None
         mode_name = value[1]
         if mode_name == "/Fit":
             return
