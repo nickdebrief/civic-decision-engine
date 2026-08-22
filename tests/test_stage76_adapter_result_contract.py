@@ -141,12 +141,12 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "pdf_action_invalid", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [{"format": "pdf", "failure_location": "catalog_open_action", "failure_reason": "executable_action", "failure_step": "open_action_resolution", "failure_structure": "action_dictionary"}],
+                "diagnostics": [{"format": "pdf", "failure_location": "catalog_open_action", "failure_reason": "executable_action", "failure_step": "open_action_resolution", "failure_structure": "action_dictionary", "failure_operand": "none", "failure_operand_kind": "none"}],
                 "artifacts": [],
             }
             self.adapter._write_result(result_path, result)
             self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
-            for key, value in (("failure_location", "/data/private"), ("failure_reason", "raw object"), ("failure_step", "raw step"), ("failure_structure", "raw structure")):
+            for key, value in (("failure_location", "/data/private"), ("failure_reason", "raw object"), ("failure_step", "raw step"), ("failure_structure", "raw structure"), ("failure_operand", "raw operand"), ("failure_operand_kind", "raw kind")):
                 candidate = json.loads(json.dumps(result))
                 candidate["diagnostics"][0][key] = value
                 result_path.write_text(json.dumps(candidate), encoding="utf-8")
