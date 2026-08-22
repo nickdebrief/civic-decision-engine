@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -34,6 +35,9 @@ PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
 RESULT_SCHEMA_VERSION = "1"
+PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
+PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
+PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterFailure(RuntimeError):
@@ -103,6 +107,32 @@ def _exception_class(exc: Exception) -> str:
     if exc.__class__.__module__.startswith("pypdf") and exc.__class__.__name__ == "PdfReadError":
         return "pdf_read_error"
     return "other"
+
+
+def _parity_diagnostics_enabled() -> bool:
+    return (
+        os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1"
+        and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID
+        and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME
+        and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
+    )
+
+
+def _emit_parity_trace(exc: Exception) -> None:
+    if not _parity_diagnostics_enabled():
+        return
+    repository = Path(__file__).resolve().parents[2]
+    frames = []
+    for frame in traceback.extract_tb(exc.__traceback__)[-12:]:
+        try:
+            relative = Path(frame.filename).resolve().relative_to(repository)
+        except (OSError, ValueError):
+            continue
+        relative_text = relative.as_posix()
+        if not (relative_text.startswith("scripts/evidence_led_governance_pipeline/") or relative_text.startswith("api/")):
+            continue
+        frames.append({"file": relative_text, "function": frame.name, "line": frame.lineno})
+    print(json.dumps({"exception_class": _exception_class(exc), "frames": frames[:12]}, separators=(",", ":")), file=sys.stderr, flush=True)
 
 
 def _write_result(path: Path, result: dict) -> None:
@@ -700,8 +730,10 @@ def _validate_pdf(pdf_path: Path, book: Book, *, deadline: float | None = None) 
     except ValueError as exc:
         if str(exc) in known_failures or str(exc).startswith("pdf_pdfinfo_") or str(exc).startswith("pdf_pdftotext_"):
             raise
+        _emit_parity_trace(exc)
         raise UnexpectedPdfInspectionError("pdf_inspection", state.get("operation", "validate_pdf"), _exception_class(exc), state.get("inspection_step", inspection_step), failure_boundary) from None
     except Exception as exc:
+        _emit_parity_trace(exc)
         raise UnexpectedPdfInspectionError("pdf_inspection", state.get("operation", "validate_pdf"), _exception_class(exc), state.get("inspection_step", inspection_step), failure_boundary) from None
 
 
