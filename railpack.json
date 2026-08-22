@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "deploy": {
+    "aptPackages": [
+      "...",
+      "libreoffice",
+      "poppler-utils",
+      "fontconfig",
+      "fonts-dejavu-core",
+      "fonts-liberation2"
+    ]
+  }
+}

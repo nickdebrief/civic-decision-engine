@@ -12,22 +12,63 @@ DIAGNOSTIC = ROOT / "scripts" / "check_pdf_runtime.py"
 
 
 class PdfRuntimePrerequisiteTests(unittest.TestCase):
+    REQUIRED_APT_PACKAGES = {
+        "libreoffice",
+        "poppler-utils",
+        "fontconfig",
+        "fonts-dejavu-core",
+        "fonts-liberation2",
+    }
+
     def test_railpack_declares_required_runtime_packages(self):
-        config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
-        packages = config["build"]["variables"]["RAILPACK_DEPLOY_APT_PACKAGES"].split()
-        self.assertEqual(
-            packages,
-            ["libreoffice", "poppler-utils", "fontconfig", "fonts-dejavu-core", "fonts-liberation2"],
-        )
-        self.assertEqual(config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
-        self.assertEqual(config["deploy"]["numReplicas"], 1)
+        config = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
+        self._assert_valid_railpack_overlay(config)
+        railway_config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
+        self.assertNotIn("RAILPACK_DEPLOY_APT_PACKAGES", railway_config["build"]["variables"])
+        self.assertEqual(railway_config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(railway_config["deploy"]["numReplicas"], 1)
+        self.assertEqual(railway_config["deploy"]["restartPolicyType"], "ON_FAILURE")
+        self.assertEqual(railway_config["deploy"]["restartPolicyMaxRetries"], 10)
 
     def test_railpack_package_declaration_cannot_omit_a_required_package(self):
-        config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
-        packages = set(config["build"]["variables"]["RAILPACK_DEPLOY_APT_PACKAGES"].split())
+        config = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
+        packages = set(config["deploy"]["aptPackages"])
         for required in ("libreoffice", "poppler-utils", "fontconfig", "fonts-dejavu-core", "fonts-liberation2"):
             with self.subTest(required=required):
                 self.assertIn(required, packages)
+        self.assertIn("...", packages)
+
+    def test_build_only_package_declaration_is_not_used(self):
+        config = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
+        self.assertNotIn("buildAptPackages", config)
+        self.assertNotIn("RAILPACK_BUILD_APT_PACKAGES", (ROOT / "railway.json").read_text(encoding="utf-8"))
+
+    def test_railpack_overlay_contract_rejects_malformed_variants(self):
+        valid = json.loads((ROOT / "railpack.json").read_text(encoding="utf-8"))
+        invalid_variants = {
+            "missing_deploy": {"$schema": valid["$schema"]},
+            "missing_apt_packages": {"$schema": valid["$schema"], "deploy": {}},
+            "apt_packages_not_a_list": {"$schema": valid["$schema"], "deploy": {"aptPackages": "libreoffice"}},
+            "missing_preservation_entry": {"$schema": valid["$schema"], "deploy": {"aptPackages": sorted(self.REQUIRED_APT_PACKAGES)}},
+            "missing_mandatory_package": {"$schema": valid["$schema"], "deploy": {"aptPackages": ["...", "libreoffice"]}},
+        }
+        for name, candidate in invalid_variants.items():
+            with self.subTest(variant=name):
+                with self.assertRaises(AssertionError):
+                    self._assert_valid_railpack_overlay(candidate)
+
+    def test_railway_config_rejects_obsolete_variable_and_deployment_drift(self):
+        valid = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
+        candidates = {
+            "obsolete_variable": {**valid, "build": {**valid["build"], "variables": {"RAILPACK_DEPLOY_APT_PACKAGES": "libreoffice"}}},
+            "changed_start": {**valid, "deploy": {**valid["deploy"], "startCommand": "sh"}},
+            "changed_replicas": {**valid, "deploy": {**valid["deploy"], "numReplicas": 2}},
+            "changed_restart_policy": {**valid, "deploy": {**valid["deploy"], "restartPolicyType": "NEVER"}},
+        }
+        for name, candidate in candidates.items():
+            with self.subTest(variant=name):
+                with self.assertRaises(AssertionError):
+                    self._assert_valid_railway_config(candidate)
 
     def test_pypdf_is_pinned_and_stage75_still_excludes_pdf(self):
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
@@ -119,6 +160,24 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         completed = subprocess.run([sys.executable, str(DIAGNOSTIC)], env=env, capture_output=True, text=True, check=False)
         self.assertNotIn("must-not-appear", completed.stdout)
         self.assertNotIn("must-not-appear", completed.stderr)
+
+    def _assert_valid_railpack_overlay(self, config):
+        self.assertEqual(config.get("$schema"), "https://schema.railpack.com")
+        deploy = config.get("deploy")
+        self.assertIsInstance(deploy, dict)
+        packages = deploy.get("aptPackages")
+        self.assertIsInstance(packages, list)
+        self.assertEqual(packages[0], "...")
+        self.assertEqual(set(packages[1:]), self.REQUIRED_APT_PACKAGES)
+        self.assertNotIn("buildAptPackages", config)
+
+    def _assert_valid_railway_config(self, config):
+        deploy = config["deploy"]
+        self.assertEqual(config["build"]["variables"], {"RAILPACK_PYTHON_VERSION": "3.13.13", "MISE_PYTHON_VERSION": "3.13.13"})
+        self.assertEqual(deploy["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(deploy["numReplicas"], 1)
+        self.assertEqual(deploy["restartPolicyType"], "ON_FAILURE")
+        self.assertEqual(deploy["restartPolicyMaxRetries"], 10)
 
     @staticmethod
     def _load_diagnostic():
