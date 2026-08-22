@@ -50,9 +50,11 @@ class PdfMetadataError(ValueError):
 
 
 class PdfActionError(ValueError):
-    def __init__(self, location: str, reason: str) -> None:
+    def __init__(self, location: str, reason: str, *, failure_step: str = "recursive_action_tree", failure_structure: str = "unexpected_object") -> None:
         self.location = location
         self.reason = reason
+        self.failure_step = failure_step
+        self.failure_structure = failure_structure
         super().__init__("pdf_action_invalid")
 
 
@@ -89,7 +91,13 @@ def _classify_pdf_failure(exc: Exception) -> AdapterFailure:
         return AdapterFailure(
             "pdf_inspection",
             "pdf_action_invalid",
-            {"format": "pdf", "failure_location": exc.location, "failure_reason": exc.reason},
+            {
+                "format": "pdf",
+                "failure_location": exc.location,
+                "failure_reason": exc.reason,
+                "failure_step": exc.failure_step,
+                "failure_structure": exc.failure_structure,
+            },
         )
     code = str(exc)
     if "pypdf" in code or "unavailable" in code:
@@ -185,51 +193,63 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
     except Exception:
         return PdfActionError("catalog_open_action", "malformed_destination")
 
-    def resolve_chain(value: object, active: set[int], location: str) -> object:
+    def reference_identity(value: object) -> tuple[int, int] | None:
+        idnum = getattr(value, "idnum", None)
+        generation = getattr(value, "generation", None)
+        if isinstance(idnum, int) and isinstance(generation, int):
+            return idnum, generation
+        return None
+
+    def resolve_chain(value: object, active: set[tuple[int, int]], location: str, *, failure_step: str = "recursive_action_tree") -> object:
         resolver = getattr(value, "get_object", None)
-        if not callable(resolver):
+        identity = reference_identity(value)
+        # pypdf containers expose get_object() as an identity operation. Only
+        # indirect references participate in cycle detection or resolution.
+        if identity is None or not callable(resolver):
             return value
-        identity = id(value)
         if identity in active:
-            raise PdfActionError(location, "indirect_cycle")
+            raise PdfActionError(location, "indirect_cycle", failure_step=failure_step, failure_structure="indirect_array")
         active.add(identity)
         try:
             resolved = resolver()
             if resolved is value:
-                raise PdfActionError(location, "indirect_cycle")
-            return resolve_chain(resolved, active, location)
+                raise PdfActionError(location, "indirect_cycle", failure_step=failure_step, failure_structure="indirect_array")
+            return resolve_chain(resolved, active, location, failure_step=failure_step)
         except PdfActionError:
             raise
         except Exception:
-            raise PdfActionError(location, "malformed_destination") from None
+            raise PdfActionError(location, "malformed_destination", failure_step=failure_step) from None
         finally:
             active.remove(identity)
 
     def internal_destination(value: object, location: str) -> None:
-        value = resolve_chain(value, set(), location)
+        structure = "indirect_array" if reference_identity(value) is not None else "direct_array"
+        value = resolve_chain(value, set(), location, failure_step="open_action_wrapper")
         if isinstance(value, dict) and "/S" in value:
-            raise PdfActionError(location, "executable_action")
+            raise PdfActionError(location, "executable_action", failure_step="open_action_resolution", failure_structure="action_dictionary")
         if isinstance(value, str):
-            raise PdfActionError(location, "external_destination")
+            raise PdfActionError(location, "external_destination", failure_step="open_action_resolution", failure_structure="unexpected_object")
         if not isinstance(value, (list, tuple)) or len(value) != 2:
-            raise PdfActionError(location, "malformed_destination")
+            raise PdfActionError(location, "malformed_destination", failure_step="destination_array", failure_structure=structure)
         page_reference = value[0]
-        identity = (getattr(page_reference, "idnum", None), getattr(page_reference, "generation", None))
-        if not all(isinstance(item, int) for item in identity) or identity not in page_objects:
-            raise PdfActionError(location, "unsupported_destination")
+        identity = reference_identity(page_reference)
+        if identity is None:
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_identity", failure_structure=structure)
+        if identity not in page_objects:
+            raise PdfActionError(location, "unsupported_destination", failure_step="page_membership", failure_structure=structure)
         try:
             if page_reference.get_object() is not page_objects[identity]:
-                raise PdfActionError(location, "unsupported_destination")
+                raise PdfActionError(location, "unsupported_destination", failure_step="page_reference_resolution", failure_structure=structure)
         except PdfActionError:
             raise
         except Exception:
-            raise PdfActionError(location, "malformed_destination") from None
+            raise PdfActionError(location, "malformed_destination", failure_step="page_reference_resolution", failure_structure=structure) from None
         mode = value[1]
         if mode != "/Fit":
-            raise PdfActionError(location, "unsupported_destination")
+            raise PdfActionError(location, "unsupported_destination", failure_step="fit_validation", failure_structure=structure)
 
     def inspect_outline(value: object, active: set[int]) -> None:
-        value = resolve_chain(value, active, "outline_action")
+        value = resolve_chain(value, active, "outline_action", failure_step="recursive_action_tree")
         if isinstance(value, (list, tuple)):
             for child in value:
                 inspect_outline(child, active)
@@ -253,7 +273,7 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
             active.remove(identity)
 
     def inspect_names(value: object, active: set[int]) -> None:
-        value = resolve_chain(value, active, "catalog_open_action")
+        value = resolve_chain(value, active, "catalog_open_action", failure_step="recursive_action_tree")
         if not isinstance(value, dict):
             return
         identity = id(value)
@@ -281,7 +301,7 @@ def _pdf_action_failure(reader: object) -> PdfActionError | None:
     trailer = getattr(reader, "trailer", {})
     try:
         root = trailer.get("/Root", trailer) if isinstance(trailer, dict) else trailer
-        root = resolve_chain(root, set(), "catalog_open_action")
+        root = resolve_chain(root, set(), "catalog_open_action", failure_step="open_action_resolution")
         if not isinstance(root, dict):
             raise PdfActionError("catalog_open_action", "malformed_destination")
         if "/OpenAction" in root:

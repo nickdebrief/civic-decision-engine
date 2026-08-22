@@ -299,7 +299,10 @@ def run_check() -> None:
                     if "failure_field" in exc.diagnostic:
                         detail = f":{exc.diagnostic['failure_field']}:{exc.diagnostic['failure_reason']}"
                     else:
-                        detail = f":{exc.diagnostic['failure_location']}:{exc.diagnostic['failure_reason']}"
+                        detail = (
+                            f":{exc.diagnostic['failure_location']}:{exc.diagnostic['failure_reason']}"
+                            f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_structure']}"
+                        )
                 raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}{detail}") from None
             except TimeoutError:
                 raise AdapterGateError("adapter_invocation_failed") from None
@@ -361,9 +364,11 @@ def main() -> int:
     except AdapterGateError as exc:
         parts = str(exc).split(":")
         if len(parts) >= 3:
-            if len(parts) == 5:
+            if len(parts) in {5, 7}:
                 label = "location" if parts[3] in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"} else "field"
                 detail = f" {label}={parts[3]} reason={parts[4]}"
+                if len(parts) == 7:
+                    detail += f" step={parts[5]} structure={parts[6]}"
             else:
                 detail = ""
             print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}{detail}", file=sys.stderr)
