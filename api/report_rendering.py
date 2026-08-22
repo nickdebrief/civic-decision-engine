@@ -241,13 +241,17 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         request.write_text(json.dumps({"specification": specification, "digest": digest}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         result_path = Path(temp) / "adapter-result.json"
         command = [sys.executable, str(ADAPTER), str(request), str(staged_output), str(result_path)]
+        child_env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ADAPTER.parent)}
+        if _parity_diagnostics_enabled():
+            for key in ("STAGE76_PARITY_DIAGNOSTICS", "RAILWAY_PROJECT_ID", "RAILWAY_ENVIRONMENT_NAME", "RAILWAY_SERVICE_NAME"):
+                child_env[key] = os.environ[key]
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
-            env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ADAPTER.parent)},
+            env=child_env,
         )
         try:
             stdout, stderr = process.communicate(timeout=ADAPTER_TIMEOUT_SECONDS)
