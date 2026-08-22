@@ -303,6 +303,8 @@ def run_check() -> None:
                             f":{exc.diagnostic['failure_location']}:{exc.diagnostic['failure_reason']}"
                             f":{exc.diagnostic['failure_step']}:{exc.diagnostic['failure_structure']}"
                             f":{exc.diagnostic['failure_operand']}:{exc.diagnostic['failure_operand_kind']}"
+                            f":{exc.diagnostic['failure_operand_count']}:{','.join(exc.diagnostic['failure_operand_kinds'])}"
+                            f":{exc.diagnostic['failure_destination_mode']}:{','.join(exc.diagnostic['failure_trailing_kinds'])}"
                         )
                 raise AdapterGateError(f"{exc.phase}:{exc.code}:{exc.cleanup}{detail}") from None
             except TimeoutError:
@@ -365,13 +367,15 @@ def main() -> int:
     except AdapterGateError as exc:
         parts = str(exc).split(":")
         if len(parts) >= 3:
-            if len(parts) in {5, 7, 9}:
+            if len(parts) in {5, 7, 9, 13}:
                 label = "location" if parts[3] in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"} else "field"
                 detail = f" {label}={parts[3]} reason={parts[4]}"
                 if len(parts) == 7:
                     detail += f" step={parts[5]} structure={parts[6]}"
                 if len(parts) == 9:
                     detail += f" step={parts[5]} structure={parts[6]} operand={parts[7]} operand_kind={parts[8]}"
+                if len(parts) == 13:
+                    detail += f" step={parts[5]} structure={parts[6]} operand={parts[7]} operand_kind={parts[8]} operand_count={parts[9]} operand_kinds={parts[10]} destination_mode={parts[11]} trailing_kinds={parts[12]}"
             else:
                 detail = ""
             print(f"stage76_adapter_gate=failed phase={parts[0]} code={parts[1]}{detail}", file=sys.stderr)

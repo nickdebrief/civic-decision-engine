@@ -44,6 +44,7 @@ DIAGNOSTIC_FIELDS = {
     "extraction_backend", "page_count", "size_bytes", "ordered_content",
     "metadata_attachments_annotations", "failure_field", "failure_location", "failure_reason",
     "failure_step", "failure_structure", "failure_operand", "failure_operand_kind",
+    "failure_operand_count", "failure_operand_kinds", "failure_destination_mode", "failure_trailing_kinds",
 }
 
 
@@ -97,7 +98,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         if "failure_location" in diagnostic or "failure_reason" in diagnostic:
-            if set(diagnostic) != {"format", "failure_location", "failure_reason", "failure_step", "failure_structure", "failure_operand", "failure_operand_kind"}:
+            if set(diagnostic) != {"format", "failure_location", "failure_reason", "failure_step", "failure_structure", "failure_operand", "failure_operand_kind", "failure_operand_count", "failure_operand_kinds", "failure_destination_mode", "failure_trailing_kinds"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_location"] not in {"catalog_open_action", "catalog_additional_actions", "page_additional_actions", "annotation_action", "outline_action"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -110,6 +111,14 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             if diagnostic["failure_operand"] not in {"none", "operand_count", "operand_one", "operand_two"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_operand_kind"] not in {"none", "array", "indirect_reference", "direct_dictionary", "name", "other"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_operand_count"] not in {"not_applicable", "0", "1", "2", "3", "4", "5", "6", "many"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if not isinstance(diagnostic["failure_operand_kinds"], list) or len(diagnostic["failure_operand_kinds"]) > 6 or any(item not in {"null", "number", "indirect_reference", "name", "array", "dictionary", "other"} for item in diagnostic["failure_operand_kinds"]):
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_destination_mode"] not in {"not_applicable", "fit", "fit_b", "fit_h", "fit_bh", "fit_v", "fit_bv", "fit_r", "xyz", "other_name", "missing", "not_name"}:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if not isinstance(diagnostic["failure_trailing_kinds"], list) or len(diagnostic["failure_trailing_kinds"]) > 5 or any(item not in {"null", "number", "indirect_reference", "name", "array", "dictionary", "other"} for item in diagnostic["failure_trailing_kinds"]):
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):
