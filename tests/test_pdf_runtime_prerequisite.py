@@ -33,7 +33,7 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
     def test_pre_deploy_gate_is_structural_and_ordered(self):
         config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
         self.assertEqual(config["deploy"]["preDeployCommand"], [
-            "python scripts/check_pdf_runtime.py && python scripts/check_pdf_synthetic_conversion.py",
+            "sh scripts/check_pdf_predeploy_gate.sh",
         ])
         self.assertEqual(config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
         self.assertEqual(config["deploy"]["numReplicas"], 1)
@@ -209,7 +209,7 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
     def _assert_pre_deploy_gate(config):
         commands = config.get("deploy", {}).get("preDeployCommand")
         assert commands == [
-            "python scripts/check_pdf_runtime.py && python scripts/check_pdf_synthetic_conversion.py",
+            "sh scripts/check_pdf_predeploy_gate.sh",
         ]
 
     @staticmethod

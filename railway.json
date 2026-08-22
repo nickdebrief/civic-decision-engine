@@ -12,7 +12,7 @@
     "runtime": "V2",
     "numReplicas": 1,
     "preDeployCommand": [
-      "python scripts/check_pdf_runtime.py && python scripts/check_pdf_synthetic_conversion.py"
+      "sh scripts/check_pdf_predeploy_gate.sh"
     ],
     "startCommand": "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}",
     "sleepApplication": false,

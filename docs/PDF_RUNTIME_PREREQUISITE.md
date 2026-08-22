@@ -32,7 +32,8 @@ does not import the application, access `/data`, read application records or
 perform conversion. A missing mandatory prerequisite returns a non-zero exit
 status.
 
-Fresh deployments now run two fail-closed pre-deployment checks, in order:
+Fresh deployments invoke `sh scripts/check_pdf_predeploy_gate.sh`. The
+wrapper executes two fail-closed checks in this order:
 
 1. `python scripts/check_pdf_runtime.py`
 2. `python scripts/check_pdf_synthetic_conversion.py`
