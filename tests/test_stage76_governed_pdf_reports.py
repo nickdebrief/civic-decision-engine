@@ -214,6 +214,61 @@ class Stage76PdfContractTests(unittest.TestCase):
         reader = SimpleNamespace(trailer={"/Root": Indirect({"/Names": {"/EmbeddedFiles": []}})}, pages=[page])
         self.assertTrue(report_adapter._pdf_has_unsafe_objects(reader))
 
+    def test_internal_fit_open_action_is_passive_and_structurally_confined(self):
+        class Indirect:
+            def __init__(self, value):
+                self.value = value
+            def get_object(self):
+                return self.value
+
+        page = {}
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": [Indirect(page), "/Fit"]}})
+        self.assertFalse(report_adapter._pdf_has_unsafe_objects(reader))
+
+    def test_action_diagnostics_distinguish_passive_destinations_from_actions(self):
+        page = {}
+        cases = (
+            ({"/Root": {"/OpenAction": {"/S": "/URI", "/URI": "https://example.invalid"}}}, "catalog_open_action", "executable_action"),
+            ({"/Root": {"/OpenAction": [page, "/FitH", 0]}}, "catalog_open_action", "malformed_destination"),
+            ({"/Root": {"/OpenAction": [object(), "/Fit"]}}, "catalog_open_action", "unsupported_destination"),
+            ({"/Root": {"/AA": {"/O": {"/S": "/JavaScript"}}}}, "catalog_additional_actions", "executable_action"),
+            ({"/Root": {"/Outlines": [{"/A": {"/S": "/GoToR"}}]}}, "outline_action", "executable_action"),
+        )
+        for trailer, location, reason in cases:
+            with self.subTest(location=location, reason=reason):
+                reader = SimpleNamespace(pages=[page], trailer=trailer)
+                failure = report_adapter._pdf_action_failure(reader)
+                self.assertIsNotNone(failure)
+                classified = report_adapter._classify_pdf_failure(failure)
+                self.assertEqual(classified.diagnostic, {"format": "pdf", "failure_location": location, "failure_reason": reason})
+
+    def test_indirect_destination_cycle_fails_closed(self):
+        class Cycle:
+            def get_object(self):
+                return self
+
+        page = {}
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": Cycle()}})
+        failure = report_adapter._pdf_action_failure(reader)
+        self.assertEqual((failure.location, failure.reason), ("catalog_open_action", "indirect_cycle"))
+
+    def test_all_executable_action_families_fail_closed(self):
+        page = {}
+        reader = SimpleNamespace(pages=[page], trailer={"/Root": {}})
+        for key in ("/JavaScript", "/JS", "/Launch", "/URI", "/GoToR", "/SubmitForm", "/ImportData", "/Rendition", "/A"):
+            with self.subTest(key=key):
+                reader.trailer = {"/Root": {"/OpenAction": {"/S": key, key: "synthetic"}}}
+                failure = report_adapter._pdf_action_failure(reader)
+                self.assertEqual((failure.location, failure.reason), ("catalog_open_action", "executable_action"))
+
+    def test_outline_internal_fit_destination_is_allowed_but_named_destination_is_not(self):
+        page = {}
+        valid = SimpleNamespace(pages=[page], trailer={"/Root": {"/Outlines": [{"/Dest": [page, "/Fit"]}]}})
+        self.assertFalse(report_adapter._pdf_has_unsafe_objects(valid))
+        named = SimpleNamespace(pages=[page], trailer={"/Root": {"/OpenAction": "/FirstPage"}})
+        failure = report_adapter._pdf_action_failure(named)
+        self.assertEqual((failure.location, failure.reason), ("catalog_open_action", "external_destination"))
+
     def test_missing_pypdf_is_a_mandatory_failure(self):
         book = report_adapter.make_book(self.specification())
         with tempfile.TemporaryDirectory() as directory:
