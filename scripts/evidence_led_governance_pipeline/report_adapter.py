@@ -34,6 +34,9 @@ PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
 RESULT_SCHEMA_VERSION = "1"
+PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
+PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
+PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterFailure(RuntimeError):
@@ -103,6 +106,31 @@ def _exception_class(exc: Exception) -> str:
     if exc.__class__.__module__.startswith("pypdf") and exc.__class__.__name__ == "PdfReadError":
         return "pdf_read_error"
     return "other"
+
+
+def _parity_diagnostics_enabled() -> bool:
+    return (
+        os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1"
+        and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID
+        and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME
+        and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
+    )
+
+
+def _emit_parity_equivalence_trace(expected: list[str], extracted: str, index: int, classification: str) -> None:
+    if not _parity_diagnostics_enabled():
+        return
+    normalized = re.sub(r"\s+", " ", extracted).strip()
+    payload = {
+        "expected_block_count": len(expected),
+        "first_failure_index": index,
+        "classification": classification,
+        "expected_sha256": hashlib.sha256("\n".join(expected).encode()).hexdigest(),
+        "extracted_sha256": hashlib.sha256(extracted.encode()).hexdigest(),
+        "expected_snippet": expected[index][:240] if index < len(expected) else "",
+        "extracted_snippet": normalized[:600],
+    }
+    print("stage76_parity_equivalence=" + json.dumps(payload, separators=(",", ":")), file=sys.stderr, flush=True)
 
 
 def _write_result(path: Path, result: dict) -> None:
@@ -524,6 +552,7 @@ def _pdf_has_unsafe_objects(reader: object) -> bool:
 
 def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
     raw = re.sub(r"Structured\s*·\s*Traceable\s*·\s*Governed\s*·\s*\d+\s+EVIDENCE-LED GOVERNANCE", " ", pdf_text)
+    expected = source_text_blocks(book)
     allowed = ("Civic Decision Engine Version", "Chapter 1 —", book.author, book.title, book.tagline or "", book.subtitle or "", str(book.version), "A governed internal report specification", "Chapter 1")
 
     def only_boilerplate(value: str) -> bool:
@@ -536,16 +565,21 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
         return not residue
 
     cursor = 0
-    for block in source_text_blocks(book):
+    for index, block in enumerate(expected):
         pattern = re.escape(block)
         pattern = pattern.replace(r"\ ", r"\s+")
         match = re.search(pattern, raw[cursor:], flags=re.DOTALL)
         if match is None:
+            _emit_parity_equivalence_trace(expected, raw[cursor:], index, "missing_or_changed")
             return False
         if not only_boilerplate(raw[cursor:cursor + match.start()]):
+            _emit_parity_equivalence_trace(expected, raw[cursor:cursor + match.start()], index, "unexpected_interstitial_text")
             return False
         cursor += match.end()
-    return only_boilerplate(raw[cursor:])
+    result = only_boilerplate(raw[cursor:])
+    if not result:
+        _emit_parity_equivalence_trace(expected, raw[cursor:], len(expected), "unexpected_trailing_text")
+    return result
 
 
 def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
