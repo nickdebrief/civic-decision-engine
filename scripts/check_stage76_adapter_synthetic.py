@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import builtins
 import html
 import json
 import re
@@ -128,14 +129,21 @@ def _prohibit_external_access() -> Iterator[None]:
     original_socket = socket.socket
     original_create_connection = socket.create_connection
     original_urlopen = urllib.request.urlopen
+    original_import = builtins.__import__
 
     def forbidden(*_args: Any, **_kwargs: Any) -> None:
         raise AdapterGateError("prohibited_external_access")
+
+    def guarded_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "api.routes" or name.startswith("api.routes."):
+            raise AdapterGateError("prohibited_route_import")
+        return original_import(name, *args, **kwargs)
 
     sqlite3.connect = forbidden  # type: ignore[assignment]
     socket.socket = forbidden  # type: ignore[assignment]
     socket.create_connection = forbidden  # type: ignore[assignment]
     urllib.request.urlopen = forbidden  # type: ignore[assignment]
+    builtins.__import__ = guarded_import
     try:
         yield
     finally:
@@ -143,6 +151,7 @@ def _prohibit_external_access() -> Iterator[None]:
         socket.socket = original_socket  # type: ignore[assignment]
         socket.create_connection = original_create_connection  # type: ignore[assignment]
         urllib.request.urlopen = original_urlopen  # type: ignore[assignment]
+        builtins.__import__ = original_import
 
 
 def _read_docx_text(path: Path) -> str:
@@ -173,10 +182,10 @@ def _assert_markers(text: str) -> None:
     positions: list[int] = []
     for marker in MARKERS:
         if text.count(marker) != 1:
-            raise AdapterGateError("ordered_content_invalid")
+            raise AdapterGateError("equivalence_failed")
         positions.append(text.index(marker))
     if positions != sorted(positions):
-        raise AdapterGateError("ordered_content_invalid")
+        raise AdapterGateError("equivalence_failed")
 
 
 def _validate_specification(specification: dict[str, Any]) -> None:
@@ -201,29 +210,41 @@ def _validate_specification(specification: dict[str, Any]) -> None:
 
 
 def _validate_result(result: dict[str, Any], specification: dict[str, Any], digest: str, root: Path) -> None:
+    if not isinstance(result, dict):
+        raise AdapterGateError("adapter_return_contract_invalid")
     if result.get("specification_digest") != digest:
-        raise AdapterGateError("specification_digest_invalid")
+        raise AdapterGateError("specification_digest_failed")
     artifacts = result.get("artifacts")
-    if not isinstance(artifacts, list) or {item.get("format") for item in artifacts} != set(EXPECTED_FORMATS) or len(artifacts) != 3:
-        raise AdapterGateError("required_artifacts_missing")
+    if not isinstance(artifacts, list) or any(not isinstance(item, dict) for item in artifacts):
+        raise AdapterGateError("adapter_return_contract_invalid")
+    if {item.get("format") for item in artifacts} != set(EXPECTED_FORMATS) or len(artifacts) != 3:
+        raise AdapterGateError("missing_artifact_descriptors")
     for item in artifacts:
-        path = Path(str(item.get("path", "")))
-        resolved = path.resolve()
-        if path.is_symlink() or resolved.parent != root or not path.is_file() or path.stat().st_size <= 0:
+        try:
+            path = Path(str(item.get("path", "")))
+            resolved = path.resolve()
+            regular = path.is_file() and path.stat().st_size > 0
+        except (OSError, TypeError, ValueError):
+            raise AdapterGateError("artifact_path_invalid") from None
+        if path.is_symlink() or resolved.parent != root or not regular:
             raise AdapterGateError("artifact_path_invalid")
-        if hashlib.sha256(path.read_bytes()).hexdigest() != item.get("sha256"):
-            raise AdapterGateError("artifact_digest_invalid")
+        try:
+            actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except (OSError, TypeError, ValueError):
+            raise AdapterGateError("artifact_digest_failed") from None
+        if actual_digest != item.get("sha256"):
+            raise AdapterGateError("artifact_digest_failed")
         if path.stat().st_size != item.get("size_bytes"):
-            raise AdapterGateError("artifact_size_invalid")
+            raise AdapterGateError("adapter_return_contract_invalid")
     pdf_diagnostics = [item for item in result.get("diagnostics", []) if item.get("format") == "pdf"]
     if len(pdf_diagnostics) != 1:
-        raise AdapterGateError("pdf_diagnostics_missing")
+        raise AdapterGateError("pdf_diagnostics_invalid")
     diagnostics = pdf_diagnostics[0]
     for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "page_count", "size_bytes"):
         if not diagnostics.get(key):
-            raise AdapterGateError("pdf_diagnostics_incomplete")
+            raise AdapterGateError("pdf_diagnostics_invalid")
     if diagnostics.get("pypdf_version") != "5.9.0" or diagnostics.get("ordered_content") != "ok" or diagnostics.get("metadata_attachments_annotations") != "ok":
-        raise AdapterGateError("pdf_validation_incomplete")
+        raise AdapterGateError("pdf_diagnostics_invalid")
     safe_result = {key: value for key, value in result.items() if key != "artifacts"}
     safe_diagnostics = [{key: value for key, value in item.items() if key not in {"path", "stdout", "stderr"}} for item in result.get("diagnostics", [])]
     safe_result["diagnostics"] = safe_diagnostics
@@ -237,10 +258,20 @@ def _validate_result(result: dict[str, Any], specification: dict[str, Any], dige
 
 
 def run_check() -> None:
-    specification = _synthetic_specification()
-    _validate_specification(specification)
+    if not REPOSITORY_ROOT.is_dir() or not (REPOSITORY_ROOT / "api").is_dir() or not (REPOSITORY_ROOT / "scripts").is_dir():
+        raise AdapterGateError("repository_root_invalid")
+    try:
+        specification = _synthetic_specification()
+        _validate_specification(specification)
+    except AdapterGateError:
+        raise
+    except Exception:
+        raise AdapterGateError("synthetic_specification_failed") from None
     before = _canonical(specification)
-    digest = _digest(specification)
+    try:
+        digest = _digest(specification)
+    except Exception:
+        raise AdapterGateError("specification_digest_failed") from None
     holder, root = _confined_temporary_directory()
     deadline = time.monotonic() + CHECK_TIMEOUT_SECONDS
     try:
@@ -256,17 +287,35 @@ def run_check() -> None:
 
             try:
                 result = render_frozen_report(specification, digest, root)
+            except TimeoutError:
+                raise AdapterGateError("adapter_invocation_failed") from None
+            except ValueError:
+                raise AdapterGateError("adapter_reported_failure") from None
+            except OSError:
+                raise AdapterGateError("adapter_invocation_failed") from None
             except AdapterGateError:
                 raise
             except Exception:
-                raise AdapterGateError("adapter_execution_failed") from None
+                raise AdapterGateError("unexpected_adapter_error") from None
         if _canonical(specification) != before:
             raise AdapterGateError("specification_mutated")
-        _validate_result(result, specification, digest, root)
+        if time.monotonic() > deadline:
+            raise AdapterGateError("adapter_gate_timeout")
+        try:
+            _validate_result(result, specification, digest, root)
+        except AdapterGateError:
+            raise
+        except (KeyError, TypeError, ValueError, OSError):
+            raise AdapterGateError("adapter_return_contract_invalid") from None
+        except Exception:
+            raise AdapterGateError("unexpected_adapter_error") from None
     finally:
-        holder.cleanup()
+        try:
+            holder.cleanup()
+        except Exception:
+            raise AdapterGateError("cleanup_failed") from None
         if root.exists():
-            raise AdapterGateError("temporary_cleanup_failed")
+            raise AdapterGateError("cleanup_failed")
 
 
 def _timeout_handler(_signum: int, _frame: object) -> None:

@@ -34,6 +34,31 @@ def discover_tool(name: str) -> Path | None:
     return None
 
 
+def _usable_soffice(path: Path | None) -> bool:
+    if path is None or not path.is_file() or not os.access(path, os.X_OK):
+        return False
+    try:
+        result = subprocess.run(
+            [str(path), "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
+        return False
+    return result.returncode == 0 and bool((result.stdout or result.stderr).strip())
+
+
+def discover_soffice() -> Path | None:
+    """Select the first approved LibreOffice entry point that actually runs."""
+    for name in ("soffice", "libreoffice"):
+        candidate = discover_tool(name)
+        if _usable_soffice(candidate):
+            return candidate
+    return None
+
+
 @dataclass(frozen=True)
 class PdfRenderResult:
     path: Path
@@ -43,7 +68,8 @@ class PdfRenderResult:
 
 class PdfRenderer:
     def __init__(self, soffice_path: Path | str | None = None) -> None:
-        self.soffice_path = Path(soffice_path) if soffice_path is not None else discover_tool("soffice")
+        candidate = Path(soffice_path) if soffice_path is not None else discover_soffice()
+        self.soffice_path = candidate if _usable_soffice(candidate) else None
 
     @property
     def available(self) -> bool:
