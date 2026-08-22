@@ -219,6 +219,14 @@ class Stage76PdfContractTests(unittest.TestCase):
         self.assertEqual((classified.phase, classified.code), ("pdf_inspection", "equivalence_failed"))
         self.assertIsNone(classified.diagnostic)
 
+    def test_pdf_ordered_equivalence_allows_exact_renderer_front_matter(self):
+        book = report_adapter.make_book(self.specification())
+        expected = report_adapter.source_text_blocks(book)
+        front_matter = "Civic Decision Engine Version stage75.report_specification.v1 A governed internal report specification"
+        framing = f"{book.title} Chapter 1 — {book.title}"
+        self.assertTrue(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} {framing} " + " ".join(expected)))
+        self.assertFalse(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} UNAPPROVED_INSERTION {framing} " + " ".join(expected)))
+
     def test_metadata_failure_does_not_expose_value_or_path(self):
         book = report_adapter.make_book(self.specification())
         failure = report_adapter._pdf_metadata_failure(SimpleNamespace(metadata={"/Producer": "/data/private-canary"}), book)
