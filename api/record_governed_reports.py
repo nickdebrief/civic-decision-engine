@@ -22,7 +22,7 @@ SPECIFICATION_SCHEMA_VERSION = "stage75.report_specification.v1"
 PUBLICATION_ENGINE_VERSION = "2.0.0"
 REPORT_TYPES = {"canonical_record_report"}
 DISTRIBUTION_CLASSES = {"internal_working", "restricted_review"}
-OUTPUT_FORMATS = {"docx", "html"}
+OUTPUT_FORMATS = {"docx", "html", "pdf"}
 CONTENT_TYPES = {"verbatim_source", "faithful_paraphrase", "administrative_summary", "qualification", "limitation", "redaction_notice"}
 LIFECYCLE = {"draft_specification", "assembly_reviewed", "privacy_reviewed", "redaction_reviewed", "approved_for_generation", "generation_requested", "generated", "validation_failed", "withdrawn", "superseded"}
 TERMINAL = {"withdrawn", "superseded"}
@@ -177,9 +177,15 @@ def _blocks(blocks: Any, *, record: Mapping[str, Any], documents: list[Mapping[s
 def _canonical_specification(*, record: Mapping[str, Any], documents: list[Mapping[str, Any]], associations: list[Mapping[str, Any]], sections: Any, exclusions: Any, title: str, purpose: str, audience: str, distribution_class: str, requested_formats: Any, rendering_profile: str, template_version: str) -> dict[str, Any]:
     if distribution_class not in DISTRIBUTION_CLASSES:
         raise ValueError("governed_report_distribution_class_invalid")
-    formats = [str(item).strip().lower() for item in (requested_formats or [])]
-    if not formats or len(formats) != len(set(formats)) or not set(formats) <= OUTPUT_FORMATS:
+    if not isinstance(requested_formats, (list, tuple)):
         raise ValueError("governed_report_output_formats_invalid")
+    formats = list(requested_formats)
+    if any(not isinstance(item, str) or item not in OUTPUT_FORMATS for item in formats):
+        raise ValueError("governed_report_output_formats_invalid")
+    if not formats or len(formats) != len(set(formats)):
+        raise ValueError("governed_report_output_formats_invalid")
+    if "pdf" in formats and not {"docx", "html"}.issubset(formats):
+        raise ValueError("governed_report_pdf_companion_formats_required")
     formats = sorted(formats)
     if not isinstance(sections, list) or not sections or len(sections) > MAX_SECTIONS:
         raise ValueError("governed_report_sections_required")
@@ -371,17 +377,19 @@ def supersede_report(conn: sqlite3.Connection, *, report_id: int | str, replacem
 def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True) -> dict[str, Any]:
     report = _row(conn, report_id)
     actor_value = _required(actor, "governed_report_generation_actor_required"); role_value = _required(actor_role, "governed_report_generation_role_required"); key = _required(idempotency_key, "governed_report_generation_idempotency_key_required")
+    version = report["versions"][-1]; spec = version["specification"]
+    if specification_digest(spec) != version["specification_digest"]:
+        raise ValueError("governed_report_specification_digest_mismatch")
+    request_payload = {"version_id": version["id"], "formats": spec["requested_formats"], "actor": actor_value, "actor_role": role_value, "specification_digest": version["specification_digest"], "rendering_profile": spec["rendering_profile"], "template_version": spec["template_version"], "publication_engine_version": spec["publication_engine_version"]}
     existing = conn.execute("SELECT * FROM record_governed_report_generation_attempts WHERE idempotency_key=?", (key,)).fetchone()
     if existing:
-        request_payload = {"version_id": existing["version_id"], "formats": json.loads(existing["requested_formats_json"]), "actor": actor_value, "actor_role": role_value}
         if json.loads(existing["request_payload_json"]) == request_payload:
-            return _row(conn, report_id)
+            if existing["result"] == "generated":
+                return _row(conn, report_id)
+            raise ValueError("governed_report_generation_failed")
         raise ValueError("governed_report_generation_idempotency_conflict")
     if report["lifecycle_status"] != "approved_for_generation": raise ValueError("governed_report_generation_approval_required")
-    version = report["versions"][-1]; spec = version["specification"]
-    if specification_digest(spec) != version["specification_digest"]: raise ValueError("governed_report_specification_digest_mismatch")
     _validate_generation_sources(conn, spec)
-    request_payload = {"version_id": version["id"], "formats": spec["requested_formats"], "actor": actor_value, "actor_role": role_value}
     target_dir = REPORT_ROOT / str(report_id) / str(version["version_number"])
     if target_dir.exists():
         raise ValueError("governed_report_artifact_directory_exists")
@@ -401,7 +409,7 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         from api.report_rendering import render_frozen_report
         result = render_frozen_report(spec, version["specification_digest"], REPORT_ROOT / str(report_id) / str(version["version_number"]))
     except Exception as exc:
-        diagnostics = [str(exc)]
+        diagnostics = ["governed_report_generation_validation_failed", type(exc).__name__]
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(diagnostics), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (version["id"],))

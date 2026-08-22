@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 75 — Governed Report Assembly and Publication-Engine Rendering
+Current release: CDE Platform Stage 76 — Governed PDF Report Rendering and Equivalence
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
@@ -66,6 +66,7 @@ Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md`](docs/releases/CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md`](docs/releases/CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md)
 - [`docs/releases/CDE_PLATFORM_STAGE_75_GOVERNED_REPORT_ASSEMBLY_AND_PUBLICATION_ENGINE_RENDERING.md`](docs/releases/CDE_PLATFORM_STAGE_75_GOVERNED_REPORT_ASSEMBLY_AND_PUBLICATION_ENGINE_RENDERING.md)
+- [`docs/releases/CDE_PLATFORM_STAGE_76_GOVERNED_PDF_REPORT_RENDERING_AND_EQUIVALENCE.md`](docs/releases/CDE_PLATFORM_STAGE_76_GOVERNED_PDF_REPORT_RENDERING_AND_EQUIVALENCE.md)
 
 Research artefacts:
 - **Civic Decision Engine User Handbook — Three-Volume Edition**

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -16,7 +17,19 @@ from api.record_governed_reports import canonical_json
 
 
 ENGINE_VERSION = "2.0.0"
+ADAPTER_TIMEOUT_SECONDS = 210
 ADAPTER = Path(__file__).resolve().parents[1] / "scripts" / "evidence_led_governance_pipeline" / "report_adapter.py"
+
+
+def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.communicate(timeout=5)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path) -> dict[str, Any]:
@@ -30,14 +43,21 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         staged_output = Path(temp) / "output"
         staged_output.mkdir()
         request.write_text(json.dumps({"specification": specification, "digest": digest}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-        completed = subprocess.run(
-            [sys.executable, str(ADAPTER), str(request), str(staged_output)],
-            check=False,
-            capture_output=True,
+        command = [sys.executable, str(ADAPTER), str(request), str(staged_output)]
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=120,
-            env={"PATH": __import__("os").environ.get("PATH", ""), "PYTHONPATH": str(ADAPTER.parent)},
+            start_new_session=True,
+            env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ADAPTER.parent)},
         )
+        try:
+            stdout, stderr = process.communicate(timeout=ADAPTER_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            _terminate_process_group(process)
+            raise ValueError("governed_report_renderer_timeout") from None
+        completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         if completed.returncode != 0:
             raise ValueError("governed_report_renderer_failed")
         try:

@@ -9,7 +9,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from api import record_governed_reports as reports
 from api.report_rendering import render_frozen_report
@@ -46,8 +46,11 @@ class Stage75PersistenceTests(unittest.TestCase):
     @patch.object(reports.rda, "record_context")
     def test_controlled_formats_and_unknown_fields_fail_before_persistence(self, record_context):
         record_context.return_value = self.record
-        with self.assertRaisesRegex(ValueError, "output_formats_invalid"):
+        with self.assertRaisesRegex(ValueError, "companion_formats_required"):
             self.create(requested_formats=["pdf"])
+        for malformed in (["PDF", "docx", "html"], [" pdf", "docx", "html"], ["docx", "html", "DOCX"]):
+            with self.assertRaisesRegex(ValueError, "output_formats_invalid"):
+                self.create(requested_formats=malformed)
         with self.assertRaisesRegex(ValueError, "block_invalid"):
             self.create(sections=[{"title": "Record", "blocks": [{"content_type": "verbatim_source", "text": "x", "source_identity": {"object_kind": "canonical_record", "object_id": "CR-1"}, "inclusion_rationale": "x", "unknown": True}]}])
         self.assertEqual(reports.list_reports(self.conn), [])
@@ -257,6 +260,10 @@ class Stage75PersistenceTests(unittest.TestCase):
         retained = reports.get_report(self.conn, item["id"])
         self.assertEqual(retained["lifecycle_status"], "validation_failed")
         self.assertEqual(retained["artifacts"], [])
+        with patch("api.report_rendering.render_frozen_report") as renderer:
+            with self.assertRaisesRegex(ValueError, "generation_failed"):
+                reports.generate_report(self.conn, report_id=item["id"], actor="generator", actor_role="administrator", idempotency_key="failed-generation")
+            renderer.assert_not_called()
 
     @patch.object(reports.rda, "record_context")
     def test_partial_renderer_output_is_removed_on_failure(self, record_context):
@@ -306,14 +313,16 @@ class Stage75BoundaryTests(unittest.TestCase):
         self.assertIn("Choose Published Documents", html)
         self.assertIn("Choose record–document associations", html)
         self.assertIn("THE RECORD MUST PRESERVE THE ORIGINAL LANGUAGE", html)
+        self.assertIn('value="pdf">PDF (requires DOCX and HTML validation)</option>', html)
+        self.assertIn("A PDF PRESENTS THE APPROVED REPORT SPECIFICATION", html)
         self.assertNotIn("bindings_json", html)
         self.assertNotIn("references_json", html)
         self.assertEqual(html.count('aria-current="page"'), 1)
 
     def test_constants_exclude_pdf_and_use_documented_engine(self):
         self.assertEqual(reports.PUBLICATION_ENGINE_VERSION, "2.0.0")
-        self.assertEqual(reports.OUTPUT_FORMATS, {"docx", "html"})
-        self.assertNotIn("pdf", reports.OUTPUT_FORMATS)
+        self.assertEqual(reports.OUTPUT_FORMATS, {"docx", "html", "pdf"})
+        self.assertIn("pdf", reports.OUTPUT_FORMATS)
         self.assertEqual(reports.REPORT_TYPES, {"canonical_record_report"})
 
     def test_adapter_has_no_persistence_or_database_dependency(self):
@@ -502,9 +511,24 @@ class Stage75BoundaryTests(unittest.TestCase):
             digest = reports.specification_digest(specification)
             payload["specification_digest"] = digest
             completed.stdout = json.dumps(payload)
-            with patch("api.report_rendering.subprocess.run", return_value=completed):
+            fake_process = subprocess.CompletedProcess([], 0, stdout=completed.stdout, stderr="")
+            process = Mock()
+            process.returncode = fake_process.returncode
+            process.communicate.return_value = (fake_process.stdout, fake_process.stderr)
+            with patch("api.report_rendering.subprocess.Popen", return_value=process) as popen:
                 with self.assertRaisesRegex(ValueError, "path_invalid"):
                     render_frozen_report(specification, digest, Path(directory) / "private")
+            self.assertTrue(popen.call_args.kwargs["start_new_session"])
+
+    def test_renderer_timeout_terminates_isolated_process_group(self):
+        specification = {"publication_engine_version": "2.0.0"}
+        digest = reports.specification_digest(specification)
+        process = Mock()
+        process.communicate.side_effect = subprocess.TimeoutExpired("adapter", 210)
+        with tempfile.TemporaryDirectory() as directory, patch("api.report_rendering.subprocess.Popen", return_value=process), patch("api.report_rendering._terminate_process_group") as terminate:
+            with self.assertRaisesRegex(ValueError, "renderer_timeout"):
+                render_frozen_report(specification, digest, Path(directory) / "private")
+        terminate.assert_called_once_with(process)
 
 
     def test_server_submission_contract_works_without_json_editor_or_javascript(self):
