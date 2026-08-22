@@ -210,12 +210,12 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         from api.report_rendering import AdapterFailure
         with patch("api.report_rendering.render_frozen_report", side_effect=AdapterFailure(
             "pdf_inspection", "unexpected_adapter_failure", "passed",
-            {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error"},
+            {"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error", "failure_boundary": "function_body"},
         )):
             with patch("builtins.print") as output:
                 self.assertEqual(checker.main(), 1)
         rendered = " ".join(str(call) for call in output.call_args_list)
-        self.assertIn("phase=pdf_inspection code=unexpected_adapter_failure checkpoint=page_reference_attribute operation=read_indirect_reference inspection_step=page_reference_registry exception_category=attribute_error", rendered)
+        self.assertIn("phase=pdf_inspection code=unexpected_adapter_failure checkpoint=page_reference_attribute operation=read_indirect_reference inspection_step=page_reference_registry exception_category=attribute_error failure_boundary=function_body", rendered)
 
     def test_cleanup_failure_does_not_replace_primary_failure(self):
         checker = load_checker()

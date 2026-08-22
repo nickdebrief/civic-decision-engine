@@ -47,12 +47,14 @@ DIAGNOSTIC_FIELDS = {
     "failure_operand_count", "failure_operand_kinds", "failure_destination_mode", "failure_trailing_kinds",
     "page_registry_state", "reference_identity_result", "resolution_result", "resolved_target_comparison", "page_reference_attribute",
     "failure_operation", "failure_exception_class",
-    "inspection_step",
+    "inspection_step", "failure_boundary",
 }
 INSPECTION_STEPS = {
     "validation_entry", "input_validation", "inspection_dispatch", "inspection_result_unpack",
     "inspection_result_validation", "limit_validation", "equivalence_preparation",
     "equivalence_dispatch", "equivalence_result_validation", "artifact_digest",
+    "validation_body_complete", "validation_return_enter", "validation_return_complete",
+    "caller_result_received", "caller_result_validation", "caller_result_serialization",
     "validation_result_unpack", "validation_result_construction", "validation_result_validation", "validation_return",
     "reader_construction", "encryption_and_page_count", "metadata_validation",
     "catalog_acquisition", "open_action_retrieval", "page_reference_registry",
@@ -103,7 +105,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
         if (
             result["ok"]
             or len(result["diagnostics"]) != 1
-            or set(result["diagnostics"][0]) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step"}
+            or set(result["diagnostics"][0]) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step", "failure_boundary"}
             or result["diagnostics"][0].get("inspection_step") not in INSPECTION_STEPS
         ):
             raise AdapterFailure("result_serialization", "adapter_return_contract_invalid")
@@ -155,7 +157,7 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         if "failure_operation" in diagnostic or "failure_exception_class" in diagnostic:
-            if set(diagnostic) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step"}:
+            if set(diagnostic) != {"format", "failure_step", "failure_operation", "failure_exception_class", "inspection_step", "failure_boundary"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["failure_step"] not in {"input_load", "input_validation", "specification_validation", "model_adaptation", "docx_render", "html_render", "pdf_conversion", "pdf_inspection", "cross_format_equivalence", "artifact_digest", "result_serialization", "cleanup", "page_enumeration", "page_reference_attribute", "identity_normalization", "registry_construction", "open_action_identity_lookup", "indirect_reference_resolution", "resolved_target_classification", "registered_page_comparison", "destination_acceptance", "construct_reader", "validate_page_count", "validate_metadata", "inspect_actions", "parse_pdfinfo", "read_extracted_text", "prepare_extracted_text", "validate_ordered_equivalence", "construct_inspection_result", "read_pdfinfo_version", "unpack_pdfinfo_version", "validate_inspection_result", "validate_pdf"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
@@ -164,6 +166,8 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             if diagnostic["failure_exception_class"] not in {"attribute_error", "type_error", "value_error", "key_error", "index_error", "pdf_read_error", "recursion_error", "os_error", "other"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             if diagnostic["inspection_step"] not in INSPECTION_STEPS:
+                raise AdapterFailure("result_serialization", "adapter_result_invalid")
+            if diagnostic["failure_boundary"] not in {"function_body", "return_finalization", "caller_assignment", "caller_post_return", "result_serialization"}:
                 raise AdapterFailure("result_serialization", "adapter_result_invalid")
             continue
         for key in ("libreoffice_version", "pdfinfo_version", "pypdf_version", "extraction_backend", "ordered_content", "metadata_attachments_annotations"):
