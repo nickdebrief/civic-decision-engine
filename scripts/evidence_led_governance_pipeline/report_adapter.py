@@ -34,6 +34,9 @@ PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
 RESULT_SCHEMA_VERSION = "1"
+PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
+PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
+PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterFailure(RuntimeError):
@@ -103,6 +106,15 @@ def _exception_class(exc: Exception) -> str:
     if exc.__class__.__module__.startswith("pypdf") and exc.__class__.__name__ == "PdfReadError":
         return "pdf_read_error"
     return "other"
+
+
+def _parity_diagnostics_enabled() -> bool:
+    return os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1" and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
+
+
+def _emit_parity_residue(residue: str) -> None:
+    if _parity_diagnostics_enabled():
+        print("stage76_parity_residue=" + json.dumps(residue[:400], ensure_ascii=True), file=sys.stderr, flush=True)
 
 
 def _write_result(path: Path, result: dict) -> None:
@@ -535,6 +547,8 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
                 residue = residue.replace(item, " ")
         residue = re.sub(r"\bPage\s+\d+\b", " ", residue, flags=re.IGNORECASE)
         residue = re.sub(r"\s+", " ", residue).strip(" -·|\n\r\f")
+        if residue:
+            _emit_parity_residue(residue)
         return not residue
 
     cursor = 0
