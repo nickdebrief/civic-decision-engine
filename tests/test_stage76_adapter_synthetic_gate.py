@@ -86,7 +86,11 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         docx_path = root / "report.docx"
         html_path = root / "report.html"
         pdf_path = root / "report.pdf"
-        marker_values = list(self._checker.EXPECTED_MARKER_SEQUENCE)
+        marker_values = list(self._checker.MARKERS)
+        marker_values.extend(["STAGE76_ADAPTER_TITLE"])
+        marker_values.extend(["STAGE76_ATTRIBUTION"] * 5)
+        marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
+        marker_values.extend(["STAGE76_QUALIFICATION"])
         xml = "<w:document><w:body>" + "".join(f"<w:t>{marker}</w:t>" for marker in marker_values) + "</w:body></w:document>"
         with zipfile.ZipFile(docx_path, "w") as package:
             package.writestr("word/document.xml", xml)
