@@ -25,17 +25,17 @@ def load_checker():
 
 
 class Stage76AdapterSyntheticGateTests(unittest.TestCase):
-    def test_wrapper_has_storage_then_three_pdf_fail_fast_gates_in_order(self):
+    def test_wrapper_has_three_pdf_fail_fast_gates_in_order(self):
         wrapper = (ROOT / "scripts" / "check_pdf_predeploy_gate.sh").read_text(encoding="utf-8")
         self.assertIn("set -eu", wrapper)
         commands = [
-            "python scripts/check_report_storage_runtime.py --mode durable",
             "python scripts/check_pdf_runtime.py",
             "python scripts/check_pdf_synthetic_conversion.py",
             "python scripts/check_stage76_adapter_synthetic.py",
         ]
         positions = [wrapper.index(command) for command in commands]
         self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("check_report_storage_runtime.py", wrapper)
         self.assertNotIn("|| true", wrapper)
         self.assertNotIn("; true", wrapper)
 
@@ -49,13 +49,13 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
                 "#!/bin/sh\n"
                 "printf '%s\\n' \"$1\" >> \"$LOG\"\n"
                 "case \"$FAIL_AT:$1\" in\n"
-                "  storage:scripts/check_report_storage_runtime.py|runtime:scripts/check_pdf_runtime.py|synthetic:scripts/check_pdf_synthetic_conversion.py|adapter:scripts/check_stage76_adapter_synthetic.py) exit 1 ;;\n"
+                "  runtime:scripts/check_pdf_runtime.py|synthetic:scripts/check_pdf_synthetic_conversion.py|adapter:scripts/check_stage76_adapter_synthetic.py) exit 1 ;;\n"
                 "esac\n",
                 encoding="utf-8",
             )
             fake_python.chmod(0o700)
             base_env = {"PATH": f"{directory}:/usr/bin:/bin", "LOG": str(log)}
-            for failure, expected in (("storage", ["scripts/check_report_storage_runtime.py"]), ("runtime", ["scripts/check_report_storage_runtime.py", "scripts/check_pdf_runtime.py"]), ("synthetic", ["scripts/check_report_storage_runtime.py", "scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py"]), ("adapter", ["scripts/check_report_storage_runtime.py", "scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py", "scripts/check_stage76_adapter_synthetic.py"]), ("", ["scripts/check_report_storage_runtime.py", "scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py", "scripts/check_stage76_adapter_synthetic.py"])):
+            for failure, expected in (("runtime", ["scripts/check_pdf_runtime.py"]), ("synthetic", ["scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py"]), ("adapter", ["scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py", "scripts/check_stage76_adapter_synthetic.py"]), ("", ["scripts/check_pdf_runtime.py", "scripts/check_pdf_synthetic_conversion.py", "scripts/check_stage76_adapter_synthetic.py"])):
                 with self.subTest(failure=failure):
                     log.unlink(missing_ok=True)
                     environment = {**base_env, "FAIL_AT": failure}

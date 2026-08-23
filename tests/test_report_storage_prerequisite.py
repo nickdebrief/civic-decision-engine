@@ -199,7 +199,7 @@ class ReportStoragePrerequisiteTests(unittest.TestCase):
 
     def test_start_command_replica_restart_and_gate_contract_are_unchanged(self):
         config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
-        self.assertEqual(config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(config["deploy"]["startCommand"], "sh scripts/start_cde_runtime.sh")
         self.assertEqual(config["deploy"]["numReplicas"], 1)
         self.assertEqual(config["deploy"]["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(config["deploy"]["preDeployCommand"], ["sh scripts/check_pdf_predeploy_gate.sh"])
