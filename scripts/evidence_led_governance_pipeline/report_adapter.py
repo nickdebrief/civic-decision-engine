@@ -112,9 +112,9 @@ def _parity_diagnostics_enabled() -> bool:
     return os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1" and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
 
 
-def _emit_parity_residue(residue: str) -> None:
+def _emit_parity_residue(residue: str, context: str) -> None:
     if _parity_diagnostics_enabled():
-        print("stage76_parity_residue=" + json.dumps(residue[:400], ensure_ascii=True), file=sys.stderr, flush=True)
+        print("stage76_parity_residue=" + json.dumps({"context": context, "value": residue[:400]}, ensure_ascii=True), file=sys.stderr, flush=True)
 
 
 def _write_result(path: Path, result: dict) -> None:
@@ -539,7 +539,7 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
     expected = source_text_blocks(book)
     allowed = ("Civic Decision Engine Version", "Chapter 1 —", book.author, book.title, book.tagline or "", book.subtitle or "", str(book.version), "A governed internal report specification", "Chapter 1")
 
-    def only_boilerplate(value: str) -> bool:
+    def only_boilerplate(value: str, context: str) -> bool:
         residue = re.sub(r"Civic\s+Decision\s+Engine\s+Version", " ", value)
         residue = re.sub(r"Chapter\s+1\s+—", " ", residue)
         for item in allowed:
@@ -548,20 +548,21 @@ def _pdf_ordered_equivalence(book: Book, pdf_text: str) -> bool:
         residue = re.sub(r"\bPage\s+\d+\b", " ", residue, flags=re.IGNORECASE)
         residue = re.sub(r"\s+", " ", residue).strip(" -·|\n\r\f")
         if residue:
-            _emit_parity_residue(residue)
+            _emit_parity_residue(residue, context)
         return not residue
 
     cursor = 0
-    for block in source_text_blocks(book):
+    expected = source_text_blocks(book)
+    for index, block in enumerate(expected):
         pattern = re.escape(block)
         pattern = pattern.replace(r"\ ", r"\s+")
         match = re.search(pattern, raw[cursor:], flags=re.DOTALL)
         if match is None:
             return False
-        if not only_boilerplate(raw[cursor:cursor + match.start()]):
+        if not only_boilerplate(raw[cursor:cursor + match.start()], f"before_block_{index}"):
             return False
         cursor += match.end()
-    return only_boilerplate(raw[cursor:])
+    return only_boilerplate(raw[cursor:], "after_blocks")
 
 
 def _validate_pdf_impl(pdf_path: Path, book: Book, *, deadline: float | None = None) -> dict[str, object]:
