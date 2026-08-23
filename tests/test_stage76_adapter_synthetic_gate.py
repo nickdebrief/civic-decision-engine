@@ -283,7 +283,7 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
     def test_no_stage761_or_ledger_status_change(self):
         ledger = (ROOT / "docs" / "releases" / "CDE_PLATFORM_STAGE_LEDGER.md").read_text(encoding="utf-8")
         self.assertNotIn("Stage 76.1", ledger)
-        self.assertRegex(ledger, r"\|\s*76\s*\|.*Implemented · pending merge · pending deployment")
+        self.assertRegex(ledger, r"\|\s*76\s*\|.*Implemented · merged · deployed")
 
 
 if __name__ == "__main__":
