@@ -25,7 +25,7 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self._assert_valid_railpack_overlay(config)
         railway_config = json.loads((ROOT / "railway.json").read_text(encoding="utf-8"))
         self.assertNotIn("RAILPACK_DEPLOY_APT_PACKAGES", railway_config["build"]["variables"])
-        self.assertEqual(railway_config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(railway_config["deploy"]["startCommand"], "sh scripts/start_cde_runtime.sh")
         self.assertEqual(railway_config["deploy"]["numReplicas"], 1)
         self.assertEqual(railway_config["deploy"]["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(railway_config["deploy"]["restartPolicyMaxRetries"], 10)
@@ -35,7 +35,7 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertEqual(config["deploy"]["preDeployCommand"], [
             "sh scripts/check_pdf_predeploy_gate.sh",
         ])
-        self.assertEqual(config["deploy"]["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(config["deploy"]["startCommand"], "sh scripts/start_cde_runtime.sh")
         self.assertEqual(config["deploy"]["numReplicas"], 1)
         self.assertEqual(config["deploy"]["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(config["deploy"]["restartPolicyMaxRetries"], 10)
@@ -186,19 +186,22 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertNotIn("must-not-appear", completed.stdout)
         self.assertNotIn("must-not-appear", completed.stderr)
 
-    def test_storage_gate_precedes_all_pdf_gates(self):
+    def test_predeploy_contains_only_the_three_stage76_gates(self):
         wrapper = (ROOT / "scripts" / "check_pdf_predeploy_gate.sh").read_text(encoding="utf-8")
         commands = [
-            "python scripts/check_report_storage_runtime.py --mode durable",
             "python scripts/check_pdf_runtime.py",
             "python scripts/check_pdf_synthetic_conversion.py",
             "python scripts/check_stage76_adapter_synthetic.py",
         ]
         positions = [wrapper.index(command) for command in commands]
         self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("check_report_storage_runtime.py", wrapper)
         self.assertIn("set -eu", wrapper)
         self.assertNotIn("|| true", wrapper)
         self.assertNotIn("; true", wrapper)
+        self.assertEqual(wrapper.count("stage76_gate_runtime_check=start"), 1)
+        self.assertEqual(wrapper.count("stage76_gate_synthetic_check=start"), 1)
+        self.assertEqual(wrapper.count("stage76_gate_adapter_check=start"), 1)
 
     def _assert_valid_railpack_overlay(self, config):
         self.assertEqual(config.get("$schema"), "https://schema.railpack.com")
@@ -213,7 +216,7 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
     def _assert_valid_railway_config(self, config):
         deploy = config["deploy"]
         self.assertEqual(config["build"]["variables"], {"RAILPACK_PYTHON_VERSION": "3.13.13", "MISE_PYTHON_VERSION": "3.13.13"})
-        self.assertEqual(deploy["startCommand"], "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}")
+        self.assertEqual(deploy["startCommand"], "sh scripts/start_cde_runtime.sh")
         self.assertEqual(deploy["numReplicas"], 1)
         self.assertEqual(deploy["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(deploy["restartPolicyMaxRetries"], 10)
