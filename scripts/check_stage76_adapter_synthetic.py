@@ -202,14 +202,14 @@ def _read_html_text(path: Path) -> str:
     return " ".join(parser.parts)
 
 
-def _assert_markers(text: str, expected_counts: dict[str, int] | None = None) -> None:
+def _assert_markers(text: str, expected_counts: dict[str, int] | None = None, label: str = "unknown") -> None:
     counts = expected_counts or {marker: 1 for marker in MARKERS}
     for marker in MARKERS:
         if text.count(marker) != counts[marker]:
-            raise AdapterGateError("equivalence_failed")
+            raise AdapterGateError("equivalence_failed_" + label)
     positions = [text.index(marker) for marker in EXPECTED_FIRST_MARKER_ORDER]
     if positions != sorted(positions):
-        raise AdapterGateError("equivalence_failed")
+        raise AdapterGateError("equivalence_failed_" + label)
 
 
 def _validate_specification(specification: dict[str, Any]) -> None:
@@ -275,8 +275,8 @@ def _validate_result(result: dict[str, Any], specification: dict[str, Any], dige
     if any(token in _canonical(safe_result).lower() for token in PRIVATE_TOKENS):
         raise AdapterGateError("private_canary_detected")
     by_format = {item["format"]: Path(item["path"]) for item in artifacts}
-    _assert_markers(_read_docx_text(by_format["docx"]), EXPECTED_MARKER_COUNTS)
-    _assert_markers(_read_html_text(by_format["html"]), EXPECTED_HTML_MARKER_COUNTS)
+    _assert_markers(_read_docx_text(by_format["docx"]), EXPECTED_MARKER_COUNTS, "docx")
+    _assert_markers(_read_html_text(by_format["html"]), EXPECTED_HTML_MARKER_COUNTS, "html")
     if _digest(specification) != digest:
         raise AdapterGateError("specification_mutated")
 
