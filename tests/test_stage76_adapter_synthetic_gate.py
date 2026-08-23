@@ -92,7 +92,7 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
         marker_values.extend(["STAGE76_QUALIFICATION"])
         html_marker_values = list(self._checker.EXPECTED_FIRST_MARKER_ORDER)
-        html_marker_values.extend(["STAGE76_ADAPTER_TITLE"])
+        html_marker_values.extend(["STAGE76_ADAPTER_TITLE"] * 3)
         html_marker_values.extend(["STAGE76_ATTRIBUTION"] * 5)
         html_marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
         html_marker_values.extend(["STAGE76_QUALIFICATION"])
