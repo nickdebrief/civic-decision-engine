@@ -175,9 +175,9 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         self.assertNotIn("check_pdf_runtime", main_source)
         self.assertNotIn("check_pdf_runtime", "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "api" / "routes").glob("*.py")))
 
-    def test_stage76_is_registered_pending_only(self):
+    def test_stage76_is_registered_merged_and_deployed(self):
         ledger = (ROOT / "docs" / "releases" / "CDE_PLATFORM_STAGE_LEDGER.md").read_text(encoding="utf-8")
-        self.assertRegex(ledger, r"\|\s*76\s*\|.*Implemented · pending merge · pending deployment")
+        self.assertRegex(ledger, r"\|\s*76\s*\|.*Implemented · merged · deployed")
 
     def test_diagnostic_output_contains_no_environment_values(self):
         env = os.environ.copy()
@@ -185,6 +185,20 @@ class PdfRuntimePrerequisiteTests(unittest.TestCase):
         completed = subprocess.run([sys.executable, str(DIAGNOSTIC)], env=env, capture_output=True, text=True, check=False)
         self.assertNotIn("must-not-appear", completed.stdout)
         self.assertNotIn("must-not-appear", completed.stderr)
+
+    def test_storage_gate_precedes_all_pdf_gates(self):
+        wrapper = (ROOT / "scripts" / "check_pdf_predeploy_gate.sh").read_text(encoding="utf-8")
+        commands = [
+            "python scripts/check_report_storage_runtime.py --mode durable",
+            "python scripts/check_pdf_runtime.py",
+            "python scripts/check_pdf_synthetic_conversion.py",
+            "python scripts/check_stage76_adapter_synthetic.py",
+        ]
+        positions = [wrapper.index(command) for command in commands]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("set -eu", wrapper)
+        self.assertNotIn("|| true", wrapper)
+        self.assertNotIn("; true", wrapper)
 
     def _assert_valid_railpack_overlay(self, config):
         self.assertEqual(config.get("$schema"), "https://schema.railpack.com")

@@ -2,6 +2,10 @@
 set -eu
 export PYTHONUNBUFFERED=1
 
+printf '%s\n' 'stage77_storage_prerequisite=start'
+python scripts/check_report_storage_runtime.py --mode durable
+printf '%s\n' 'stage77_storage_prerequisite=passed'
+
 printf '%s\n' 'stage76_gate_runtime_check=start'
 python scripts/check_pdf_runtime.py
 printf '%s\n' 'stage76_gate_runtime_check=passed'
