@@ -91,10 +91,15 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         marker_values.extend(["STAGE76_ATTRIBUTION"] * 5)
         marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
         marker_values.extend(["STAGE76_QUALIFICATION"])
+        html_marker_values = list(self._checker.EXPECTED_FIRST_MARKER_ORDER)
+        html_marker_values.extend(["STAGE76_ADAPTER_TITLE"])
+        html_marker_values.extend(["STAGE76_ATTRIBUTION"] * 5)
+        html_marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
+        html_marker_values.extend(["STAGE76_QUALIFICATION"])
         xml = "<w:document><w:body>" + "".join(f"<w:t>{marker}</w:t>" for marker in marker_values) + "</w:body></w:document>"
         with zipfile.ZipFile(docx_path, "w") as package:
             package.writestr("word/document.xml", xml)
-        html_path.write_text("<html><body>" + " ".join(marker_values) + "</body></html>", encoding="utf-8")
+        html_path.write_text("<html><body>" + " ".join(html_marker_values) + "</body></html>", encoding="utf-8")
         pdf_path.write_bytes(b"%PDF-1.7 synthetic")
         artifacts = []
         for format_name, path in (("docx", docx_path), ("html", html_path), ("pdf", pdf_path)):
