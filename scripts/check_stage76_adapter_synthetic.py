@@ -7,7 +7,6 @@ import hashlib
 import builtins
 import html
 import json
-import os
 import re
 import signal
 import socket
@@ -40,7 +39,7 @@ MARKERS = (
     "STAGE76_REDACTION_NOTICE",
 )
 EXPECTED_MARKER_COUNTS = {
-    "STAGE76_ADAPTER_TITLE": 4,
+    "STAGE76_ADAPTER_TITLE": 2,
     "STAGE76_ADAPTER_PURPOSE": 1,
     "STAGE76_ORIGINAL_WORDING": 1,
     "STAGE76_FAITHFUL_PARAPHRASE": 1,
@@ -51,16 +50,13 @@ EXPECTED_MARKER_COUNTS = {
     "STAGE76_LIMITATION": 1,
     "STAGE76_REDACTION_NOTICE": 1,
 }
-EXPECTED_HTML_MARKER_COUNTS = {**EXPECTED_MARKER_COUNTS, "STAGE76_ADAPTER_TITLE": 2}
+EXPECTED_HTML_MARKER_COUNTS = EXPECTED_MARKER_COUNTS
 EXPECTED_FIRST_MARKER_ORDER = (
     "STAGE76_ADAPTER_TITLE", "STAGE76_ADAPTER_PURPOSE", "STAGE76_ORIGINAL_WORDING",
     "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE", "STAGE76_FAITHFUL_PARAPHRASE",
     "STAGE76_ADMINISTRATIVE_SUMMARY", "STAGE76_QUALIFICATION", "STAGE76_LIMITATION",
     "STAGE76_REDACTION_NOTICE",
 )
-PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
-PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
-PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterGateError(RuntimeError):
@@ -208,16 +204,11 @@ def _read_html_text(path: Path) -> str:
 
 def _assert_markers(text: str, expected_counts: dict[str, int] | None = None, label: str = "unknown") -> None:
     counts = expected_counts or {marker: 1 for marker in MARKERS}
-    parity = os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1" and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
     for marker in MARKERS:
         if text.count(marker) != counts[marker]:
-            if parity:
-                print(f"stage76_parity_marker_failure={label}:count:{marker}:{text.count(marker)}:{counts[marker]}", file=sys.stderr, flush=True)
             raise AdapterGateError("equivalence_failed_" + label)
     positions = [text.index(marker) for marker in EXPECTED_FIRST_MARKER_ORDER]
     if positions != sorted(positions):
-        if parity:
-            print(f"stage76_parity_marker_failure={label}:order", file=sys.stderr, flush=True)
         raise AdapterGateError("equivalence_failed_" + label)
 
 

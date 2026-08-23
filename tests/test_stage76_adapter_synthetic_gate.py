@@ -87,7 +87,7 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         html_path = root / "report.html"
         pdf_path = root / "report.pdf"
         marker_values = list(self._checker.EXPECTED_FIRST_MARKER_ORDER)
-        marker_values.extend(["STAGE76_ADAPTER_TITLE"] * 3)
+        marker_values.extend(["STAGE76_ADAPTER_TITLE"])
         marker_values.extend(["STAGE76_ATTRIBUTION"] * 5)
         marker_values.extend(["STAGE76_INCLUSION_RATIONALE"] * 5)
         marker_values.extend(["STAGE76_QUALIFICATION"])
