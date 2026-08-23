@@ -213,6 +213,7 @@ def _unexpected_failure_result(exc: Exception) -> dict:
 
 
 def ordered_content_is_preserved(book, *, docx_path: Path, html_path: Path) -> bool:
+    expected = source_text_blocks(book)
     actual_values = (docx_text(docx_path)[0], audit_html(html_path).text)
     for actual in actual_values:
         cursor = -1
