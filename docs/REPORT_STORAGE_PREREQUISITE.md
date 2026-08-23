@@ -39,7 +39,7 @@ Runtime validation can fail startup rather than blocking a deployment before act
 
 This prerequisite performs configuration and filesystem metadata validation only. It does not open the database, read records, enumerate artifacts, create files, generate reports or alter production.
 
-No migration or deletion is required because no production governed-report artifact has been created, and the approved artifact directory is not manually provisioned. No Stage 77 release or Ledger entry is added. Stage 77 worker functionality is unimplemented. Isolated worker, restart-recovery, WAL and fencing experiments remain pending. Backup guarantees remain unresolved.
+No migration or deletion is required because no production governed-report artifact has been created, and the approved artifact directory is not manually provisioned. This prerequisite introduced no worker or queue capability; the separate Stage 77 implementation document records the later durable execution scope and remains pending merge and deployment. Backup guarantees remain unresolved.
 
 ## Local Evidence
 

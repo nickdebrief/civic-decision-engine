@@ -190,7 +190,7 @@ class Stage75PersistenceTests(unittest.TestCase):
         retained = reports.get_report(self.conn, item["id"])
         self.assertEqual(retained["artifacts"], [])
         self.assertEqual(retained["lifecycle_status"], "validation_failed")
-        self.assertFalse((reports.REPORT_ROOT / str(item["id"])).exists())
+        self.assertFalse((reports.REPORT_ROOT / str(item["id"]) / "1").exists())
 
     @patch.object(reports.rda, "record_context")
     def test_generation_revalidates_primary_record_after_approval(self, record_context):
@@ -279,7 +279,26 @@ class Stage75PersistenceTests(unittest.TestCase):
         with patch("api.report_rendering.render_frozen_report", side_effect=fail_after_partial):
             with self.assertRaisesRegex(ValueError, "generation_failed"):
                 reports.generate_report(self.conn, report_id=item["id"], actor="generator", actor_role="administrator", idempotency_key="partial-generation")
-        self.assertFalse((reports.REPORT_ROOT / str(item["id"])).exists())
+        self.assertFalse((reports.REPORT_ROOT / str(item["id"]) / "1").exists())
+
+    @patch.object(reports.rda, "record_context")
+    def test_stage77_attempt_directory_promotes_before_artifact_registration(self, record_context):
+        record_context.return_value = self.record
+        item = self.create()
+        for status, actor, key in (("assembly_reviewed", "reviewer", "promote-assembly"), ("privacy_reviewed", "privacy", "promote-privacy"), ("redaction_reviewed", "redactor", "promote-redaction"), ("approved_for_generation", "approver", "promote-approval")):
+            item = reports.transition_report(self.conn, report_id=item["id"], resulting_status=status, rationale="Review", actor=actor, actor_role="administrator", declaration={"acknowledged": True}, idempotency_key=key)
+        def fake_render(_specification, _digest, output_dir):
+            output_dir.mkdir(parents=True)
+            path = output_dir / "report.docx"
+            path.write_bytes(b"promoted")
+            return {"artifacts": [{"format": "docx", "path": str(path), "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size, "renderer_version": "2.0.0"}], "diagnostics": []}
+        staging = reports.REPORT_ROOT / ".stage77" / "job-1" / "1" / "token"
+        final = reports.REPORT_ROOT / str(item["id"]) / "1" / "job-1-attempt-1"
+        with patch("api.report_rendering.render_frozen_report", side_effect=fake_render):
+            result = reports.generate_report(self.conn, report_id=item["id"], actor="worker", actor_role="system_worker", idempotency_key="stage77-promote", output_dir=staging, promote_to=final)
+        self.assertFalse(staging.exists())
+        self.assertTrue(final.joinpath("report.docx").is_file())
+        self.assertEqual(Path(result["artifacts"][0]["storage_reference"]), final / "report.docx")
 
 
     @patch.object(reports.rda, "record_context")

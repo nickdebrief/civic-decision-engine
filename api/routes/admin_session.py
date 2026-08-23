@@ -76,6 +76,7 @@ from api import record_document_associations as rda
 from api import record_document_association_decisions as rdd
 from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
+from api import governed_report_jobs as rg77
 from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
 from api import record_governed_responses as rgr
@@ -719,9 +720,9 @@ def require_admin_session(request) -> dict[str, Any]:
 
 
 def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=rg77.BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
-    return conn
+    return rg77.configure_connection(conn, require_wal=False)
 
 
 def _get_db_read_only() -> sqlite3.Connection | None:
@@ -54882,6 +54883,68 @@ def admin_governed_reports_diagnostics(request: Request):
     return JSONResponse({"stage": 76, "publication_engine_version": rg75.PUBLICATION_ENGINE_VERSION, "report_types": sorted(rg75.REPORT_TYPES), "formats": sorted(rg75.OUTPUT_FORMATS), "pdf_requires_companions": True, "public": False})
 
 
+@router.get("/admin/governed-report-jobs", response_class=JSONResponse)
+def admin_governed_report_jobs(request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        jobs = rg77.list_jobs(conn)
+    finally:
+        conn.close()
+    return JSONResponse({"jobs": [{key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action")} for item in jobs]})
+
+
+@router.get("/admin/governed-report-jobs/{job_id}", response_class=JSONResponse)
+def admin_governed_report_job_detail(job_id: str, request: Request):
+    require_admin_session(request)
+    try:
+        numeric_id = int(job_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    conn = get_db()
+    try:
+        item = rg77.get_job(conn, numeric_id)
+    except (ValueError, TypeError, sqlite3.Error):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    finally:
+        conn.close()
+    return JSONResponse({key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action", "events")})
+
+
+@router.post("/admin/governed-report-jobs/{job_id}/cancel", response_class=JSONResponse)
+def admin_governed_report_job_cancel(job_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        numeric_id = int(job_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    conn = get_db()
+    try:
+        item = rg77.request_cancel(conn, numeric_id, _admin_session_actor(session))
+    except ValueError:
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_job_operation_failed") from None
+    finally:
+        conn.close()
+    return JSONResponse({"id": item["id"], "state": item["state"]})
+
+
+@router.post("/admin/governed-report-jobs/{job_id}/retry", response_class=JSONResponse)
+def admin_governed_report_job_retry(job_id: str, request: Request):
+    session = require_admin_session(request)
+    try:
+        numeric_id = int(job_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    conn = get_db()
+    try:
+        item = rg77.retry_job(conn, numeric_id, _admin_session_actor(session))
+    except ValueError:
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_job_operation_failed") from None
+    finally:
+        conn.close()
+    return JSONResponse({"id": item["id"], "state": item["state"], "retry_of_job_id": item["retry_of_job_id"]})
+
+
 @router.get("/admin/governed-reports/{report_id}", response_class=HTMLResponse)
 def admin_governed_report_detail(report_id: str, request: Request):
     session = require_admin_session(request)
@@ -54940,12 +55003,12 @@ def admin_governed_report_generate(report_id: str, request: Request, acknowledge
         raise HTTPException(status_code=409, detail="governed_report_generation_declaration_required")
     conn = get_db()
     try:
-        item = rg75.generate_report(conn, report_id=report_id, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), idempotency_key=idempotency_key or f"stage75-generate-{report_id}")
+        item = rg77.enqueue_generation(conn, report_id=report_id, actor=_admin_session_actor(session), governed_action="enqueue_generation", idempotency_key=idempotency_key or f"stage77-generate-{report_id}")
     except (ValueError, TypeError, sqlite3.Error):
         conn.rollback(); conn.close()
         raise HTTPException(status_code=409, detail="governed_report_generation_failed") from None
     conn.close()
-    return admin_governed_report_detail(str(item["id"]), request)
+    return admin_governed_report_detail(str(item["report_id"]), request)
 
 
 @router.post("/api/admin/session/governed-reports/{report_id}/supersede", response_class=HTMLResponse)

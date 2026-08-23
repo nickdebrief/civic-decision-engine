@@ -56,7 +56,7 @@ Designed for understanding.
 
 ---
 
-Current release: CDE Platform Stage 76 — Governed PDF Report Rendering and Equivalence
+Current release: CDE Platform Stage 77 — Durable Governed Report Generation
 
 Release documentation:
 - [`docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md`](docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md)
