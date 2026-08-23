@@ -7,6 +7,7 @@ import hashlib
 import builtins
 import html
 import json
+import os
 import re
 import signal
 import socket
@@ -57,6 +58,9 @@ EXPECTED_FIRST_MARKER_ORDER = (
     "STAGE76_ADMINISTRATIVE_SUMMARY", "STAGE76_QUALIFICATION", "STAGE76_LIMITATION",
     "STAGE76_REDACTION_NOTICE",
 )
+PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
+PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
+PARITY_SERVICE_NAME = "stage76-pdf-parity"
 
 
 class AdapterGateError(RuntimeError):
@@ -209,6 +213,9 @@ def _assert_markers(text: str, expected_counts: dict[str, int] | None = None, la
             raise AdapterGateError("equivalence_failed_" + label)
     positions = [text.index(marker) for marker in EXPECTED_FIRST_MARKER_ORDER]
     if positions != sorted(positions):
+        if os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1" and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME:
+            found = sorted(((text.index(marker), marker) for marker in MARKERS), key=lambda item: item[0])
+            print("stage76_parity_html_order=" + json.dumps([marker for _, marker in found], separators=(",", ":")), file=sys.stderr, flush=True)
         raise AdapterGateError("equivalence_failed_" + label)
 
 
