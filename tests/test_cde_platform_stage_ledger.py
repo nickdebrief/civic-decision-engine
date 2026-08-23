@@ -131,6 +131,13 @@ class CDEPlatformStageLedgerTests(unittest.TestCase):
         self.assertEqual(entry.merge_commit, "92dad4ab9669c44431af759f6791141988c74844")
         self.assertEqual(entry.pull_request, "[#372](https://github.com/nickdebrief/civic-decision-engine/pull/372)")
 
+    def test_stage_76_is_closed_after_verified_production_deployment(self):
+        entry = next(item for item in self.entries if item.stage == "76")
+        self.assertEqual(entry.title, "Governed PDF Report Rendering and Equivalence")
+        self.assertEqual(entry.status, "Implemented · merged · deployed")
+        self.assertEqual(entry.merge_commit, "975cab0d95d03d074be51f9418f8896b635ee966")
+        self.assertEqual(entry.pull_request, "[#416](https://github.com/nickdebrief/civic-decision-engine/pull/416)")
+
 
 if __name__ == "__main__":
     unittest.main()
