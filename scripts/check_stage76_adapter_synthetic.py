@@ -7,7 +7,6 @@ import hashlib
 import builtins
 import html
 import json
-import os
 import re
 import signal
 import socket
@@ -39,9 +38,28 @@ MARKERS = (
     "STAGE76_LIMITATION",
     "STAGE76_REDACTION_NOTICE",
 )
-PARITY_PROJECT_ID = "caaaade5-4fe4-4bfd-8a50-02bccdb6df6b"
-PARITY_ENVIRONMENT_NAME = "stage76-pdf-parity"
-PARITY_SERVICE_NAME = "stage76-pdf-parity"
+EXPECTED_MARKER_COUNTS = {
+    "STAGE76_ADAPTER_TITLE": 2,
+    "STAGE76_ADAPTER_PURPOSE": 1,
+    "STAGE76_ORIGINAL_WORDING": 1,
+    "STAGE76_FAITHFUL_PARAPHRASE": 1,
+    "STAGE76_ADMINISTRATIVE_SUMMARY": 1,
+    "STAGE76_ATTRIBUTION": 6,
+    "STAGE76_INCLUSION_RATIONALE": 6,
+    "STAGE76_QUALIFICATION": 2,
+    "STAGE76_LIMITATION": 1,
+    "STAGE76_REDACTION_NOTICE": 1,
+}
+EXPECTED_MARKER_SEQUENCE = (
+    "STAGE76_ADAPTER_TITLE", "STAGE76_ADAPTER_PURPOSE", "STAGE76_ADAPTER_TITLE",
+    "STAGE76_ORIGINAL_WORDING", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_FAITHFUL_PARAPHRASE", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_ADMINISTRATIVE_SUMMARY", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_QUALIFICATION", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_LIMITATION", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_REDACTION_NOTICE", "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE",
+    "STAGE76_QUALIFICATION",
+)
 
 
 class AdapterGateError(RuntimeError):
@@ -187,22 +205,17 @@ def _read_html_text(path: Path) -> str:
     return " ".join(parser.parts)
 
 
-def _assert_markers(text: str) -> None:
-    parity = (
-        os.environ.get("STAGE76_PARITY_DIAGNOSTICS") == "1"
-        and os.environ.get("RAILWAY_PROJECT_ID") == PARITY_PROJECT_ID
-        and os.environ.get("RAILWAY_ENVIRONMENT_NAME") == PARITY_ENVIRONMENT_NAME
-        and os.environ.get("RAILWAY_SERVICE_NAME") == PARITY_SERVICE_NAME
-    )
-    if parity:
-        print("stage76_parity_marker_counts=" + json.dumps({"counts": {marker: text.count(marker) for marker in MARKERS}, "length": len(text)}, separators=(",", ":")), file=sys.stderr, flush=True)
-    positions: list[int] = []
+def _assert_markers(text: str, expected_counts: dict[str, int] | None = None) -> None:
+    counts = expected_counts or {marker: 1 for marker in MARKERS}
     for marker in MARKERS:
-        if text.count(marker) != 1:
+        if text.count(marker) != counts[marker]:
             raise AdapterGateError("equivalence_failed")
-        positions.append(text.index(marker))
-    if positions != sorted(positions):
-        raise AdapterGateError("equivalence_failed")
+    cursor = -1
+    for marker in EXPECTED_MARKER_SEQUENCE:
+        position = text.find(marker, cursor + 1)
+        if position <= cursor:
+            raise AdapterGateError("equivalence_failed")
+        cursor = position
 
 
 def _validate_specification(specification: dict[str, Any]) -> None:
@@ -268,8 +281,8 @@ def _validate_result(result: dict[str, Any], specification: dict[str, Any], dige
     if any(token in _canonical(safe_result).lower() for token in PRIVATE_TOKENS):
         raise AdapterGateError("private_canary_detected")
     by_format = {item["format"]: Path(item["path"]) for item in artifacts}
-    _assert_markers(_read_docx_text(by_format["docx"]))
-    _assert_markers(_read_html_text(by_format["html"]))
+    _assert_markers(_read_docx_text(by_format["docx"]), EXPECTED_MARKER_COUNTS)
+    _assert_markers(_read_html_text(by_format["html"]), EXPECTED_MARKER_COUNTS)
     if _digest(specification) != digest:
         raise AdapterGateError("specification_mutated")
 

@@ -86,10 +86,11 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
         docx_path = root / "report.docx"
         html_path = root / "report.html"
         pdf_path = root / "report.pdf"
-        xml = "<w:document><w:body>" + "".join(f"<w:t>{marker}</w:t>" for marker in self._checker.MARKERS) + "</w:body></w:document>"
+        marker_values = list(self._checker.EXPECTED_MARKER_SEQUENCE)
+        xml = "<w:document><w:body>" + "".join(f"<w:t>{marker}</w:t>" for marker in marker_values) + "</w:body></w:document>"
         with zipfile.ZipFile(docx_path, "w") as package:
             package.writestr("word/document.xml", xml)
-        html_path.write_text("<html><body>" + " ".join(self._checker.MARKERS) + "</body></html>", encoding="utf-8")
+        html_path.write_text("<html><body>" + " ".join(marker_values) + "</body></html>", encoding="utf-8")
         pdf_path.write_bytes(b"%PDF-1.7 synthetic")
         artifacts = []
         for format_name, path in (("docx", docx_path), ("html", html_path), ("pdf", pdf_path)):
