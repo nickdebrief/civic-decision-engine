@@ -226,6 +226,8 @@ class Stage76PdfContractTests(unittest.TestCase):
         framing = f"{book.title} Chapter\n1 — {book.title}"
         self.assertTrue(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} {framing} " + " ".join(expected)))
         self.assertFalse(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} UNAPPROVED_INSERTION {framing} " + " ".join(expected)))
+        self.assertTrue(report_adapter._pdf_ordered_equivalence(book, " ".join(expected) + " 2"))
+        self.assertFalse(report_adapter._pdf_ordered_equivalence(book, " ".join(expected) + " 3"))
 
     def test_metadata_failure_does_not_expose_value_or_path(self):
         book = report_adapter.make_book(self.specification())
