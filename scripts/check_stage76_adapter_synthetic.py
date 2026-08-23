@@ -50,6 +50,12 @@ EXPECTED_MARKER_COUNTS = {
     "STAGE76_LIMITATION": 1,
     "STAGE76_REDACTION_NOTICE": 1,
 }
+EXPECTED_FIRST_MARKER_ORDER = (
+    "STAGE76_ADAPTER_TITLE", "STAGE76_ADAPTER_PURPOSE", "STAGE76_ORIGINAL_WORDING",
+    "STAGE76_ATTRIBUTION", "STAGE76_INCLUSION_RATIONALE", "STAGE76_FAITHFUL_PARAPHRASE",
+    "STAGE76_ADMINISTRATIVE_SUMMARY", "STAGE76_QUALIFICATION", "STAGE76_LIMITATION",
+    "STAGE76_REDACTION_NOTICE",
+)
 
 
 class AdapterGateError(RuntimeError):
@@ -200,7 +206,7 @@ def _assert_markers(text: str, expected_counts: dict[str, int] | None = None) ->
     for marker in MARKERS:
         if text.count(marker) != counts[marker]:
             raise AdapterGateError("equivalence_failed")
-    positions = [text.index(marker) for marker in MARKERS]
+    positions = [text.index(marker) for marker in EXPECTED_FIRST_MARKER_ORDER]
     if positions != sorted(positions):
         raise AdapterGateError("equivalence_failed")
 
