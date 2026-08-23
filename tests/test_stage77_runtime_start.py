@@ -3,8 +3,9 @@ import signal
 import subprocess
 import tempfile
 import unittest
+import importlib.util
 from pathlib import Path
-
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "scripts" / "start_cde_runtime.sh"
@@ -16,22 +17,16 @@ class Stage77RuntimeStartTests(unittest.TestCase):
             directory = Path(temp)
             log = directory / "calls.log"
             fake_python = directory / "python"
-            fake_uvicorn = directory / "uvicorn"
             fake_python.write_text(
                 "#!/bin/sh\n"
-                "printf 'python:%s\n' \"$*\" >> \"$LOG\"\n"
-                f"exit {storage_status}\n",
-                encoding="utf-8",
-            )
-            fake_uvicorn.write_text(
-                "#!/bin/sh\n"
-                "printf 'argc=%s\\n' \"$#\" >> \"$LOG\"\n"
-                "for arg in \"$@\"; do printf 'arg=<%s>\\n' \"$arg\" >> \"$LOG\"; done\n"
-                "exit 17\n",
+                "printf 'python:%s\\n' \"$*\" >> \"$LOG\"\n"
+                "case \"$1\" in\n"
+                f"  scripts/check_report_storage_runtime.py) exit {storage_status} ;;\n"
+                "  scripts/cde_runtime_supervisor.py) printf 'port:%s\\n' \"$CDE_RUNTIME_PORT\" >> \"$LOG\"; exit 17 ;;\n"
+                "esac\nexit 19\n",
                 encoding="utf-8",
             )
             fake_python.chmod(0o700)
-            fake_uvicorn.chmod(0o700)
             environment = {**os.environ, "PATH": f"{directory}:/usr/bin:/bin", "LOG": str(log)}
             if port is None:
                 environment.pop("PORT", None)
@@ -40,93 +35,80 @@ class Stage77RuntimeStartTests(unittest.TestCase):
             completed = subprocess.run(["sh", str(WRAPPER)], cwd=ROOT, env=environment, capture_output=True, text=True, check=False)
             return completed, log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
-    def test_success_runs_storage_once_then_execs_uvicorn_once(self):
-        completed, calls = self._run_wrapper(storage_status=0, port="9123")
+    def test_success_runs_storage_once_then_supervisor_once(self):
+        completed, calls = self._run_wrapper()
         self.assertEqual(completed.returncode, 17)
-        self.assertEqual(calls, [
-            "python:scripts/check_report_storage_runtime.py --mode durable",
-            "argc=5",
-            "arg=<api.main:app>",
-            "arg=<--host>",
-            "arg=<0.0.0.0>",
-            "arg=<--port>",
-            "arg=<9123>",
-        ])
+        self.assertEqual(calls, ["python:scripts/check_report_storage_runtime.py --mode durable", "python:scripts/cde_runtime_supervisor.py", "port:8000"])
 
-    def test_failure_never_starts_uvicorn_and_propagates_status(self):
-        completed, calls = self._run_wrapper(storage_status=23, port="9123")
+    def test_explicit_port_is_passed_as_data(self):
+        completed, calls = self._run_wrapper(port="9000;never-execute")
+        self.assertEqual(completed.returncode, 17)
+        self.assertEqual(calls[-1], "port:9000;never-execute")
+
+    def test_failure_never_starts_supervisor(self):
+        completed, calls = self._run_wrapper(storage_status=23)
         self.assertEqual(completed.returncode, 23)
         self.assertEqual(calls, ["python:scripts/check_report_storage_runtime.py --mode durable"])
 
-    def test_default_port_is_preserved(self):
-        completed, calls = self._run_wrapper(storage_status=0)
-        self.assertEqual(completed.returncode, 17)
-        self.assertEqual(calls[-1], "arg=<8000>")
-
-    def test_hostile_port_values_are_data_and_never_executed(self):
-        hostile = (
-            "9000 9001",
-            "9000;touch SHOULD_NOT_EXIST",
-            "$(touch SHOULD_NOT_EXIST)",
-            "9000'\"",
-            "9000&|<>",
-            "--bad-port",
-            "",
-            "9" * 4096,
-        )
-        for value in hostile:
-            with self.subTest(value=value):
-                completed, calls = self._run_wrapper(storage_status=0, port=value)
-                self.assertEqual(completed.returncode, 17)
-                self.assertEqual(calls[0], "python:scripts/check_report_storage_runtime.py --mode durable")
-                self.assertEqual(calls[1], "argc=5")
-                self.assertEqual(calls[-1], f"arg=<{value or '8000'}>")
-        completed, calls = self._run_wrapper(storage_status=0, port="9000\n9001")
-        self.assertEqual(completed.returncode, 17)
-        self.assertEqual(calls[:2], ["python:scripts/check_report_storage_runtime.py --mode durable", "argc=5"])
-
-    def test_signal_reaches_final_fake_uvicorn_and_exit_status_is_preserved(self):
+    def test_signal_reaches_final_supervisor_process(self):
         with tempfile.TemporaryDirectory(prefix="stage77-signal-test-") as temp:
             directory = Path(temp)
             fake_python = directory / "python"
-            fake_uvicorn = directory / "uvicorn"
-            ready = directory / "ready"
-            fake_python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            fake_uvicorn.write_text(
-                "#!/bin/sh\n"
-                "printf ready > \"$READY\"\n"
-                "trap 'exit 42' TERM INT\n"
-                "while :; do sleep 1; done\n",
-                encoding="utf-8",
-            )
+            fake_python.write_text("#!/bin/sh\ncase \"$1\" in scripts/check_report_storage_runtime.py) exit 0;; scripts/cde_runtime_supervisor.py) trap 'exit 42' TERM INT; while :; do sleep 1; done;; esac\n", encoding="utf-8")
             fake_python.chmod(0o700)
-            fake_uvicorn.chmod(0o700)
-            environment = {**os.environ, "PATH": f"{directory}:/usr/bin:/bin", "READY": str(ready)}
-            process = subprocess.Popen(["sh", str(WRAPPER)], cwd=ROOT, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+            environment = {**os.environ, "PATH": f"{directory}:/usr/bin:/bin"}
+            process = subprocess.Popen(["sh", str(WRAPPER)], cwd=ROOT, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
-                for _ in range(50):
-                    if ready.exists():
-                        break
-                    if process.poll() is not None:
-                        self.fail(f"wrapper exited before final process started: {process.returncode}")
-                    __import__("time").sleep(0.01)
-                self.assertTrue(ready.exists())
+                __import__("time").sleep(0.2)
+                self.assertIsNone(process.poll())
                 process.send_signal(signal.SIGTERM)
                 self.assertEqual(process.wait(timeout=5), 42)
             finally:
                 if process.poll() is None:
                     process.kill()
 
-    def test_wrapper_is_single_process_fail_closed_and_non_mutating(self):
+    def test_wrapper_is_bounded_and_non_mutating(self):
         source = WRAPPER.read_text(encoding="utf-8")
         self.assertIn("set -eu", source)
-        self.assertIn("exec uvicorn", source)
+        self.assertIn("exec python scripts/cde_runtime_supervisor.py", source)
         self.assertNotIn("&", source)
         self.assertNotIn("--reload", source)
-        self.assertNotIn("worker", source.lower())
         self.assertNotIn("mkdir", source)
         self.assertNotIn("touch", source)
         self.assertNotIn("set -x", source)
+
+    def test_supervisor_starts_distinct_children_and_drains_both(self):
+        spec = importlib.util.spec_from_file_location("stage77_supervisor", ROOT / "scripts" / "cde_runtime_supervisor.py")
+        supervisor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(supervisor)
+        class Child:
+            _next_pid = 100
+            def __init__(self):
+                self.pid = Child._next_pid
+                Child._next_pid += 1
+            def poll(self):
+                return None
+            def wait(self):
+                return 0
+        calls = []
+        handlers = {}
+        def fake_popen(command, **kwargs):
+            calls.append((command, kwargs))
+            return Child()
+        def fake_signal(signum, handler):
+            handlers[signum] = handler
+        sleeps = []
+        def fake_sleep(_seconds):
+            sleeps.append(True)
+            if len(sleeps) == 1:
+                handlers[signal.SIGTERM]()
+        with patch.object(supervisor.subprocess, "Popen", side_effect=fake_popen), patch.object(supervisor.signal, "signal", side_effect=fake_signal), patch.object(supervisor, "_stop"), patch.object(supervisor.time, "sleep", side_effect=fake_sleep), patch.dict(os.environ, {"CDE_RUNTIME_PORT": "9123"}):
+            self.assertEqual(supervisor.main(), 0)
+        self.assertEqual([call[0][2] for call in calls], ["uvicorn", "api.governed_report_worker"])
+        self.assertIn("--host", calls[0][0])
+        self.assertIn("0.0.0.0", calls[0][0])
+        self.assertIn("9123", calls[0][0])
+        self.assertTrue(all(call[1]["start_new_session"] for call in calls))
 
 
 if __name__ == "__main__":

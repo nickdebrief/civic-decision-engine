@@ -204,9 +204,9 @@ class ReportStoragePrerequisiteTests(unittest.TestCase):
         self.assertEqual(config["deploy"]["restartPolicyType"], "ON_FAILURE")
         self.assertEqual(config["deploy"]["preDeployCommand"], ["sh scripts/check_pdf_predeploy_gate.sh"])
 
-    def test_no_stage77_ledger_entry_or_public_route_was_added(self):
+    def test_stage77_ledger_entry_exists_without_public_route(self):
         ledger = (ROOT / "docs" / "releases" / "CDE_PLATFORM_STAGE_LEDGER.md").read_text(encoding="utf-8")
-        self.assertNotIn("| 77 |", ledger)
+        self.assertIn("| 77 |", ledger)
         main_source = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("check_report_storage_runtime", main_source)
 

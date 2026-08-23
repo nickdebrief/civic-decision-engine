@@ -1,0 +1,121 @@
+# CDE Platform Stage 77 — Durable Governed Report Generation
+
+## Status
+
+Implemented · pending merge · pending deployment
+
+Stage 77 adds one durable operational queue and one governed-report worker to
+the existing one-service, one-replica topology. A job executes an already
+approved immutable Stage 75 report specification; it does not approve the
+specification, alter its content, select sources, publish a determination or
+distribute an artifact.
+
+Stage 75 remains the owner of report identity, versions, lifecycle history,
+specifications, artifact records and private artifact authorization. Stage 76
+remains the owner of DOCX/HTML/PDF rendering, metadata/action safety and
+cross-format equivalence. The Publication Engine remains persistence-free.
+
+Restore targets are accepted only beneath an existing, real isolated restore
+root. Lexical path components are inspected with no-follow metadata before
+staging, and descriptor-anchored no-replace promotion is used where supported
+by the runtime platform. Symlinked, aliased, traversing, existing or otherwise
+ambiguous targets fail closed; restore staging and cleanup never follow links.
+The supported deployment contract therefore requires a filesystem with
+directory-descriptor and no-follow operations suitable for the running Python
+platform. Restore remains an explicit governed operational action and never
+overwrites a live path.
+
+## Durable Execution
+
+The queue uses the existing persistent SQLite database with WAL, bounded busy
+timeouts, foreign keys and short `BEGIN IMMEDIATE` claim transactions. One
+supervised worker uses lease tokens, UTC expiry timestamps, heartbeats and
+token-checked completion. Stale workers cannot promote bytes, register
+artifacts, complete jobs or override cancellation. Job coordination state and
+append-only job events are isolated from Stage 75 artifact ownership.
+
+The authenticated generation POST now enqueues and returns without rendering.
+Rendering occurs only in the worker after revalidating the report lifecycle,
+version digest and cancellation state. GET, import, listing, diagnostics and
+terminal idempotent replay do not render. Retries are bounded and restricted
+to explicitly transient infrastructure failures; validation, source, action,
+equivalence, authorization and digest failures remain terminal.
+
+The runtime supervisor validates durable storage before starting exactly one
+Uvicorn child and one worker child, forwards shutdown signals, drains and
+reaps both children, and reports only bounded operational markers. No worker,
+queue, public route, report type, external broker, physical-print service or
+Stage 73 integration is introduced.
+
+## Boundaries and Limitations
+
+The worker identity is distinct from the requesting or approving actor. A job
+cannot approve a report or change a frozen specification. Stage 72 remains the
+relationship owner, Stage 73 remains the public determination-publication
+boundary, and Stage 74 terminology remains representation rather than finding.
+Reports remain internal and authenticated; no public report distribution is
+introduced.
+
+Backup and restore of the SQLite database and artifact bytes remain an
+application-level operational prerequisite. Railway volume snapshots preserve
+storage but do not by themselves prove a coordinated SQLite/artifact recovery
+point. The explicit `scripts/manage_stage77_recovery.py` operations therefore
+drain and fence the worker, take an SQLite online backup, copy and digest every
+valid Stage 75 artifact, write an allow-listed canonical manifest, validate the
+complete bundle, and atomically promote it. The recovery-control and event
+tables record the maintenance epoch and bounded terminal outcome.
+
+The recovery root is supplied explicitly for each governed operation. The
+intended production value is `/data/cde-recovery-points`, represented by the
+`CDE_RECOVERY_ROOT` deployment configuration only when separately approved.
+It remains distinct from `RECORDS_DB_PATH` and
+`CDE_REPORT_ARTIFACT_ROOT`; this change does not configure production backups
+or create a recovery point.
+
+The SQLite backup contains the recovery event bound recorded in the manifest;
+the terminal completion event is written only after bundle promotion and is
+therefore intentionally outside that backup. A failed capture leaves worker
+claims fenced until an explicit governed abort transition releases them.
+Foreign-key checks consume the complete violation result, and manifests are
+strict canonical JSON with duplicate keys and reordered fields rejected.
+
+Restore accepts only explicitly supplied empty isolated targets. It validates
+the manifest, database integrity, schema and engine compatibility, artifact
+digests and ownership before promoting restored files. Leased and running jobs
+lose their old tokens and enter bounded retry recovery; cancellation requests
+become cancelled; succeeded, failed-terminal and cancelled jobs do not
+rerender. A worker remains non-claiming while recovery or restore validation is
+active and resumes only after `restore_ready`.
+
+Recovery creation and restore are governed operational actions, not startup,
+import, GET, listing or diagnostic behavior. A backup is not proof that a
+restore succeeded. Restoration is not approval, publication, distribution or
+printing. Railway snapshots may later preserve a completed bundle, but Stage
+77 remains blocked until this protocol is assured in an isolated backup/restore
+verification and the separate operational backup prerequisite is resolved.
+
+## Portable Custody
+
+Railway native volume backups are unavailable on the current plan and are not
+treated as application-consistent backups. The supported operational path is
+the explicit `export` and `validate-export` commands in
+`scripts/manage_stage77_recovery.py`. Export first revalidates a completed
+recovery bundle, then creates a deterministic tar transport containing only
+the canonical manifest, SQLite online-backup file, registered artifact bytes,
+and bounded metadata. It rejects unsafe members, symlinks, traversal,
+unknown files, digest mismatches, source mutation, and partial finalization.
+
+The paired canonical custody receipt records the recovery-point identity,
+manifest, database and archive digests, artifact count, job and recovery event
+bounds, and schema/engine versions. It contains no paths, content, secrets,
+environment values, or raw diagnostics. Safe extraction is into a new isolated
+destination and is independently validated before restore. The archive is not
+encrypted by the application; custody must use an independently verified
+encrypted local filesystem. The operational cadence, seven-point retention,
+temporary Railway transport-key controls, and first-deployment sequence are
+documented in `docs/STAGE77_RECOVERY_CUSTODY_RUNBOOK.md`.
+
+Export and restore require an administrator and never run automatically during
+import, startup, GET, listing, diagnostics, or worker startup. Backup creation
+is not proof of successful restoration, and restoration is not approval,
+publication, distribution, or printing.

@@ -69,6 +69,22 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
     return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
+def _assert_confined_output(root: Path, candidate: Path) -> None:
+    raw_root = Path(root)
+    raw_candidate = Path(candidate)
+    if raw_root.exists() and raw_root.is_symlink():
+        raise ValueError("governed_report_artifact_path_invalid")
+    current = raw_candidate
+    while current != raw_root and current != current.parent:
+        if current.exists() and current.is_symlink():
+            raise ValueError("governed_report_artifact_path_invalid")
+        current = current.parent
+    root = raw_root.resolve(strict=False)
+    candidate = raw_candidate.resolve(strict=False)
+    if not candidate.is_relative_to(root):
+        raise ValueError("governed_report_artifact_path_invalid")
+
+
 def ensure_report_tables(conn: sqlite3.Connection) -> None:
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS record_governed_reports (
@@ -308,7 +324,7 @@ def create_report(conn: sqlite3.Connection, *, title: str, purpose: str, audienc
 def transition_report(conn: sqlite3.Connection, *, report_id: int | str, resulting_status: str, rationale: str, actor: str, actor_role: str, declaration: Mapping[str, Any], idempotency_key: str, _commit: bool = True) -> dict[str, Any]:
     report = _row(conn, report_id); current = report["lifecycle_status"]
     if resulting_status not in LIFECYCLE: raise ValueError("governed_report_status_invalid")
-    allowed = {"draft_specification": {"assembly_reviewed", "withdrawn"}, "assembly_reviewed": {"privacy_reviewed", "withdrawn"}, "privacy_reviewed": {"redaction_reviewed", "withdrawn"}, "redaction_reviewed": {"approved_for_generation", "withdrawn"}, "approved_for_generation": {"withdrawn"}, "validation_failed": {"approved_for_generation", "withdrawn"}, "generated": {"withdrawn"}}
+    allowed = {"draft_specification": {"assembly_reviewed", "withdrawn"}, "assembly_reviewed": {"privacy_reviewed", "withdrawn"}, "privacy_reviewed": {"redaction_reviewed", "withdrawn"}, "redaction_reviewed": {"approved_for_generation", "withdrawn"}, "approved_for_generation": {"withdrawn"}, "generation_requested": {"withdrawn"}, "validation_failed": {"approved_for_generation", "withdrawn"}, "generated": {"withdrawn"}}
     actor_value = _required(actor, "governed_report_event_actor_required"); role_value = _required(actor_role, "governed_report_event_actor_role_required"); rationale_value = _required(rationale, "governed_report_event_rationale_required")
     if resulting_status in {"assembly_reviewed", "privacy_reviewed", "redaction_reviewed", "approved_for_generation"} and actor_value == report["created_by"]:
         raise ValueError("governed_report_review_actor_must_differ_from_creator")
@@ -374,7 +390,7 @@ def supersede_report(conn: sqlite3.Connection, *, report_id: int | str, replacem
     return _row(conn, report_id)
 
 
-def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True) -> dict[str, Any]:
+def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False) -> dict[str, Any]:
     report = _row(conn, report_id)
     actor_value = _required(actor, "governed_report_generation_actor_required"); role_value = _required(actor_role, "governed_report_generation_role_required"); key = _required(idempotency_key, "governed_report_generation_idempotency_key_required")
     version = report["versions"][-1]; spec = version["specification"]
@@ -388,9 +404,13 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
                 return _row(conn, report_id)
             raise ValueError("governed_report_generation_failed")
         raise ValueError("governed_report_generation_idempotency_conflict")
-    if report["lifecycle_status"] != "approved_for_generation": raise ValueError("governed_report_generation_approval_required")
+    if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}: raise ValueError("governed_report_generation_approval_required")
     _validate_generation_sources(conn, spec)
-    target_dir = REPORT_ROOT / str(report_id) / str(version["version_number"])
+    final_dir = REPORT_ROOT / str(report_id) / str(version["version_number"])
+    target_dir = Path(output_dir) if output_dir is not None else final_dir
+    if promote_to is not None:
+        _assert_confined_output(REPORT_ROOT, target_dir)
+        _assert_confined_output(REPORT_ROOT, Path(promote_to))
     if target_dir.exists():
         raise ValueError("governed_report_artifact_directory_exists")
     now = utc_now()
@@ -407,16 +427,54 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         raise
     try:
         from api.report_rendering import render_frozen_report
-        result = render_frozen_report(spec, version["specification_digest"], REPORT_ROOT / str(report_id) / str(version["version_number"]))
+        result = render_frozen_report(spec, version["specification_digest"], target_dir)
     except Exception as exc:
         diagnostics = ["governed_report_generation_validation_failed", type(exc).__name__]
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(diagnostics), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (version["id"],))
         conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), version["id"], "validation_failed", "validation_failed", "Rendering or output validation failed.", actor_value, role_value, '{"acknowledged":true}', utc_now(), key + ":failed", canonical_json({"diagnostics": diagnostics})))
-        shutil.rmtree(target_dir.parent, ignore_errors=True)
+        shutil.rmtree(target_dir, ignore_errors=True)
         conn.commit() if _commit else None
         raise ValueError("governed_report_generation_failed") from None
+    if execution_guard is not None and not execution_guard():
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise ValueError("governed_report_generation_cancelled")
+    try:
+        _validate_generation_sources(conn, spec)
+    except Exception:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise ValueError("governed_report_generation_source_changed") from None
+    if promote_to is not None:
+        promoted_dir = Path(promote_to)
+        if promoted_dir.exists() or promoted_dir.is_symlink():
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise ValueError("governed_report_artifact_directory_exists")
+        try:
+            promoted_dir.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(target_dir, promoted_dir)
+        except OSError:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise ValueError("governed_report_artifact_promotion_failed") from None
+        target_dir = promoted_dir
+        result = dict(result)
+        result["artifacts"] = [dict(item, path=str(promoted_dir / Path(item["path"]).name)) for item in result["artifacts"]]
+    try:
+        _validate_generation_sources(conn, spec)
+    except Exception:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise ValueError("governed_report_generation_source_changed") from None
+    if finalization_transaction:
+        if execution_guard is not None and not execution_guard():
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise ValueError("governed_report_generation_cancelled")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            _validate_generation_sources(conn, spec)
+        except Exception:
+            conn.rollback()
+            shutil.rmtree(target_dir, ignore_errors=True)
+            raise ValueError("governed_report_generation_source_changed") from None
     try:
         conn.execute("SAVEPOINT stage75_generation_db")
         for item in result["artifacts"]:
@@ -428,11 +486,12 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT stage75_generation_db")
         conn.execute("RELEASE SAVEPOINT stage75_generation_db")
-        shutil.rmtree(target_dir.parent, ignore_errors=True)
+        shutil.rmtree(target_dir, ignore_errors=True)
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(["artifact registration failed"]), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (version["id"],))
         if _commit: conn.commit()
+        elif finalization_transaction: conn.rollback()
         raise ValueError("governed_report_artifact_registration_failed") from None
     if _commit: conn.commit()
     return _row(conn, report_id)
