@@ -223,7 +223,7 @@ class Stage76PdfContractTests(unittest.TestCase):
         book = report_adapter.make_book(self.specification())
         expected = report_adapter.source_text_blocks(book)
         front_matter = "Civic Decision Engine Version stage75.report_specification.v1 A governed internal report specification"
-        framing = f"{book.title} Chapter 1 — {book.title}"
+        framing = f"{book.title} Chapter\n1 — {book.title}"
         self.assertTrue(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} {framing} " + " ".join(expected)))
         self.assertFalse(report_adapter._pdf_ordered_equivalence(book, f"{front_matter} UNAPPROVED_INSERTION {framing} " + " ".join(expected)))
 
