@@ -119,10 +119,47 @@ class Stage77RuntimeStartTests(unittest.TestCase):
             "stage77_supervisor=start",
             "stage77_supervisor_application_child=started",
             "stage77_supervisor_worker_child=started",
+            "stage77_supervisor_attestation=ready protocol=1 application_child=alive worker_child=ready",
             "stage77_supervisor=ready",
             "stage77_supervisor=drain_start",
             "stage77_supervisor=children_reaped",
         ])
+
+    def test_worker_token_must_be_exactly_once_and_followed_by_eof(self):
+        spec = importlib.util.spec_from_file_location("stage77_supervisor", ROOT / "scripts" / "cde_runtime_supervisor.py")
+        supervisor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(supervisor)
+        class Child:
+            def poll(self):
+                return None
+        for payload, expected in ((b"ready\n", True), (b"rea", False), (b"xready\n", False), (b"ready\nready\n", False)):
+            read_fd, write_fd = os.pipe()
+            os.write(write_fd, payload)
+            os.close(write_fd)
+            self.assertEqual(supervisor._await_worker_ready(Child(), Child(), read_fd), expected, payload)
+
+    def test_attestation_is_absent_before_valid_worker_token(self):
+        spec = importlib.util.spec_from_file_location("stage77_supervisor", ROOT / "scripts" / "cde_runtime_supervisor.py")
+        supervisor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(supervisor)
+        class Child:
+            def __init__(self):
+                self.pid = 400
+            def poll(self):
+                return None
+            def wait(self):
+                return 0
+        def fake_popen(_command, **_kwargs):
+            return Child()
+        output = StringIO()
+        with patch.object(supervisor.subprocess, "Popen", side_effect=fake_popen), patch.object(supervisor, "_await_worker_ready", return_value=False), patch.object(supervisor, "_child_failure", return_value=0), patch.object(supervisor, "_stop"), patch.object(supervisor.signal, "signal"), patch.dict(os.environ, {"CDE_RUNTIME_PORT": "9123"}), redirect_stdout(output):
+            self.assertEqual(supervisor.main(), 1)
+        self.assertNotIn("stage77_supervisor_attestation=ready", output.getvalue())
+
+    def test_attestation_has_fixed_allow_listed_fields(self):
+        marker = "stage77_supervisor_attestation=ready protocol=1 application_child=alive worker_child=ready"
+        self.assertEqual(marker.count("="), 4)
+        self.assertNotRegex(marker, r"(?:pid|path|timestamp|fd|secret|environment|database|job)")
 
     def test_worker_command_receives_readiness_fd(self):
         spec = importlib.util.spec_from_file_location("stage77_supervisor", ROOT / "scripts" / "cde_runtime_supervisor.py")

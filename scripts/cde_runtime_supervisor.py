@@ -10,6 +10,7 @@ import time
 
 
 STARTUP_DEADLINE_SECONDS = 10
+WORKER_READY_TOKEN = b"ready\n"
 
 
 def _stop(process: subprocess.Popen[str], deadline: float) -> None:
@@ -54,10 +55,12 @@ def _await_worker_ready(app, worker, ready_fd: int) -> bool:
             if readable:
                 chunk = os.read(ready_fd, 64)
                 if not chunk:
-                    return False
+                    return received == WORKER_READY_TOKEN
                 received.extend(chunk)
-                if b"ready\n" in received:
-                    return True
+                if len(received) > len(WORKER_READY_TOKEN) or not WORKER_READY_TOKEN.startswith(received):
+                    return False
+                if received == WORKER_READY_TOKEN:
+                    continue
         return False
     finally:
         os.close(ready_fd)
@@ -137,6 +140,7 @@ def main() -> int:
     if app.poll() is not None or worker.poll() is not None:
         _child_failure(app, worker)
         return 1
+    print("stage77_supervisor_attestation=ready protocol=1 application_child=alive worker_child=ready", flush=True)
     print("stage77_supervisor=ready", flush=True)
     while not draining:
         if app.poll() is not None or worker.poll() is not None:

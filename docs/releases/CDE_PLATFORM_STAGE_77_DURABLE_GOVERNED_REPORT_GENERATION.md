@@ -43,7 +43,14 @@ equivalence, authorization and digest failures remain terminal.
 
 The runtime supervisor validates durable storage before starting exactly one
 Uvicorn child and one worker child, forwards shutdown signals, drains and
-reaps both children, and reports only bounded operational markers. No worker,
+reaps both children, and reports only bounded operational markers. The worker
+uses a private readiness channel after real SQLite, job-schema and recovery
+state initialization. The supervisor validates that exact token while both
+children remain alive and emits the authoritative
+`stage77_supervisor_attestation=ready protocol=1 application_child=alive
+worker_child=ready` marker. Railway's aggregate display may interleave records
+from separate processes, so relative display order is not used as causal
+evidence; HTTP smoke checks establish application availability separately. No worker,
 queue, public route, report type, external broker, physical-print service or
 Stage 73 integration is introduced.
 
