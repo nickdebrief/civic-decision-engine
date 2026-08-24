@@ -154,6 +154,14 @@ class Stage77JobTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_real_worker_loop_announces_readiness_with_empty_queue(self):
+        path = Path(self.temp.name) / "worker-ready.db"
+        stop = threading.Event()
+        stop.set()
+        ready = []
+        self.assertEqual(jobs.worker_loop(str(path), stop, lambda: ready.append(True)), 0)
+        self.assertEqual(ready, [True])
+
     def test_retry_requires_terminal_failure(self):
         item = jobs.enqueue_generation(self.conn, report_id=7, actor="admin-a", governed_action="enqueue_generation", idempotency_key="retry")
         self.conn.execute("UPDATE stage77_report_jobs SET state='failed_terminal' WHERE id=?", (item["id"],))
