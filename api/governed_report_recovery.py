@@ -15,6 +15,7 @@ import stat
 import tarfile
 import tempfile
 import time
+import re
 from collections.abc import Mapping as ABCMapping
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -524,22 +525,57 @@ def fail_recovery(conn: sqlite3.Connection, *, phase: str, code: str) -> None:
         raise
 
 
-def abort_recovery(conn: sqlite3.Connection, *, actor: str, governed_action: str) -> dict[str, Any]:
-    """Explicitly release workers after an acknowledged failed operation."""
+def _operation_staging_path(recovery_root: str | os.PathLike[str], operation_id: str, approved_root: str | os.PathLike[str] = "/data") -> Path:
+    if not re.fullmatch(r"[0-9a-f]{32}", operation_id):
+        raise ValueError("recovery_abort_identity_invalid")
+    root = _require_recovery_root(recovery_root, approved_root=approved_root)
+    stage_root = root / ".stage"
+    if stage_root.exists() and stage_root.is_symlink():
+        raise ValueError("symlink_component")
+    stage = stage_root / operation_id
+    if stage.exists() and stage.is_symlink():
+        raise ValueError("symlink_component")
+    if stage.exists() and not stage.is_dir():
+        raise ValueError("recovery_abort_staging_invalid")
+    return stage
+
+
+def abort_recovery(conn: sqlite3.Connection, *, recovery_operation_id: str, maintenance_epoch: int, recovery_root: str | os.PathLike[str], actor: str, governed_action: str, approved_root: str | os.PathLike[str] = "/data") -> dict[str, Any]:
+    """Release fencing for one explicitly identified failed operation."""
+    if not re.fullmatch(r"[0-9a-f]{32}", str(recovery_operation_id)):
+        raise ValueError("recovery_abort_identity_invalid")
+    if isinstance(maintenance_epoch, bool) or not isinstance(maintenance_epoch, int) or maintenance_epoch <= 0:
+        raise ValueError("recovery_abort_epoch_invalid")
     ensure_recovery_tables(conn)
     conn.execute("BEGIN IMMEDIATE")
+    prior_state = None
     try:
-        row = _control(conn)
-        if not row or row["state"] not in {"failed", "restore_failed"}:
-            raise ValueError("recovery_abort_invalid")
-        conn.execute("UPDATE stage77_recovery_control SET worker_drained=1 WHERE singleton=1")
+        row = conn.execute("SELECT * FROM stage77_recovery_control WHERE singleton=1 AND operation_id=? AND maintenance_epoch=?", (recovery_operation_id, maintenance_epoch)).fetchone()
+        if row is None:
+            raise ValueError("recovery_abort_identity_or_epoch_mismatch")
+        prior_state = str(row["state"])
+        if prior_state not in {"failed", "restore_failed"} or int(row["worker_drained"] or 0) != 0:
+            raise ValueError("recovery_abort_state_mismatch")
+        updated_cursor = conn.execute("UPDATE stage77_recovery_control SET worker_drained=1 WHERE singleton=1 AND operation_id=? AND maintenance_epoch=? AND state IN ('failed','restore_failed') AND worker_drained=0", (recovery_operation_id, maintenance_epoch))
+        if updated_cursor.rowcount != 1:
+            raise ValueError("recovery_abort_conditional_update")
         updated = _control(conn)
-        _event(conn, updated, "recovery_aborted", updated["state"], actor, {"governed_action": governed_action})
+        _event(conn, updated, "recovery_aborted", updated["state"], actor, {"governed_action": governed_action, "operation_id": recovery_operation_id, "maintenance_epoch": maintenance_epoch, "prior_state": prior_state, "resulting_state": updated["state"]})
         conn.commit()
-        return dict(updated)
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
+    cleanup_status = "completed"
+    try:
+        stage = _operation_staging_path(recovery_root, recovery_operation_id, approved_root=approved_root)
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=False)
+    except Exception:
+        cleanup_status = "failed"
+    return {"operation_id": recovery_operation_id, "maintenance_epoch": maintenance_epoch, "prior_state": prior_state, "resulting_state": str(updated["state"]), "cleanup_status": cleanup_status, "maintenance_status": "released"}
 
 
 def _live_artifact_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:

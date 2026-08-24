@@ -75,8 +75,90 @@ class Stage77RecoveryTests(unittest.TestCase):
         self.assertFalse(recovery.recovery_allows_finalize(self.conn, item["id"], "old-token", 0))
         recovery.fail_recovery(self.conn, phase="test", code="aborted")
         self.assertFalse(recovery.recovery_allows_claim(self.conn))
-        recovery.abort_recovery(self.conn, actor="admin", governed_action="abort")
+        control = recovery.recovery_status(self.conn)
+        recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=control["maintenance_epoch"], recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
         self.assertTrue(recovery.recovery_allows_claim(self.conn))
+
+    def _failed_recovery(self):
+        recovery.request_recovery(self.conn, actor="admin", governed_action="capture")
+        recovery.fail_recovery(self.conn, phase="capture", code="sqlite_error")
+        return recovery.recovery_status(self.conn)
+
+    def test_abort_requires_exact_operation_and_epoch_and_releases_only_that_failure(self):
+        control = self._failed_recovery()
+        stage = self.recovery_root / ".stage" / control["operation_id"]
+        other = self.recovery_root / ".stage" / ("f" * 32)
+        stage.mkdir(parents=True)
+        other.mkdir(parents=True)
+        result = recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=control["maintenance_epoch"], recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        self.assertEqual(result["operation_id"], control["operation_id"])
+        self.assertEqual(result["maintenance_epoch"], 1)
+        self.assertEqual(result["prior_state"], "failed")
+        self.assertEqual(result["resulting_state"], "failed")
+        self.assertEqual(result["cleanup_status"], "completed")
+        self.assertEqual(result["maintenance_status"], "released")
+        self.assertFalse(stage.exists())
+        self.assertTrue(other.exists())
+        self.assertTrue(recovery.recovery_allows_claim(self.conn))
+        event = self.conn.execute("SELECT event_type,payload_json FROM stage77_recovery_events WHERE event_type='recovery_aborted'").fetchone()
+        self.assertEqual(event[0], "recovery_aborted")
+        payload = json.loads(event[1])
+        self.assertEqual(payload["operation_id"], control["operation_id"])
+        self.assertEqual(payload["maintenance_epoch"], 1)
+
+    def test_abort_rejects_identity_epoch_and_state_mismatches_without_mutation(self):
+        control = self._failed_recovery()
+        for operation_id, epoch, expected in (("0" * 32, 1, "recovery_abort_identity_or_epoch_mismatch"), (control["operation_id"], 2, "recovery_abort_identity_or_epoch_mismatch")):
+            with self.assertRaisesRegex(ValueError, expected):
+                recovery.abort_recovery(self.conn, recovery_operation_id=operation_id, maintenance_epoch=epoch, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+            self.assertEqual(recovery.recovery_status(self.conn)["worker_drained"], 0)
+        with self.assertRaisesRegex(ValueError, "recovery_abort_identity_invalid"):
+            recovery.abort_recovery(self.conn, recovery_operation_id="not-an-id", maintenance_epoch=1, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        with self.assertRaisesRegex(ValueError, "recovery_abort_epoch_invalid"):
+            recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=0, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=1, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        with self.assertRaisesRegex(ValueError, "recovery_abort_state_mismatch"):
+            recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=1, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+
+    def test_abort_cleanup_failure_is_reported_after_committed_release(self):
+        control = self._failed_recovery()
+        stage_root = self.recovery_root / ".stage"
+        stage_root.mkdir(parents=True)
+        outside = self.root / "outside"
+        outside.mkdir()
+        (stage_root / control["operation_id"]).symlink_to(outside, target_is_directory=True)
+        result = recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=1, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        self.assertEqual(result["cleanup_status"], "failed")
+        self.assertEqual(recovery.recovery_status(self.conn)["worker_drained"], 1)
+        self.assertTrue(outside.exists())
+
+    def test_abort_event_write_failure_rolls_back_release(self):
+        control = self._failed_recovery()
+        original_event = recovery._event
+        recovery._event = lambda *_args, **_kwargs: (_ for _ in ()).throw(sqlite3.OperationalError("event write failed"))
+        try:
+            with self.assertRaises(sqlite3.OperationalError):
+                recovery.abort_recovery(self.conn, recovery_operation_id=control["operation_id"], maintenance_epoch=1, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="abort")
+        finally:
+            recovery._event = original_event
+        self.assertEqual(recovery.recovery_status(self.conn)["worker_drained"], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_events WHERE event_type='recovery_aborted'").fetchone()[0], 0)
+
+    def test_abort_cli_requires_identity_and_epoch(self):
+        from scripts import manage_stage77_recovery as cli
+        with self.assertRaises(SystemExit):
+            cli.parser().parse_args(["abort", "--database", str(self.db), "--recovery-root", str(self.recovery_root), "--actor", "admin", "--action", "abort"])
+        with self.assertRaises(SystemExit):
+            cli.parser().parse_args(["abort", "--database", str(self.db), "--recovery-root", str(self.recovery_root), "--recovery-operation-id", "0" * 32, "--maintenance-epoch", " 1", "--actor", "admin", "--action", "abort"])
+
+    def test_abort_cli_direct_invocation_returns_bounded_confirmation(self):
+        self._failed_recovery()
+        control = recovery.recovery_status(self.conn)
+        completed = subprocess.run([sys.executable, "scripts/manage_stage77_recovery.py", "abort", "--database", str(self.db), "--recovery-root", str(self.recovery_root), "--approved-root", str(self.root), "--recovery-operation-id", control["operation_id"], "--maintenance-epoch", str(control["maintenance_epoch"]), "--actor", "admin", "--action", "abort"], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, check=False)
+        self.assertEqual(completed.returncode, 0)
+        self.assertRegex(completed.stdout.strip(), r"^stage77_recovery=aborted operation=[0-9a-f]{32} epoch=1 prior_state=failed resulting_state=failed cleanup=completed maintenance=released$")
+        self.assertNotIn(str(self.root), completed.stdout)
+        self.assertNotIn("Traceback", completed.stderr)
 
     def test_heartbeat_is_fenced_after_maintenance_epoch_changes(self):
         self.conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,lease_token,maintenance_epoch,idempotency_key,schema_version) VALUES(7,11,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ("a" * 64, "[]", "internal", "v1", "2.0.0", "admin", "capture", "now", "running", 1, 3, "now", "old-token", 0, "epoch-heartbeat", jobs.JOB_SCHEMA_VERSION))

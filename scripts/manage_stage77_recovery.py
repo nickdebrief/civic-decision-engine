@@ -6,6 +6,7 @@ This command never runs automatically and never imports the web application.
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 import sys
 
@@ -52,8 +53,11 @@ def parser() -> argparse.ArgumentParser:
     validate_export.add_argument("--extract-to")
 
     abort = commands.add_parser("abort", help="explicitly release workers after a failed recovery operation")
-    for name in ("database", "actor", "action"):
+    for name in ("database", "recovery-root", "actor", "action"):
         abort.add_argument(f"--{name}", required=True)
+    abort.add_argument("--recovery-operation-id", required=True, type=_operation_id)
+    abort.add_argument("--approved-root", default="/data")
+    abort.add_argument("--maintenance-epoch", required=True, type=_positive_epoch)
 
     restore = commands.add_parser("restore", help="restore a bundle into empty isolated paths")
     for name in ("bundle", "restore-root", "database-target", "artifact-root-target", "live-database", "live-artifact-root", "live-recovery-root", "actor", "action", "application-version", "publication-engine-version"):
@@ -61,6 +65,18 @@ def parser() -> argparse.ArgumentParser:
     restore.add_argument("--approved-root", default="/data")
 
     return root
+
+
+def _positive_epoch(value: str) -> int:
+    if not value or value != value.strip() or not value.isascii() or not value.isdecimal() or int(value) <= 0:
+        raise argparse.ArgumentTypeError("recovery_abort_epoch_invalid")
+    return int(value)
+
+
+def _operation_id(value: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{32}", value or ""):
+        raise argparse.ArgumentTypeError("recovery_abort_identity_invalid")
+    return value
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,10 +97,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "abort":
             conn = _connect(args.database)
             try:
-                result = abort_recovery(conn, actor=args.actor, governed_action=args.action)
+                result = abort_recovery(conn, recovery_operation_id=args.recovery_operation_id, maintenance_epoch=args.maintenance_epoch, recovery_root=args.recovery_root, actor=args.actor, governed_action=args.action, approved_root=args.approved_root)
             finally:
                 conn.close()
-            print(f"stage77_recovery=aborted epoch={result['maintenance_epoch']}", flush=True)
+            print(f"stage77_recovery=aborted operation={result['operation_id']} epoch={result['maintenance_epoch']} prior_state={result['prior_state']} resulting_state={result['resulting_state']} cleanup={result['cleanup_status']} maintenance={result['maintenance_status']}", flush=True)
         else:
             result = restore_recovery_point(bundle_path=args.bundle, restore_root=args.restore_root, database_target=args.database_target, artifact_root_target=args.artifact_root_target, live_database=args.live_database, live_artifact_root=args.live_artifact_root, live_recovery_root=args.live_recovery_root, actor=args.actor, governed_action=args.action, approved_root=args.approved_root, application_version=args.application_version, publication_engine_version=args.publication_engine_version)
             print(f"stage77_recovery=restore_ready manifest={result['manifest_digest']}", flush=True)
@@ -94,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"stage77_recovery=failed phase={exc.phase} operation={exc.operation} checkpoint={exc.checkpoint} code={exc.code} cleanup={exc.cleanup_status} maintenance={exc.maintenance_status}", flush=True)
             return 1
         code = str(exc) if str(exc) in {
-            "recovery_already_active", "recovery_abort_invalid", "recovery_terminal_immutable", "recovery_event_immutable", "drain_timeout", "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap", "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component", "artifact_invalid", "artifact_outside_root", "artifact_digest_mismatch", "artifact_changed_during_capture", "duplicate_artifact_source", "backup_timeout", "manifest_missing", "manifest_invalid", "manifest_digest_mismatch", "bundle_file_invalid", "bundle_file_inventory_invalid", "database_digest_mismatch", "integrity_check_failed", "foreign_key_check_failed", "artifact_inventory_mismatch", "job_state_count_mismatch", "record_count_mismatch", "version_count_mismatch", "recovery_event_bound_mismatch", "schema_incompatible", "engine_incompatible", "restore_target_invalid", "restore_target_overlap", "restore_integrity_failed", "custody_root_invalid", "custody_root_permissions", "export_target_invalid", "export_target_exists", "export_reason_invalid", "export_source_invalid", "export_source_changed", "export_filesystem_mismatch", "export_archive_invalid", "export_receipt_invalid", "export_archive_digest_mismatch", "export_receipt_mismatch", "export_extract_target_invalid", "recovery_operation_failed",
+            "recovery_already_active", "recovery_abort_invalid", "recovery_abort_identity_invalid", "recovery_abort_epoch_invalid", "recovery_abort_identity_or_epoch_mismatch", "recovery_abort_state_mismatch", "recovery_abort_conditional_update", "recovery_abort_staging_invalid", "recovery_terminal_immutable", "recovery_event_immutable", "drain_timeout", "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap", "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component", "artifact_invalid", "artifact_outside_root", "artifact_digest_mismatch", "artifact_changed_during_capture", "duplicate_artifact_source", "backup_timeout", "manifest_missing", "manifest_invalid", "manifest_digest_mismatch", "bundle_file_invalid", "bundle_file_inventory_invalid", "database_digest_mismatch", "integrity_check_failed", "foreign_key_check_failed", "artifact_inventory_mismatch", "job_state_count_mismatch", "record_count_mismatch", "recovery_event_bound_mismatch", "schema_incompatible", "engine_incompatible", "restore_target_invalid", "restore_target_overlap", "restore_integrity_failed", "custody_root_invalid", "custody_root_permissions", "export_target_invalid", "export_target_exists", "export_reason_invalid", "export_source_invalid", "export_source_changed", "export_filesystem_mismatch", "export_archive_invalid", "export_receipt_invalid", "export_archive_digest_mismatch", "export_receipt_mismatch", "export_extract_target_invalid", "recovery_operation_failed",
     } else "recovery_operation_failed"
         print(f"stage77_recovery=failed code={code}", flush=True)
         return 1
