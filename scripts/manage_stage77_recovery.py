@@ -21,6 +21,7 @@ from api.governed_report_recovery import (
     restore_recovery_point,
     validate_export_archive,
     validate_recovery_bundle,
+    RecoveryOperationFailure,
 )
 
 
@@ -89,6 +90,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"stage77_recovery=restore_ready manifest={result['manifest_digest']}", flush=True)
         return 0
     except Exception as exc:
+        if isinstance(exc, RecoveryOperationFailure):
+            print(f"stage77_recovery=failed phase={exc.phase} operation={exc.operation} checkpoint={exc.checkpoint} code={exc.code} cleanup={exc.cleanup_status} maintenance={exc.maintenance_status}", flush=True)
+            return 1
         code = str(exc) if str(exc) in {
             "recovery_already_active", "recovery_abort_invalid", "recovery_terminal_immutable", "recovery_event_immutable", "drain_timeout", "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap", "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component", "artifact_invalid", "artifact_outside_root", "artifact_digest_mismatch", "artifact_changed_during_capture", "duplicate_artifact_source", "backup_timeout", "manifest_missing", "manifest_invalid", "manifest_digest_mismatch", "bundle_file_invalid", "bundle_file_inventory_invalid", "database_digest_mismatch", "integrity_check_failed", "foreign_key_check_failed", "artifact_inventory_mismatch", "job_state_count_mismatch", "record_count_mismatch", "version_count_mismatch", "recovery_event_bound_mismatch", "schema_incompatible", "engine_incompatible", "restore_target_invalid", "restore_target_overlap", "restore_integrity_failed", "custody_root_invalid", "custody_root_permissions", "export_target_invalid", "export_target_exists", "export_reason_invalid", "export_source_invalid", "export_source_changed", "export_filesystem_mismatch", "export_archive_invalid", "export_receipt_invalid", "export_archive_digest_mismatch", "export_receipt_mismatch", "export_extract_target_invalid", "recovery_operation_failed",
     } else "recovery_operation_failed"

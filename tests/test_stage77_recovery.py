@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
@@ -302,6 +303,153 @@ class Stage77RecoveryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("create", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_capture_failure_preserves_bounded_phase_and_cleanup_status(self):
+        original = recovery._read_connection
+
+        def fail_read(_path):
+            raise sqlite3.OperationalError("database is locked")
+
+        recovery._read_connection = fail_read
+        try:
+            with self.assertRaises(recovery.RecoveryOperationFailure) as raised:
+                recovery.capture_recovery_point(
+                    database_path=self.db,
+                    artifact_root=self.artifacts,
+                    recovery_root=self.recovery_root,
+                    approved_root=self.root,
+                    actor="admin",
+                    governed_action="capture",
+                )
+        finally:
+            recovery._read_connection = original
+        failure = raised.exception
+        self.assertEqual(failure.phase, "capture")
+        self.assertEqual(failure.operation, "online_backup_source_connection")
+        self.assertEqual(failure.checkpoint, "starting")
+        self.assertEqual(failure.code, "sqlite_error")
+        self.assertEqual(failure.cleanup_status, "completed")
+        self.assertEqual(failure.maintenance_status, "failed")
+
+    def test_capture_failure_does_not_mask_primary_failure_when_failure_recording_fails(self):
+        original_read = recovery._read_connection
+        original_fail = recovery.fail_recovery
+
+        def fail_read(_path):
+            raise sqlite3.OperationalError("database is locked")
+
+        def fail_record(*_args, **_kwargs):
+            raise sqlite3.OperationalError("state recording unavailable")
+
+        recovery._read_connection = fail_read
+        recovery.fail_recovery = fail_record
+        try:
+            with self.assertRaises(recovery.RecoveryOperationFailure) as raised:
+                recovery.capture_recovery_point(
+                    database_path=self.db,
+                    artifact_root=self.artifacts,
+                    recovery_root=self.recovery_root,
+                    approved_root=self.root,
+                    actor="admin",
+                    governed_action="capture",
+                )
+        finally:
+            recovery._read_connection = original_read
+            recovery.fail_recovery = original_fail
+        failure = raised.exception
+        self.assertEqual(failure.code, "sqlite_error")
+        self.assertEqual(failure.maintenance_status, "unknown")
+
+    def test_capture_failure_does_not_mask_primary_failure_when_rollback_fails(self):
+        original_read = recovery._read_connection
+        original_connect = recovery._connect
+
+        def fail_read(_path):
+            raise sqlite3.OperationalError("database is locked")
+
+        class RollbackFailingConnection:
+            def __init__(self, wrapped):
+                self._wrapped = wrapped
+
+            def __getattr__(self, name):
+                return getattr(self._wrapped, name)
+
+            def rollback(self):
+                raise sqlite3.OperationalError("rollback unavailable")
+
+        def connect_with_failing_rollback(path):
+            return RollbackFailingConnection(original_connect(path))
+
+        recovery._read_connection = fail_read
+        recovery._connect = connect_with_failing_rollback
+        try:
+            with self.assertRaises(recovery.RecoveryOperationFailure) as raised:
+                recovery.capture_recovery_point(
+                    database_path=self.db,
+                    artifact_root=self.artifacts,
+                    recovery_root=self.recovery_root,
+                    approved_root=self.root,
+                    actor="admin",
+                    governed_action="capture",
+                )
+        finally:
+            recovery._read_connection = original_read
+            recovery._connect = original_connect
+        failure = raised.exception
+        self.assertEqual(failure.code, "sqlite_error")
+        self.assertEqual(failure.operation, "online_backup_source_connection")
+        self.assertEqual(failure.cleanup_status, "failed")
+
+    def test_source_connection_failure_closes_backup_destination(self):
+        original_read = recovery._read_connection
+        original_connect = sqlite3.connect
+        backup_connections = []
+
+        def fail_read(_path):
+            raise sqlite3.OperationalError("database is locked")
+
+        def tracking_connect(*args, **kwargs):
+            connection = original_connect(*args, **kwargs)
+            if args and str(args[0]).endswith("database.sqlite3"):
+                backup_connections.append(connection)
+            return connection
+
+        recovery._read_connection = fail_read
+        recovery.sqlite3.connect = tracking_connect
+        try:
+            with self.assertRaises(recovery.RecoveryOperationFailure):
+                recovery.capture_recovery_point(
+                    database_path=self.db,
+                    artifact_root=self.artifacts,
+                    recovery_root=self.recovery_root,
+                    approved_root=self.root,
+                    actor="admin",
+                    governed_action="capture",
+                )
+        finally:
+            recovery._read_connection = original_read
+            recovery.sqlite3.connect = original_connect
+        self.assertTrue(backup_connections)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            backup_connections[-1].execute("SELECT 1")
+
+    def test_recovery_cli_serializes_only_bounded_failure_context(self):
+        from scripts import manage_stage77_recovery as cli
+        from contextlib import redirect_stdout
+
+        output = io.StringIO()
+        failure = recovery.RecoveryOperationFailure(
+            phase="capture",
+            operation="online_backup_source_connection",
+            checkpoint="starting",
+            code="sqlite_error",
+            cleanup_status="completed",
+            maintenance_status="failed",
+        )
+        with patch.object(cli, "capture_recovery_point", side_effect=failure), redirect_stdout(output):
+            self.assertEqual(cli.main(["create", "--database", str(self.db), "--artifact-root", str(self.artifacts), "--recovery-root", str(self.recovery_root), "--actor", "admin", "--action", "capture"]), 1)
+        self.assertEqual(output.getvalue().strip(), "stage77_recovery=failed phase=capture operation=online_backup_source_connection checkpoint=starting code=sqlite_error cleanup=completed maintenance=failed")
+        self.assertNotIn(str(self.root), output.getvalue())
 
     def test_portable_export_is_deterministic_and_receipt_validates(self):
         bundle = self._bundle()
