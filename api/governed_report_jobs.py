@@ -406,7 +406,20 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
         conn.close()
 
 
-def worker_loop(db_path: str, stop_event) -> int:
+def worker_loop(db_path: str, stop_event, on_ready=None) -> int:
+    startup_conn = _connect(db_path)
+    try:
+        ensure_job_tables(startup_conn)
+        from api.governed_report_recovery import ensure_recovery_tables, recovery_status
+        ensure_recovery_tables(startup_conn)
+        recovery_status(startup_conn)
+        if on_ready is not None:
+            on_ready()
+    except Exception:
+        print("stage77_worker=startup_failure", flush=True)
+        return 1
+    finally:
+        startup_conn.close()
     while not stop_event.is_set():
         conn = _connect(db_path)
         try:

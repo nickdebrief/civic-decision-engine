@@ -4,6 +4,8 @@ import subprocess
 import tempfile
 import unittest
 import importlib.util
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,6 +96,8 @@ class Stage77RuntimeStartTests(unittest.TestCase):
         handlers = {}
         def fake_popen(command, **kwargs):
             calls.append((command, kwargs))
+            if command[-1] == "api.governed_report_worker":
+                os.write(kwargs["pass_fds"][0], b"ready\n")
             return Child()
         def fake_signal(signum, handler):
             handlers[signum] = handler
@@ -102,13 +106,47 @@ class Stage77RuntimeStartTests(unittest.TestCase):
             sleeps.append(True)
             if len(sleeps) == 1:
                 handlers[signal.SIGTERM]()
-        with patch.object(supervisor.subprocess, "Popen", side_effect=fake_popen), patch.object(supervisor.signal, "signal", side_effect=fake_signal), patch.object(supervisor, "_stop"), patch.object(supervisor.time, "sleep", side_effect=fake_sleep), patch.dict(os.environ, {"CDE_RUNTIME_PORT": "9123"}):
+        output = StringIO()
+        with patch.object(supervisor.subprocess, "Popen", side_effect=fake_popen), patch.object(supervisor.signal, "signal", side_effect=fake_signal), patch.object(supervisor, "_stop"), patch.object(supervisor.time, "sleep", side_effect=fake_sleep), patch.dict(os.environ, {"CDE_RUNTIME_PORT": "9123"}), redirect_stdout(output):
             self.assertEqual(supervisor.main(), 0)
         self.assertEqual([call[0][2] for call in calls], ["uvicorn", "api.governed_report_worker"])
         self.assertIn("--host", calls[0][0])
         self.assertIn("0.0.0.0", calls[0][0])
         self.assertIn("9123", calls[0][0])
         self.assertTrue(all(call[1]["start_new_session"] for call in calls))
+        markers = [line for line in output.getvalue().splitlines() if line.startswith("stage77_")]
+        self.assertEqual(markers, [
+            "stage77_supervisor=start",
+            "stage77_supervisor_application_child=started",
+            "stage77_supervisor_worker_child=started",
+            "stage77_supervisor=ready",
+            "stage77_supervisor=drain_start",
+            "stage77_supervisor=children_reaped",
+        ])
+
+    def test_worker_command_receives_readiness_fd(self):
+        spec = importlib.util.spec_from_file_location("stage77_supervisor", ROOT / "scripts" / "cde_runtime_supervisor.py")
+        supervisor = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(supervisor)
+        class Child:
+            _next_pid = 300
+            def __init__(self):
+                self.pid = Child._next_pid
+                Child._next_pid += 1
+            def poll(self):
+                return 0 if self.pid == 300 else None
+            def wait(self):
+                return 0
+        calls = []
+        def fake_popen(command, **kwargs):
+            calls.append((command, kwargs))
+            if command[-1] == "api.governed_report_worker":
+                os.write(kwargs["pass_fds"][0], b"ready\n")
+            return Child()
+        with patch.object(supervisor.subprocess, "Popen", side_effect=fake_popen), patch.object(supervisor, "_stop"), patch.dict(os.environ, {"CDE_RUNTIME_PORT": "9123"}), patch.object(supervisor, "_child_failure", return_value=1):
+            self.assertEqual(supervisor.main(), 1)
+        self.assertEqual(calls[1][1]["pass_fds"], (calls[1][1]["pass_fds"][0],))
+        self.assertEqual(calls[1][1]["env"]["CDE_WORKER_READY_FD"], str(calls[1][1]["pass_fds"][0]))
 
 
 if __name__ == "__main__":
