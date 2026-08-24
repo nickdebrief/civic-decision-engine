@@ -85,6 +85,8 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
       failure_code TEXT,
       idempotency_key TEXT NOT NULL UNIQUE,
       retry_of_job_id INTEGER,
+      qualification_id INTEGER,
+      qualification_digest TEXT,
       maintenance_epoch INTEGER NOT NULL DEFAULT 0,
       schema_version TEXT NOT NULL,
       FOREIGN KEY(report_id) REFERENCES record_governed_reports(id),
@@ -109,11 +111,16 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     if "maintenance_epoch" not in columns:
         conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN maintenance_epoch INTEGER NOT NULL DEFAULT 0")
+    if "qualification_id" not in columns:
+        conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN qualification_id INTEGER")
+    if "qualification_digest" not in columns:
+        conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN qualification_digest TEXT")
 
 
 def _payload(report: Mapping[str, Any], actor: str, action: str) -> dict[str, Any]:
     version = report["versions"][-1]
     spec = version["specification"]
+    qualification = report.get("_qualification")
     return {
         "report_id": int(report["id"]),
         "report_version_id": int(version["id"]),
@@ -124,6 +131,8 @@ def _payload(report: Mapping[str, Any], actor: str, action: str) -> dict[str, An
         "publication_engine_version": str(spec["publication_engine_version"]),
         "actor": str(actor),
         "action": str(action),
+        "qualification_id": None if qualification is None else int(qualification["id"]),
+        "qualification_digest": None if qualification is None else str(qualification["digest"]),
     }
 
 
@@ -163,9 +172,16 @@ def enqueue_generation(conn: sqlite3.Connection, *, report_id: int | str, actor:
         raise ValueError("governed_report_generation_idempotency_key_required")
     existing = conn.execute("SELECT * FROM stage77_report_jobs WHERE idempotency_key=?", (key,)).fetchone()
     if existing:
-        existing_payload = {k: existing[k] for k in ("report_id", "report_version_id", "specification_digest", "rendering_profile", "template_version", "publication_engine_version", "requesting_actor", "governed_action")}
+        existing_payload = {k: existing[k] for k in ("report_id", "report_version_id", "specification_digest", "rendering_profile", "template_version", "publication_engine_version", "requesting_actor", "governed_action", "qualification_id", "qualification_digest")}
         existing_payload["requested_formats"] = json.loads(existing["requested_formats_json"])
         report = reports.get_report(conn, report_id)
+        if "qualifications" in report:
+            from api import governed_report_qualifications as qualification_store
+            qualification = qualification_store.latest_final(conn, report_id)
+            if qualification is None:
+                raise ValueError("governed_report_qualification_required")
+            report = dict(report)
+            report["_qualification"] = qualification
         expected_payload = _payload(report, actor, governed_action)
         expected_payload["requesting_actor"] = expected_payload.pop("actor")
         expected_payload["governed_action"] = expected_payload.pop("action")
@@ -173,6 +189,15 @@ def enqueue_generation(conn: sqlite3.Connection, *, report_id: int | str, actor:
             raise ValueError("governed_report_generation_idempotency_conflict")
         return _job(conn, existing["id"])
     report = reports.get_report(conn, report_id)
+    if "qualifications" in report:
+        from api import governed_report_qualifications as qualification_store
+        qualification = qualification_store.latest_final(conn, report_id)
+        if qualification is None:
+            raise ValueError("governed_report_qualification_required")
+        if qualification["payload"]["review_mode"] == qualification_store.SOLE_MODE and qualification_store.configured_review_mode() != qualification_store.SOLE_MODE:
+            raise ValueError("governed_report_sole_mode_disabled")
+        report = dict(report)
+        report["_qualification"] = qualification
     if report["lifecycle_status"] != "approved_for_generation":
         raise ValueError("governed_report_generation_approval_required")
     payload = _payload(report, actor, governed_action)
@@ -181,7 +206,7 @@ def enqueue_generation(conn: sqlite3.Connection, *, report_id: int | str, actor:
     now = utc_now()
     conn.execute("BEGIN IMMEDIATE")
     try:
-        cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (payload["report_id"], payload["report_version_id"], payload["specification_digest"], reports.canonical_json(payload["requested_formats"]), payload["rendering_profile"], payload["template_version"], payload["publication_engine_version"], payload["actor"], payload["action"], now, "queued", 0, MAX_ATTEMPTS, now, key, retry_of_job_id, 0, JOB_SCHEMA_VERSION))
+        cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (payload["report_id"], payload["report_version_id"], payload["specification_digest"], reports.canonical_json(payload["requested_formats"]), payload["rendering_profile"], payload["template_version"], payload["publication_engine_version"], payload["actor"], payload["action"], payload["qualification_id"], payload["qualification_digest"], now, "queued", 0, MAX_ATTEMPTS, now, key, retry_of_job_id, 0, JOB_SCHEMA_VERSION))
         job_id = int(cur.lastrowid)
         _event(conn, job_id, "enqueued", "queued", actor, payload)
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='generation_requested' WHERE id=?", (int(report_id),))
@@ -370,6 +395,23 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
         conn.commit()
         heartbeat_thread.start()
         report = reports.get_report(conn, job["report_id"])
+        if job.get("qualification_id") is not None:
+            from api import governed_report_qualifications as qualification_store
+            qualification = qualification_store.latest_final(conn, job["report_id"])
+            if qualification is None or int(qualification["id"]) != int(job["qualification_id"]) or qualification["digest"] != job.get("qualification_digest"):
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_invalid")
+                return
+            qualification_payload = qualification["payload"]
+            if qualification_payload.get("specification_digest") != report["versions"][-1]["specification_digest"]:
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_specification_mismatch")
+                return
+            if qualification_payload.get("review_mode") == qualification_store.SOLE_MODE:
+                if qualification_payload.get("distribution_restriction") != "internal_working" or qualification_payload.get("disclosure_version") != qualification_store.DISCLOSURE_VERSION:
+                    _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_distribution_invalid")
+                    return
+            elif qualification_payload.get("review_mode") != qualification_store.INDEPENDENT_MODE or qualification_payload.get("disclosure_version") != "none":
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_mode_invalid")
+                return
         if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}:
             _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_lifecycle_invalid"); return
         version = report["versions"][-1]
@@ -383,7 +425,13 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
         staging_dir = reports.REPORT_ROOT / ".stage77" / str(job["id"]) / str(attempt) / token
         promoted_dir = reports.REPORT_ROOT / str(job["report_id"]) / str(version["version_number"]) / f"job-{job['id']}-attempt-{attempt}"
         try:
-            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True)
+            governance_qualification = None
+            if job.get("qualification_id") is not None:
+                from api import governed_report_qualifications as qualification_store
+                qualification = qualification_store.latest_final(conn, job["report_id"])
+                governance_qualification = dict(qualification["payload"])
+                governance_qualification.update({"qualification_id": int(qualification["id"]), "qualification_digest": qualification["digest"], "disclosure": qualification_store.DISCLOSURE})
+            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification)
         except Exception as exc:
             if "cancelled" in str(exc):
                 _terminal(conn, job["id"], token, "cancelled", WORKER_IDENTITY, phase="cancellation", code="cancelled")
@@ -413,12 +461,27 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
 def worker_loop(db_path: str, stop_event, on_ready=None) -> int:
     startup_conn = None
     try:
-        startup_conn = _connect(db_path)
-        ensure_job_tables(startup_conn)
-        reports.ensure_report_tables(startup_conn)
-        from api.governed_report_recovery import ensure_recovery_tables, recovery_status
-        ensure_recovery_tables(startup_conn)
-        recovery_status(startup_conn)
+        last_error = None
+        for attempt in range(5):
+            try:
+                startup_conn = _connect(db_path)
+                ensure_job_tables(startup_conn)
+                reports.ensure_report_tables(startup_conn)
+                from api.governed_report_recovery import ensure_recovery_tables, recovery_status
+                ensure_recovery_tables(startup_conn)
+                recovery_status(startup_conn)
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt == 4:
+                    raise
+                if startup_conn is not None:
+                    startup_conn.close()
+                    startup_conn = None
+                time.sleep(0.05 * (attempt + 1))
+        if last_error is not None:
+            raise last_error
         if on_ready is not None:
             on_ready()
     except ValueError as exc:

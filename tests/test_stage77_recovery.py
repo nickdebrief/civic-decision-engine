@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
+from api import governed_report_qualifications as qualifications
 
 
 class Stage77RecoveryTests(unittest.TestCase):
@@ -37,6 +38,7 @@ class Stage77RecoveryTests(unittest.TestCase):
         self.artifact.write_bytes(self.bytes)
         self.conn.execute("INSERT INTO record_governed_report_artifacts VALUES(3,11,'docx',?,?,?,'valid')", (str(self.artifact), recovery.digest_bytes(self.bytes), len(self.bytes)))
         jobs.ensure_job_tables(self.conn)
+        qualifications.ensure_qualification_tables(self.conn)
 
     def tearDown(self):
         self.conn.close()

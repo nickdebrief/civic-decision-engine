@@ -699,7 +699,7 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def make_book(spec):
+def make_book(spec, governance_qualification=None):
     blocks = []
     for section in spec["sections"]:
         paragraphs = []
@@ -725,7 +725,21 @@ def make_book(spec):
         provenance.append(Paragraph(text=f"Record–document association: {item['association_id']} — {item['record_reference']} / {item['document_id']} — {item['relationship_type']}", role="body", identifier=f"stage75-association-{item['association_id']}"))
     if provenance:
         blocks.append(Section(title="Selected source provenance", number=str(len(blocks) + 1), level=1, blocks=provenance, identifier="stage75-source-provenance"))
-    qualification_blocks = [Paragraph(text=f"Qualification: {value}", role="body", identifier=f"stage75-qualification-{index}") for index, value in enumerate(spec.get("qualifications", []))]
+    qualification_values = list(spec.get("qualifications", []))
+    if governance_qualification is not None:
+        if set(governance_qualification) != {"review_mode", "disclosure_version", "disclosure", "qualification_id", "qualification_digest"}:
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        if governance_qualification["review_mode"] != "sole_administrator" or governance_qualification["disclosure_version"] != "sole-admin-v1":
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        expected_disclosure = "Independent administrator review did not occur. This report was confirmed and approved by its creator under the declared sole-administrator operating constraint. It remains restricted to authorised internal use."
+        if governance_qualification["disclosure"] != expected_disclosure:
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        if not isinstance(governance_qualification["qualification_id"], int) or not isinstance(governance_qualification["qualification_digest"], str) or len(governance_qualification["qualification_digest"]) != 64:
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        if expected_disclosure in qualification_values:
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        qualification_values.append(governance_qualification["disclosure"])
+    qualification_blocks = [Paragraph(text=f"Qualification: {value}", role="body", identifier=f"stage75-qualification-{index}") for index, value in enumerate(qualification_values)]
     exclusion_blocks = [Paragraph(text=f"Exclusion: {item['object_kind']}:{item['object_id']} — {item['rationale']}", role="body", identifier=f"stage75-exclusion-{index}") for index, item in enumerate(spec.get("exclusions", []))]
     if not exclusion_blocks:
         exclusion_blocks = [Paragraph(text="Exclusion: No exclusions recorded in this specification.", role="body", identifier="stage75-exclusion-none")]
@@ -752,7 +766,8 @@ def main():
     requested = set(spec.get("requested_formats", []))
     if "pdf" in requested and not {"docx", "html"}.issubset(requested):
         raise AdapterFailure("specification_validation", "adapter_input_invalid")
-    book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec))
+    governance_qualification = payload.get("governance_qualification")
+    book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec, governance_qualification))
     effective = EffectiveTheme(theme=HANDBOOK_THEME, publication_profile=PUBLICATION_PROFILES["digital"], page=HANDBOOK_THEME.page, title_page=HANDBOOK_THEME.title_page, volume_page=HANDBOOK_THEME.volume_page, chapter_opening=HANDBOOK_THEME.chapter_opening)
     artifacts = []
     html_path = output / "report.html"

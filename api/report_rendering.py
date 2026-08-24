@@ -208,17 +208,20 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
             pass
 
 
-def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path) -> dict[str, Any]:
+def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path, governance_qualification: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if specification.get("publication_engine_version") != ENGINE_VERSION:
         raise ValueError("governed_report_publication_engine_version_invalid")
     if __import__("hashlib").sha256(canonical_json(specification).encode("utf-8")).hexdigest() != digest:
         raise ValueError("governed_report_specification_digest_mismatch")
+    if governance_qualification is not None:
+        if governance_qualification.get("review_mode") != "sole_administrator" or governance_qualification.get("disclosure_version") != "sole-admin-v1" or governance_qualification.get("disclosure") != "Independent administrator review did not occur. This report was confirmed and approved by its creator under the declared sole-administrator operating constraint. It remains restricted to authorised internal use.":
+            raise ValueError("governed_report_qualification_disclosure_invalid")
     promoted = []
     with tempfile.TemporaryDirectory(prefix="cde-stage75-") as temp:
         request = Path(temp) / "specification.json"
         staged_output = Path(temp) / "output"
         staged_output.mkdir()
-        request.write_text(json.dumps({"specification": specification, "digest": digest}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         result_path = Path(temp) / "adapter-result.json"
         command = [sys.executable, str(ADAPTER), str(request), str(staged_output), str(result_path)]
         process = subprocess.Popen(

@@ -77,6 +77,7 @@ from api import record_document_association_decisions as rdd
 from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
 from api import governed_report_jobs as rg77
+from api import governed_report_qualifications as rg75q
 from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
 from api import record_governed_responses as rgr
@@ -54846,17 +54847,32 @@ def _stage75_html(*, session: dict[str, Any], reports: list[dict[str, Any]], can
     if detail is not None:
         events = "".join(f'<li>{escape(event["occurred_at"])} — {escape(event["event_type"])} — {escape(event["resulting_status"])} — {escape(event["actor"])}</li>' for event in detail.get("events", [])) or "<li>No lifecycle events.</li>"
         artifacts = "".join(f'<li>{escape(item["format"])} — {escape(item["validation_state"])} — <a href="/admin/governed-reports/{int(detail["id"])}/artifacts/{int(item["id"])}">download</a></li>' for item in detail.get("artifacts", [])) or "<li>No generated artifacts.</li>"
-        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Artifacts</h3><ul>{artifacts}</ul><div class="actions">{_stage75_transition_forms(detail)}</div></section>'
+        qualification_history = "".join(f'<li>{escape(str(item["id"]))} · {escape(str(item["completed_gate"]))} · {escape(str(item["review_mode"]))} · {escape(str(item["qualification_digest"]))}</li>' for item in detail.get("qualifications", [])) or "<li>No structured qualification recorded.</li>"
+        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul><div class="actions">{_stage75_transition_forms(detail, session=session)}</div></section>'
     record_options = '<option value="" selected disabled>Choose a Canonical Record</option>' + records
     document_options = '<option value="" disabled>Choose Published Documents (optional)</option>' + documents
     association_options = '<option value="" disabled>Choose record–document associations (optional)</option>' + associations
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Governed Reports</title><style>*{{box-sizing:border-box}}body{{margin:0;background:#f4f3ef;color:#222;font-family:system-ui,sans-serif}}main{{width:min(1180px,calc(100% - 32px));margin:32px auto 64px}}h1,h2,h3{{color:#143a52}}a{{color:#245d61}}.qualification,.panel{{background:#fff;border:1px solid #d8d4ca;padding:16px;margin:18px 0;min-width:0}}.qualification{{border-left:4px solid #8a5a2b;line-height:1.55}}form{{display:grid;gap:12px;max-width:900px}}label{{display:grid;gap:6px}}input,select,textarea{{width:100%;max-width:100%;min-width:0;padding:9px;font:1rem system-ui,sans-serif}}select[multiple]{{min-height:110px}}textarea{{min-height:88px}}button{{width:max-content;padding:10px 14px;background:#245d61;color:#fff;border:0}}table{{width:100%;border-collapse:collapse}}th,td{{padding:9px;border:1px solid #ddd;text-align:left;vertical-align:top;overflow-wrap:anywhere}}th{{background:#faf9f5}}.table-wrap{{max-width:100%;overflow-x:auto}}.error{{padding:12px;background:#fee2e2;color:#991b1b}}.governed-declaration-control{{display:flex;align-items:flex-start;gap:8px;line-height:1.45}}.governed-declaration-control input{{width:auto;min-width:1rem;margin:.2rem 0 0;flex:0 0 auto}}code{{overflow-wrap:anywhere}}@media(max-width:700px){{main{{width:calc(100% - 20px)}}.panel{{padding:12px}}}}</style></head><body><main>{_render_admin_console_navigation(admin_session=session)}<h1>Governed Reports</h1><p class="qualification"><strong>A REPORT PRESENTS THE RECORD—IT DOES NOT REPLACE IT.</strong><br>A PDF PRESENTS THE APPROVED REPORT SPECIFICATION—IT DOES NOT ALTER IT.<br>PDF rendering is not approval. Format equivalence is not legal validation. Inclusion is not endorsement. Exclusion is not proof of absence. A summary is not original language. Printing is not publication. Publication Engine validation is not legal validation.<br><strong>THE RECORD MUST PRESERVE THE ORIGINAL LANGUAGE.</strong></p>{error_html}<section class="panel"><h2>Recorded report specifications</h2><div class="table-wrap"><table><thead><tr><th>Identity</th><th>Type</th><th>Title</th><th>Lifecycle</th><th>Distribution</th></tr></thead><tbody>{rows}</tbody></table></div></section>{detail_html}<section class="panel"><h2>Assemble Canonical Record Report</h2><p>Only deliberately selected internal material is assembled. No report is a determination or a publication.</p><form method="post" action="/api/admin/session/governed-reports"><label for="stage75-type">Report type<select id="stage75-type" name="report_type" required><option value="" selected disabled>Choose report type</option><option value="canonical_record_report">Canonical Record Report</option></select></label><label for="stage75-record">Canonical Record<select id="stage75-record" name="canonical_record_reference" required>{record_options}</select></label><label for="stage75-title">Represented title<input id="stage75-title" name="title" required></label><label for="stage75-purpose">Represented purpose<textarea id="stage75-purpose" name="purpose" required></textarea></label><label for="stage75-audience">Intended audience<input id="stage75-audience" name="audience" required></label><label for="stage75-distribution">Distribution class<select id="stage75-distribution" name="distribution_class" required><option value="" selected disabled>Choose distribution class</option><option value="internal_working">Internal working</option><option value="restricted_review">Restricted review</option></select></label><fieldset><legend>Published Documents</legend><label for="stage75-documents">Deliberately selected documents<select id="stage75-documents" name="document_ids" multiple>{document_options}</select></label><label for="stage75-associations">Existing record–document associations<select id="stage75-associations" name="association_ids" multiple>{association_options}</select><p>No document or association is selected by default. They remain separate governed selections.</p></fieldset><label for="stage75-formats">Output formats<select id="stage75-formats" name="requested_formats" multiple required><option value="" selected disabled>Choose output formats</option><option value="docx">DOCX</option><option value="html">HTML</option><option value="pdf">PDF (requires DOCX and HTML validation)</option></select></label><label for="stage75-rendering">Rendering profile<input id="stage75-rendering" name="rendering_profile" value="internal" required></label><label for="stage75-template">Template version<input id="stage75-template" name="template_version" value="cde-internal-v1" required></label><label for="stage75-record-description" class="governed-declaration-control"><input id="stage75-record-description" type="checkbox" name="include_record_description" value="1"><span>Deliberately include the Canonical Record represented description as original wording.</span></label><label for="stage75-declaration" class="governed-declaration-control"><input id="stage75-declaration" type="checkbox" name="acknowledged" value="1" required><span>I confirm that this report presents deliberately selected record material and does not replace the record.</span></label><input type="hidden" name="idempotency_key" value=""><button type="submit">Create internal report specification</button></form></section></main></body></html>'''
 
 
-def _stage75_transition_forms(detail: dict[str, Any]) -> str:
+def _stage75_transition_forms(detail: dict[str, Any], *, session: dict[str, Any]) -> str:
     status = detail["lifecycle_status"]
     next_statuses = {"draft_specification": ("assembly_reviewed",), "assembly_reviewed": ("privacy_reviewed",), "privacy_reviewed": ("redaction_reviewed",), "redaction_reviewed": ("approved_for_generation",)}.get(status, ())
-    form = "".join(f'<form method="post" action="/api/admin/session/governed-reports/{int(detail["id"])}/transition"><input type="hidden" name="resulting_status" value="{escape(next_status)}"><label>{escape(next_status)} rationale<textarea name="rationale" required></textarea></label><label class="governed-declaration-control"><input type="checkbox" name="acknowledged" value="1" required><span>I confirm this review concerns report assembly and validation, not truth, determination or publication.</span></label><input type="hidden" name="idempotency_key" value=""><button type="submit">Record {escape(next_status.replace("_", " "))}</button></form>' for next_status in next_statuses)
+    try:
+        sole_mode = rg75q.configured_review_mode() == rg75q.SOLE_MODE
+    except ValueError:
+        sole_mode = False
+    form = ""
+    if sole_mode:
+        form = '<p class="notice">Independent review requires a different administrator. Creator confirmation is not independent review and is available only under the configured sole-administrator operating constraint.</p>'
+        sole_status = {"draft_specification": "assembly_reviewed", "assembly_reviewed": "privacy_reviewed", "privacy_reviewed": "redaction_reviewed", "redaction_reviewed": "approved_for_generation"}.get(status)
+        if sole_status and str(session.get("username") or "") == str(detail.get("created_by") or ""):
+            form += f'<form method="post" action="/api/admin/session/governed-reports/{int(detail["id"])}/creator-confirm"><input type="hidden" name="resulting_status" value="{escape(sole_status)}"><h3>Creator confirmation — not independent review</h3><label>Confirmation rationale<textarea name="rationale" required></textarea></label><label class="governed-declaration-control"><input type="checkbox" name="acknowledged" value="1" required><span>I confirm that no independent administrator was available and that this action is not independent review.</span></label><input type="hidden" name="idempotency_key" value=""><button type="submit">Confirm {escape(sole_status.replace("_", " "))}</button></form>'
+        elif sole_status:
+            form += '<p>The current actor is not the report creator and cannot use creator confirmation.</p>'
+    elif next_statuses:
+        resulting_status = next_statuses[0]
+        form = f'<form method="post" action="/api/admin/session/governed-reports/{int(detail["id"])}/transition"><h3>Independent administrator review</h3><input type="hidden" name="resulting_status" value="{escape(resulting_status)}"><label>Review rationale<textarea name="rationale" required></textarea></label><label class="governed-declaration-control"><input type="checkbox" name="acknowledged" value="1" required><span>I confirm this review is deliberate and does not alter the frozen specification.</span></label><input type="hidden" name="idempotency_key" value=""><button type="submit">Complete {escape(resulting_status.replace("_", " "))}</button></form>'
     if status == "approved_for_generation":
         formats = ", ".join(detail["versions"][-1].get("requested_formats", []))
         form += f'<form method="post" action="/api/admin/session/governed-reports/{int(detail["id"])}/generate"><p>Generation validates every requested format together. PDF requests require DOCX and HTML companion validation.</p><label>Generation declaration<input type="checkbox" name="acknowledged" value="1" required></label><input type="hidden" name="idempotency_key" value=""><button type="submit">Generate validated {escape(formats or "report")} artifacts</button></form>'
@@ -54891,7 +54907,7 @@ def admin_governed_report_jobs(request: Request):
         jobs = rg77.list_jobs(conn)
     finally:
         conn.close()
-    return JSONResponse({"jobs": [{key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action")} for item in jobs]})
+    return JSONResponse({"jobs": [{key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action")} for item in jobs]})
 
 
 @router.get("/admin/governed-report-jobs/{job_id}", response_class=JSONResponse)
@@ -54908,7 +54924,7 @@ def admin_governed_report_job_detail(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Not found") from None
     finally:
         conn.close()
-    return JSONResponse({key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action", "events")})
+    return JSONResponse({key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action", "events")})
 
 
 @router.post("/admin/governed-report-jobs/{job_id}/cancel", response_class=JSONResponse)
@@ -54996,6 +55012,34 @@ def admin_governed_report_transition(report_id: str, request: Request, resulting
     return admin_governed_report_detail(str(item["id"]), request)
 
 
+@router.post("/api/admin/session/governed-reports/{report_id}/creator-confirm", response_class=HTMLResponse)
+def admin_governed_report_creator_confirm(report_id: str, request: Request, resulting_status: str = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form("")):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        item = rg75.confirm_creator_gate(
+            conn,
+            report_id=report_id,
+            resulting_status=resulting_status,
+            rationale=rationale,
+            actor=_admin_session_actor(session),
+            actor_role=_admin_session_role(session),
+            acknowledged=acknowledged == "1",
+            idempotency_key=idempotency_key or f"stage75-creator-confirm-{report_id}-{resulting_status}",
+        )
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        conn.rollback(); conn.close()
+        messages = {
+            "governed_report_sole_confirmation_required": "Creator confirmation is unavailable unless sole-administrator mode is explicitly enabled.",
+            "governed_report_sole_qualifier_must_be_creator": "Only the report creator can use creator confirmation.",
+            "governed_report_qualification_rationale_invalid": "A bounded rationale is required for each confirmation.",
+            "governed_report_qualification_declaration_required": "The affirmative confirmation is required.",
+        }
+        return HTMLResponse(content=_stage75_html(session=session, reports=[], candidates={}, error=messages.get(str(exc), "Creator confirmation could not be recorded.")), status_code=409)
+    conn.close()
+    return admin_governed_report_detail(str(item["id"]), request)
+
+
 @router.post("/api/admin/session/governed-reports/{report_id}/generate", response_class=HTMLResponse)
 def admin_governed_report_generate(report_id: str, request: Request, acknowledged: str | None = Form(None), idempotency_key: str = Form("")):
     session = require_admin_session(request)
@@ -55035,11 +55079,21 @@ def admin_governed_report_artifact(report_id: str, artifact_id: str, request: Re
         raise HTTPException(status_code=404, detail="Not found") from None
     conn = get_db()
     try:
-        row = conn.execute("SELECT a.storage_reference,a.format,a.lifecycle_status,a.sha256,a.validation_state,v.specification_json,v.specification_digest,v.lifecycle_status,r.lifecycle_status FROM record_governed_report_artifacts a JOIN record_governed_report_versions v ON v.id=a.version_id JOIN record_governed_reports r ON r.id=v.report_id WHERE a.id=? AND v.report_id=?", (numeric_artifact, numeric_report)).fetchone()
+        row = conn.execute("SELECT a.storage_reference,a.format,a.lifecycle_status,a.sha256,a.validation_state,v.specification_json,v.specification_digest,v.lifecycle_status,r.lifecycle_status,a.qualification_id,a.qualification_digest,a.disclosure_version FROM record_governed_report_artifacts a JOIN record_governed_report_versions v ON v.id=a.version_id JOIN record_governed_reports r ON r.id=v.report_id WHERE a.id=? AND v.report_id=?", (numeric_artifact, numeric_report)).fetchone()
+        qualification = None
+        if row is not None and row[9] is not None:
+            try:
+                qualification = rg75q.latest_final(conn, numeric_report)
+            except (ValueError, TypeError, sqlite3.Error):
+                qualification = None
     finally:
         conn.close()
     if not row or row[2] != "current" or row[4] != "valid" or row[7] != "generated" or row[8] != "generated" or rg75.specification_digest(json.loads(row[5])) != row[6]:
         raise HTTPException(status_code=404, detail="Not found")
+    if row[9] is not None:
+        expected_disclosure = rg75q.DISCLOSURE_VERSION if qualification and qualification["payload"].get("review_mode") == rg75q.SOLE_MODE else "none"
+        if qualification is None or int(qualification["id"]) != int(row[9]) or qualification["digest"] != row[10] or row[11] != expected_disclosure:
+            raise HTTPException(status_code=404, detail="Not found")
     path = Path(row[0]).resolve()
     root = rg75.REPORT_ROOT.resolve()
     if root not in path.parents or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row[3]:
