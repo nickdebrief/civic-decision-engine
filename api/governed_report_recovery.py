@@ -49,6 +49,30 @@ ALLOWED_RECEIPT_KEYS = {
     "publication_engine_version", "stage77_schema_version",
 }
 MAX_EXPORT_REASON = 256
+BOUNDED_FAILURE_CODES = {
+    "artifact_digest_mismatch", "duplicate_artifact_source", "artifact_invalid",
+    "artifact_outside_root", "artifact_changed_during_capture", "backup_timeout",
+    "integrity_check_failed", "foreign_key_check_failed", "recovery_point_exists",
+    "bundle_file_inventory_invalid", "job_state_count_mismatch", "record_count_mismatch",
+    "version_count_mismatch", "recovery_event_bound_mismatch", "recovery_not_draining",
+    "recovery_not_quiesced", "recovery_already_active", "recovery_terminal_immutable",
+    "recovery_operation_failed", "sqlite_error", "digest_mismatch", "manifest_invalid",
+    "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap",
+    "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component",
+}
+RECOVERY_DIAGNOSTIC_PHASES = {"configuration", "initialization", "maintenance", "drain", "capture", "validation", "promotion", "completion"}
+RECOVERY_DIAGNOSTIC_OPERATIONS = {
+    "recovery_root_validation", "connection_configuration", "job_schema", "recovery_tables",
+    "maintenance_epoch_creation", "maintenance_epoch_validation", "worker_quiescence",
+    "capture_state_write", "staging_directory", "wal_checkpoint", "capture_transaction_begin",
+    "online_backup_destination_connection", "online_backup_source_connection", "online_backup_execution",
+    "backup_completion", "database_integrity_check", "foreign_key_check", "job_event_bound_read",
+    "recovery_event_bound_read", "artifact_registration_inventory_read", "artifact_copy",
+    "artifact_stability_check", "manifest_database_reads", "manifest_write", "bundle_validation",
+    "bundle_promotion", "completion_event_write", "completion_transaction_commit",
+    "failure_event_write", "failure_transaction_commit", "capture_transaction_rollback",
+}
+RECOVERY_DIAGNOSTIC_CHECKPOINTS = {"starting", "waiting", "progress", "completed", "failed"}
 
 
 def utc_now() -> str:
@@ -65,6 +89,8 @@ def digest_bytes(value: bytes) -> str:
 
 def _code(exc: BaseException) -> str:
     text = str(exc).lower()
+    if text in BOUNDED_FAILURE_CODES:
+        return text
     if isinstance(exc, sqlite3.Error):
         return "sqlite_error"
     if "symlink" in text:
@@ -76,6 +102,21 @@ def _code(exc: BaseException) -> str:
     if "artifact" in text:
         return "artifact_invalid"
     return "recovery_operation_failed"
+
+
+class RecoveryOperationFailure(ValueError):
+    """Bounded failure context for the explicit recovery CLI."""
+
+    def __init__(self, *, phase: str, operation: str, checkpoint: str, code: str, cleanup_status: str, maintenance_status: str) -> None:
+        if phase not in RECOVERY_DIAGNOSTIC_PHASES or operation not in RECOVERY_DIAGNOSTIC_OPERATIONS or checkpoint not in RECOVERY_DIAGNOSTIC_CHECKPOINTS or code not in BOUNDED_FAILURE_CODES or cleanup_status not in {"not_required", "completed", "failed"} or maintenance_status not in {"unknown", "failed"}:
+            raise ValueError("recovery_diagnostic_invalid")
+        super().__init__(code)
+        self.phase = phase
+        self.operation = operation
+        self.checkpoint = checkpoint
+        self.code = code
+        self.cleanup_status = cleanup_status
+        self.maintenance_status = maintenance_status
 
 
 def _lexical_path(path: str | os.PathLike[str], *, error: str = "restore_target_invalid") -> Path:
@@ -684,62 +725,98 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
 
 
 def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_root: str | os.PathLike[str], recovery_root: str | os.PathLike[str], actor: str, governed_action: str, idempotency_key: str = "", approved_root: str | os.PathLike[str] = "/data", drain_timeout: float = 30.0, application_version: str = "unknown", publication_engine_version: str = "2.0.0") -> dict[str, Any]:
-    root = _require_recovery_root(recovery_root, approved_root=approved_root)
+    phase = "configuration"
+    operation = "recovery_root_validation"
+    checkpoint = "starting"
+    try:
+        root = _require_recovery_root(recovery_root, approved_root=approved_root)
+    except Exception as exc:
+        raise RecoveryOperationFailure(phase=phase, operation=operation, checkpoint=checkpoint, code=_code(exc), cleanup_status="not_required", maintenance_status="unknown") from exc
     database = Path(database_path)
     artifacts = Path(artifact_root)
-    if database.resolve(strict=False) == root or artifacts.resolve(strict=False) == root or root.is_relative_to(database.resolve(strict=False)) or root.is_relative_to(artifacts.resolve(strict=False)):
-        raise ValueError("recovery_root_overlap")
-    root.mkdir(parents=True, exist_ok=True)
-    conn = _connect(database)
+    try:
+        if database.resolve(strict=False) == root or artifacts.resolve(strict=False) == root or root.is_relative_to(database.resolve(strict=False)) or root.is_relative_to(artifacts.resolve(strict=False)):
+            raise ValueError("recovery_root_overlap")
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise RecoveryOperationFailure(phase=phase, operation="recovery_root_validation", checkpoint="starting", code=_code(exc), cleanup_status="not_required", maintenance_status="unknown") from exc
+    phase, operation, checkpoint = "initialization", "connection_configuration", "starting"
+    try:
+        conn = _connect(database)
+    except Exception as exc:
+        raise RecoveryOperationFailure(phase=phase, operation=operation, checkpoint=checkpoint, code=_code(exc), cleanup_status="not_required", maintenance_status="unknown") from exc
     stage: Path | None = None
+    rollback_failed = False
     try:
         from api import governed_report_jobs as jobs
+        phase, operation, checkpoint = "initialization", "job_schema", "starting"
         jobs.ensure_job_tables(conn)
+        operation = "recovery_tables"
         ensure_recovery_tables(conn)
+        phase, operation, checkpoint = "maintenance", "maintenance_epoch_creation", "starting"
         control = request_recovery(conn, actor=actor, governed_action=governed_action, idempotency_key=idempotency_key)
         if control["state"] == "completed":
             final = root / f"recovery-{control['recovery_point_id']}"
             manifest, digest = _manifest_and_digest(final)
             _verify_bundle(final, manifest)
             return {"recovery_point_id": control["recovery_point_id"], "manifest_digest": digest, "state": "completed"}
+        phase, operation, checkpoint = "drain", "maintenance_epoch_validation", "starting"
+        recovery_status(conn)
+        phase, operation, checkpoint = "drain", "worker_quiescence", "waiting"
         wait_for_quiescence(conn, deadline=time.monotonic() + drain_timeout)
+        phase, operation, checkpoint = "capture", "capture_state_write", "starting"
         control = _set_capture_state(conn, "capturing")
+        phase, operation, checkpoint = "capture", "staging_directory", "creating"
         stage = root / ".stage" / control["operation_id"]
         final = root / f"recovery-{control['recovery_point_id']}"
         if final.exists() or final.is_symlink():
             raise ValueError("recovery_point_exists")
         stage.mkdir(parents=True, exist_ok=False)
         (stage / "artifacts").mkdir()
+        phase, operation, checkpoint = "capture", "wal_checkpoint", "starting"
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        phase, operation, checkpoint = "capture", "capture_transaction_begin", "starting"
         conn.execute("BEGIN IMMEDIATE")
         backup_check = None
         try:
             backup_path = stage / "database.sqlite3"
-            backup_conn = sqlite3.connect(backup_path, isolation_level=None)
-            backup_source = _read_connection(database)
+            phase, operation, checkpoint = "capture", "online_backup_destination_connection", "starting"
+            backup_conn = None
+            backup_source = None
             try:
+                backup_conn = sqlite3.connect(backup_path, isolation_level=None)
+                phase, operation, checkpoint = "capture", "online_backup_source_connection", "starting"
+                backup_source = _read_connection(database)
                 deadline = time.monotonic() + BACKUP_DEADLINE_SECONDS
                 def backup_progress(_status: int, _remaining: int, _total: int) -> None:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("backup_timeout")
+                phase, operation, checkpoint = "capture", "online_backup_execution", "progress"
                 backup_source.backup(backup_conn, pages=100, sleep=0.01, progress=backup_progress)
+                phase, operation, checkpoint = "capture", "backup_completion", "starting"
                 backup_conn.execute("PRAGMA journal_mode=DELETE")
             finally:
-                backup_source.close()
-                backup_conn.close()
+                if backup_source is not None:
+                    backup_source.close()
+                if backup_conn is not None:
+                    backup_conn.close()
             backup_data = backup_path.read_bytes()
+            phase, operation, checkpoint = "validation", "database_integrity_check", "starting"
             backup_check = _read_connection(backup_path)
             try:
                 if backup_check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ValueError("integrity_check_failed")
+                phase, operation, checkpoint = "validation", "foreign_key_check", "starting"
                 if not _foreign_keys_are_clean(backup_check):
                     raise ValueError("foreign_key_check_failed")
                 job_counts = {state: int(backup_check.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
+                phase, operation, checkpoint = "validation", "job_event_bound_read", "starting"
                 max_event = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM stage77_report_job_events").fetchone()[0])
                 job_count = int(backup_check.execute("SELECT COUNT(*) FROM stage77_report_jobs").fetchone()[0])
                 report_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0])
                 version_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0])
                 artifact_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_report_artifacts WHERE validation_state='valid'").fetchone()[0])
+                phase, operation, checkpoint = "validation", "artifact_registration_inventory_read", "starting"
                 rows = backup_check.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
                 inventory = []
                 source_paths: set[Path] = set()
@@ -749,37 +826,69 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     if source in source_paths:
                         raise ValueError("duplicate_artifact_source")
                     source_paths.add(source)
+                    phase, operation, checkpoint = "validation", "artifact_copy", "starting"
                     inventory.append(_copy_artifact(artifacts, stage / "artifacts", dict(row, report_id=int(version[0]))))
+                phase, operation, checkpoint = "validation", "artifact_stability_check", "starting"
                 for row in rows:
                     current = Path(str(row["storage_reference"]))
                     if current.is_symlink() or not current.is_file() or current.stat().st_size != int(row["size_bytes"]) or digest_bytes(current.read_bytes()) != str(row["sha256"]):
                         raise ValueError("artifact_changed_during_capture")
+                phase, operation, checkpoint = "validation", "recovery_event_bound_read", "starting"
                 recovery_event_bound = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
+                phase, operation, checkpoint = "validation", "manifest_database_reads", "starting"
                 manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
                 raw_manifest = canonical_json(manifest).encode("utf-8")
+                phase, operation, checkpoint = "validation", "manifest_write", "starting"
                 (stage / "manifest.json").write_bytes(raw_manifest)
                 (stage / "manifest.sha256").write_text(digest_bytes(raw_manifest) + "\n", encoding="ascii")
+                phase, operation, checkpoint = "validation", "bundle_validation", "starting"
                 _verify_bundle(stage, manifest)
+                phase, operation, checkpoint = "promotion", "bundle_promotion", "starting"
                 os.replace(stage, final)
+                phase, operation, checkpoint = "completion", "completion_event_write", "starting"
                 conn.execute("UPDATE stage77_recovery_control SET state='completed',completed_at=?,manifest_digest=?,source_database_identity=?,worker_drained=1 WHERE singleton=1", (utc_now(), digest_bytes(raw_manifest), manifest["source_database_identity"]))
                 updated = _control(conn)
                 _event(conn, updated, "recovery_completed", "completed", actor, {"manifest_digest": digest_bytes(raw_manifest)})
-                conn.commit()
+                operation, checkpoint = "completion_transaction_commit", "starting"
+                try:
+                    conn.commit()
+                except Exception:
+                    operation, checkpoint = "completion_transaction_commit", "failed"
+                    raise
                 return {"recovery_point_id": control["recovery_point_id"], "manifest_digest": digest_bytes(raw_manifest), "state": "completed"}
             finally:
                 if backup_check is not None:
                     backup_check.close()
         except Exception:
-            conn.rollback()
+            failed_operation, failed_checkpoint = operation, checkpoint
+            try:
+                conn.rollback()
+            except Exception:
+                rollback_failed = True
+                operation, checkpoint = "capture_transaction_rollback", "failed"
+                operation, checkpoint = failed_operation, failed_checkpoint
+            operation, checkpoint = failed_operation, failed_checkpoint
             raise
     except Exception as exc:
+        primary_code = _code(exc)
+        cleanup_status = "not_required"
         if stage is not None:
-            shutil.rmtree(stage, ignore_errors=True)
+            try:
+                shutil.rmtree(stage, ignore_errors=False)
+                cleanup_status = "completed"
+            except Exception:
+                cleanup_status = "failed"
+        if rollback_failed:
+            cleanup_status = "failed"
+        maintenance_status = "unknown"
         try:
-            fail_recovery(conn, phase="capture", code=_code(exc))
+            fail_recovery(conn, phase=phase, code=primary_code)
+            maintenance_status = "failed"
+        except Exception:
+            maintenance_status = "unknown"
         finally:
             conn.close()
-        raise
+        raise RecoveryOperationFailure(phase=phase, operation=operation, checkpoint=checkpoint, code=primary_code, cleanup_status=cleanup_status, maintenance_status=maintenance_status) from exc
     finally:
         if not conn is None:
             conn.close()
