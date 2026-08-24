@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from api import record_governed_reports as reports
+from api import governed_report_qualifications as qualifications
 
 RECOVERY_SCHEMA_VERSION = "stage77.recovery.v1"
 MANIFEST_SCHEMA_VERSION = "stage77.recovery_manifest.v1"
@@ -35,7 +36,7 @@ ALLOWED_MANIFEST_KEYS = {
     "manifest_schema_version", "recovery_point_id", "maintenance_epoch", "created_at",
     "source_database_identity", "sqlite_version", "application_version",
     "publication_engine_version", "stage77_schema_version", "database",
-    "integrity", "job_event_bound", "recovery_event_bound", "job_state_counts", "counts", "artifacts",
+    "integrity", "job_event_bound", "recovery_event_bound", "qualification_event_bound", "qualification_state_digest", "job_state_counts", "counts", "artifacts",
     "limitations",
 }
 ALLOWED_ARTIFACT_KEYS = {"artifact_id", "report_id", "version_id", "format", "filename", "size_bytes", "sha256"}
@@ -45,7 +46,7 @@ BACKUP_DEADLINE_SECONDS = 30.0
 EXPORT_RECEIPT_SCHEMA_VERSION = "stage77.recovery_receipt.v1"
 ALLOWED_RECEIPT_KEYS = {
     "receipt_schema_version", "recovery_point_id", "created_at", "recovery_reason",
-    "manifest_digest", "database_digest", "archive_digest", "artifact_count",
+    "manifest_digest", "database_digest", "archive_digest", "artifact_count", "qualification_count", "qualification_event_bound", "qualification_state_digest",
     "recovery_event_bound", "job_event_bound", "application_version",
     "publication_engine_version", "stage77_schema_version",
 }
@@ -412,6 +413,11 @@ def _validate_capture_schema(conn: sqlite3.Connection) -> None:
         columns = {str(row[1]): str(row[2]).upper() for row in rows}
         if not rows or any(columns.get(name) != expected_type for name, expected_type in expected_columns.items()):
             raise ValueError("schema_incompatible")
+    from api import governed_report_qualifications as qualifications
+    try:
+        qualifications.validate_qualification_tables(conn)
+    except ValueError:
+        raise ValueError("schema_incompatible") from None
 
 
 def _control(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -657,9 +663,13 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
         raise ValueError("manifest_invalid")
     if isinstance(manifest["recovery_event_bound"], bool) or not isinstance(manifest["recovery_event_bound"], int) or manifest["recovery_event_bound"] < 0:
         raise ValueError("manifest_invalid")
+    if isinstance(manifest["qualification_event_bound"], bool) or not isinstance(manifest["qualification_event_bound"], int) or manifest["qualification_event_bound"] < 0:
+        raise ValueError("manifest_invalid")
+    if not isinstance(manifest["qualification_state_digest"], str) or len(manifest["qualification_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["qualification_state_digest"]):
+        raise ValueError("manifest_invalid")
     if not isinstance(manifest.get("integrity"), ABCMapping) or set(manifest["integrity"]) != {"integrity_check", "foreign_key_check"} or manifest["integrity"] != {"integrity_check": "ok", "foreign_key_check": "ok"}:
         raise ValueError("manifest_invalid")
-    if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != {"jobs", "reports", "versions", "artifacts"} or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
+    if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != {"jobs", "reports", "versions", "artifacts", "qualifications"} or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
         raise ValueError("manifest_invalid")
     for value in list(manifest["counts"].values()) + list(manifest["job_state_counts"].values()):
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -747,6 +757,11 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         required = {"record_governed_reports", "record_governed_report_versions", "record_governed_report_artifacts", "stage77_report_jobs", "stage77_report_job_events", "stage77_recovery_control", "stage77_recovery_events"}
         if not required.issubset(tables):
             raise ValueError("schema_incompatible")
+        from api import governed_report_qualifications as qualifications
+        try:
+            qualifications.validate_qualification_tables(conn)
+        except ValueError:
+            raise ValueError("schema_incompatible") from None
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("integrity_check_failed")
         if not _foreign_keys_are_clean(conn):
@@ -754,6 +769,9 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
         if event_bound != int(manifest["recovery_event_bound"]):
             raise ValueError("recovery_event_bound_mismatch")
+        qualification_state = qualifications.state_snapshot(conn)
+        if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)) or qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]:
+            raise ValueError("qualification_state_mismatch")
         rows = conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
         if len(rows) != len(manifest["artifacts"]):
             raise ValueError("artifact_inventory_mismatch")
@@ -896,8 +914,9 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                         raise ValueError("artifact_changed_during_capture")
                 phase, operation, checkpoint = "validation", "recovery_event_bound_read", "starting"
                 recovery_event_bound = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
+                qualification_state = qualifications.state_snapshot(backup_check)
                 phase, operation, checkpoint = "validation", "manifest_database_reads", "starting"
-                manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
+                manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "qualification_event_bound": qualification_state["event_bound"], "qualification_state_digest": qualification_state["digest"], "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count, "qualifications": qualification_state["count"]}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
                 raw_manifest = canonical_json(manifest).encode("utf-8")
                 phase, operation, checkpoint = "validation", "manifest_write", "starting"
                 (stage / "manifest.json").write_bytes(raw_manifest)
@@ -1100,6 +1119,9 @@ def _receipt_from_manifest(manifest: Mapping[str, Any], *, archive_digest: str, 
         "database_digest": str(manifest["database"]["sha256"]),
         "archive_digest": archive_digest,
         "artifact_count": int(manifest["counts"]["artifacts"]),
+        "qualification_count": int(manifest["counts"]["qualifications"]),
+        "qualification_event_bound": int(manifest["qualification_event_bound"]),
+        "qualification_state_digest": str(manifest["qualification_state_digest"]),
         "recovery_event_bound": int(manifest["recovery_event_bound"]),
         "job_event_bound": int(manifest["job_event_bound"]),
         "application_version": str(manifest["application_version"]),
@@ -1145,10 +1167,10 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
         datetime.fromisoformat(receipt["created_at"][:-1] + "+00:00")
     except ValueError:
         raise ValueError("export_receipt_invalid") from None
-    for key in ("manifest_digest", "database_digest", "archive_digest"):
+    for key in ("manifest_digest", "database_digest", "archive_digest", "qualification_state_digest"):
         if len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
             raise ValueError("export_receipt_invalid")
-    for key in ("artifact_count", "recovery_event_bound", "job_event_bound"):
+    for key in ("artifact_count", "qualification_count", "qualification_event_bound", "recovery_event_bound", "job_event_bound"):
         if isinstance(receipt[key], bool) or not isinstance(receipt[key], int) or receipt[key] < 0:
             raise ValueError("export_receipt_invalid")
     return receipt
@@ -1237,7 +1259,7 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
         bundle = _extract_export_archive(archive, temporary / "bundle")
         result = validate_recovery_bundle(bundle)
         manifest, manifest_digest = _manifest_and_digest(bundle)
-        if result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]:
+        if result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]:
             raise ValueError("export_receipt_mismatch")
         if extract_to is not None:
             extraction_target = _lexical_path(extract_to, error="export_extract_target_invalid")

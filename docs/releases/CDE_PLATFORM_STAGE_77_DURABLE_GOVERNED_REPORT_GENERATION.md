@@ -2,7 +2,10 @@
 
 ## Status
 
-Implemented · pending merge · pending deployment
+Implemented · merged · deployed
+
+Sole-administrator qualification amendment: implemented locally · pending
+assurance and integration. It is not part of the historical deployed revision.
 
 Stage 77 adds one durable operational queue and one governed-report worker to
 the existing one-service, one-replica topology. A job executes an already
@@ -14,6 +17,17 @@ Stage 75 remains the owner of report identity, versions, lifecycle history,
 specifications, artifact records and private artifact authorization. Stage 76
 remains the owner of DOCX/HTML/PDF rendering, metadata/action safety and
 cross-format equivalence. The Publication Engine remains persistence-free.
+
+Stage 75 may qualify a frozen report version through either the existing
+`independent_multi_administrator` pathway or an explicitly configured
+`sole_administrator` operating constraint. The latter records creator
+confirmation, never independent review, requires all four deliberate gates,
+permits only `internal_working`, and binds its immutable qualification identity
+and digest into enqueue, worker revalidation and artifact metadata. Its exact
+`sole-admin-v1` limitation disclosure is controlled front matter and is
+validated across every requested output format. Disabling the deployment mode
+blocks new sole-administrator qualifications and enqueue requests; persisted
+queued qualifications are not rewritten.
 
 Restore targets are accepted only beneath an existing, real isolated restore
 root. Lexical path components are inspected with no-follow metadata before

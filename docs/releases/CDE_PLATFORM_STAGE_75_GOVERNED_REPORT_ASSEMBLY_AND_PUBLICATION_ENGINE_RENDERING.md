@@ -82,6 +82,14 @@ not perform the later review stages. Generation records attempts, diagnostics,
 artifact digests and authenticated downloads. Failed validation serves no
 artifact.
 
+The local sole-administrator governance amendment adds an explicit,
+deployment-configured creator-confirmation mode without changing a frozen
+specification. Each gate is recorded in an immutable Stage 75 qualification
+envelope and distinct append-only events. Creator confirmation is not
+independent review, is restricted to `internal_working`, and carries the
+controlled `sole-admin-v1` disclosure through DOCX, HTML and PDF equivalence.
+Aliases, worker identities and automation do not establish independence.
+
 No Stage 75 public route or navigation exists. Reports are not determinations,
 Published Documents or Stage 73 publication snapshots. Stages 60–74 remain the
 owners of their existing objects and relationships.

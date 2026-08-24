@@ -5,6 +5,13 @@ native volume backups are unavailable on the current plan and are not treated
 as application-consistent backups. A completed, validated Stage 77 recovery
 bundle and its portable export are the authoritative recovery artifacts.
 
+Governance qualification is separate from recovery custody. A sole-
+administrator-qualified report is not independently reviewed: it is explicitly
+confirmed by its creator under the configured `sole_administrator` operating
+constraint, remains `internal_working`, and carries the controlled disclosure
+version `sole-admin-v1`. Recovery and the durable worker revalidate that
+qualification; neither can create or broaden it.
+
 ## Recovery cadence
 
 Create and validate a recovery point immediately before any production

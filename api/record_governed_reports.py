@@ -128,7 +128,13 @@ def ensure_report_tables(conn: sqlite3.Connection) -> None:
     CREATE INDEX IF NOT EXISTS idx_stage75_report_status ON record_governed_reports(lifecycle_status, created_at);
     CREATE INDEX IF NOT EXISTS idx_stage75_version_report ON record_governed_report_versions(report_id, version_number);
     """)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(record_governed_report_artifacts)").fetchall()}
+    for name, definition in (("qualification_id", "INTEGER"), ("qualification_digest", "TEXT"), ("disclosure_version", "TEXT")):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE record_governed_report_artifacts ADD COLUMN {name} {definition}")
     validate_report_tables(conn)
+    from api import governed_report_qualifications as qualifications
+    qualifications.ensure_qualification_tables(conn)
 
 
 def validate_report_tables(conn: sqlite3.Connection) -> None:
@@ -252,6 +258,7 @@ def _row(conn: sqlite3.Connection, report_id: int | str) -> dict[str, Any]:
     result["artifacts"] = []
     for version in result["versions"]:
         result["artifacts"].extend(dict(item) for item in conn.execute("SELECT * FROM record_governed_report_artifacts WHERE version_id=? ORDER BY id", (version["id"],)).fetchall())
+    result["qualifications"] = [dict(item) for item in conn.execute("SELECT * FROM record_governed_report_qualifications WHERE report_id=? ORDER BY revision_number", (int(report_id),)).fetchall()] if _table_exists(conn, "record_governed_report_qualifications") else []
     return result
 
 
@@ -341,6 +348,9 @@ def transition_report(conn: sqlite3.Connection, *, report_id: int | str, resulti
     if resulting_status not in LIFECYCLE: raise ValueError("governed_report_status_invalid")
     allowed = {"draft_specification": {"assembly_reviewed", "withdrawn"}, "assembly_reviewed": {"privacy_reviewed", "withdrawn"}, "privacy_reviewed": {"redaction_reviewed", "withdrawn"}, "redaction_reviewed": {"approved_for_generation", "withdrawn"}, "approved_for_generation": {"withdrawn"}, "generation_requested": {"withdrawn"}, "validation_failed": {"approved_for_generation", "withdrawn"}, "generated": {"withdrawn"}}
     actor_value = _required(actor, "governed_report_event_actor_required"); role_value = _required(actor_role, "governed_report_event_actor_role_required"); rationale_value = _required(rationale, "governed_report_event_rationale_required")
+    from api import governed_report_qualifications as qualifications
+    if resulting_status in qualifications.GATE_STATUS and qualifications.configured_review_mode() == qualifications.SOLE_MODE:
+        raise ValueError("governed_report_sole_confirmation_required")
     if resulting_status in {"assembly_reviewed", "privacy_reviewed", "redaction_reviewed", "approved_for_generation"} and actor_value == report["created_by"]:
         raise ValueError("governed_report_review_actor_must_differ_from_creator")
     if not isinstance(declaration, Mapping) or declaration != {"acknowledged": True}: raise ValueError("governed_report_event_declaration_required")
@@ -356,10 +366,54 @@ def transition_report(conn: sqlite3.Connection, *, report_id: int | str, resulti
         conn.execute("UPDATE record_governed_reports SET lifecycle_status=? WHERE id=?", (resulting_status, int(report_id)))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status=? WHERE report_id=? AND version_number=(SELECT MAX(version_number) FROM record_governed_report_versions WHERE report_id=?)", (resulting_status, int(report_id), int(report_id)))
         conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), report["versions"][-1]["id"], resulting_status, resulting_status, rationale_value, actor_value, role_value, canonical_json(declaration), now, key, canonical_json(payload)))
+        if resulting_status in qualifications.GATE_STATUS:
+            qualifications.record_gate(conn, report_id=report_id, resulting_status=resulting_status, actor=actor_value, rationale=rationale_value, declaration=declaration, idempotency_key=key + ":qualification", mode=qualifications.INDEPENDENT_MODE, event_type=qualifications.INDEPENDENT_EVENTS[qualifications.GATE_STATUS[resulting_status]])
         conn.execute("RELEASE SAVEPOINT stage75_event")
         if _commit: conn.commit()
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT stage75_event"); conn.execute("RELEASE SAVEPOINT stage75_event"); raise
+    return _row(conn, report_id)
+
+
+def confirm_creator_gate(conn: sqlite3.Connection, *, report_id: int | str, resulting_status: str, rationale: str, actor: str, actor_role: str, acknowledged: bool, idempotency_key: str, _commit: bool = True) -> dict[str, Any]:
+    """Advance one gate under explicit sole-administrator confirmation."""
+    from api import governed_report_qualifications as qualifications
+
+    if qualifications.configured_review_mode() != qualifications.SOLE_MODE:
+        raise ValueError("governed_report_sole_mode_required")
+    report = _row(conn, report_id)
+    allowed = {"draft_specification": "assembly_reviewed", "assembly_reviewed": "privacy_reviewed", "privacy_reviewed": "redaction_reviewed", "redaction_reviewed": "approved_for_generation"}
+    if str(actor or "").strip() != str(report["created_by"]):
+        raise ValueError("governed_report_sole_qualifier_must_be_creator")
+    if not acknowledged:
+        raise ValueError("governed_report_qualification_declaration_required")
+    key = _required(idempotency_key, "governed_report_event_idempotency_key_required")
+    rationale_value = _required(rationale, "governed_report_qualification_rationale_invalid")
+    declaration = {"acknowledged": True, "no_independent_administrator_available": True, "application_did_not_verify_declaration": True}
+    payload = {"report_id": int(report_id), "resulting_status": resulting_status, "rationale": rationale_value, "actor": str(actor), "actor_role": str(actor_role), "declaration": declaration}
+    existing = conn.execute("SELECT request_payload_json FROM record_governed_report_events WHERE idempotency_key=?", (key,)).fetchone()
+    if existing is not None:
+        if json.loads(existing[0]) != payload:
+            raise ValueError("governed_report_idempotency_conflict")
+        return _row(conn, report_id)
+    if allowed.get(report["lifecycle_status"]) != resulting_status:
+        raise ValueError("governed_report_transition_invalid")
+    _validate_generation_sources(conn, report["versions"][-1]["specification"])
+    conn.execute("SAVEPOINT stage75_sole_gate")
+    try:
+        now = utc_now()
+        event_type = qualifications.SOLE_EVENTS[qualifications.GATE_STATUS[resulting_status]]
+        conn.execute("UPDATE record_governed_reports SET lifecycle_status=? WHERE id=?", (resulting_status, int(report_id)))
+        conn.execute("UPDATE record_governed_report_versions SET lifecycle_status=? WHERE report_id=? AND version_number=(SELECT MAX(version_number) FROM record_governed_report_versions WHERE report_id=?)", (resulting_status, int(report_id), int(report_id)))
+        conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), report["versions"][-1]["id"], event_type, resulting_status, rationale_value, str(actor), str(actor_role), qualifications.canonical_json(declaration), now, key, qualifications.canonical_json(payload)))
+        qualifications.record_gate(conn, report_id=report_id, resulting_status=resulting_status, actor=str(actor), rationale=rationale_value, declaration=declaration, idempotency_key=key + ":qualification", mode=qualifications.SOLE_MODE, event_type=event_type)
+        conn.execute("RELEASE SAVEPOINT stage75_sole_gate")
+        if _commit:
+            conn.commit()
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT stage75_sole_gate")
+        conn.execute("RELEASE SAVEPOINT stage75_sole_gate")
+        raise
     return _row(conn, report_id)
 
 
@@ -405,13 +459,25 @@ def supersede_report(conn: sqlite3.Connection, *, report_id: int | str, replacem
     return _row(conn, report_id)
 
 
-def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False) -> dict[str, Any]:
+def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False, governance_qualification: Mapping[str, Any] | None = None) -> dict[str, Any]:
     report = _row(conn, report_id)
     actor_value = _required(actor, "governed_report_generation_actor_required"); role_value = _required(actor_role, "governed_report_generation_role_required"); key = _required(idempotency_key, "governed_report_generation_idempotency_key_required")
     version = report["versions"][-1]; spec = version["specification"]
     if specification_digest(spec) != version["specification_digest"]:
         raise ValueError("governed_report_specification_digest_mismatch")
-    request_payload = {"version_id": version["id"], "formats": spec["requested_formats"], "actor": actor_value, "actor_role": role_value, "specification_digest": version["specification_digest"], "rendering_profile": spec["rendering_profile"], "template_version": spec["template_version"], "publication_engine_version": spec["publication_engine_version"]}
+    if "qualifications" in report:
+        from api import governed_report_qualifications as qualification_store
+        qualification = qualification_store.latest_final(conn, report_id)
+        if qualification is None:
+            raise ValueError("governed_report_qualification_required")
+        stored_qualification = dict(qualification["payload"])
+        stored_qualification.update({"qualification_id": int(qualification["id"]), "qualification_digest": qualification["digest"], "disclosure": qualification_store.DISCLOSURE})
+        if governance_qualification is not None and (governance_qualification.get("qualification_id") != stored_qualification["qualification_id"] or governance_qualification.get("qualification_digest") != stored_qualification["qualification_digest"]):
+            raise ValueError("governed_report_qualification_mismatch")
+        governance_qualification = stored_qualification
+    if governance_qualification is not None and governance_qualification.get("review_mode") == "sole_administrator" and spec.get("distribution_class") != "internal_working":
+        raise ValueError("governed_report_sole_distribution_invalid")
+    request_payload = {"version_id": version["id"], "formats": spec["requested_formats"], "actor": actor_value, "actor_role": role_value, "specification_digest": version["specification_digest"], "rendering_profile": spec["rendering_profile"], "template_version": spec["template_version"], "publication_engine_version": spec["publication_engine_version"], "qualification_id": governance_qualification.get("qualification_id") if governance_qualification else None, "qualification_digest": governance_qualification.get("qualification_digest") if governance_qualification else None}
     existing = conn.execute("SELECT * FROM record_governed_report_generation_attempts WHERE idempotency_key=?", (key,)).fetchone()
     if existing:
         if json.loads(existing["request_payload_json"]) == request_payload:
@@ -442,7 +508,10 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         raise
     try:
         from api.report_rendering import render_frozen_report
-        result = render_frozen_report(spec, version["specification_digest"], target_dir)
+        if governance_qualification is not None and governance_qualification.get("review_mode") == "sole_administrator":
+            result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification)
+        else:
+            result = render_frozen_report(spec, version["specification_digest"], target_dir)
     except Exception as exc:
         diagnostics = ["governed_report_generation_validation_failed", type(exc).__name__]
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(diagnostics), key))
@@ -493,7 +562,10 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
     try:
         conn.execute("SAVEPOINT stage75_generation_db")
         for item in result["artifacts"]:
-            conn.execute("INSERT INTO record_governed_report_artifacts (version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (version["id"], item["format"], item["path"], item["sha256"], item["size_bytes"], item["renderer_version"], spec["template_version"], now, "valid", canonical_json(result["diagnostics"]), "current"))
+            qualification_id = governance_qualification.get("qualification_id") if governance_qualification else None
+            qualification_digest = governance_qualification.get("qualification_digest") if governance_qualification else None
+            disclosure_version = governance_qualification.get("disclosure_version") if governance_qualification else None
+            conn.execute("INSERT INTO record_governed_report_artifacts (version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status,qualification_id,qualification_digest,disclosure_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (version["id"], item["format"], item["path"], item["sha256"], item["size_bytes"], item["renderer_version"], spec["template_version"], now, "valid", canonical_json(result["diagnostics"]), "current", qualification_id, qualification_digest, disclosure_version))
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("generated", canonical_json(result["diagnostics"]), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='generated' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='generated' WHERE id=?", (version["id"],))
