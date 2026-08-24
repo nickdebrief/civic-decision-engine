@@ -128,6 +128,21 @@ def ensure_report_tables(conn: sqlite3.Connection) -> None:
     CREATE INDEX IF NOT EXISTS idx_stage75_report_status ON record_governed_reports(lifecycle_status, created_at);
     CREATE INDEX IF NOT EXISTS idx_stage75_version_report ON record_governed_report_versions(report_id, version_number);
     """)
+    validate_report_tables(conn)
+
+
+def validate_report_tables(conn: sqlite3.Connection) -> None:
+    """Validate the Stage 75-owned schema without creating or changing data."""
+    required = {
+        "record_governed_reports": {"id": "INTEGER", "idempotency_key": "TEXT", "lifecycle_status": "TEXT"},
+        "record_governed_report_versions": {"id": "INTEGER", "report_id": "INTEGER", "version_number": "INTEGER"},
+        "record_governed_report_artifacts": {"id": "INTEGER", "version_id": "INTEGER", "format": "TEXT", "storage_reference": "TEXT", "sha256": "TEXT", "size_bytes": "INTEGER", "validation_state": "TEXT"},
+    }
+    for table, expected_columns in required.items():
+        rows = conn.execute("PRAGMA table_info(%s)" % table).fetchall()
+        columns = {str(row[1]): str(row[2]).upper() for row in rows}
+        if not rows or any(columns.get(name) != expected_type for name, expected_type in expected_columns.items()):
+            raise ValueError("stage75_schema_incompatible")
 
 
 def _record_snapshot(conn: sqlite3.Connection, reference: str) -> dict[str, Any]:

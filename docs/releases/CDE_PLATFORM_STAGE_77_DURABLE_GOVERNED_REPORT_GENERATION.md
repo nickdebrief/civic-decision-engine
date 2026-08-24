@@ -44,6 +44,8 @@ equivalence, authorization and digest failures remain terminal.
 The runtime supervisor validates durable storage before starting exactly one
 Uvicorn child and one worker child, forwards shutdown signals, drains and
 reaps both children, and reports only bounded operational markers. The worker
+invokes the canonical Stage 75-owned report-schema initializer, then validates
+the Stage 75, Stage 77 job and recovery schemas before emitting readiness. It
 uses a private readiness channel after real SQLite, job-schema and recovery
 state initialization. The supervisor validates that exact token while both
 children remain alive and emits the authoritative
@@ -70,7 +72,12 @@ point. The explicit `scripts/manage_stage77_recovery.py` operations therefore
 drain and fence the worker, take an SQLite online backup, copy and digest every
 valid Stage 75 artifact, write an allow-listed canonical manifest, validate the
 complete bundle, and atomically promote it. The recovery-control and event
-tables record the maintenance epoch and bounded terminal outcome.
+tables record the maintenance epoch and bounded terminal outcome. Recovery
+capture and validation remain schema-repair-free: missing or incompatible
+Stage 75 tables fail closed with bounded diagnostics rather than creating
+parallel or compatibility tables. Empty authoritative Stage 75 tables are
+established only during worker startup through the Stage 75-owned initializer,
+before worker readiness.
 
 The recovery root is supplied explicitly for each governed operation. The
 intended production value is `/data/cde-recovery-points`, represented by the

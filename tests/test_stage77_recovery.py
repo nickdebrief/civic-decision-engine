@@ -57,8 +57,46 @@ class Stage77RecoveryTests(unittest.TestCase):
         self.assertEqual(recovery.validate_recovery_bundle(bundle)["manifest_digest"], result["manifest_digest"])
         manifest = json.loads((bundle / "manifest.json").read_text())
         self.assertEqual(manifest["artifacts"][0]["filename"], "artifacts/artifact-3-docx")
+        self.assertEqual(manifest["job_event_bound"], 0)
         self.assertNotIn(str(self.db), (bundle / "manifest.json").read_text())
         self.assertFalse((bundle / "database.sqlite3-wal").exists())
+
+    def test_capture_rejects_missing_authoritative_schema_before_maintenance(self):
+        temp = tempfile.TemporaryDirectory(dir="/private/tmp")
+        try:
+            root = Path(temp.name)
+            db = root / "records.db"
+            artifacts = root / "artifacts"
+            artifacts.mkdir()
+            recovery_root = root / "recovery"
+            conn = sqlite3.connect(db, isolation_level=None)
+            jobs.ensure_job_tables(conn)
+            conn.close()
+            with self.assertRaises(recovery.RecoveryOperationFailure) as raised:
+                recovery.capture_recovery_point(database_path=db, artifact_root=artifacts, recovery_root=recovery_root, approved_root=root, actor="admin", governed_action="capture")
+            failure = raised.exception
+            self.assertEqual((failure.phase, failure.operation, failure.checkpoint, failure.code), ("initialization", "schema_validation", "starting", "schema_incompatible"))
+            check = sqlite3.connect(db)
+            self.assertEqual(check.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='stage77_recovery_control'").fetchone()[0], 1)
+            self.assertEqual(check.execute("SELECT COUNT(*) FROM stage77_recovery_control").fetchone()[0], 0)
+            check.close()
+        finally:
+            temp.cleanup()
+
+    def test_capture_rejects_incompatible_job_event_schema_before_maintenance(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript("""
+        CREATE TABLE record_governed_reports(id INTEGER PRIMARY KEY);
+        CREATE TABLE record_governed_report_versions(id INTEGER PRIMARY KEY, report_id INTEGER);
+        CREATE TABLE record_governed_report_artifacts(id INTEGER PRIMARY KEY, version_id INTEGER, format TEXT, storage_reference TEXT, sha256 TEXT, size_bytes INTEGER, validation_state TEXT);
+        CREATE TABLE stage77_report_jobs(id INTEGER, state TEXT, maintenance_epoch INTEGER);
+        CREATE TABLE stage77_report_job_events(id TEXT, job_id INTEGER);
+        CREATE TABLE stage77_recovery_control(singleton INTEGER, operation_id TEXT, maintenance_epoch INTEGER, state TEXT);
+        CREATE TABLE stage77_recovery_events(id INTEGER, operation_id TEXT);
+        """)
+        with self.assertRaisesRegex(ValueError, "schema_incompatible"):
+            recovery._validate_capture_schema(conn)
+        conn.close()
 
     def test_capture_rejects_changed_artifact_and_records_failure(self):
         self.artifact.write_bytes(b"changed")
