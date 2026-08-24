@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
+from api import governed_report_diagnostics as diagnostics
+from api import record_governed_reports as reports
 
 
 class Stage77JobTests(unittest.TestCase):
@@ -77,6 +79,38 @@ class Stage77JobTests(unittest.TestCase):
             jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
         self.assertEqual(render.call_count, 1)
         self.assertEqual(jobs.get_job(self.conn, item["id"])["state"], "succeeded")
+
+    def test_worker_preserves_stage75_bounded_failure_diagnostic(self):
+        item = jobs.enqueue_generation(self.conn, report_id=7, actor="admin-a", governed_action="enqueue_generation", idempotency_key="diagnostic")
+        claimed = jobs.claim_one(self.conn)
+        value = diagnostics.make_diagnostic(
+            phase="validation", operation="pdf_validation", checkpoint="validation",
+            code="pdf_invalid", cleanup_status="passed",
+            adapter_invocation_entered=True, adapter_process_started=True,
+            adapter_result_received=True, format_category="pdf",
+        )
+        failure = reports.GovernedReportGenerationFailure(value)
+        with patch.object(jobs.reports, "generate_report", side_effect=failure):
+            jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
+        event = self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal'", (item["id"],)).fetchone()
+        self.assertIsNotNone(event)
+        payload = __import__("json").loads(event[0])
+        self.assertEqual(payload["diagnostic"], value)
+        self.assertEqual(jobs.get_job(self.conn, item["id"])["state"], "failed_terminal")
+
+    def test_worker_rejects_malformed_inner_diagnostic_closed(self):
+        item = jobs.enqueue_generation(self.conn, report_id=7, actor="admin-a", governed_action="enqueue_generation", idempotency_key="malformed-diagnostic")
+        claimed = jobs.claim_one(self.conn)
+
+        class MalformedFailure(ValueError):
+            def diagnostic_payload(self):
+                return {"failure_code": "pdf_invalid"}
+
+        with patch.object(jobs.reports, "generate_report", side_effect=MalformedFailure("private detail")):
+            jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
+        payload = __import__("json").loads(self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal'", (item["id"],)).fetchone()[0])
+        self.assertEqual(payload["diagnostic"]["failure_code"], "adapter_return_contract_invalid")
+        self.assertNotIn("private detail", __import__("json").dumps(payload))
 
     def test_terminal_idempotent_replay_returns_job_after_report_lifecycle_changes(self):
         item = jobs.enqueue_generation(self.conn, report_id=7, actor="admin-a", governed_action="enqueue_generation", idempotency_key="terminal-replay")

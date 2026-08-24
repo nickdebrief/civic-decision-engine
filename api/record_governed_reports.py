@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from api import record_document_associations as rda
+from api.governed_report_diagnostics import bounded_code, combine_cleanup_status, make_diagnostic, validate_diagnostic
 
 SCHEMA_VERSION = "stage75.governed_report.v1"
 SPECIFICATION_SCHEMA_VERSION = "stage75.report_specification.v1"
@@ -33,6 +34,27 @@ MAX_BLOCKS = 500
 MAX_SELECTED_OBJECTS = 100
 
 BOUNDARY = "A REPORT PRESENTS THE RECORD—IT DOES NOT REPLACE IT. Inclusion is not endorsement. Exclusion is not proof of absence. A summary is not original language. Printing is not publication. Publication Engine validation is not legal validation."
+
+
+class GovernedReportGenerationFailure(ValueError):
+    """A generation failure carrying only the bounded diagnostic contract."""
+
+    def __init__(self, diagnostic: Mapping[str, Any]) -> None:
+        self.diagnostic = validate_diagnostic(diagnostic)
+        self.code = self.diagnostic["failure_code"]
+        display_code = "governed_report_generation_failed" if self.code == "governed_report_generation_validation_failed" else self.code
+        super().__init__(display_code)
+
+
+def _cleanup_generation_output(path: Path) -> str:
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink(missing_ok=True)
+        elif path.is_dir():
+            shutil.rmtree(path)
+        return "passed" if not path.exists() and not path.is_symlink() else "failed"
+    except OSError:
+        return "failed"
 
 
 def utc_now() -> str:
@@ -507,58 +529,74 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         conn.execute("RELEASE SAVEPOINT stage75_generation_request")
         raise
     try:
-        from api.report_rendering import render_frozen_report
+        from api.report_rendering import AdapterFailure, render_frozen_report
         if governance_qualification is not None and governance_qualification.get("review_mode") == "sole_administrator":
             result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification)
         else:
             result = render_frozen_report(spec, version["specification_digest"], target_dir)
     except Exception as exc:
-        diagnostics = ["governed_report_generation_validation_failed", type(exc).__name__]
+        diagnostic = None
+        if isinstance(exc, AdapterFailure) or callable(getattr(exc, "diagnostic_payload", None)):
+            try:
+                diagnostic = validate_diagnostic(exc.diagnostic_payload())
+            except Exception:
+                diagnostic = None
+        if diagnostic is None:
+            code = bounded_code(str(exc))
+            if code == "unknown":
+                code = "governed_report_generation_validation_failed"
+            diagnostic = make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=code, exc=exc, cleanup_status="unknown")
+        inner_cleanup_status = diagnostic["cleanup_status"]
+        diagnostics = [validate_diagnostic(diagnostic)]
+        cleanup_status = _cleanup_generation_output(target_dir)
+        diagnostics[0] = validate_diagnostic({**diagnostics[0], "cleanup_status": combine_cleanup_status(inner_cleanup_status, cleanup_status)})
+    else:
+        diagnostics = None
+    if diagnostics is not None:
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(diagnostics), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (version["id"],))
         conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), version["id"], "validation_failed", "validation_failed", "Rendering or output validation failed.", actor_value, role_value, '{"acknowledged":true}', utc_now(), key + ":failed", canonical_json({"diagnostics": diagnostics})))
-        shutil.rmtree(target_dir, ignore_errors=True)
         conn.commit() if _commit else None
-        raise ValueError("governed_report_generation_failed") from None
+        raise GovernedReportGenerationFailure(diagnostics[0]) from None
     if execution_guard is not None and not execution_guard():
-        shutil.rmtree(target_dir, ignore_errors=True)
+        _cleanup_generation_output(target_dir)
         raise ValueError("governed_report_generation_cancelled")
     try:
         _validate_generation_sources(conn, spec)
-    except Exception:
-        shutil.rmtree(target_dir, ignore_errors=True)
-        raise ValueError("governed_report_generation_source_changed") from None
+    except Exception as exc:
+        cleanup_status = _cleanup_generation_output(target_dir)
+        raise GovernedReportGenerationFailure(make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="governed_report_generation_source_changed", exc=exc, cleanup_status=cleanup_status)) from None
     if promote_to is not None:
         promoted_dir = Path(promote_to)
         if promoted_dir.exists() or promoted_dir.is_symlink():
-            shutil.rmtree(target_dir, ignore_errors=True)
-            raise ValueError("governed_report_artifact_directory_exists")
+            cleanup_status = _cleanup_generation_output(target_dir)
+            raise GovernedReportGenerationFailure(make_diagnostic(phase="output_preparation", operation="artifact_promotion", checkpoint="promotion", code="governed_report_artifact_directory_exists", cleanup_status=cleanup_status)) from None
         try:
             promoted_dir.parent.mkdir(parents=True, exist_ok=True)
             os.replace(target_dir, promoted_dir)
-        except OSError:
-            shutil.rmtree(target_dir, ignore_errors=True)
-            raise ValueError("governed_report_artifact_promotion_failed") from None
+        except OSError as exc:
+            cleanup_status = _cleanup_generation_output(target_dir)
+            raise GovernedReportGenerationFailure(make_diagnostic(phase="promotion", operation="artifact_promotion", checkpoint="promotion", code="governed_report_artifact_promotion_failed", exc=exc, cleanup_status=cleanup_status)) from None
         target_dir = promoted_dir
         result = dict(result)
         result["artifacts"] = [dict(item, path=str(promoted_dir / Path(item["path"]).name)) for item in result["artifacts"]]
     try:
         _validate_generation_sources(conn, spec)
-    except Exception:
-        shutil.rmtree(target_dir, ignore_errors=True)
-        raise ValueError("governed_report_generation_source_changed") from None
+    except Exception as exc:
+        cleanup_status = _cleanup_generation_output(target_dir)
+        raise GovernedReportGenerationFailure(make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="governed_report_generation_source_changed", exc=exc, cleanup_status=cleanup_status)) from None
     if finalization_transaction:
         if execution_guard is not None and not execution_guard():
-            shutil.rmtree(target_dir, ignore_errors=True)
+            _cleanup_generation_output(target_dir)
             raise ValueError("governed_report_generation_cancelled")
         conn.execute("BEGIN IMMEDIATE")
         try:
             _validate_generation_sources(conn, spec)
-        except Exception:
+        except Exception as exc:
             conn.rollback()
-            shutil.rmtree(target_dir, ignore_errors=True)
-            raise ValueError("governed_report_generation_source_changed") from None
+            cleanup_status = _cleanup_generation_output(target_dir)
+            raise GovernedReportGenerationFailure(make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="finalization", code="governed_report_generation_source_changed", exc=exc, cleanup_status=cleanup_status)) from None
     try:
         conn.execute("SAVEPOINT stage75_generation_db")
         for item in result["artifacts"]:
@@ -570,15 +608,15 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='generated' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='generated' WHERE id=?", (version["id"],))
         conn.execute("RELEASE SAVEPOINT stage75_generation_db")
-    except Exception:
+    except Exception as exc:
         conn.execute("ROLLBACK TO SAVEPOINT stage75_generation_db")
         conn.execute("RELEASE SAVEPOINT stage75_generation_db")
-        shutil.rmtree(target_dir, ignore_errors=True)
-        conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json(["artifact registration failed"]), key))
+        cleanup_status = _cleanup_generation_output(target_dir)
+        diagnostic = make_diagnostic(phase="registration", operation="artifact_registration", checkpoint="registration", code="governed_report_artifact_registration_failed", exc=exc, cleanup_status=cleanup_status)
+        conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("validation_failed", canonical_json([diagnostic]), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (version["id"],))
         if _commit: conn.commit()
-        elif finalization_transaction: conn.rollback()
-        raise ValueError("governed_report_artifact_registration_failed") from None
+        raise GovernedReportGenerationFailure(diagnostic) from None
     if _commit: conn.commit()
     return _row(conn, report_id)
