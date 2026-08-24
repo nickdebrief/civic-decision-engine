@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from api import record_governed_reports as reports
+from api.governed_report_diagnostics import bounded_code, make_diagnostic, validate_diagnostic
 
 JOB_SCHEMA_VERSION = "stage77.governed_report_job.v1"
 WORKER_IDENTITY = "cde-governed-report-worker"
@@ -345,12 +346,16 @@ def reconcile_job_storage(conn: sqlite3.Connection, job: Mapping[str, Any]) -> b
     return True
 
 
-def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: str | None = None, code: str | None = None) -> bool:
+def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: str | None = None, code: str | None = None, diagnostic: Mapping[str, Any] | None = None) -> bool:
     allowed_states = "'cancel_requested'" if state == "cancelled" else "'leased','running'"
     cur = conn.execute(f"UPDATE stage77_report_jobs SET state=?,terminal_at=?,terminal_outcome=?,failure_phase=?,failure_code=? WHERE id=? AND lease_token=? AND state IN ({allowed_states})", (state, utc_now(), code or state, phase, code, job_id, token))
     if cur.rowcount != 1:
         conn.commit(); return False
-    _event(conn, job_id, "terminal", state, actor, {"phase": phase, "code": code})
+    payload: dict[str, Any] = {"phase": phase, "code": code}
+    if diagnostic is not None:
+        payload["diagnostic"] = validate_diagnostic(diagnostic)
+        payload.update(payload["diagnostic"])
+    _event(conn, job_id, "terminal", state, actor, payload)
     conn.commit(); return True
 
 
@@ -384,7 +389,7 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
     heartbeat_thread = threading.Thread(target=heartbeat_loop, name="stage77-heartbeat", daemon=True)
     try:
         if not reconcile_job_storage(conn, job):
-            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="artifact_reconciliation", code="artifact_path_invalid")
+            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="artifact_path_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="starting", code="artifact_path_invalid"))
             return
         if not heartbeat(conn, job["id"], token): return
         cur = conn.execute("UPDATE stage77_report_jobs SET state='running' WHERE id=? AND lease_token=? AND state='leased'", (job["id"], token))
@@ -399,26 +404,26 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
             from api import governed_report_qualifications as qualification_store
             qualification = qualification_store.latest_final(conn, job["report_id"])
             if qualification is None or int(qualification["id"]) != int(job["qualification_id"]) or qualification["digest"] != job.get("qualification_digest"):
-                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_invalid")
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="qualification_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_invalid"))
                 return
             qualification_payload = qualification["payload"]
             if qualification_payload.get("specification_digest") != report["versions"][-1]["specification_digest"]:
-                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_specification_mismatch")
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="qualification_specification_mismatch", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_specification_mismatch"))
                 return
             if qualification_payload.get("review_mode") == qualification_store.SOLE_MODE:
                 if qualification_payload.get("distribution_restriction") != "internal_working" or qualification_payload.get("disclosure_version") != qualification_store.DISCLOSURE_VERSION:
-                    _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_distribution_invalid")
+                    _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="qualification_distribution_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_distribution_invalid"))
                     return
             elif qualification_payload.get("review_mode") != qualification_store.INDEPENDENT_MODE or qualification_payload.get("disclosure_version") != "none":
-                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="qualification", code="qualification_mode_invalid")
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="qualification_mode_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_mode_invalid"))
                 return
         if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}:
-            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_lifecycle_invalid"); return
+            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_lifecycle_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="report_lifecycle_invalid")); return
         version = report["versions"][-1]
         if int(version["id"]) != int(job["report_version_id"]):
-            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_version_superseded"); return
+            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_version_superseded", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="report_version_superseded")); return
         if version["specification_digest"] != job["specification_digest"] or reports.specification_digest(version["specification"]) != job["specification_digest"]:
-            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="specification_digest_mismatch"); return
+            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="specification_digest_mismatch", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="specification_digest_mismatch")); return
         if conn.execute("SELECT cancellation_requested_at FROM stage77_report_jobs WHERE id=?", (job["id"],)).fetchone()[0]:
             _terminal(conn, job["id"], token, "cancelled", WORKER_IDENTITY, phase="cancellation", code="cancelled"); return
         attempt = int(job["attempt_count"])
@@ -433,22 +438,34 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
                 governance_qualification.update({"qualification_id": int(qualification["id"]), "qualification_digest": qualification["digest"], "disclosure": qualification_store.DISCLOSURE})
             reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification)
         except Exception as exc:
-            if "cancelled" in str(exc):
+            if str(exc) == "governed_report_generation_cancelled":
                 _terminal(conn, job["id"], token, "cancelled", WORKER_IDENTITY, phase="cancellation", code="cancelled")
                 return
-            code = "governed_report_renderer_timeout" if "timeout" in str(exc) else "governed_report_renderer_failed"
+            if isinstance(exc, reports.GovernedReportGenerationFailure):
+                diagnostic = exc.diagnostic
+            elif callable(getattr(exc, "diagnostic_payload", None)):
+                try:
+                    diagnostic = validate_diagnostic(exc.diagnostic_payload())
+                except Exception:
+                    diagnostic = make_diagnostic(phase="job", operation="job_result_serialization", checkpoint="validation", code="adapter_return_contract_invalid", exception_category_value="contract_error")
+            else:
+                code = bounded_code(str(exc))
+                if code == "unknown":
+                    code = "governed_report_renderer_failed"
+                diagnostic = make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=code, exc=exc)
+            code = "governed_report_renderer_timeout" if diagnostic["failure_code"] == "governed_report_renderer_timeout" else "governed_report_renderer_failed"
             attempt = int(job["attempt_count"])
             if code in RETRYABLE_CODES and attempt < int(job["max_attempts"]):
                 from api.governed_report_recovery import recovery_allows_finalize
                 if recovery_allows_finalize(conn, int(job["id"]), token, int(job.get("maintenance_epoch", 0))):
-                    conn.execute("UPDATE stage77_report_jobs SET state='retry_wait',next_eligible_at=?,failure_phase='rendering',failure_code=? WHERE id=? AND lease_token=?", (_future(2 ** attempt), code, job["id"], token)); _event(conn, job["id"], "retry_scheduled", "retry_wait", WORKER_IDENTITY, {"code": code}); conn.commit()
+                    conn.execute("UPDATE stage77_report_jobs SET state='retry_wait',next_eligible_at=?,failure_phase='rendering',failure_code=? WHERE id=? AND lease_token=?", (_future(2 ** attempt), code, job["id"], token)); _event(conn, job["id"], "retry_scheduled", "retry_wait", WORKER_IDENTITY, {"code": code, "diagnostic": validate_diagnostic(diagnostic)}); conn.commit()
                 else:
                     conn.rollback()
             else:
-                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="rendering", code=code)
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="rendering", code=code, diagnostic=diagnostic)
             return
         if not _artifact_rows_valid(conn, int(job["report_version_id"])):
-            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="artifact_integrity", code="artifact_integrity_failed")
+            _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="validation", code="artifact_integrity_failed", diagnostic=make_diagnostic(phase="validation", operation="artifact_integrity", checkpoint="validation", code="artifact_integrity_failed"))
             return
         _terminal(conn, job["id"], token, "succeeded", WORKER_IDENTITY, phase="rendering", code="completed")
     finally:

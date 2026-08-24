@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from api.record_governed_reports import canonical_json
+from api.governed_report_diagnostics import adapter_mapping, make_diagnostic, validate_diagnostic
 
 
 ENGINE_VERSION = "2.0.0"
@@ -74,9 +75,77 @@ class AdapterFailure(ValueError):
     code: str
     cleanup: str = "unknown"
     diagnostic: dict[str, Any] | None = None
+    adapter_invocation_entered: bool = False
+    adapter_process_started: bool = False
+    adapter_result_received: bool = False
 
     def __str__(self) -> str:
         return "governed_report_renderer_failed"
+
+    def with_execution_context(self, *, invocation: bool, process: bool, result: bool) -> "AdapterFailure":
+        return AdapterFailure(
+            self.phase,
+            self.code,
+            self.cleanup,
+            self.diagnostic,
+            invocation,
+            process,
+            result,
+        )
+
+    def diagnostic_payload(self) -> dict[str, Any]:
+        if self.diagnostic is not None and set(self.diagnostic) == {
+            "failure_phase", "failure_operation", "failure_checkpoint", "failure_code",
+            "failure_exception_category", "cleanup_status", "adapter_invocation_entered",
+            "adapter_process_started", "adapter_result_received", "format_category",
+        }:
+            return validate_diagnostic(self.diagnostic)
+        operation, checkpoint, phase = adapter_mapping(self.phase, self.code)
+        format_category = "pdf" if isinstance(self.diagnostic, dict) and self.diagnostic.get("format") == "pdf" else "unknown"
+        if isinstance(self.diagnostic, dict):
+            operation_map = {
+                "render_docx": "docx_validation",
+                "render_html": "html_validation",
+                "convert_pdf": "pdf_validation",
+                "inspect_pdf": "pdf_validation",
+                "validate_pdf": "pdf_validation",
+                "validate_ordered_equivalence": "format_equivalence",
+                "write_result": "job_result_serialization",
+            }
+            operation = operation_map.get(self.diagnostic.get("failure_operation"), operation)
+            if self.diagnostic.get("failure_step") in {"cross_format_equivalence", "validate_ordered_equivalence"}:
+                operation = "format_equivalence"
+            exception_map = {
+                "type_error": "type_error",
+                "value_error": "value_error",
+                "os_error": "os_error",
+                "pdf_read_error": "validation_error",
+            }
+            exception_category_value = exception_map.get(self.diagnostic.get("failure_exception_class"))
+        else:
+            exception_category_value = None
+        if self.code in {
+            "docx_render_failed", "html_render_failed", "pdf_conversion_failed",
+            "pdf_missing", "pdf_invalid", "pdf_metadata_invalid", "pdf_action_invalid",
+            "pdf_attachment_invalid", "pdf_extraction_failed",
+            "pdf_inspection_dependency_unavailable", "equivalence_failed",
+            "artifact_digest_failed",
+        }:
+            exception_category_value = "validation_error"
+        return make_diagnostic(
+            phase=phase,
+            operation=operation,
+            checkpoint=checkpoint,
+            code=self.code,
+            exception_category_value=(
+                "timeout" if self.code.endswith("timeout") else "contract_error" if "contract" in self.code or "result" in self.code else None
+            ) or exception_category_value,
+            cleanup_status=self.cleanup,
+            adapter_invocation_entered=self.adapter_invocation_entered,
+            adapter_process_started=self.adapter_process_started,
+            adapter_result_received=self.adapter_result_received,
+            format_category=format_category,
+        )
 
 
 def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_formats: set[str] | None = None) -> dict[str, Any]:
@@ -224,29 +293,35 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         result_path = Path(temp) / "adapter-result.json"
         command = [sys.executable, str(ADAPTER), str(request), str(staged_output), str(result_path)]
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True,
-            env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ADAPTER.parent)},
-        )
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+                env={
+                    "PATH": os.environ.get("PATH", ""),
+                    "PYTHONPATH": str(ADAPTER.parent),
+                },
+            )
+        except Exception as exc:
+            raise AdapterFailure("adapter_launch", "governed_report_renderer_failed", "unknown", None, True, False, False) from None
         try:
             stdout, stderr = process.communicate(timeout=ADAPTER_TIMEOUT_SECONDS)
         except subprocess.TimeoutExpired:
             _terminate_process_group(process)
-            raise AdapterFailure("cleanup", "governed_report_renderer_timeout") from None
+            raise AdapterFailure("cleanup", "governed_report_renderer_timeout", "unknown", None, True, True, result_path.is_file()) from None
         try:
             expected_formats = set(specification["requested_formats"]) if "requested_formats" in specification else None
             result = _read_adapter_result(result_path, staged_output, digest, expected_formats)
-        except AdapterFailure:
-            raise
+        except AdapterFailure as exc:
+            raise exc.with_execution_context(invocation=True, process=True, result=result_path.is_file()) from None
         if not result["ok"]:
             detail = result["diagnostics"][0] if result["diagnostics"] and (result["code"] == "unexpected_adapter_failure" or "failure_field" in result["diagnostics"][0] or "failure_location" in result["diagnostics"][0] or "failure_operation" in result["diagnostics"][0] or "contract_step" in result["diagnostics"][0]) else None
-            raise AdapterFailure(result["phase"], result["code"], result["cleanup"], detail)
+            raise AdapterFailure(result["phase"], result["code"], result["cleanup"], detail, True, True, True)
         if process.returncode != 0:
-            raise AdapterFailure(result["phase"], result["code"], result["cleanup"])
+            raise AdapterFailure(result["phase"], result["code"], result["cleanup"], None, True, True, True)
         output_dir.mkdir(parents=True, exist_ok=True)
         for item in result["artifacts"]:
             source = (staged_output / f"report.{item['format']}").resolve()
