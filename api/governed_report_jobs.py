@@ -35,11 +35,15 @@ def utc_now() -> str:
 
 def configure_connection(conn: sqlite3.Connection, *, require_wal: bool = False) -> sqlite3.Connection:
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-    except sqlite3.OperationalError:
-        if require_wal:
-            raise
+    for attempt in range(3):
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            break
+        except sqlite3.OperationalError as exc:
+            locked = "locked" in str(exc).lower() or "busy" in str(exc).lower()
+            if not require_wal or not locked or attempt == 2:
+                raise
+            time.sleep(0.05 * (attempt + 1))
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
@@ -407,19 +411,26 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
 
 
 def worker_loop(db_path: str, stop_event, on_ready=None) -> int:
-    startup_conn = _connect(db_path)
+    startup_conn = None
     try:
+        startup_conn = _connect(db_path)
         ensure_job_tables(startup_conn)
+        reports.ensure_report_tables(startup_conn)
         from api.governed_report_recovery import ensure_recovery_tables, recovery_status
         ensure_recovery_tables(startup_conn)
         recovery_status(startup_conn)
         if on_ready is not None:
             on_ready()
+    except ValueError as exc:
+        code = "stage75_schema_incompatible" if str(exc) == "stage75_schema_incompatible" else "initialization_failed"
+        print(f"stage77_worker=startup_failure code={code}", flush=True)
+        return 1
     except Exception:
-        print("stage77_worker=startup_failure", flush=True)
+        print("stage77_worker=startup_failure code=initialization_failed", flush=True)
         return 1
     finally:
-        startup_conn.close()
+        if startup_conn is not None:
+            startup_conn.close()
     while not stop_event.is_set():
         conn = _connect(db_path)
         try:

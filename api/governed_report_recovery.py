@@ -57,17 +57,19 @@ BOUNDED_FAILURE_CODES = {
     "bundle_file_inventory_invalid", "job_state_count_mismatch", "record_count_mismatch",
     "version_count_mismatch", "recovery_event_bound_mismatch", "recovery_not_draining",
     "recovery_not_quiesced", "recovery_already_active", "recovery_terminal_immutable",
-    "recovery_operation_failed", "sqlite_error", "digest_mismatch", "manifest_invalid",
+    "recovery_operation_failed", "schema_incompatible", "sqlite_error", "digest_mismatch", "manifest_invalid",
     "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap",
     "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component",
 }
 RECOVERY_DIAGNOSTIC_PHASES = {"configuration", "initialization", "maintenance", "drain", "capture", "validation", "promotion", "completion"}
 RECOVERY_DIAGNOSTIC_OPERATIONS = {
     "recovery_root_validation", "connection_configuration", "job_schema", "recovery_tables",
+    "schema_validation",
     "maintenance_epoch_creation", "maintenance_epoch_validation", "worker_quiescence",
     "capture_state_write", "staging_directory", "wal_checkpoint", "capture_transaction_begin",
     "online_backup_destination_connection", "online_backup_source_connection", "online_backup_execution",
     "backup_completion", "database_integrity_check", "foreign_key_check", "job_event_bound_read",
+    "job_count_read", "report_count_read", "version_count_read", "artifact_count_read",
     "recovery_event_bound_read", "artifact_registration_inventory_read", "artifact_copy",
     "artifact_stability_check", "manifest_database_reads", "manifest_write", "bundle_validation",
     "bundle_promotion", "completion_event_write", "completion_transaction_commit",
@@ -393,6 +395,23 @@ def ensure_recovery_tables(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(stage77_recovery_control)").fetchall()}
     if "idempotency_key" not in columns:
         conn.execute("ALTER TABLE stage77_recovery_control ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''")
+
+
+def _validate_capture_schema(conn: sqlite3.Connection) -> None:
+    required = {
+        "record_governed_reports": {"id": "INTEGER"},
+        "record_governed_report_versions": {"id": "INTEGER", "report_id": "INTEGER"},
+        "record_governed_report_artifacts": {"id": "INTEGER", "version_id": "INTEGER", "format": "TEXT", "storage_reference": "TEXT", "sha256": "TEXT", "size_bytes": "INTEGER", "validation_state": "TEXT"},
+        "stage77_report_jobs": {"id": "INTEGER", "state": "TEXT", "maintenance_epoch": "INTEGER"},
+        "stage77_report_job_events": {"id": "INTEGER", "job_id": "INTEGER"},
+        "stage77_recovery_control": {"singleton": "INTEGER", "operation_id": "TEXT", "maintenance_epoch": "INTEGER", "state": "TEXT"},
+        "stage77_recovery_events": {"id": "INTEGER", "operation_id": "TEXT"},
+    }
+    for table, expected_columns in required.items():
+        rows = conn.execute("PRAGMA table_info(%s)" % table).fetchall()
+        columns = {str(row[1]): str(row[2]).upper() for row in rows}
+        if not rows or any(columns.get(name) != expected_type for name, expected_type in expected_columns.items()):
+            raise ValueError("schema_incompatible")
 
 
 def _control(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -789,6 +808,8 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
         jobs.ensure_job_tables(conn)
         operation = "recovery_tables"
         ensure_recovery_tables(conn)
+        phase, operation, checkpoint = "initialization", "schema_validation", "starting"
+        _validate_capture_schema(conn)
         phase, operation, checkpoint = "maintenance", "maintenance_epoch_creation", "starting"
         control = request_recovery(conn, actor=actor, governed_action=governed_action, idempotency_key=idempotency_key)
         if control["state"] == "completed":
@@ -848,9 +869,13 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                 job_counts = {state: int(backup_check.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
                 phase, operation, checkpoint = "validation", "job_event_bound_read", "starting"
                 max_event = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM stage77_report_job_events").fetchone()[0])
+                phase, operation, checkpoint = "validation", "job_count_read", "starting"
                 job_count = int(backup_check.execute("SELECT COUNT(*) FROM stage77_report_jobs").fetchone()[0])
+                phase, operation, checkpoint = "validation", "report_count_read", "starting"
                 report_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0])
+                phase, operation, checkpoint = "validation", "version_count_read", "starting"
                 version_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0])
+                phase, operation, checkpoint = "validation", "artifact_count_read", "starting"
                 artifact_count = int(backup_check.execute("SELECT COUNT(*) FROM record_governed_report_artifacts WHERE validation_state='valid'").fetchone()[0])
                 phase, operation, checkpoint = "validation", "artifact_registration_inventory_read", "starting"
                 rows = backup_check.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
