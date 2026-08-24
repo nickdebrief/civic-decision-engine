@@ -60,6 +60,16 @@ key material. The custody filesystem must provide the approved encryption.
 The receipt contains only bounded identifiers, digests, counts, event bounds,
 and schema/engine versions. It is integrity evidence, not proof of authorship.
 
+Historical receipts are immutable evidence. Export validation selects the
+closed receipt and manifest contract recorded by the bundle: pre-qualification
+bundles are checked without qualification fields only when their archived
+database proves that the qualification schema did not yet exist; current
+qualification-aware bundles must contain and validate qualification counts,
+event bounds, and the qualification-state digest, including legitimate zero
+values. Later requirements are never imposed retrospectively, and no unknown,
+mixed, or ambiguous receipt shape is accepted. Historical validation does not
+claim current-contract compliance.
+
 ## Custody controls
 
 The operator must select a canonical absolute custody directory outside the

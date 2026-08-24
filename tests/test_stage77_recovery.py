@@ -599,6 +599,97 @@ class Stage77RecoveryTests(unittest.TestCase):
         recovery.validate_export_archive(exports / "first.tar", exports / "first.json", extract_to=extracted)
         self.assertTrue(next(extracted.iterdir()).joinpath("database.sqlite3").exists())
 
+    def test_historical_receipt_contract_validates_only_with_legacy_bundle_schema(self):
+        legacy = self.root / "legacy-bundle"
+        legacy.mkdir()
+        database = legacy / "database.sqlite3"
+        conn = sqlite3.connect(database)
+        conn.executescript("""
+        CREATE TABLE record_governed_reports(id INTEGER PRIMARY KEY);
+        CREATE TABLE record_governed_report_versions(id INTEGER PRIMARY KEY, report_id INTEGER NOT NULL,
+          FOREIGN KEY(report_id) REFERENCES record_governed_reports(id));
+        CREATE TABLE record_governed_report_artifacts(id INTEGER PRIMARY KEY, version_id INTEGER NOT NULL,
+          format TEXT, storage_reference TEXT, sha256 TEXT, size_bytes INTEGER, validation_state TEXT,
+          FOREIGN KEY(version_id) REFERENCES record_governed_report_versions(id));
+        CREATE TABLE stage77_report_jobs(id INTEGER PRIMARY KEY, state TEXT);
+        CREATE TABLE stage77_report_job_events(id INTEGER PRIMARY KEY);
+        CREATE TABLE stage77_recovery_control(singleton INTEGER, operation_id TEXT, maintenance_epoch INTEGER, state TEXT);
+        CREATE TABLE stage77_recovery_events(id INTEGER PRIMARY KEY, operation_id TEXT);
+        """)
+        conn.commit()
+        conn.close()
+        database_digest = recovery.digest_bytes(database.read_bytes())
+        manifest = {
+            "manifest_schema_version": recovery.MANIFEST_SCHEMA_VERSION,
+            "recovery_point_id": "a" * 32,
+            "maintenance_epoch": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+            "source_database_identity": f"sqlite:{database.stat().st_size}:{database_digest}",
+            "sqlite_version": sqlite3.sqlite_version,
+            "application_version": "unknown",
+            "publication_engine_version": "2.0.0",
+            "stage77_schema_version": "stage77.governed_report_job.v1",
+            "database": {"filename": "database.sqlite3", "size_bytes": database.stat().st_size, "sha256": database_digest},
+            "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"},
+            "job_event_bound": 0,
+            "recovery_event_bound": 0,
+            "job_state_counts": {state: 0 for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")},
+            "counts": {"jobs": 0, "reports": 0, "versions": 0, "artifacts": 0},
+            "artifacts": [],
+            "limitations": ["historical pre-qualification fixture"],
+        }
+        raw_manifest = recovery.canonical_json(manifest).encode("utf-8")
+        (legacy / "manifest.json").write_bytes(raw_manifest)
+        (legacy / "manifest.sha256").write_text(recovery.digest_bytes(raw_manifest) + "\n", encoding="ascii")
+        archive = self.root / "legacy.tar"
+        recovery._write_deterministic_archive(legacy, archive, manifest["recovery_point_id"])
+        receipt = {
+            "receipt_schema_version": recovery.EXPORT_RECEIPT_SCHEMA_VERSION,
+            "recovery_point_id": manifest["recovery_point_id"],
+            "created_at": "2026-01-01T00:00:00Z",
+            "recovery_reason": "historical pre-qualification fixture",
+            "manifest_digest": recovery.digest_bytes(raw_manifest),
+            "database_digest": database_digest,
+            "archive_digest": recovery.digest_bytes(archive.read_bytes()),
+            "artifact_count": 0,
+            "recovery_event_bound": 0,
+            "job_event_bound": 0,
+            "application_version": "unknown",
+            "publication_engine_version": "2.0.0",
+            "stage77_schema_version": "stage77.governed_report_job.v1",
+        }
+        receipt_path = self.root / "legacy.receipt.json"
+        receipt_path.write_bytes(recovery.canonical_json(receipt).encode("utf-8"))
+        result = recovery.validate_export_archive(archive, receipt_path)
+        self.assertEqual(result["recovery_point_id"], manifest["recovery_point_id"])
+
+    def test_current_receipt_cannot_downgrade_or_accept_legacy_shape(self):
+        bundle = self._bundle()
+        exports = self.root / "exports"
+        exports.mkdir()
+        archive = exports / "current.tar"
+        receipt_path = exports / "current.json"
+        recovery.export_recovery_bundle(bundle_path=bundle, output_archive=archive, receipt_path=receipt_path, reason="current")
+        receipt = json.loads(receipt_path.read_text())
+        for field in ("qualification_count", "qualification_event_bound", "qualification_state_digest"):
+            receipt.pop(field)
+        receipt_path.write_text(recovery.canonical_json(receipt), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "export_receipt_mismatch"):
+            recovery.validate_export_archive(archive, receipt_path)
+
+    def test_unknown_receipt_version_and_mixed_contracts_fail_closed(self):
+        bundle = self._bundle()
+        exports = self.root / "exports"
+        exports.mkdir()
+        archive = exports / "current.tar"
+        receipt_path = exports / "current.json"
+        recovery.export_recovery_bundle(bundle_path=bundle, output_archive=archive, receipt_path=receipt_path, reason="current")
+        receipt = json.loads(receipt_path.read_text())
+        receipt["receipt_schema_version"] = "stage77.recovery_receipt.unknown"
+        receipt_path.write_text(recovery.canonical_json(receipt), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "export_receipt_invalid"):
+            recovery.validate_export_archive(archive, receipt_path)
+
     def test_portable_export_rejects_existing_targets_and_unsafe_custody_root(self):
         bundle = self._bundle()
         exports = self.root / "exports"
