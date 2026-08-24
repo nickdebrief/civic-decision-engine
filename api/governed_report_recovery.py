@@ -39,6 +39,8 @@ ALLOWED_MANIFEST_KEYS = {
     "integrity", "job_event_bound", "recovery_event_bound", "qualification_event_bound", "qualification_state_digest", "job_state_counts", "counts", "artifacts",
     "limitations",
 }
+LEGACY_MANIFEST_KEYS = ALLOWED_MANIFEST_KEYS - {"qualification_event_bound", "qualification_state_digest"}
+CURRENT_MANIFEST_KEYS = ALLOWED_MANIFEST_KEYS
 ALLOWED_ARTIFACT_KEYS = {"artifact_id", "report_id", "version_id", "format", "filename", "size_bytes", "sha256"}
 MAX_MANIFEST_ARTIFACTS = 10000
 MAX_MANIFEST_TEXT = 256
@@ -50,6 +52,8 @@ ALLOWED_RECEIPT_KEYS = {
     "recovery_event_bound", "job_event_bound", "application_version",
     "publication_engine_version", "stage77_schema_version",
 }
+LEGACY_RECEIPT_KEYS = ALLOWED_RECEIPT_KEYS - {"qualification_count", "qualification_event_bound", "qualification_state_digest"}
+CURRENT_RECEIPT_KEYS = ALLOWED_RECEIPT_KEYS
 MAX_EXPORT_REASON = 256
 BOUNDED_FAILURE_CODES = {
     "artifact_digest_mismatch", "duplicate_artifact_source", "artifact_invalid",
@@ -639,8 +643,31 @@ def _database_identity(path: Path, data: bytes) -> str:
     return f"sqlite:{path.stat().st_size}:{digest_bytes(data)}"
 
 
+def _manifest_contract(manifest: Mapping[str, Any]) -> str:
+    if not isinstance(manifest, ABCMapping):
+        raise ValueError("manifest_invalid")
+    fields = set(manifest)
+    if fields == LEGACY_MANIFEST_KEYS:
+        return "legacy"
+    if fields == CURRENT_MANIFEST_KEYS:
+        return "current"
+    raise ValueError("manifest_invalid")
+
+
+def _receipt_contract(receipt: Mapping[str, Any]) -> str:
+    if not isinstance(receipt, ABCMapping):
+        raise ValueError("export_receipt_invalid")
+    fields = set(receipt)
+    if fields == LEGACY_RECEIPT_KEYS:
+        return "legacy"
+    if fields == CURRENT_RECEIPT_KEYS:
+        return "current"
+    raise ValueError("export_receipt_invalid")
+
+
 def _validate_manifest(manifest: Mapping[str, Any]) -> None:
-    if set(manifest) != ALLOWED_MANIFEST_KEYS or manifest.get("manifest_schema_version") != MANIFEST_SCHEMA_VERSION:
+    contract = _manifest_contract(manifest)
+    if manifest.get("manifest_schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ValueError("manifest_invalid")
     if not isinstance(manifest, ABCMapping) or not isinstance(manifest.get("artifacts"), list) or not isinstance(manifest.get("limitations"), list):
         raise ValueError("manifest_invalid")
@@ -663,13 +690,17 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
         raise ValueError("manifest_invalid")
     if isinstance(manifest["recovery_event_bound"], bool) or not isinstance(manifest["recovery_event_bound"], int) or manifest["recovery_event_bound"] < 0:
         raise ValueError("manifest_invalid")
-    if isinstance(manifest["qualification_event_bound"], bool) or not isinstance(manifest["qualification_event_bound"], int) or manifest["qualification_event_bound"] < 0:
-        raise ValueError("manifest_invalid")
-    if not isinstance(manifest["qualification_state_digest"], str) or len(manifest["qualification_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["qualification_state_digest"]):
-        raise ValueError("manifest_invalid")
+    if contract == "current":
+        if isinstance(manifest["qualification_event_bound"], bool) or not isinstance(manifest["qualification_event_bound"], int) or manifest["qualification_event_bound"] < 0:
+            raise ValueError("manifest_invalid")
+        if not isinstance(manifest["qualification_state_digest"], str) or len(manifest["qualification_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["qualification_state_digest"]):
+            raise ValueError("manifest_invalid")
     if not isinstance(manifest.get("integrity"), ABCMapping) or set(manifest["integrity"]) != {"integrity_check", "foreign_key_check"} or manifest["integrity"] != {"integrity_check": "ok", "foreign_key_check": "ok"}:
         raise ValueError("manifest_invalid")
-    if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != {"jobs", "reports", "versions", "artifacts", "qualifications"} or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
+    expected_counts = {"jobs", "reports", "versions", "artifacts"}
+    if contract == "current":
+        expected_counts.add("qualifications")
+    if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != expected_counts or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
         raise ValueError("manifest_invalid")
     for value in list(manifest["counts"].values()) + list(manifest["job_state_counts"].values()):
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -744,6 +775,7 @@ def _manifest_and_digest(bundle: Path) -> tuple[dict[str, Any], str]:
 
 
 def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
+    contract = _manifest_contract(manifest)
     expected = {"database.sqlite3", "manifest.json", "manifest.sha256"} | {str(item["filename"]) for item in manifest["artifacts"]}
     if _bundle_files(bundle) != expected:
         raise ValueError("bundle_file_inventory_invalid")
@@ -757,11 +789,19 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         required = {"record_governed_reports", "record_governed_report_versions", "record_governed_report_artifacts", "stage77_report_jobs", "stage77_report_job_events", "stage77_recovery_control", "stage77_recovery_events"}
         if not required.issubset(tables):
             raise ValueError("schema_incompatible")
-        from api import governed_report_qualifications as qualifications
-        try:
-            qualifications.validate_qualification_tables(conn)
-        except ValueError:
-            raise ValueError("schema_incompatible") from None
+        qualification_tables = {
+            "record_governed_report_qualifications",
+            "record_governed_report_qualification_events",
+        }
+        has_qualification_schema = bool(qualification_tables & tables)
+        if has_qualification_schema != (contract == "current"):
+            raise ValueError("schema_incompatible")
+        if contract == "current":
+            from api import governed_report_qualifications as qualifications
+            try:
+                qualifications.validate_qualification_tables(conn)
+            except ValueError:
+                raise ValueError("schema_incompatible") from None
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("integrity_check_failed")
         if not _foreign_keys_are_clean(conn):
@@ -769,9 +809,10 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
         if event_bound != int(manifest["recovery_event_bound"]):
             raise ValueError("recovery_event_bound_mismatch")
-        qualification_state = qualifications.state_snapshot(conn)
-        if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)) or qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]:
-            raise ValueError("qualification_state_mismatch")
+        if contract == "current":
+            qualification_state = qualifications.state_snapshot(conn)
+            if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)) or qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]:
+                raise ValueError("qualification_state_mismatch")
         rows = conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
         if len(rows) != len(manifest["artifacts"]):
             raise ValueError("artifact_inventory_mismatch")
@@ -1152,8 +1193,9 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
         receipt = json.loads(raw.decode("utf-8"), object_pairs_hook=reject_duplicate_keys)
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         raise ValueError("export_receipt_invalid") from exc
-    if not isinstance(receipt, dict) or set(receipt) != ALLOWED_RECEIPT_KEYS or raw != canonical_json(receipt).encode("utf-8"):
+    if not isinstance(receipt, dict) or raw != canonical_json(receipt).encode("utf-8"):
         raise ValueError("export_receipt_invalid")
+    _receipt_contract(receipt)
     if receipt["receipt_schema_version"] != EXPORT_RECEIPT_SCHEMA_VERSION:
         raise ValueError("export_receipt_invalid")
     for key in ("recovery_point_id", "created_at", "recovery_reason", "manifest_digest", "database_digest", "archive_digest", "application_version", "publication_engine_version", "stage77_schema_version"):
@@ -1167,10 +1209,15 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
         datetime.fromisoformat(receipt["created_at"][:-1] + "+00:00")
     except ValueError:
         raise ValueError("export_receipt_invalid") from None
-    for key in ("manifest_digest", "database_digest", "archive_digest", "qualification_state_digest"):
+    for key in ("manifest_digest", "database_digest", "archive_digest"):
         if len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
             raise ValueError("export_receipt_invalid")
-    for key in ("artifact_count", "qualification_count", "qualification_event_bound", "recovery_event_bound", "job_event_bound"):
+    if _receipt_contract(receipt) == "current" and (len(receipt["qualification_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["qualification_state_digest"])):
+        raise ValueError("export_receipt_invalid")
+    numeric_fields = ["artifact_count", "recovery_event_bound", "job_event_bound"]
+    if _receipt_contract(receipt) == "current":
+        numeric_fields.extend(("qualification_count", "qualification_event_bound"))
+    for key in numeric_fields:
         if isinstance(receipt[key], bool) or not isinstance(receipt[key], int) or receipt[key] < 0:
             raise ValueError("export_receipt_invalid")
     return receipt
@@ -1252,6 +1299,7 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
     archive = _lexical_path(archive_path, error="export_archive_invalid")
     receipt_file = _lexical_path(receipt_path, error="export_receipt_invalid")
     receipt = _strict_receipt(receipt_file.read_bytes())
+    receipt_contract = _receipt_contract(receipt)
     if digest_bytes(archive.read_bytes()) != receipt["archive_digest"]:
         raise ValueError("export_archive_digest_mismatch")
     temporary = Path(tempfile.mkdtemp(prefix="stage77-export-check-", dir=archive.parent))
@@ -1259,7 +1307,12 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
         bundle = _extract_export_archive(archive, temporary / "bundle")
         result = validate_recovery_bundle(bundle)
         manifest, manifest_digest = _manifest_and_digest(bundle)
-        if result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]:
+        manifest_contract = _manifest_contract(manifest)
+        if receipt_contract != manifest_contract:
+            raise ValueError("export_receipt_mismatch")
+        common_mismatch = result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]
+        qualification_mismatch = manifest_contract == "current" and (int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"])
+        if common_mismatch or qualification_mismatch:
             raise ValueError("export_receipt_mismatch")
         if extract_to is not None:
             extraction_target = _lexical_path(extract_to, error="export_extract_target_invalid")
@@ -1279,6 +1332,8 @@ def export_recovery_bundle(*, bundle_path: str | os.PathLike[str], output_archiv
     bundle_result = validate_recovery_bundle(bundle)
     before_snapshot = _bundle_snapshot(bundle)
     manifest, manifest_digest = _manifest_and_digest(bundle)
+    if _manifest_contract(manifest) != "current":
+        raise ValueError("export_source_contract_unsupported")
     manifest = dict(manifest)
     manifest["_manifest_digest"] = manifest_digest
     archive = _safe_export_destination(Path(output_archive))
