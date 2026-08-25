@@ -57,6 +57,9 @@ equivalence, authorization and digest failures remain terminal.
 
 ### Exceptional diagnostic retry
 
+This compatibility amendment is local-only pending independent assurance and
+separate integration/deployment authorization.
+
 The local Stage 77 diagnostic-observability amendment defines a separate,
 one-time `diagnostic_retry` action for a terminal renderer failure with the
 exact bounded phase and code recognized by the deployed diagnostic protocol.
@@ -74,8 +77,13 @@ authorization, never as substantive reapproval. The worker revalidates the
 linkage and diagnostic protocol before using the ordinary lease, rendering,
 validation, promotion and registration path; it cannot authorize a retry or
 create another one. A failed successor remains terminal and retains bounded
-diagnostics. Production use requires the separately governed Custody Point 4
-precondition described in the recovery runbook.
+diagnostics. Historical failures created before diagnostic propagation are
+selected only by the closed `legacy_pre_propagation_diagnostic_contract_v1`
+shape and independently bound payload digests; current failures require the
+strict `current_diagnostic_contract_v1` shape. Mixed, partial, unknown and
+downgraded pairs fail closed. Historical rows are never rewritten or upgraded.
+Production use requires the separately governed Custody Point 4 precondition
+described in the recovery runbook.
 
 The runtime supervisor validates durable storage before starting exactly one
 Uvicorn child and one worker child, forwards shutdown signals, drains and
