@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from typing import Any, Mapping
 
@@ -83,6 +85,19 @@ EXCEPTION_CATEGORIES = {
 
 CLEANUP_STATUSES = {"passed", "failed", "unknown", "not_required"}
 FORMAT_CATEGORIES = {"docx", "html", "pdf", "multiple", "none", "unknown"}
+
+CURRENT_DIAGNOSTIC_CONTRACT = "current_diagnostic_contract_v1"
+LEGACY_DIAGNOSTIC_CONTRACT = "legacy_pre_propagation_diagnostic_contract_v1"
+LEGACY_ATTEMPT_DIAGNOSTICS = (
+    "governed_report_generation_validation_failed",
+    "AdapterFailure",
+)
+LEGACY_TERMINAL_PAYLOAD = {
+    "phase": "rendering",
+    "code": "governed_report_renderer_failed",
+}
+LEGACY_ATTEMPT_SHA256 = "f5fa57e6989a8406c99bd3c26b877694515f44af74426684fbcc18a0268abd63"
+LEGACY_TERMINAL_SHA256 = "f7456646b23f037b18af45f5019d5c817b54649cf28da14eecdf838817495239"
 
 
 def combine_cleanup_status(inner: str, outer: str) -> str:
@@ -216,6 +231,57 @@ def validate_diagnostic(value: Mapping[str, Any]) -> dict[str, Any]:
     if any(not isinstance(value[name], bool) for name in ("adapter_invocation_entered", "adapter_process_started", "adapter_result_received")):
         raise ValueError("bounded_diagnostic_contract_invalid")
     return dict(value)
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("bounded_diagnostic_contract_invalid")
+        result[key] = value
+    return result
+
+
+def _strict_json(value: str) -> Any:
+    try:
+        return json.loads(value, object_pairs_hook=_reject_duplicate_json_keys)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("bounded_diagnostic_contract_invalid") from None
+
+
+def _legacy_payload_is_safe(value: str) -> bool:
+    lowered = value.lower()
+    return not any(token in lowered for token in ("traceback", "stderr", "stdout", "command", "/data/", "/tmp/", "\\", "exception:"))
+
+
+def select_diagnostic_contract(*, attempt_raw: str, terminal_raw: str) -> dict[str, Any]:
+    """Select one closed diagnostic contract from both immutable payloads."""
+    attempt = _strict_json(attempt_raw)
+    terminal = _strict_json(terminal_raw)
+    if (isinstance(attempt, list) and attempt == list(LEGACY_ATTEMPT_DIAGNOSTICS)
+            and terminal == LEGACY_TERMINAL_PAYLOAD
+            and hashlib.sha256(attempt_raw.encode("utf-8")).hexdigest() == LEGACY_ATTEMPT_SHA256
+            and hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest() == LEGACY_TERMINAL_SHA256):
+        if all(_legacy_payload_is_safe(item) for item in attempt) and _legacy_payload_is_safe(terminal_raw):
+            return {
+                "contract_id": LEGACY_DIAGNOSTIC_CONTRACT,
+                "attempt_sha256": hashlib.sha256(attempt_raw.encode("utf-8")).hexdigest(),
+                "terminal_sha256": hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest(),
+            }
+    if not isinstance(attempt, list) or len(attempt) != 1 or not isinstance(attempt[0], Mapping):
+        raise ValueError("bounded_diagnostic_contract_invalid")
+    diagnostic = validate_diagnostic(attempt[0])
+    expected_terminal_keys = {"phase", "operation", "checkpoint", "code", "diagnostic"} | DIAGNOSTIC_FIELDS
+    if not isinstance(terminal, Mapping) or set(terminal) != expected_terminal_keys:
+        raise ValueError("bounded_diagnostic_contract_invalid")
+    terminal_diagnostic = validate_diagnostic(terminal["diagnostic"])
+    if diagnostic != terminal_diagnostic or terminal["phase"] != diagnostic["failure_phase"] or terminal["code"] != diagnostic["failure_code"]:
+        raise ValueError("bounded_diagnostic_contract_invalid")
+    return {
+        "contract_id": CURRENT_DIAGNOSTIC_CONTRACT,
+        "attempt_sha256": hashlib.sha256(attempt_raw.encode("utf-8")).hexdigest(),
+        "terminal_sha256": hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest(),
+    }
 
 
 def adapter_mapping(phase: str, code: str) -> tuple[str, str, str]:

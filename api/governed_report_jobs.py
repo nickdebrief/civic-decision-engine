@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -17,7 +18,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from api import record_governed_reports as reports
-from api.governed_report_diagnostics import bounded_code, make_diagnostic, validate_diagnostic
+from api.governed_report_diagnostics import (
+    bounded_code,
+    make_diagnostic,
+    select_diagnostic_contract,
+    validate_diagnostic,
+)
 
 JOB_SCHEMA_VERSION = "stage77.governed_report_job.v1"
 WORKER_IDENTITY = "cde-governed-report-worker"
@@ -251,6 +257,7 @@ def _diagnostic_retry_payload(
     qualification: Mapping[str, Any],
     actor: str,
     rationale: str,
+    diagnostic_contract: Mapping[str, Any],
     authorized_at: str | None = None,
     successor_job_id: int | None = None,
 ) -> dict[str, Any]:
@@ -272,6 +279,9 @@ def _diagnostic_retry_payload(
         "rationale": str(rationale),
         "predecessor_failure_phase": str(predecessor["failure_phase"]),
         "predecessor_failure_code": str(predecessor["failure_code"]),
+        "diagnostic_contract_id": str(diagnostic_contract["contract_id"]),
+        "predecessor_attempt_diagnostic_sha256": str(diagnostic_contract["attempt_sha256"]),
+        "predecessor_terminal_diagnostic_sha256": str(diagnostic_contract["terminal_sha256"]),
         "authorized_at": authorized_at,
     }
 
@@ -282,6 +292,7 @@ def _validate_diagnostic_retry_payload(payload: Mapping[str, Any]) -> dict[str, 
         "specification_digest", "qualification_id", "qualification_digest", "requesting_actor",
         "governed_action", "diagnostic_protocol_version", "declaration_version", "declaration",
         "rationale", "predecessor_failure_phase", "predecessor_failure_code", "authorized_at",
+        "diagnostic_contract_id", "predecessor_attempt_diagnostic_sha256", "predecessor_terminal_diagnostic_sha256",
     }
     if not isinstance(payload, Mapping) or set(payload) != expected:
         raise ValueError("governed_report_diagnostic_retry_contract_invalid")
@@ -298,6 +309,14 @@ def _validate_diagnostic_retry_payload(payload: Mapping[str, Any]) -> dict[str, 
         raise ValueError("governed_report_diagnostic_retry_contract_invalid")
     for name in ("specification_digest", "qualification_digest", "requesting_actor", "authorized_at"):
         if not isinstance(payload[name], str) or not payload[name].strip():
+            raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if payload["diagnostic_contract_id"] not in {
+        "current_diagnostic_contract_v1",
+        "legacy_pre_propagation_diagnostic_contract_v1",
+    }:
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    for name in ("predecessor_attempt_diagnostic_sha256", "predecessor_terminal_diagnostic_sha256"):
+        if not isinstance(payload[name], str) or not re.fullmatch(r"[0-9a-f]{64}", payload[name]):
             raise ValueError("governed_report_diagnostic_retry_contract_invalid")
     if payload["predecessor_failure_phase"] != "rendering" or payload["predecessor_failure_code"] != DIAGNOSTIC_RETRY_FAILURE_CODE:
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
@@ -325,7 +344,7 @@ def _diagnostic_retry_event_payload(conn: sqlite3.Connection, job_id: int) -> di
     return _validate_diagnostic_retry_payload(payload)
 
 
-def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, predecessor: Mapping[str, Any]) -> None:
+def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, predecessor: Mapping[str, Any]) -> dict[str, Any]:
     """Require the complete Stage 75 and Stage 77 bounded failure evidence."""
     attempt = conn.execute(
         "SELECT result,diagnostics_json FROM record_governed_report_generation_attempts "
@@ -334,13 +353,6 @@ def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, pr
     ).fetchone()
     if attempt is None or attempt["result"] != "validation_failed":
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
-    try:
-        attempt_diagnostics = json.loads(attempt["diagnostics_json"])
-        if not isinstance(attempt_diagnostics, list) or len(attempt_diagnostics) != 1:
-            raise ValueError
-        attempt_diagnostic = validate_diagnostic(attempt_diagnostics[0])
-    except (TypeError, ValueError, json.JSONDecodeError):
-        raise ValueError("governed_report_diagnostic_retry_diagnostic_invalid") from None
     terminal = conn.execute(
         "SELECT payload_json FROM stage77_report_job_events "
         "WHERE job_id=? AND event_type='terminal' AND resulting_state='failed_terminal' "
@@ -350,17 +362,17 @@ def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, pr
     if terminal is None:
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
     try:
-        terminal_payload = json.loads(terminal["payload_json"])
-        terminal_diagnostic = validate_diagnostic(terminal_payload["diagnostic"])
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        contract = select_diagnostic_contract(
+            attempt_raw=str(attempt["diagnostics_json"]),
+            terminal_raw=str(terminal["payload_json"]),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError):
         raise ValueError("governed_report_diagnostic_retry_diagnostic_invalid") from None
-    for diagnostic in (attempt_diagnostic, terminal_diagnostic):
-        if diagnostic["failure_phase"] != "rendering" or diagnostic["failure_code"] != DIAGNOSTIC_RETRY_FAILURE_CODE:
-            raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
-    if attempt_diagnostic != terminal_diagnostic:
-        raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
-    if terminal_payload.get("phase") != "rendering" or terminal_payload.get("code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
-        raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
+    if contract["contract_id"] == "current_diagnostic_contract_v1":
+        terminal_payload = json.loads(terminal["payload_json"])
+        if terminal_payload.get("phase") != "rendering" or terminal_payload.get("code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
+            raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
+    return contract
 
 
 def _diagnostic_retry_report_and_qualification(conn: sqlite3.Connection, predecessor: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -398,7 +410,7 @@ def _diagnostic_retry_report_and_qualification(conn: sqlite3.Connection, predece
     return report, qualification
 
 
-def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int, actor: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int, actor: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     if not str(actor or "").strip() or str(actor).strip().lower() in NON_ADMIN_IDENTITIES:
         raise ValueError("governed_report_diagnostic_retry_actor_invalid")
     predecessor = _job(conn, int(predecessor_job_id))
@@ -406,7 +418,7 @@ def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
     if predecessor.get("failure_phase") != "rendering" or predecessor.get("failure_code") != DIAGNOSTIC_RETRY_FAILURE_CODE or predecessor.get("failure_code") in RETRYABLE_CODES:
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
-    _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
+    diagnostic_contract = _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
     if conn.execute("SELECT 1 FROM stage77_report_jobs WHERE retry_of_job_id=?", (int(predecessor_job_id),)).fetchone() is not None:
         raise ValueError("governed_report_diagnostic_retry_successor_exists")
     active = conn.execute("SELECT 1 FROM stage77_report_jobs WHERE report_id=? AND report_version_id=? AND state IN ('queued','leased','running','retry_wait','cancel_requested')", (int(predecessor["report_id"]), int(predecessor["report_version_id"]))).fetchone()
@@ -417,14 +429,14 @@ def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int
     if status.get("state") != "inactive" or not recovery.recovery_allows_claim(conn):
         raise ValueError("governed_report_diagnostic_retry_maintenance_active")
     report, qualification = _diagnostic_retry_report_and_qualification(conn, predecessor)
-    return predecessor, report, qualification
+    return predecessor, report, qualification, diagnostic_contract
 
 
 def diagnostic_retry_candidate(conn: sqlite3.Connection, report_id: int | str, actor: str) -> dict[str, Any] | None:
     """Return only bounded UI evidence when the full retry contract is eligible."""
     for row in conn.execute("SELECT id FROM stage77_report_jobs WHERE report_id=? ORDER BY id", (int(report_id),)).fetchall():
         try:
-            predecessor, _, _ = _eligible_diagnostic_retry(conn, int(row[0]), actor)
+            predecessor, _, _, _ = _eligible_diagnostic_retry(conn, int(row[0]), actor)
         except (ValueError, TypeError, sqlite3.Error):
             continue
         return {"job_id": int(predecessor["id"]), "failure_phase": predecessor["failure_phase"], "failure_code": predecessor["failure_code"], "attempt_count": int(predecessor["attempt_count"]), "max_attempts": int(predecessor["max_attempts"]), "artifact_count": 0}
@@ -451,15 +463,16 @@ def authorize_diagnostic_retry(conn: sqlite3.Connection, *, predecessor_job_id: 
             qualification = qualification_store.latest_final(conn, int(predecessor["report_id"]))
             if qualification is None:
                 raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+            diagnostic_contract = _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
             existing_payload = _diagnostic_retry_event_payload(conn, int(existing[0]))
-            requested = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, authorized_at=existing_payload["authorized_at"], successor_job_id=int(existing[0]))
+            requested = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, diagnostic_contract=diagnostic_contract, authorized_at=existing_payload["authorized_at"], successor_job_id=int(existing[0]))
             if _diagnostic_retry_identity(existing_payload) != _diagnostic_retry_identity(requested):
                 raise ValueError("governed_report_diagnostic_retry_idempotency_conflict")
             conn.commit()
             return _job(conn, int(existing[0]))
-        predecessor, report, qualification = _eligible_diagnostic_retry(conn, int(predecessor_job_id), actor)
+        predecessor, report, qualification, diagnostic_contract = _eligible_diagnostic_retry(conn, int(predecessor_job_id), actor)
         now = utc_now()
-        report_payload = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, authorized_at=now)
+        report_payload = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, diagnostic_contract=diagnostic_contract, authorized_at=now)
         version = report["versions"][-1]
         cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), version["specification_digest"], reports.canonical_json(version["requested_formats"]), version["rendering_profile"], version["template_version"], version["publication_engine_version"], actor, DIAGNOSTIC_RETRY_ACTION, int(qualification["id"]), qualification["digest"], now, "queued", 0, MAX_ATTEMPTS, now, key, int(predecessor_job_id), 0, JOB_SCHEMA_VERSION))
         successor_id = int(cur.lastrowid)
@@ -564,7 +577,11 @@ def _revalidate_diagnostic_retry_job(conn: sqlite3.Connection, job: Mapping[str,
     predecessor = _job(conn, int(job["retry_of_job_id"]))
     if predecessor["state"] != "failed_terminal" or predecessor.get("retry_of_job_id") is not None or predecessor.get("failure_phase") != "rendering" or predecessor.get("failure_code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
         raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
-    _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
+    diagnostic_contract = _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
+    if (payload["diagnostic_contract_id"] != diagnostic_contract["contract_id"]
+            or payload["predecessor_attempt_diagnostic_sha256"] != diagnostic_contract["attempt_sha256"]
+            or payload["predecessor_terminal_diagnostic_sha256"] != diagnostic_contract["terminal_sha256"]):
+        raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
     if conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id=?", (int(predecessor["id"]),)).fetchone()[0] != 1:
         raise ValueError("governed_report_diagnostic_retry_successor_invalid")
     if report["lifecycle_status"] != "generation_requested" or int(report["id"]) != payload["report_id"]:

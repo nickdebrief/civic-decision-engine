@@ -35,7 +35,7 @@ class DiagnosticRetryTests(unittest.TestCase):
             association_ids=[],
             sections=[{"title": "Record", "blocks": [{"content_type": "verbatim_source", "text": "Original wording", "source_identity": {"object_kind": "canonical_record", "object_id": "CR-1"}, "inclusion_rationale": "Deliberately selected."}]}],
             exclusions=[],
-            requested_formats=["docx", "html"],
+            requested_formats=["docx", "html", "pdf"],
             rendering_profile="internal",
             template_version="cde-internal-v1",
             actor="nick",
@@ -51,11 +51,11 @@ class DiagnosticRetryTests(unittest.TestCase):
         diagnostic = jobs.make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, format_category="multiple")
         self.connection.execute(
             "INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?)",
-            (self.report["versions"][-1]["id"], '["docx", "html"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:00Z", "validation_failed", json.dumps([diagnostic], separators=(",", ":")), "{}", f"stage77-job-{self.original_job['id']}"),
+            (self.report["versions"][-1]["id"], '["docx", "html", "pdf"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:00Z", "validation_failed", json.dumps([diagnostic], separators=(",", ":")), "{}", f"stage77-job-{self.original_job['id']}"),
         )
         self.connection.execute(
             "INSERT INTO stage77_report_job_events(job_id,event_type,resulting_state,actor,occurred_at,payload_json) VALUES(?,?,?,?,?,?)",
-            (self.original_job["id"], "terminal", "failed_terminal", jobs.WORKER_IDENTITY, "2026-01-01T00:00:01Z", json.dumps({"phase": "rendering", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic}, separators=(",", ":"))),
+            (self.original_job["id"], "terminal", "failed_terminal", jobs.WORKER_IDENTITY, "2026-01-01T00:00:01Z", json.dumps({"phase": "rendering", "operation": "renderer_invocation", "checkpoint": "entered", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic, **diagnostic}, separators=(",", ":"))),
         )
         self.connection.commit()
 
@@ -110,6 +110,39 @@ class DiagnosticRetryTests(unittest.TestCase):
             self.authorize()
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL").fetchone()[0], 0)
 
+    def test_exact_legacy_pair_is_selected_and_bound_to_successor(self):
+        attempt_raw = json.dumps(list(__import__("api.governed_report_diagnostics", fromlist=["LEGACY_ATTEMPT_DIAGNOSTICS"]).LEGACY_ATTEMPT_DIAGNOSTICS), separators=(",", ":"))
+        terminal_raw = json.dumps(__import__("api.governed_report_diagnostics", fromlist=["LEGACY_TERMINAL_PAYLOAD"]).LEGACY_TERMINAL_PAYLOAD, separators=(",", ":"), sort_keys=True)
+        self.connection.execute("UPDATE record_governed_report_generation_attempts SET diagnostics_json=? WHERE idempotency_key=?", (attempt_raw, f"stage77-job-{self.original_job['id']}"))
+        self.connection.execute("UPDATE stage77_report_job_events SET payload_json=? WHERE job_id=? AND event_type='terminal'", (terminal_raw, self.original_job["id"]))
+        self.connection.commit()
+        successor = self.authorize()
+        self.assertEqual(successor["retry_of_job_id"], self.original_job["id"])
+        event = self.connection.execute("SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type=?", (successor["id"], jobs.DIAGNOSTIC_RETRY_EVENT)).fetchone()
+        payload = json.loads(event[0])
+        self.assertEqual(payload["diagnostic_contract_id"], "legacy_pre_propagation_diagnostic_contract_v1")
+        self.assertEqual(payload["predecessor_attempt_diagnostic_sha256"], "f5fa57e6989a8406c99bd3c26b877694515f44af74426684fbcc18a0268abd63")
+        self.assertEqual(payload["predecessor_terminal_diagnostic_sha256"], "f7456646b23f037b18af45f5019d5c817b54649cf28da14eecdf838817495239")
+
+    def test_legacy_selector_rejects_mixed_or_unknown_shapes(self):
+        from api.governed_report_diagnostics import select_diagnostic_contract
+        legacy_attempt = json.dumps(["governed_report_generation_validation_failed", "AdapterFailure"], separators=(",", ":"))
+        legacy_terminal = json.dumps({"phase": "rendering", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE}, separators=(",", ":"), sort_keys=True)
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            select_diagnostic_contract(attempt_raw=legacy_attempt, terminal_raw=json.dumps({"phase": "rendering", "operation": "renderer_invocation", "checkpoint": "entered", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": {}}, separators=(",", ":")))
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            select_diagnostic_contract(attempt_raw=legacy_attempt.replace("AdapterFailure", "UnknownFailure"), terminal_raw=legacy_terminal)
+
+    def test_legacy_payload_digests_are_exact_sha256_and_bound(self):
+        import hashlib
+        from api import governed_report_diagnostics as diagnostics
+        attempt_raw = json.dumps(list(diagnostics.LEGACY_ATTEMPT_DIAGNOSTICS), separators=(",", ":"))
+        terminal_raw = json.dumps(diagnostics.LEGACY_TERMINAL_PAYLOAD, separators=(",", ":"), sort_keys=True)
+        self.assertRegex(diagnostics.LEGACY_ATTEMPT_SHA256, r"^[0-9a-f]{64}$")
+        self.assertRegex(diagnostics.LEGACY_TERMINAL_SHA256, r"^[0-9a-f]{64}$")
+        self.assertEqual(hashlib.sha256(attempt_raw.encode()).hexdigest(), diagnostics.LEGACY_ATTEMPT_SHA256)
+        self.assertEqual(hashlib.sha256(terminal_raw.encode()).hexdigest(), diagnostics.LEGACY_TERMINAL_SHA256)
+
     def test_rendered_form_is_private_and_has_fixed_declaration(self):
         import importlib
         with patch.dict(os.environ, {"RECORDS_DB_PATH": str(Path(self.root.name) / "route.db")}):
@@ -118,6 +151,9 @@ class DiagnosticRetryTests(unittest.TestCase):
         diagnostic_retry = jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick")
         html = admin_session._stage75_html(session={"username": "nick", "role": "admin"}, reports=[detail], candidates={}, detail=detail, diagnostic_retry=diagnostic_retry)
         self.assertIn("Authorize one diagnostic retry", html)
+        self.assertIn("predates the current diagnostic propagation contract", html)
+        self.assertIn("exact historical bounded pair has been validated", html)
+        self.assertIn("root renderer cause remains unidentified", html)
         self.assertIn(jobs.DIAGNOSTIC_RETRY_DECLARATION, html)
         self.assertIn('name="acknowledged" value="1" required', html)
         self.assertIn(f'action="/api/admin/session/governed-report-jobs/{self.original_job["id"]}/diagnostic-retry"', html)

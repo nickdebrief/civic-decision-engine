@@ -151,3 +151,11 @@ source and association hashes, internal distribution, recovery state and
 predecessor linkage. No second diagnostic retry, direct database mutation,
 GET-triggered action, or worker-authorized retry is permitted. This sequencing
 does not renumber or modify Custody Points 1–3.
+
+Diagnostic evidence is versioned and immutable. A pre-propagation failure is
+accepted only under the exact closed legacy pair recorded by its historical
+Stage 75 producer and Stage 77 terminal producer, with independently checked
+payload hashes and ownership state. Current failures require the complete
+qualification-aware diagnostic contract. Mixed, partial, unknown, or
+downgraded pairs fail closed; historical rows are never backfilled, normalized,
+or re-signed.
