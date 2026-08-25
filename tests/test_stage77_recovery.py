@@ -53,6 +53,77 @@ class Stage77RecoveryTests(unittest.TestCase):
         root.mkdir(exist_ok=True)
         return recovery.restore_recovery_point(bundle_path=bundle, restore_root=root, database_target=database_target, artifact_root_target=artifact_target, live_database=self.db, live_artifact_root=self.artifacts, live_recovery_root=self.recovery_root, actor="admin", governed_action="restore", approved_root=self.root)
 
+    def _add_diagnostic_evidence(self, *, linked_successor=False):
+        from api import governed_report_diagnostics as diagnostics
+        self.conn.executescript("""
+        CREATE TABLE record_governed_report_generation_attempts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, version_id INTEGER NOT NULL,
+          requested_formats_json TEXT NOT NULL, actor TEXT NOT NULL, actor_role TEXT NOT NULL,
+          requested_at TEXT NOT NULL, result TEXT NOT NULL, diagnostics_json TEXT NOT NULL,
+          request_payload_json TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE
+        );
+        """)
+        diagnostic = jobs.make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, format_category="multiple")
+        attempt_raw = json.dumps([diagnostic], separators=(",", ":"))
+        terminal_raw = json.dumps({"phase": "rendering", "operation": "renderer_invocation", "checkpoint": "entered", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic, **diagnostic}, separators=(",", ":"), sort_keys=True)
+        self.conn.execute(
+            "INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?)",
+            (11, '["docx","html","pdf"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:00Z", "validation_failed", attempt_raw, "{}", "stage77-job-1"),
+        )
+        self.conn.execute(
+            "INSERT INTO stage77_report_jobs (report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (7, 11, "a" * 64, '["docx","html","pdf"]', "internal", "cde-internal-v1", "2.0.0", "nick", "enqueue_generation", "2026-01-01T00:00:00Z", "failed_terminal", 1, 3, "2026-01-01T00:00:00Z", "stage77-job-1", None, 0, jobs.JOB_SCHEMA_VERSION),
+        )
+        job_id = self.conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        terminal_raw = terminal_raw.replace('"code":"governed_report_renderer_failed"', '"code":"governed_report_renderer_failed"')
+        self.conn.execute(
+            "INSERT INTO stage77_report_job_events (job_id,event_type,resulting_state,actor,occurred_at,payload_json) VALUES(?,?,?,?,?,?)",
+            (job_id, "terminal", "failed_terminal", jobs.WORKER_IDENTITY, "2026-01-01T00:00:01Z", terminal_raw),
+        )
+        if linked_successor:
+            self.conn.execute(
+                "INSERT INTO stage77_report_jobs (report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (7, 11, "a" * 64, '["docx","html","pdf"]', "internal", "cde-internal-v1", "2.0.0", "nick", "authorize_diagnostic_retry", "2026-01-01T00:00:02Z", "queued", 0, 3, "2026-01-01T00:00:02Z", "stage77-diagnostic-retry-1", job_id, 0, jobs.JOB_SCHEMA_VERSION),
+            )
+
+    def test_diagnostic_aware_manifest_binds_evidence_and_retry_topology(self):
+        self._add_diagnostic_evidence(linked_successor=True)
+        result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
+        bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        self.assertEqual(recovery._manifest_contract(manifest), "diagnostic_aware")
+        self.assertEqual(manifest["diagnostic_contract_version"], "stage77.diagnostic_aware.v1")
+        self.assertEqual(manifest["diagnostic_evidence_count"], 1)
+        self.assertEqual(manifest["retry_link_count"], 1)
+        self.assertEqual(recovery.validate_recovery_bundle(bundle)["manifest_digest"], result["manifest_digest"])
+        exports = self.root / "exports"
+        exports.mkdir()
+        recovery.export_recovery_bundle(bundle_path=bundle, output_archive=exports / "point4.tar", receipt_path=exports / "point4.json", reason="diagnostic-aware pre-retry state")
+        self.assertEqual(recovery.validate_export_archive(exports / "point4.tar", exports / "point4.json")["state"], "valid")
+
+    def test_diagnostic_database_rejects_older_manifest_shape(self):
+        self._add_diagnostic_evidence()
+        result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
+        bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        for key in ("diagnostic_contract_version", "diagnostic_evidence", "diagnostic_evidence_count", "diagnostic_evidence_state_digest", "retry_link_count", "retry_link_state_digest"):
+            manifest.pop(key)
+        raw = recovery.canonical_json(manifest).encode()
+        (bundle / "manifest.json").write_bytes(raw)
+        (bundle / "manifest.sha256").write_text(recovery.digest_bytes(raw) + "\n")
+        with self.assertRaisesRegex(ValueError, "schema_incompatible"):
+            recovery.validate_recovery_bundle(bundle)
+
+    def test_retry_topology_rejects_retry_of_retry_even_without_manifest_trust(self):
+        self._add_diagnostic_evidence(linked_successor=True)
+        predecessor = 1
+        self.conn.execute(
+            "INSERT INTO stage77_report_jobs (report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (7, 11, "a" * 64, '["docx","html","pdf"]', "internal", "cde-internal-v1", "2.0.0", "nick", "authorize_diagnostic_retry", "2026-01-01T00:00:03Z", "queued", 0, 3, "2026-01-01T00:00:03Z", "stage77-diagnostic-retry-2", 2, 0, jobs.JOB_SCHEMA_VERSION),
+        )
+        with self.assertRaisesRegex(ValueError, "retry_topology_invalid"):
+            recovery._retry_topology_snapshot(self.conn)
+
     def test_capture_uses_online_backup_and_exact_artifact_manifest(self):
         result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture", idempotency_key="point-1")
         bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
