@@ -82,9 +82,13 @@ validation, promotion and registration path; it cannot authorize a retry or
 create another one. A failed successor remains terminal and retains bounded
 diagnostics. Historical failures created before diagnostic propagation are
 selected only by the closed `legacy_pre_propagation_diagnostic_contract_v1`
-shape and independently bound payload digests; current failures require the
-strict `current_diagnostic_contract_v1` shape. Mixed, partial, unknown and
-downgraded pairs fail closed. Historical rows are never rewritten or upgraded.
+shape and independently bound payload digests. The first terminal projection
+defect is preserved under the exact transitional
+`current_pre_terminal_projection_fix_diagnostic_contract_v1` pair, whose
+payload hashes bind Job 2 without rewriting it. Future terminal events use
+the strict `current_diagnostic_contract_v1` projection. Legacy, transitional
+and current pairs are disjoint; mixed, partial, unknown and downgraded pairs
+fail closed. Historical rows are never rewritten or upgraded.
 Production use requires the separately governed Custody Point 4 precondition
 described in the recovery runbook.
 
@@ -188,7 +192,11 @@ mixed, partial, reordered, or downgraded evidence fails closed.
 
 Custody Point 4 is the post-failure, pre-diagnostic-retry point. It must use
 the diagnostic-aware contract and must be captured, exported, and validated
-before the one separately governed linked retry is authorized.
+before the one separately governed linked retry is authorized. A later Custody
+Point 5 binds the legacy Job 1 evidence and the transitional or current Job 2
+evidence, their four payload hashes, and the single Job 1 to Job 2 retry link.
+The transitional contract identifies the projection defect only; any renderer
+correction requires separate authorization.
 
 Export and restore require an administrator and never run automatically during
 import, startup, GET, listing, diagnostics, or worker startup. Backup creation

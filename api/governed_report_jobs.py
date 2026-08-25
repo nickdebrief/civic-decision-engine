@@ -619,7 +619,7 @@ def _terminal_diagnostic_retry_revalidation_failure(conn: sqlite3.Connection, jo
         if cur.rowcount != 1:
             conn.rollback()
             return False
-        _event(conn, int(job["id"]), "terminal", "failed_terminal", WORKER_IDENTITY, {"phase": "revalidation", "code": "qualification_invalid", "diagnostic": diagnostic, **diagnostic})
+        _event(conn, int(job["id"]), "terminal", "failed_terminal", WORKER_IDENTITY, _terminal_payload(phase="revalidation", code="qualification_invalid", diagnostic=diagnostic))
         conn.commit()
         return True
     except Exception:
@@ -671,15 +671,24 @@ def reconcile_job_storage(conn: sqlite3.Connection, job: Mapping[str, Any]) -> b
     return True
 
 
+def _terminal_payload(*, phase: str | None, code: str | None, diagnostic: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"phase": phase, "code": code}
+    if diagnostic is not None:
+        payload["diagnostic"] = validate_diagnostic(diagnostic)
+        payload["phase"] = payload["diagnostic"]["failure_phase"]
+        payload["operation"] = payload["diagnostic"]["failure_operation"]
+        payload["checkpoint"] = payload["diagnostic"]["failure_checkpoint"]
+        payload["code"] = payload["diagnostic"]["failure_code"]
+        payload.update(payload["diagnostic"])
+    return payload
+
+
 def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: str | None = None, code: str | None = None, diagnostic: Mapping[str, Any] | None = None) -> bool:
     allowed_states = "'cancel_requested'" if state == "cancelled" else "'leased','running'"
     cur = conn.execute(f"UPDATE stage77_report_jobs SET state=?,terminal_at=?,terminal_outcome=?,failure_phase=?,failure_code=? WHERE id=? AND lease_token=? AND state IN ({allowed_states})", (state, utc_now(), code or state, phase, code, job_id, token))
     if cur.rowcount != 1:
         conn.commit(); return False
-    payload: dict[str, Any] = {"phase": phase, "code": code}
-    if diagnostic is not None:
-        payload["diagnostic"] = validate_diagnostic(diagnostic)
-        payload.update(payload["diagnostic"])
+    payload = _terminal_payload(phase=phase, code=code, diagnostic=diagnostic)
     _event(conn, job_id, "terminal", state, actor, payload)
     conn.commit(); return True
 

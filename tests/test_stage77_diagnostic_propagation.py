@@ -30,6 +30,45 @@ class BoundedDiagnosticContractTests(unittest.TestCase):
             diagnostics.validate_diagnostic({**value, "raw_error": "private detail"})
         with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
             diagnostics.validate_diagnostic({**value, "adapter_process_started": 1})
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.validate_diagnostic({**value, "adapter_invocation_entered": False, "adapter_process_started": True})
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.validate_diagnostic({**value, "adapter_process_started": False, "adapter_result_received": True})
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.validate_diagnostic({**value, "failure_checkpoint": "process_started", "adapter_process_started": False})
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.validate_diagnostic({**value, "failure_checkpoint": "result_received", "adapter_result_received": False})
+
+    def test_transitional_job2_pair_is_exact_and_current_pair_is_distinct(self):
+        transitional_attempt = reports.canonical_json([diagnostics.TRANSITIONAL_DIAGNOSTIC])
+        transitional_terminal = reports.canonical_json({
+            "phase": "rendering",
+            "code": "governed_report_renderer_failed",
+            "diagnostic": diagnostics.TRANSITIONAL_DIAGNOSTIC,
+            **diagnostics.TRANSITIONAL_DIAGNOSTIC,
+        })
+        selected = diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=transitional_terminal)
+        self.assertEqual(selected["contract_id"], diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT)
+        self.assertEqual(selected["attempt_sha256"], diagnostics.TRANSITIONAL_ATTEMPT_SHA256)
+        self.assertEqual(selected["terminal_sha256"], diagnostics.TRANSITIONAL_TERMINAL_SHA256)
+        current_terminal = reports.canonical_json({
+            "phase": "rendering",
+            "operation": "adapter_preparation",
+            "checkpoint": "starting",
+            "code": "adapter_input_invalid",
+            "diagnostic": diagnostics.TRANSITIONAL_DIAGNOSTIC,
+            **diagnostics.TRANSITIONAL_DIAGNOSTIC,
+        })
+        current = diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=current_terminal)
+        self.assertEqual(current["contract_id"], diagnostics.CURRENT_DIAGNOSTIC_CONTRACT)
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=current_terminal.replace("adapter_preparation", "renderer_invocation"))
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=current_terminal.replace('"operation":"adapter_preparation"', '"operation":"adapter_launch"'))
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=current_terminal.replace('"checkpoint":"starting"', '"checkpoint":"validation"'))
+        with self.assertRaisesRegex(ValueError, "bounded_diagnostic_contract_invalid"):
+            diagnostics.select_diagnostic_contract(attempt_raw=transitional_attempt, terminal_raw=current_terminal.replace('"failure_code":"adapter_input_invalid"', '"failure_code":"pdf_invalid"', 1))
 
     def test_adapter_failure_maps_to_bounded_contract_without_detail(self):
         failure = AdapterFailure(
@@ -46,6 +85,29 @@ class BoundedDiagnosticContractTests(unittest.TestCase):
         self.assertEqual(value["failure_code"], "pdf_invalid")
         self.assertTrue(value["adapter_result_received"])
         self.assertNotIn("private", value)
+
+    def test_controlled_adapter_fixture_reproduces_qualification_input_boundary(self):
+        from scripts.evidence_led_governance_pipeline import report_adapter
+
+        specification = {
+            "title": "Synthetic internal report",
+            "purpose": "Bounded adapter diagnosis",
+            "specification_schema_version": "1",
+            "sections": [],
+        }
+        qualification = {
+            "review_mode": "sole_administrator",
+            "disclosure_version": "sole-admin-v1",
+            "disclosure": "Independent administrator review did not occur. This report was confirmed and approved by its creator under the declared sole-administrator operating constraint. It remains restricted to authorised internal use.",
+            "qualification_id": 4,
+            "qualification_digest": "a" * 64,
+            "specification_digest": "b" * 64,
+            "distribution_restriction": "internal_working",
+        }
+        with self.assertRaises(report_adapter.AdapterFailure) as raised:
+            report_adapter.make_book(specification, qualification)
+        self.assertEqual(raised.exception.phase, "specification_validation")
+        self.assertEqual(raised.exception.code, "adapter_input_invalid")
 
 
 class Stage75ToStage77PropagationTests(unittest.TestCase):
@@ -118,6 +180,9 @@ class Stage75ToStage77PropagationTests(unittest.TestCase):
         self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="rendering", code="governed_report_renderer_failed", diagnostic=value))
         payload = json.loads(self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE event_type='terminal'").fetchone()[0])
         self.assertEqual(payload["diagnostic"], value)
+        self.assertEqual(payload["operation"], value["failure_operation"])
+        self.assertEqual(payload["checkpoint"], value["failure_checkpoint"])
+        self.assertEqual(payload["code"], value["failure_code"])
         self.assertNotIn("raw_error", payload)
 
 

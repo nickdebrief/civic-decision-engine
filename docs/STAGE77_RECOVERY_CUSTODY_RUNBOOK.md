@@ -168,10 +168,18 @@ does not renumber or modify Custody Points 1–3.
 Diagnostic evidence is versioned and immutable. A pre-propagation failure is
 accepted only under the exact closed legacy pair recorded by its historical
 Stage 75 producer and Stage 77 terminal producer, with independently checked
-payload hashes and ownership state. Current failures require the complete
-qualification-aware diagnostic contract. Mixed, partial, unknown, or
-downgraded pairs fail closed; historical rows are never backfilled, normalized,
-or re-signed.
+payload hashes and ownership state. The first terminal projection producer
+also has a closed transitional contract,
+`current_pre_terminal_projection_fix_diagnostic_contract_v1`, bound to its
+exact Stage 75 and Stage 77 hashes; those rows are never rewritten or relabeled
+as current. Future terminal events use the complete
+`current_diagnostic_contract_v1` projection, including operation and
+checkpoint. Mixed, partial, unknown, or downgraded pairs fail closed; progress
+flags are monotonic and historical transitional flags are preserved as-is.
 The diagnostic-aware recovery contract is required for any custody point whose
-database contains such evidence, including Custody Point 4. No diagnostic
-retry may occur until that point has been captured, exported, and validated.
+database contains such evidence, including Custody Point 4. A later Custody
+Point 5 may bind both the immutable legacy predecessor and the single
+transitional/current successor evidence entry plus the one retry link. No
+additional retry is permitted, and no renderer correction is implied by the
+transitional classification. No diagnostic retry may occur until the required
+custody point has been captured, exported, and validated.
