@@ -425,8 +425,7 @@ def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int
     if active is not None:
         raise ValueError("governed_report_diagnostic_retry_active_job_exists")
     from api import governed_report_recovery as recovery
-    status = recovery.recovery_status(conn)
-    if status.get("state") != "inactive" or not recovery.recovery_allows_claim(conn):
+    if not recovery.recovery_allows_claim(conn):
         raise ValueError("governed_report_diagnostic_retry_maintenance_active")
     report, qualification = _diagnostic_retry_report_and_qualification(conn, predecessor)
     return predecessor, report, qualification, diagnostic_contract
@@ -607,7 +606,7 @@ def _revalidate_diagnostic_retry_job(conn: sqlite3.Connection, job: Mapping[str,
         raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
     reports._validate_generation_sources(conn, version["specification"])
     from api import governed_report_recovery as recovery
-    if recovery.recovery_status(conn).get("state") != "inactive" or not recovery.recovery_allows_claim(conn):
+    if not recovery.recovery_allows_claim(conn):
         raise ValueError("governed_report_diagnostic_retry_maintenance_active")
 
 

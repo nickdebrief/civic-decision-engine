@@ -71,7 +71,10 @@ identity and records append-only report and job authorization events.
 Authorization requires an authenticated administrator, a bounded rationale,
 the fixed affirmative declaration, unchanged specification and final
 qualification identity/digest, internal-only distribution, valid sources and
-associations, no artifacts or active job, and inactive recovery maintenance.
+associations, no artifacts or active job, and a recovery state that permits
+worker claims under the authoritative recovery-fencing contract. A completed
+recovery epoch with released fencing is eligible; active, failed or otherwise
+claim-blocking recovery states remain ineligible.
 It moves `validation_failed` directly to `generation_requested` as execution
 authorization, never as substantive reapproval. The worker revalidates the
 linkage and diagnostic protocol before using the ordinary lease, rendering,

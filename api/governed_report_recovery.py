@@ -448,15 +448,32 @@ def recovery_status(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def recovery_allows_claim(conn: sqlite3.Connection) -> bool:
     status = recovery_status(conn)
-    if status["state"] in ACTIVE_STATES or bool(status.get("restore_validation_required")):
+    control = _control(conn)
+    state = status.get("state")
+    if not isinstance(state, str) or state not in RECOVERY_STATES | {"inactive"}:
         return False
-    if status["state"] in {"failed", "restore_failed"} and not bool(status.get("worker_drained")):
+    raw_epoch = status.get("maintenance_epoch")
+    if isinstance(raw_epoch, bool) or not isinstance(raw_epoch, int) or raw_epoch < 0:
         return False
-    if status["state"] == "restore_ready" and not status.get("manifest_digest"):
+    maintenance_epoch = raw_epoch
+    if control is None:
+        if state != "inactive" or maintenance_epoch != 0:
+            return False
+    elif state == "inactive" or maintenance_epoch <= 0:
         return False
-    if _control(conn) is not None and conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_report_jobs'").fetchone() is not None:
+    if control is not None and not {"restore_validation_required", "worker_drained"}.issubset(status):
+        return False
+    if state in ACTIVE_STATES or bool(status.get("restore_validation_required")):
+        return False
+    if state in {"failed", "restore_failed"} and not bool(status.get("worker_drained")):
+        return False
+    if state == "restore_ready" and not status.get("manifest_digest"):
+        return False
+    if control is not None and conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_report_jobs'").fetchone() is not None:
         maximum_epoch = conn.execute("SELECT COALESCE(MAX(maintenance_epoch),0) FROM stage77_report_jobs").fetchone()[0]
-        if int(maximum_epoch) > int(status.get("maintenance_epoch", 0)):
+        if isinstance(maximum_epoch, bool) or not isinstance(maximum_epoch, int) or maximum_epoch < 0:
+            return False
+        if maximum_epoch > maintenance_epoch:
             return False
     return True
 
