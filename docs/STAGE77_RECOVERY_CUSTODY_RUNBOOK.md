@@ -123,3 +123,31 @@ The first production deployment sequence is:
 
 If production recovery cannot be invoked through a controlled administrative
 execution mechanism, deployment remains blocked.
+
+## Exceptional diagnostic-retry sequencing
+
+The exceptional diagnostic retry is a separate governed action for the
+recognized terminal renderer failure. It is not an automatic retry, ordinary
+infrastructure retry, reapproval, or reuse of the generation declaration.
+Job 1 and its events remain immutable, and only one linked successor may be
+authorized.
+
+For a failed pre-generation report, the required operational order is:
+
+1. Implement and independently assure the bounded diagnostic contract.
+2. Integrate and deploy the exact reviewed revision; verify worker readiness.
+3. Capture a new recovery point preserving `validation_failed`, the immutable
+   failed predecessor, zero artifacts, and no successor job.
+4. Export and validate that bundle as encrypted Custody Point 4 without
+   altering Custody Points 1–3.
+5. Only after Custody Point 4 validation, use the authenticated diagnostic-
+   retry form once with a bounded rationale and fixed declaration.
+6. If the linked successor succeeds, capture the generated state separately
+   as Custody Point 5. If it fails, stop and preserve its bounded diagnostics;
+   any custody of that failed state requires separate authorization.
+
+The retry must revalidate the frozen specification, final qualification,
+source and association hashes, internal distribution, recovery state and
+predecessor linkage. No second diagnostic retry, direct database mutation,
+GET-triggered action, or worker-authorized retry is permitted. This sequencing
+does not renumber or modify Custody Points 1–3.
