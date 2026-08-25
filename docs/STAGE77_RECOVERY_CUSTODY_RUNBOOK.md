@@ -165,6 +165,17 @@ predecessor linkage. No second diagnostic retry, direct database mutation,
 GET-triggered action, or worker-authorized retry is permitted. This sequencing
 does not renumber or modify Custody Points 1–3.
 
+The full persisted qualification envelope remains the governance and custody
+source of truth. Immediately before adapter invocation, the worker projects
+that already revalidated envelope into exactly the five-field Stage 76
+rendering contract: `review_mode`, `disclosure_version`, `disclosure`,
+`qualification_id`, and `qualification_digest`. The adapter remains strict and
+continues to reject the persisted envelope itself. This projection does not
+create a replacement qualification digest, alter sole-admin-v1 disclosure, or
+rewrite either terminal job. Custody Point 5 therefore preserves the complete
+pre-correction evidence; a post-correction recovery capture and any later
+controlled generation require separate authorization.
+
 Diagnostic evidence is versioned and immutable. A pre-propagation failure is
 accepted only under the exact closed legacy pair recorded by its historical
 Stage 75 producer and Stage 77 terminal producer, with independently checked
