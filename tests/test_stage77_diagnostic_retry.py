@@ -1,0 +1,141 @@
+import os
+import json
+import re
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from api import governed_report_jobs as jobs
+from api import governed_report_qualifications as qualifications
+from api import record_governed_reports as reports
+
+
+class DiagnosticRetryTests(unittest.TestCase):
+    def setUp(self):
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.row_factory = sqlite3.Row
+        self.root = tempfile.TemporaryDirectory()
+        self.original_root = reports.REPORT_ROOT
+        reports.REPORT_ROOT = Path(self.root.name)
+        self.record = {"reference": "CR-1", "title": "Canonical record", "finding": "Original wording", "status": "recorded", "version": 1}
+        self.record_context = patch.object(reports.rda, "record_context", return_value=self.record)
+        self.record_context.start()
+        self.mode = patch.dict(os.environ, {qualifications.REVIEW_MODE_ENV: qualifications.SOLE_MODE})
+        self.mode.start()
+        self.report = reports.create_report(
+            self.connection,
+            title="Internal report",
+            purpose="Review selected record",
+            audience="Administrators",
+            distribution_class="internal_working",
+            canonical_record_reference="CR-1",
+            document_ids=[],
+            association_ids=[],
+            sections=[{"title": "Record", "blocks": [{"content_type": "verbatim_source", "text": "Original wording", "source_identity": {"object_kind": "canonical_record", "object_id": "CR-1"}, "inclusion_rationale": "Deliberately selected."}]}],
+            exclusions=[],
+            requested_formats=["docx", "html"],
+            rendering_profile="internal",
+            template_version="cde-internal-v1",
+            actor="nick",
+            actor_role="administrator",
+            idempotency_key="diagnostic-retry-report",
+        )
+        for status, key in (("assembly_reviewed", "diagnostic-assembly"), ("privacy_reviewed", "diagnostic-privacy"), ("redaction_reviewed", "diagnostic-redaction"), ("approved_for_generation", "diagnostic-approval")):
+            self.report = reports.confirm_creator_gate(self.connection, report_id=self.report["id"], resulting_status=status, rationale="Sole administrator fixture confirmation", actor="nick", actor_role="administrator", acknowledged=True, idempotency_key=key)
+        self.original_job = jobs.enqueue_generation(self.connection, report_id=self.report["id"], actor="nick", governed_action="enqueue_generation", idempotency_key="diagnostic-original")
+        self.connection.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (self.report["id"],))
+        self.connection.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE report_id=?", (self.report["id"],))
+        self.connection.execute("UPDATE stage77_report_jobs SET state='failed_terminal',attempt_count=1,terminal_at='2026-01-01T00:00:00Z',terminal_outcome='validation_failed',failure_phase='rendering',failure_code=? WHERE id=?", (jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, self.original_job["id"]))
+        diagnostic = jobs.make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, format_category="multiple")
+        self.connection.execute(
+            "INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?)",
+            (self.report["versions"][-1]["id"], '["docx", "html"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:00Z", "validation_failed", json.dumps([diagnostic], separators=(",", ":")), "{}", f"stage77-job-{self.original_job['id']}"),
+        )
+        self.connection.execute(
+            "INSERT INTO stage77_report_job_events(job_id,event_type,resulting_state,actor,occurred_at,payload_json) VALUES(?,?,?,?,?,?)",
+            (self.original_job["id"], "terminal", "failed_terminal", jobs.WORKER_IDENTITY, "2026-01-01T00:00:01Z", json.dumps({"phase": "rendering", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic}, separators=(",", ":"))),
+        )
+        self.connection.commit()
+
+    def tearDown(self):
+        self.connection.close()
+        self.mode.stop()
+        self.record_context.stop()
+        reports.REPORT_ROOT = self.original_root
+        self.root.cleanup()
+
+    def authorize(self, rationale="Bounded diagnostic observability correction deployed"):
+        return jobs.authorize_diagnostic_retry(self.connection, predecessor_job_id=self.original_job["id"], actor="nick", actor_role="admin", rationale=rationale, acknowledged=True)
+
+    def test_one_linked_retry_is_atomic_and_preserves_original(self):
+        successor = self.authorize()
+        self.assertEqual(successor["retry_of_job_id"], self.original_job["id"])
+        self.assertEqual(successor["governed_action"], jobs.DIAGNOSTIC_RETRY_ACTION)
+        self.assertEqual(jobs.get_job(self.connection, self.original_job["id"])["state"], "failed_terminal")
+        self.assertEqual(reports.get_report(self.connection, self.report["id"])["lifecycle_status"], "generation_requested")
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM record_governed_report_events WHERE event_type='diagnostic_retry_authorized'").fetchone()[0], 1)
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_job_events WHERE event_type=?", (jobs.DIAGNOSTIC_RETRY_EVENT,)).fetchone()[0], 1)
+
+    def test_identical_replay_is_idempotent_and_conflicting_replay_fails(self):
+        first = self.authorize()
+        replay = self.authorize()
+        self.assertEqual(replay["id"], first["id"])
+        with self.assertRaisesRegex(ValueError, "idempotency_conflict"):
+            self.authorize("A materially different rationale")
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id=?", (self.original_job["id"],)).fetchone()[0], 1)
+
+    def test_ineligible_terminal_failure_is_rejected_without_mutation(self):
+        self.connection.execute("UPDATE stage77_report_jobs SET failure_code='pdf_invalid' WHERE id=?", (self.original_job["id"],))
+        self.connection.commit()
+        with self.assertRaisesRegex(ValueError, "predecessor_invalid"):
+            self.authorize()
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL").fetchone()[0], 0)
+        self.assertEqual(reports.get_report(self.connection, self.report["id"])["lifecycle_status"], "validation_failed")
+
+    def test_concurrent_successor_insertion_is_rejected_by_fixed_identity(self):
+        self.connection.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) SELECT report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,'nick',?,requested_at,'queued',0,3,next_eligible_at,?,id,0,schema_version FROM stage77_report_jobs WHERE id=?", (jobs.DIAGNOSTIC_RETRY_ACTION, "stage77-other-key-%s" % self.original_job["id"], self.original_job["id"]))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) SELECT report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,'nick',?,requested_at,'queued',0,3,next_eligible_at,?,id,0,schema_version FROM stage77_report_jobs WHERE id=?", (jobs.DIAGNOSTIC_RETRY_ACTION, "stage77-other-key-2-%s" % self.original_job["id"], self.original_job["id"]))
+        self.connection.commit()
+        with self.assertRaisesRegex(ValueError, "successor_exists|event_missing|contract_invalid"):
+            self.authorize()
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id=?", (self.original_job["id"],)).fetchone()[0], 1)
+
+    def test_incomplete_predecessor_diagnostic_is_rejected(self):
+        self.connection.execute("UPDATE record_governed_report_generation_attempts SET diagnostics_json='[]' WHERE idempotency_key=?", (f"stage77-job-{self.original_job['id']}",))
+        self.connection.commit()
+        with self.assertRaisesRegex(ValueError, "diagnostic_invalid"):
+            self.authorize()
+        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL").fetchone()[0], 0)
+
+    def test_rendered_form_is_private_and_has_fixed_declaration(self):
+        import importlib
+        with patch.dict(os.environ, {"RECORDS_DB_PATH": str(Path(self.root.name) / "route.db")}):
+            admin_session = importlib.import_module("api.routes.admin_session")
+        detail = reports.get_report(self.connection, self.report["id"])
+        diagnostic_retry = jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick")
+        html = admin_session._stage75_html(session={"username": "nick", "role": "admin"}, reports=[detail], candidates={}, detail=detail, diagnostic_retry=diagnostic_retry)
+        self.assertIn("Authorize one diagnostic retry", html)
+        self.assertIn(jobs.DIAGNOSTIC_RETRY_DECLARATION, html)
+        self.assertIn('name="acknowledged" value="1" required', html)
+        self.assertIn(f'action="/api/admin/session/governed-report-jobs/{self.original_job["id"]}/diagnostic-retry"', html)
+        self.assertNotIn("/diagnostic-retry" , admin_session._stage75_html(session={"username": "nick", "role": "admin"}, reports=[detail], candidates={}, detail=detail))
+        source = Path(admin_session.__file__).read_text(encoding="utf-8")
+        route_decorators = re.findall(
+            r'@router\.(get|post|put|patch|delete)\("([^"]*diagnostic-retry[^"]*)"',
+            source,
+        )
+        self.assertEqual(
+            route_decorators,
+            [("post", "/api/admin/session/governed-report-jobs/{job_id}/diagnostic-retry")],
+        )
+        self.assertNotIn(
+            '"/admin/governed-report-jobs/{job_id}/diagnostic-retry"',
+            source,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

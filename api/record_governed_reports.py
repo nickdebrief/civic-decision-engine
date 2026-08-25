@@ -397,6 +397,100 @@ def transition_report(conn: sqlite3.Connection, *, report_id: int | str, resulti
     return _row(conn, report_id)
 
 
+def record_diagnostic_retry_authorization(
+    conn: sqlite3.Connection,
+    *,
+    report_id: int | str,
+    version_id: int | str,
+    predecessor_job_id: int,
+    actor: str,
+    actor_role: str,
+    rationale: str,
+    declaration: Mapping[str, Any],
+    idempotency_key: str,
+    payload: Mapping[str, Any],
+    _commit: bool = False,
+) -> dict[str, Any]:
+    """Record execution authorization without re-approving the report."""
+    report = _row(conn, report_id)
+    if report["lifecycle_status"] != "validation_failed":
+        raise ValueError("governed_report_diagnostic_retry_lifecycle_invalid")
+    if int(report["versions"][-1]["id"]) != int(version_id):
+        raise ValueError("governed_report_diagnostic_retry_version_invalid")
+    actor_value = _required(actor, "governed_report_event_actor_required")
+    role_value = _required(actor_role, "governed_report_event_actor_role_required")
+    rationale_value = _required(rationale, "governed_report_diagnostic_retry_rationale_required")
+    if len(rationale_value) > 4000:
+        raise ValueError("governed_report_diagnostic_retry_rationale_invalid")
+    if not isinstance(declaration, Mapping) or declaration != {"acknowledged": True}:
+        raise ValueError("governed_report_diagnostic_retry_declaration_required")
+    key = _required(idempotency_key, "governed_report_event_idempotency_key_required")
+    existing = conn.execute(
+        "SELECT report_id,request_payload_json FROM record_governed_report_events WHERE idempotency_key=?",
+        (key,),
+    ).fetchone()
+    if existing:
+        if json.loads(existing[1]) != dict(payload):
+            raise ValueError("governed_report_diagnostic_retry_idempotency_conflict")
+        return _row(conn, existing[0])
+    now = utc_now()
+    conn.execute("UPDATE record_governed_reports SET lifecycle_status='generation_requested' WHERE id=?", (int(report_id),))
+    conn.execute(
+        "UPDATE record_governed_report_versions SET lifecycle_status='generation_requested' WHERE id=?",
+        (int(version_id),),
+    )
+    conn.execute(
+        "INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            int(report_id),
+            int(version_id),
+            "diagnostic_retry_authorized",
+            "generation_requested",
+            rationale_value,
+            actor_value,
+            role_value,
+            canonical_json(dict(declaration)),
+            now,
+            key,
+            canonical_json(dict(payload)),
+        ),
+    )
+    if _commit:
+        conn.commit()
+    return _row(conn, report_id)
+
+
+def record_diagnostic_retry_validation_failure(
+    conn: sqlite3.Connection,
+    *,
+    report_id: int | str,
+    version_id: int | str,
+    job_id: int,
+    payload: Mapping[str, Any],
+    _commit: bool = False,
+) -> dict[str, Any]:
+    """Return a linked diagnostic retry to validation_failed after revalidation failure."""
+    report = _row(conn, report_id)
+    if report["lifecycle_status"] != "generation_requested" or int(report["versions"][-1]["id"]) != int(version_id):
+        raise ValueError("governed_report_diagnostic_retry_lifecycle_invalid")
+    key = f"stage75-diagnostic-retry-{int(job_id)}:validation-failed"
+    existing = conn.execute("SELECT request_payload_json FROM record_governed_report_events WHERE idempotency_key=?", (key,)).fetchone()
+    if existing is not None:
+        if json.loads(existing[0]) != dict(payload):
+            raise ValueError("governed_report_diagnostic_retry_idempotency_conflict")
+        return _row(conn, report_id)
+    now = utc_now()
+    conn.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (int(report_id),))
+    conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE id=?", (int(version_id),))
+    conn.execute(
+        "INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (int(report_id), int(version_id), "validation_failed", "validation_failed", "Diagnostic retry failed pre-execution revalidation.", "cde-governed-report-worker", "system_worker", '{"acknowledged":true}', now, key, canonical_json(dict(payload))),
+    )
+    if _commit:
+        conn.commit()
+    return _row(conn, report_id)
+
+
 def confirm_creator_gate(conn: sqlite3.Connection, *, report_id: int | str, resulting_status: str, rationale: str, actor: str, actor_role: str, acknowledged: bool, idempotency_key: str, _commit: bool = True) -> dict[str, Any]:
     """Advance one gate under explicit sole-administrator confirmation."""
     from api import governed_report_qualifications as qualifications

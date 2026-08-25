@@ -55,6 +55,28 @@ terminal idempotent replay do not render. Retries are bounded and restricted
 to explicitly transient infrastructure failures; validation, source, action,
 equivalence, authorization and digest failures remain terminal.
 
+### Exceptional diagnostic retry
+
+The local Stage 77 diagnostic-observability amendment defines a separate,
+one-time `diagnostic_retry` action for a terminal renderer failure with the
+exact bounded phase and code recognized by the deployed diagnostic protocol.
+It is not automatic retry, ordinary infrastructure retry, reapproval, or a
+new generation declaration. The original failed job remains immutable; a
+successful authorization creates one linked successor with a distinct stable
+identity and records append-only report and job authorization events.
+
+Authorization requires an authenticated administrator, a bounded rationale,
+the fixed affirmative declaration, unchanged specification and final
+qualification identity/digest, internal-only distribution, valid sources and
+associations, no artifacts or active job, and inactive recovery maintenance.
+It moves `validation_failed` directly to `generation_requested` as execution
+authorization, never as substantive reapproval. The worker revalidates the
+linkage and diagnostic protocol before using the ordinary lease, rendering,
+validation, promotion and registration path; it cannot authorize a retry or
+create another one. A failed successor remains terminal and retains bounded
+diagnostics. Production use requires the separately governed Custody Point 4
+precondition described in the recovery runbook.
+
 The runtime supervisor validates durable storage before starting exactly one
 Uvicorn child and one worker child, forwards shutdown signals, drains and
 reaps both children, and reports only bounded operational markers. The worker

@@ -29,6 +29,22 @@ LEASE_SECONDS = 180
 HEARTBEAT_SECONDS = 20
 BUSY_TIMEOUT_MS = 5000
 
+DIAGNOSTIC_RETRY_KIND = "diagnostic_retry"
+DIAGNOSTIC_RETRY_ACTION = "authorize_diagnostic_retry"
+DIAGNOSTIC_RETRY_EVENT = "diagnostic_retry_enqueued"
+DIAGNOSTIC_RETRY_REPORT_EVENT = "diagnostic_retry_authorized"
+DIAGNOSTIC_RETRY_PROTOCOL_VERSION = "stage77-bounded-diagnostics-v1"
+DIAGNOSTIC_RETRY_DECLARATION_VERSION = "stage77-diagnostic-retry-v1"
+DIAGNOSTIC_RETRY_DECLARATION = (
+    "I confirm that this action authorizes one diagnostic retry of the preserved "
+    "failed generation job. It does not reapprove or alter the frozen report "
+    "specification, does not erase the original failure, does not publish the "
+    "report, and does not permit an additional retry."
+)
+DIAGNOSTIC_RETRY_FAILURE_CODE = "governed_report_renderer_failed"
+DIAGNOSTIC_RETRY_MAX_RATIONALE = 4000
+NON_ADMIN_IDENTITIES = {WORKER_IDENTITY, "automation", "codex", "system", "system_worker", "worker"}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -108,6 +124,8 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
     CREATE INDEX IF NOT EXISTS idx_stage77_jobs_eligible ON stage77_report_jobs(state,next_eligible_at);
     CREATE INDEX IF NOT EXISTS idx_stage77_jobs_report ON stage77_report_jobs(report_id,report_version_id);
     CREATE INDEX IF NOT EXISTS idx_stage77_events_job ON stage77_report_job_events(job_id,id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_jobs_retry_predecessor
+        ON stage77_report_jobs(retry_of_job_id) WHERE retry_of_job_id IS NOT NULL;
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     if "maintenance_epoch" not in columns:
@@ -226,6 +244,241 @@ def retry_job(conn: sqlite3.Connection, job_id: int | str, actor: str) -> dict[s
     return enqueue_generation(conn, report_id=original["report_id"], actor=actor, governed_action="retry_generation", idempotency_key=f"stage77-retry-{int(job_id)}", retry_of_job_id=int(job_id))
 
 
+def _diagnostic_retry_payload(
+    *,
+    predecessor: Mapping[str, Any],
+    report: Mapping[str, Any],
+    qualification: Mapping[str, Any],
+    actor: str,
+    rationale: str,
+    authorized_at: str | None = None,
+    successor_job_id: int | None = None,
+) -> dict[str, Any]:
+    version = report["versions"][-1]
+    return {
+        "retry_kind": DIAGNOSTIC_RETRY_KIND,
+        "predecessor_job_id": int(predecessor["id"]),
+        "successor_job_id": None if successor_job_id is None else int(successor_job_id),
+        "report_id": int(report["id"]),
+        "report_version_id": int(version["id"]),
+        "specification_digest": str(version["specification_digest"]),
+        "qualification_id": int(qualification["id"]),
+        "qualification_digest": str(qualification["digest"]),
+        "requesting_actor": str(actor),
+        "governed_action": DIAGNOSTIC_RETRY_ACTION,
+        "diagnostic_protocol_version": DIAGNOSTIC_RETRY_PROTOCOL_VERSION,
+        "declaration_version": DIAGNOSTIC_RETRY_DECLARATION_VERSION,
+        "declaration": DIAGNOSTIC_RETRY_DECLARATION,
+        "rationale": str(rationale),
+        "predecessor_failure_phase": str(predecessor["failure_phase"]),
+        "predecessor_failure_code": str(predecessor["failure_code"]),
+        "authorized_at": authorized_at,
+    }
+
+
+def _validate_diagnostic_retry_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    expected = {
+        "retry_kind", "predecessor_job_id", "successor_job_id", "report_id", "report_version_id",
+        "specification_digest", "qualification_id", "qualification_digest", "requesting_actor",
+        "governed_action", "diagnostic_protocol_version", "declaration_version", "declaration",
+        "rationale", "predecessor_failure_phase", "predecessor_failure_code", "authorized_at",
+    }
+    if not isinstance(payload, Mapping) or set(payload) != expected:
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if payload["retry_kind"] != DIAGNOSTIC_RETRY_KIND or payload["governed_action"] != DIAGNOSTIC_RETRY_ACTION:
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if payload["diagnostic_protocol_version"] != DIAGNOSTIC_RETRY_PROTOCOL_VERSION or payload["declaration_version"] != DIAGNOSTIC_RETRY_DECLARATION_VERSION:
+        raise ValueError("governed_report_diagnostic_retry_protocol_invalid")
+    if payload["declaration"] != DIAGNOSTIC_RETRY_DECLARATION or not isinstance(payload["rationale"], str) or not payload["rationale"].strip() or len(payload["rationale"]) > DIAGNOSTIC_RETRY_MAX_RATIONALE:
+        raise ValueError("governed_report_diagnostic_retry_declaration_invalid")
+    for name in ("predecessor_job_id", "report_id", "report_version_id", "qualification_id"):
+        if isinstance(payload[name], bool) or not isinstance(payload[name], int) or payload[name] <= 0:
+            raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if payload["successor_job_id"] is not None and (isinstance(payload["successor_job_id"], bool) or not isinstance(payload["successor_job_id"], int) or payload["successor_job_id"] <= 0):
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    for name in ("specification_digest", "qualification_digest", "requesting_actor", "authorized_at"):
+        if not isinstance(payload[name], str) or not payload[name].strip():
+            raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if payload["predecessor_failure_phase"] != "rendering" or payload["predecessor_failure_code"] != DIAGNOSTIC_RETRY_FAILURE_CODE:
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    return dict(payload)
+
+
+def _diagnostic_retry_identity(payload: Mapping[str, Any]) -> dict[str, Any]:
+    value = dict(payload)
+    value.pop("authorized_at", None)
+    value.pop("successor_job_id", None)
+    return value
+
+
+def _diagnostic_retry_event_payload(conn: sqlite3.Connection, job_id: int) -> dict[str, Any]:
+    row = conn.execute(
+        "SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type=? ORDER BY id DESC LIMIT 1",
+        (int(job_id), DIAGNOSTIC_RETRY_EVENT),
+    ).fetchone()
+    if row is None:
+        raise ValueError("governed_report_diagnostic_retry_event_missing")
+    try:
+        payload = json.loads(row[0])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid") from None
+    return _validate_diagnostic_retry_payload(payload)
+
+
+def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, predecessor: Mapping[str, Any]) -> None:
+    """Require the complete Stage 75 and Stage 77 bounded failure evidence."""
+    attempt = conn.execute(
+        "SELECT result,diagnostics_json FROM record_governed_report_generation_attempts "
+        "WHERE version_id=? AND idempotency_key=? ORDER BY id DESC LIMIT 1",
+        (int(predecessor["report_version_id"]), f"stage77-job-{int(predecessor['id'])}"),
+    ).fetchone()
+    if attempt is None or attempt["result"] != "validation_failed":
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    try:
+        attempt_diagnostics = json.loads(attempt["diagnostics_json"])
+        if not isinstance(attempt_diagnostics, list) or len(attempt_diagnostics) != 1:
+            raise ValueError
+        attempt_diagnostic = validate_diagnostic(attempt_diagnostics[0])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("governed_report_diagnostic_retry_diagnostic_invalid") from None
+    terminal = conn.execute(
+        "SELECT payload_json FROM stage77_report_job_events "
+        "WHERE job_id=? AND event_type='terminal' AND resulting_state='failed_terminal' "
+        "ORDER BY id DESC LIMIT 1",
+        (int(predecessor["id"]),),
+    ).fetchone()
+    if terminal is None:
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    try:
+        terminal_payload = json.loads(terminal["payload_json"])
+        terminal_diagnostic = validate_diagnostic(terminal_payload["diagnostic"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("governed_report_diagnostic_retry_diagnostic_invalid") from None
+    for diagnostic in (attempt_diagnostic, terminal_diagnostic):
+        if diagnostic["failure_phase"] != "rendering" or diagnostic["failure_code"] != DIAGNOSTIC_RETRY_FAILURE_CODE:
+            raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    if attempt_diagnostic != terminal_diagnostic:
+        raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
+    if terminal_payload.get("phase") != "rendering" or terminal_payload.get("code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
+        raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
+
+
+def _diagnostic_retry_report_and_qualification(conn: sqlite3.Connection, predecessor: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    report = reports.get_report(conn, int(predecessor["report_id"]))
+    if report["lifecycle_status"] != "validation_failed":
+        raise ValueError("governed_report_diagnostic_retry_lifecycle_invalid")
+    version = report["versions"][-1]
+    if int(version["id"]) != int(predecessor["report_version_id"]):
+        raise ValueError("governed_report_diagnostic_retry_version_invalid")
+    if version["specification_digest"] != predecessor["specification_digest"] or reports.specification_digest(version["specification"]) != predecessor["specification_digest"]:
+        raise ValueError("governed_report_diagnostic_retry_specification_invalid")
+    if version["specification"].get("distribution_class") != "internal_working":
+        raise ValueError("governed_report_diagnostic_retry_distribution_invalid")
+    if (list(predecessor["requested_formats"]) != list(version["requested_formats"])
+            or predecessor["rendering_profile"] != version["rendering_profile"]
+            or predecessor["template_version"] != version["template_version"]
+            or predecessor["publication_engine_version"] != version["publication_engine_version"]):
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    from api import governed_report_qualifications as qualification_store
+    qualification = qualification_store.latest_final(conn, int(predecessor["report_id"]))
+    if qualification is None or int(qualification["id"]) != int(predecessor["qualification_id"] or 0) or qualification["digest"] != predecessor["qualification_digest"]:
+        raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+    qualification_payload = qualification["payload"]
+    if (qualification_payload.get("review_mode") != qualification_store.SOLE_MODE
+            or qualification_payload.get("distribution_restriction") != "internal_working"
+            or qualification_payload.get("disclosure_version") != qualification_store.DISCLOSURE_VERSION):
+        raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+    reports._validate_generation_sources(conn, version["specification"])
+    if report["artifacts"]:
+        raise ValueError("governed_report_diagnostic_retry_artifacts_exist")
+    promoted_root = reports.REPORT_ROOT / str(report["id"]) / str(version["version_number"])
+    reports._assert_confined_output(reports.REPORT_ROOT, promoted_root)
+    if promoted_root.exists():
+        raise ValueError("governed_report_diagnostic_retry_promoted_output_exists")
+    return report, qualification
+
+
+def _eligible_diagnostic_retry(conn: sqlite3.Connection, predecessor_job_id: int, actor: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    if not str(actor or "").strip() or str(actor).strip().lower() in NON_ADMIN_IDENTITIES:
+        raise ValueError("governed_report_diagnostic_retry_actor_invalid")
+    predecessor = _job(conn, int(predecessor_job_id))
+    if predecessor["state"] != "failed_terminal" or predecessor.get("retry_of_job_id") is not None or predecessor.get("governed_action") != "enqueue_generation":
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    if predecessor.get("failure_phase") != "rendering" or predecessor.get("failure_code") != DIAGNOSTIC_RETRY_FAILURE_CODE or predecessor.get("failure_code") in RETRYABLE_CODES:
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
+    if conn.execute("SELECT 1 FROM stage77_report_jobs WHERE retry_of_job_id=?", (int(predecessor_job_id),)).fetchone() is not None:
+        raise ValueError("governed_report_diagnostic_retry_successor_exists")
+    active = conn.execute("SELECT 1 FROM stage77_report_jobs WHERE report_id=? AND report_version_id=? AND state IN ('queued','leased','running','retry_wait','cancel_requested')", (int(predecessor["report_id"]), int(predecessor["report_version_id"]))).fetchone()
+    if active is not None:
+        raise ValueError("governed_report_diagnostic_retry_active_job_exists")
+    from api import governed_report_recovery as recovery
+    status = recovery.recovery_status(conn)
+    if status.get("state") != "inactive" or not recovery.recovery_allows_claim(conn):
+        raise ValueError("governed_report_diagnostic_retry_maintenance_active")
+    report, qualification = _diagnostic_retry_report_and_qualification(conn, predecessor)
+    return predecessor, report, qualification
+
+
+def diagnostic_retry_candidate(conn: sqlite3.Connection, report_id: int | str, actor: str) -> dict[str, Any] | None:
+    """Return only bounded UI evidence when the full retry contract is eligible."""
+    for row in conn.execute("SELECT id FROM stage77_report_jobs WHERE report_id=? ORDER BY id", (int(report_id),)).fetchall():
+        try:
+            predecessor, _, _ = _eligible_diagnostic_retry(conn, int(row[0]), actor)
+        except (ValueError, TypeError, sqlite3.Error):
+            continue
+        return {"job_id": int(predecessor["id"]), "failure_phase": predecessor["failure_phase"], "failure_code": predecessor["failure_code"], "attempt_count": int(predecessor["attempt_count"]), "max_attempts": int(predecessor["max_attempts"]), "artifact_count": 0}
+    return None
+
+
+def authorize_diagnostic_retry(conn: sqlite3.Connection, *, predecessor_job_id: int | str, actor: str, actor_role: str, rationale: str, acknowledged: bool) -> dict[str, Any]:
+    ensure_job_tables(conn)
+    if str(actor_role or "").strip() != "admin":
+        raise ValueError("governed_report_diagnostic_retry_actor_invalid")
+    rationale_value = str(rationale or "").strip()
+    if not rationale_value or len(rationale_value) > DIAGNOSTIC_RETRY_MAX_RATIONALE:
+        raise ValueError("governed_report_diagnostic_retry_rationale_invalid")
+    if acknowledged is not True:
+        raise ValueError("governed_report_diagnostic_retry_declaration_required")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        key = f"stage77-diagnostic-retry-{int(predecessor_job_id)}"
+        existing = conn.execute("SELECT id FROM stage77_report_jobs WHERE idempotency_key=?", (key,)).fetchone()
+        if existing is not None:
+            predecessor = _job(conn, int(predecessor_job_id))
+            report = reports.get_report(conn, int(predecessor["report_id"]))
+            from api import governed_report_qualifications as qualification_store
+            qualification = qualification_store.latest_final(conn, int(predecessor["report_id"]))
+            if qualification is None:
+                raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+            existing_payload = _diagnostic_retry_event_payload(conn, int(existing[0]))
+            requested = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, authorized_at=existing_payload["authorized_at"], successor_job_id=int(existing[0]))
+            if _diagnostic_retry_identity(existing_payload) != _diagnostic_retry_identity(requested):
+                raise ValueError("governed_report_diagnostic_retry_idempotency_conflict")
+            conn.commit()
+            return _job(conn, int(existing[0]))
+        predecessor, report, qualification = _eligible_diagnostic_retry(conn, int(predecessor_job_id), actor)
+        now = utc_now()
+        report_payload = _diagnostic_retry_payload(predecessor=predecessor, report=report, qualification=qualification, actor=actor, rationale=rationale_value, authorized_at=now)
+        version = report["versions"][-1]
+        cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), version["specification_digest"], reports.canonical_json(version["requested_formats"]), version["rendering_profile"], version["template_version"], version["publication_engine_version"], actor, DIAGNOSTIC_RETRY_ACTION, int(qualification["id"]), qualification["digest"], now, "queued", 0, MAX_ATTEMPTS, now, key, int(predecessor_job_id), 0, JOB_SCHEMA_VERSION))
+        successor_id = int(cur.lastrowid)
+        report_payload["successor_job_id"] = successor_id
+        report_payload = _validate_diagnostic_retry_payload(report_payload)
+        reports.record_diagnostic_retry_authorization(conn, report_id=report["id"], version_id=version["id"], predecessor_job_id=int(predecessor_job_id), actor=actor, actor_role=actor_role, rationale=rationale_value, declaration={"acknowledged": True}, idempotency_key=f"stage75-diagnostic-retry-{int(predecessor_job_id)}", payload=report_payload, _commit=False)
+        _event(conn, successor_id, DIAGNOSTIC_RETRY_EVENT, "queued", actor, report_payload)
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        if "retry_predecessor" in str(exc) or "retry_of_job_id" in str(exc):
+            raise ValueError("governed_report_diagnostic_retry_successor_exists") from None
+        raise
+    except Exception:
+        conn.rollback()
+        raise
+    return _job(conn, successor_id)
+
+
 def request_cancel(conn: sqlite3.Connection, job_id: int | str, actor: str) -> dict[str, Any]:
     ensure_job_tables(conn)
     conn.execute("BEGIN IMMEDIATE")
@@ -300,6 +553,62 @@ def _artifact_rows_valid(conn: sqlite3.Connection, version_id: int) -> bool:
         if digest != row["sha256"]:
             return False
     return True
+
+
+def _revalidate_diagnostic_retry_job(conn: sqlite3.Connection, job: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    if job.get("governed_action") != DIAGNOSTIC_RETRY_ACTION or job.get("retry_of_job_id") is None:
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    payload = _diagnostic_retry_event_payload(conn, int(job["id"]))
+    if payload["successor_job_id"] != int(job["id"]) or payload["predecessor_job_id"] != int(job["retry_of_job_id"]):
+        raise ValueError("governed_report_diagnostic_retry_link_invalid")
+    predecessor = _job(conn, int(job["retry_of_job_id"]))
+    if predecessor["state"] != "failed_terminal" or predecessor.get("retry_of_job_id") is not None or predecessor.get("failure_phase") != "rendering" or predecessor.get("failure_code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
+        raise ValueError("governed_report_diagnostic_retry_predecessor_invalid")
+    _validate_diagnostic_retry_predecessor_evidence(conn, predecessor)
+    if conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id=?", (int(predecessor["id"]),)).fetchone()[0] != 1:
+        raise ValueError("governed_report_diagnostic_retry_successor_invalid")
+    if report["lifecycle_status"] != "generation_requested" or int(report["id"]) != payload["report_id"]:
+        raise ValueError("governed_report_diagnostic_retry_lifecycle_invalid")
+    version = report["versions"][-1]
+    if int(version["id"]) != payload["report_version_id"] or version["specification_digest"] != payload["specification_digest"] or reports.specification_digest(version["specification"]) != payload["specification_digest"]:
+        raise ValueError("governed_report_diagnostic_retry_specification_invalid")
+    if (list(job["requested_formats"]) != list(version["requested_formats"])
+            or job["rendering_profile"] != version["rendering_profile"]
+            or job["template_version"] != version["template_version"]
+            or job["publication_engine_version"] != version["publication_engine_version"]):
+        raise ValueError("governed_report_diagnostic_retry_contract_invalid")
+    if version["specification"].get("distribution_class") != "internal_working":
+        raise ValueError("governed_report_diagnostic_retry_distribution_invalid")
+    from api import governed_report_qualifications as qualification_store
+    qualification = qualification_store.latest_final(conn, int(report["id"]))
+    if qualification is None or int(qualification["id"]) != payload["qualification_id"] or qualification["digest"] != payload["qualification_digest"]:
+        raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+    qualification_payload = qualification["payload"]
+    if (qualification_payload.get("review_mode") != qualification_store.SOLE_MODE
+            or qualification_payload.get("distribution_restriction") != "internal_working"
+            or qualification_payload.get("disclosure_version") != qualification_store.DISCLOSURE_VERSION):
+        raise ValueError("governed_report_diagnostic_retry_qualification_invalid")
+    reports._validate_generation_sources(conn, version["specification"])
+    from api import governed_report_recovery as recovery
+    if recovery.recovery_status(conn).get("state") != "inactive" or not recovery.recovery_allows_claim(conn):
+        raise ValueError("governed_report_diagnostic_retry_maintenance_active")
+
+
+def _terminal_diagnostic_retry_revalidation_failure(conn: sqlite3.Connection, job: Mapping[str, Any], token: str) -> bool:
+    diagnostic = make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_invalid")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        reports.record_diagnostic_retry_validation_failure(conn, report_id=int(job["report_id"]), version_id=int(job["report_version_id"]), job_id=int(job["id"]), payload=diagnostic, _commit=False)
+        cur = conn.execute("UPDATE stage77_report_jobs SET state='failed_terminal',terminal_at=?,terminal_outcome='qualification_invalid',failure_phase='revalidation',failure_code='qualification_invalid' WHERE id=? AND lease_token=? AND state IN ('leased','running')", (utc_now(), int(job["id"]), token))
+        if cur.rowcount != 1:
+            conn.rollback()
+            return False
+        _event(conn, int(job["id"]), "terminal", "failed_terminal", WORKER_IDENTITY, {"phase": "revalidation", "code": "qualification_invalid", "diagnostic": diagnostic, **diagnostic})
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
 
 
 def reconcile_job_storage(conn: sqlite3.Connection, job: Mapping[str, Any]) -> bool:
@@ -400,6 +709,12 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
         conn.commit()
         heartbeat_thread.start()
         report = reports.get_report(conn, job["report_id"])
+        if job.get("governed_action") == DIAGNOSTIC_RETRY_ACTION:
+            try:
+                _revalidate_diagnostic_retry_job(conn, job, report)
+            except (ValueError, TypeError, sqlite3.Error):
+                _terminal_diagnostic_retry_revalidation_failure(conn, job, token)
+                return
         if job.get("qualification_id") is not None:
             from api import governed_report_qualifications as qualification_store
             qualification = qualification_store.latest_final(conn, job["report_id"])
