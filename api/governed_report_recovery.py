@@ -868,7 +868,7 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
                 raise ValueError("manifest_invalid")
             if any(isinstance(item[name], bool) or not isinstance(item[name], int) or item[name] < 0 for name in ("job_id", "attempt_id", "terminal_event_id")):
                 raise ValueError("manifest_invalid")
-            if item["diagnostic_contract_version"] not in {diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.LEGACY_DIAGNOSTIC_CONTRACT}:
+            if item["diagnostic_contract_version"] not in {diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT, diagnostics.LEGACY_DIAGNOSTIC_CONTRACT}:
                 raise ValueError("manifest_invalid")
             for name in ("attempt_diagnostic_sha256", "terminal_diagnostic_sha256"):
                 if not isinstance(item[name], str) or len(item[name]) != 64 or any(c not in "0123456789abcdef" for c in item[name]):

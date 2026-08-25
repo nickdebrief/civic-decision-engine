@@ -64,8 +64,8 @@ class Stage77RecoveryTests(unittest.TestCase):
         );
         """)
         diagnostic = jobs.make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code=jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, format_category="multiple")
-        attempt_raw = json.dumps([diagnostic], separators=(",", ":"))
-        terminal_raw = json.dumps({"phase": "rendering", "operation": "renderer_invocation", "checkpoint": "entered", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic, **diagnostic}, separators=(",", ":"), sort_keys=True)
+        attempt_raw = recovery.canonical_json([diagnostic])
+        terminal_raw = recovery.canonical_json({"phase": "rendering", "operation": "renderer_invocation", "checkpoint": "entered", "code": jobs.DIAGNOSTIC_RETRY_FAILURE_CODE, "diagnostic": diagnostic, **diagnostic})
         self.conn.execute(
             "INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?)",
             (11, '["docx","html","pdf"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:00Z", "validation_failed", attempt_raw, "{}", "stage77-job-1"),
@@ -100,6 +100,36 @@ class Stage77RecoveryTests(unittest.TestCase):
         exports.mkdir()
         recovery.export_recovery_bundle(bundle_path=bundle, output_archive=exports / "point4.tar", receipt_path=exports / "point4.json", reason="diagnostic-aware pre-retry state")
         self.assertEqual(recovery.validate_export_archive(exports / "point4.tar", exports / "point4.json")["state"], "valid")
+
+    def test_diagnostic_aware_manifest_binds_legacy_and_transitional_evidence(self):
+        from api import governed_report_diagnostics as diagnostics
+        self._add_diagnostic_evidence(linked_successor=True)
+        transitional = diagnostics.TRANSITIONAL_DIAGNOSTIC
+        attempt_raw = recovery.canonical_json([transitional])
+        terminal_raw = recovery.canonical_json({
+            "phase": "rendering",
+            "code": "governed_report_renderer_failed",
+            "diagnostic": transitional,
+            **transitional,
+        })
+        self.conn.execute(
+            "INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?)",
+            (11, '["docx","html","pdf"]', jobs.WORKER_IDENTITY, "system_worker", "2026-01-01T00:00:02Z", "validation_failed", attempt_raw, "{}", "stage77-job-2"),
+        )
+        predecessor = self.conn.execute("SELECT id FROM stage77_report_jobs WHERE retry_of_job_id IS NULL").fetchone()[0]
+        successor = self.conn.execute("SELECT id FROM stage77_report_jobs WHERE retry_of_job_id=?", (predecessor,)).fetchone()[0]
+        self.conn.execute("UPDATE stage77_report_jobs SET state='failed_terminal',attempt_count=1,failure_phase='rendering',failure_code='governed_report_renderer_failed' WHERE id=?", (successor,))
+        self.conn.execute(
+            "INSERT INTO stage77_report_job_events (job_id,event_type,resulting_state,actor,occurred_at,payload_json) VALUES(?,?,?,?,?,?)",
+            (successor, "terminal", "failed_terminal", jobs.WORKER_IDENTITY, "2026-01-01T00:00:03Z", terminal_raw),
+        )
+        self.conn.commit()
+        result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
+        bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        self.assertEqual(manifest["diagnostic_evidence_count"], 2)
+        self.assertEqual([item["diagnostic_contract_version"] for item in manifest["diagnostic_evidence"]], [diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT])
+        self.assertEqual(recovery.validate_recovery_bundle(bundle)["manifest_digest"], result["manifest_digest"])
 
     def test_diagnostic_database_rejects_older_manifest_shape(self):
         self._add_diagnostic_evidence()
