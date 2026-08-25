@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -6,9 +7,129 @@ from pathlib import Path
 from unittest.mock import patch
 
 from api import governed_report_diagnostics as diagnostics
+from api import governed_report_qualifications as qualifications
 from api import governed_report_jobs as jobs
 from api import record_governed_reports as reports
 from api.report_rendering import AdapterFailure
+
+
+class QualificationProjectionTests(unittest.TestCase):
+    def setUp(self):
+        self.root = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.root.name) / "records.db"
+        self.conn = sqlite3.connect(self.db_path)
+        self.conn.row_factory = sqlite3.Row
+        self.old_root = reports.REPORT_ROOT
+        reports.REPORT_ROOT = Path(self.root.name)
+        self.record = {"reference": "CR-PROJECTION", "title": "Synthetic record", "finding": "Bounded wording", "status": "recorded", "version": 1}
+        self.record_patch = patch.object(reports.rda, "record_context", return_value=self.record)
+        self.record_patch.start()
+        with patch.dict(os.environ, {qualifications.REVIEW_MODE_ENV: qualifications.SOLE_MODE}):
+            self.report = reports.create_report(
+                self.conn,
+                title="Synthetic internal report",
+                purpose="Projection boundary test",
+                audience="Administrators",
+                distribution_class="internal_working",
+                canonical_record_reference="CR-PROJECTION",
+                document_ids=[], association_ids=[],
+                sections=[{"title": "Record", "blocks": [{"content_type": "verbatim_source", "text": "Bounded wording", "source_identity": {"object_kind": "canonical_record", "object_id": "CR-PROJECTION"}, "inclusion_rationale": "Controlled fixture."}]}],
+                exclusions=[], requested_formats=["docx", "html", "pdf"],
+                rendering_profile="internal", template_version="cde-internal-v1",
+                actor="nick", actor_role="administrator", idempotency_key="projection-report",
+            )
+            for status, key in (("assembly_reviewed", "projection-assembly"), ("privacy_reviewed", "projection-privacy"), ("redaction_reviewed", "projection-redaction"), ("approved_for_generation", "projection-approval")):
+                self.report = reports.confirm_creator_gate(
+                    self.conn, report_id=self.report["id"], resulting_status=status,
+                    rationale="Controlled qualification fixture.", actor="nick",
+                    actor_role="administrator", acknowledged=True, idempotency_key=key,
+                )
+
+    def tearDown(self):
+        reports.REPORT_ROOT = self.old_root
+        self.record_patch.stop()
+        self.conn.close()
+        self.root.cleanup()
+
+    def _projection(self):
+        version = self.report["versions"][0]
+        final = qualifications.latest_final(self.conn, self.report["id"])
+        return qualifications.rendering_projection(
+            self.conn, report_id=self.report["id"], report_version_id=version["id"],
+            specification_digest=version["specification_digest"],
+            qualification_id=final["id"], qualification_digest=final["digest"],
+        )
+
+    def test_projection_is_exact_deterministic_and_adapter_accepted(self):
+        from scripts.evidence_led_governance_pipeline import report_adapter
+        final = qualifications.latest_final(self.conn, self.report["id"])
+        full = dict(final["payload"])
+        full.update({"qualification_id": final["id"], "qualification_digest": final["digest"], "disclosure": qualifications.DISCLOSURE})
+        specification = self.report["versions"][0]["specification"]
+        with self.assertRaises(report_adapter.AdapterFailure):
+            report_adapter.make_book(specification, full)
+        projected = self._projection()
+        self.assertEqual(set(projected), qualifications.RENDERING_QUALIFICATION_FIELDS)
+        self.assertEqual(projected, self._projection())
+        before = dict(final["payload"])
+        report_adapter.make_book(specification, projected)
+        self.assertEqual(final["payload"], before)
+        with self.assertRaises(report_adapter.AdapterFailure):
+            report_adapter.make_book(specification, {**projected, "extra": "rejected"})
+        with self.assertRaises(report_adapter.AdapterFailure):
+            report_adapter.make_book(specification, {key: value for key, value in projected.items() if key != "disclosure"})
+
+    def test_worker_projects_before_real_adapter_boundary(self):
+        from scripts.evidence_led_governance_pipeline import report_adapter
+        with patch.dict(os.environ, {qualifications.REVIEW_MODE_ENV: qualifications.SOLE_MODE}):
+            jobs.ensure_job_tables(self.conn)
+            item = jobs.enqueue_generation(
+                self.conn, report_id=self.report["id"], actor="nick",
+                governed_action="enqueue_generation", idempotency_key="projection-worker",
+            )
+            claimed = jobs.claim_one(self.conn)
+            self.assertEqual(claimed["id"], item["id"])
+            seen = {}
+
+            def controlled_generation(_conn, *, governance_qualification=None, **_kwargs):
+                seen.update(governance_qualification or {})
+                report_adapter.make_book(self.report["versions"][0]["specification"], governance_qualification)
+                return self.report
+
+            with patch.object(jobs.reports, "generate_report", side_effect=controlled_generation), patch.object(jobs, "_artifact_rows_valid", return_value=True):
+                jobs.execute_job(str(self.db_path), claimed)
+        self.assertEqual(set(seen), qualifications.RENDERING_QUALIFICATION_FIELDS)
+        self.assertEqual(jobs.get_job(self.conn, item["id"])["state"], "succeeded")
+
+    def test_projection_rejects_stale_identity_specification_and_envelope(self):
+        final = qualifications.latest_final(self.conn, self.report["id"])
+        version = self.report["versions"][0]
+        args = {"report_id": self.report["id"], "report_version_id": version["id"], "specification_digest": version["specification_digest"], "qualification_id": final["id"], "qualification_digest": final["digest"]}
+        with self.assertRaisesRegex(ValueError, "qualification_specification_invalid"):
+            qualifications.rendering_projection(self.conn, **{**args, "specification_digest": "0" * 64})
+        with self.assertRaisesRegex(ValueError, "qualification_identity_invalid"):
+            qualifications.rendering_projection(self.conn, **{**args, "qualification_digest": "0" * 64})
+        payload = dict(final["payload"])
+        payload.pop("rationale")
+        self.conn.execute("UPDATE record_governed_report_qualifications SET qualification_payload_json=? WHERE id=?", (reports.canonical_json(payload), final["id"]))
+        with self.assertRaises(ValueError):
+            qualifications.rendering_projection(self.conn, **args)
+        payload["rationale"] = "Controlled qualification fixture."
+        payload["unexpected"] = True
+        self.conn.execute("UPDATE record_governed_report_qualifications SET qualification_payload_json=? WHERE id=?", (reports.canonical_json(payload), final["id"]))
+        with self.assertRaises(ValueError):
+            qualifications.rendering_projection(self.conn, **args)
+
+    def test_projection_rejects_non_internal_distribution_and_wrong_ownership(self):
+        final = qualifications.latest_final(self.conn, self.report["id"])
+        version = self.report["versions"][0]
+        args = {"report_id": self.report["id"], "report_version_id": version["id"], "specification_digest": version["specification_digest"], "qualification_id": final["id"], "qualification_digest": final["digest"]}
+        self.conn.execute("UPDATE record_governed_reports SET distribution_class='public' WHERE id=?", (self.report["id"],))
+        with self.assertRaisesRegex(ValueError, "qualification_distribution_invalid"):
+            qualifications.rendering_projection(self.conn, **args)
+        self.conn.execute("UPDATE record_governed_reports SET distribution_class='internal_working' WHERE id=?", (self.report["id"],))
+        with self.assertRaisesRegex(ValueError, "ownership_invalid"):
+            qualifications.rendering_projection(self.conn, **{**args, "report_version_id": version["id"] + 100})
 
 
 class BoundedDiagnosticContractTests(unittest.TestCase):

@@ -773,9 +773,14 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
             governance_qualification = None
             if job.get("qualification_id") is not None:
                 from api import governed_report_qualifications as qualification_store
-                qualification = qualification_store.latest_final(conn, job["report_id"])
-                governance_qualification = dict(qualification["payload"])
-                governance_qualification.update({"qualification_id": int(qualification["id"]), "qualification_digest": qualification["digest"], "disclosure": qualification_store.DISCLOSURE})
+                governance_qualification = qualification_store.rendering_projection(
+                    conn,
+                    report_id=job["report_id"],
+                    report_version_id=job["report_version_id"],
+                    specification_digest=job["specification_digest"],
+                    qualification_id=job["qualification_id"],
+                    qualification_digest=job["qualification_digest"],
+                )
             reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification)
         except Exception as exc:
             if str(exc) == "governed_report_generation_cancelled":

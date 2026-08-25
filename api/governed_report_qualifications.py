@@ -20,6 +20,16 @@ DISCLOSURE = (
     "constraint. It remains restricted to authorised internal use."
 )
 GATES = ("assembly", "privacy", "redaction", "approval")
+PERSISTED_QUALIFICATION_FIELDS = frozenset({
+    "report_id", "report_version_id", "specification_digest", "revision_number",
+    "previous_qualification_id", "completed_gate", "review_mode",
+    "operating_constraint", "creator_actor", "qualifier_actor", "rationale",
+    "declaration", "disclosure_version", "distribution_restriction",
+})
+RENDERING_QUALIFICATION_FIELDS = frozenset({
+    "review_mode", "disclosure_version", "disclosure", "qualification_id",
+    "qualification_digest",
+})
 GATE_STATUS = {
     "assembly_reviewed": "assembly",
     "privacy_reviewed": "privacy",
@@ -372,3 +382,87 @@ def latest_final(conn: sqlite3.Connection, report_id: int | str) -> dict[str, An
     if str(_row_value(row, "qualification_state", 17)) != "final":
         raise ValueError("governed_report_qualification_not_final")
     return {"id": int(row["id"]), "digest": str(row["qualification_digest"]), "payload": payload, "row": row}
+
+
+def rendering_projection(
+    conn: sqlite3.Connection,
+    *,
+    report_id: int | str,
+    report_version_id: int | str,
+    specification_digest: str,
+    qualification_id: int | str,
+    qualification_digest: str,
+) -> dict[str, Any]:
+    """Project a validated persisted envelope into the exact adapter contract."""
+    report = conn.execute(
+        "SELECT id,distribution_class,lifecycle_status FROM record_governed_reports WHERE id=?",
+        (int(report_id),),
+    ).fetchone()
+    version = conn.execute(
+        "SELECT id,report_id,specification_digest,specification_json FROM record_governed_report_versions WHERE id=?",
+        (int(report_version_id),),
+    ).fetchone()
+    if report is None or version is None or int(version["report_id"]) != int(report["id"]):
+        raise ValueError("governed_report_rendering_qualification_ownership_invalid")
+    if str(version["specification_digest"]) != str(specification_digest):
+        raise ValueError("governed_report_rendering_qualification_specification_invalid")
+    try:
+        specification = json.loads(version["specification_json"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("governed_report_rendering_qualification_specification_invalid") from None
+    if not isinstance(specification, dict) or _payload_digest(specification) != str(specification_digest):
+        raise ValueError("governed_report_rendering_qualification_specification_invalid")
+    if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}:
+        raise ValueError("governed_report_rendering_qualification_lifecycle_invalid")
+    if report["distribution_class"] != "internal_working" or specification.get("distribution_class") != "internal_working":
+        raise ValueError("governed_report_rendering_qualification_distribution_invalid")
+    chain = validate_chain(conn, int(version["id"]))
+    if len(chain) != len(GATES) or not chain or chain[-1]["completed_gate"] != "approval":
+        raise ValueError("governed_report_rendering_qualification_chain_invalid")
+    final_row = chain[-1]
+    try:
+        final_payload = json.loads(final_row["qualification_payload_json"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("governed_report_rendering_qualification_envelope_invalid") from None
+    qualification = {"id": int(final_row["id"]), "digest": str(final_row["qualification_digest"]), "payload": final_payload}
+    if qualification["id"] != int(qualification_id) or qualification["digest"] != str(qualification_digest):
+        raise ValueError("governed_report_rendering_qualification_identity_invalid")
+    payload = qualification["payload"]
+    if not isinstance(payload, dict) or set(payload) != PERSISTED_QUALIFICATION_FIELDS:
+        raise ValueError("governed_report_rendering_qualification_envelope_invalid")
+    digest = payload["specification_digest"]
+    digest_valid = isinstance(digest, str) and len(digest) == 64 and digest == digest.lower() and all(char in "0123456789abcdef" for char in digest)
+    declaration = payload["declaration"]
+    if (
+        type(payload["report_id"]) is not int
+        or type(payload["report_version_id"]) is not int
+        or type(payload["revision_number"]) is not int
+        or (payload["previous_qualification_id"] is not None and type(payload["previous_qualification_id"]) is not int)
+        or not isinstance(payload["specification_digest"], str)
+        or not digest_valid
+        or payload["report_id"] != int(report["id"])
+        or payload["report_version_id"] != int(version["id"])
+        or payload["specification_digest"] != str(specification_digest)
+        or payload["revision_number"] != 4
+        or payload["completed_gate"] != "approval"
+        or payload["review_mode"] != SOLE_MODE
+        or payload["operating_constraint"] != "no_independent_administrator_available"
+        or not isinstance(payload["creator_actor"], str) or not payload["creator_actor"].strip()
+        or not isinstance(payload["qualifier_actor"], str) or payload["qualifier_actor"] != payload["creator_actor"]
+        or not isinstance(payload["rationale"], str) or not payload["rationale"].strip() or len(payload["rationale"]) > 4000
+        or payload["disclosure_version"] != DISCLOSURE_VERSION
+        or payload["distribution_restriction"] != "internal_working"
+    ):
+        raise ValueError("governed_report_rendering_qualification_envelope_invalid")
+    if not isinstance(declaration, dict) or set(declaration) != {"acknowledged", "no_independent_administrator_available", "application_did_not_verify_declaration"} or any(value is not True for value in declaration.values()):
+        raise ValueError("governed_report_rendering_qualification_envelope_invalid")
+    projection = {
+        "review_mode": SOLE_MODE,
+        "disclosure_version": DISCLOSURE_VERSION,
+        "disclosure": DISCLOSURE,
+        "qualification_id": int(qualification["id"]),
+        "qualification_digest": str(qualification["digest"]),
+    }
+    if set(projection) != RENDERING_QUALIFICATION_FIELDS:
+        raise ValueError("governed_report_rendering_qualification_projection_invalid")
+    return projection

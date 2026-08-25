@@ -198,6 +198,21 @@ evidence, their four payload hashes, and the single Job 1 to Job 2 retry link.
 The transitional contract identifies the projection defect only; any renderer
 correction requires separate authorization.
 
+The adapter qualification-schema correction is a local projection-boundary
+change only. The complete persisted Stage 75 qualification envelope remains
+authoritative for ownership, the frozen specification digest, the four-gate
+chain, authorization, recovery evidence, and artifact metadata. After those
+checks, Stage 77 constructs a new immutable rendering projection containing
+exactly the five Stage 76 adapter fields: `review_mode`,
+`disclosure_version`, `disclosure`, `qualification_id`, and
+`qualification_digest`. The adapter continues to reject the broader persisted
+envelope and unknown fields. This does not rewrite Job 1 or Job 2, change their
+diagnostic contracts, authorize another retry, or change rendering acceptance,
+lifecycle, recovery, custody, artifact, or public-boundary semantics. Custody
+Point 5 preserves the pre-correction state; integration, deployment, a later
+post-correction recovery point, and any controlled generation require separate
+authorization.
+
 Export and restore require an administrator and never run automatically during
 import, startup, GET, listing, diagnostics, or worker startup. Backup creation
 is not proof of successful restoration, and restoration is not approval,
