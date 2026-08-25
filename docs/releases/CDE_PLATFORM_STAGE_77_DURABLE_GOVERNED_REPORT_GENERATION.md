@@ -173,6 +173,20 @@ encrypted local filesystem. The operational cadence, seven-point retention,
 temporary Railway transport-key controls, and first-deployment sequence are
 documented in `docs/STAGE77_RECOVERY_CUSTODY_RUNBOOK.md`.
 
+Recovery manifests and receipts use three closed generations: historical
+pre-qualification, qualification-aware, and diagnostic-aware
+(`stage77.diagnostic_aware.v1`). Selection is deterministic from the archived
+database. Diagnostic-bearing databases must bind the selected diagnostic
+contract, Stage 75 and Stage 77 evidence identities and payload digests, plus
+deterministic diagnostic-evidence and retry-topology count/state digests. Raw
+diagnostic payloads remain in SQLite and are not copied into custody metadata.
+Older contracts cannot validate diagnostic-bearing databases, and missing,
+mixed, partial, reordered, or downgraded evidence fails closed.
+
+Custody Point 4 is the post-failure, pre-diagnostic-retry point. It must use
+the diagnostic-aware contract and must be captured, exported, and validated
+before the one separately governed linked retry is authorized.
+
 Export and restore require an administrator and never run automatically during
 import, startup, GET, listing, diagnostics, or worker startup. Backup creation
 is not proof of successful restoration, and restoration is not approval,

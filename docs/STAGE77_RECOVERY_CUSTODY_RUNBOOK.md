@@ -70,6 +70,19 @@ values. Later requirements are never imposed retrospectively, and no unknown,
 mixed, or ambiguous receipt shape is accepted. Historical validation does not
 claim current-contract compliance.
 
+Stage 77 now has three closed recovery-contract generations: the historical
+pre-qualification contract, the qualification-aware contract, and the
+diagnostic-aware contract (`stage77.diagnostic_aware.v1`). Contract selection
+is derived from the archived database. A database with governed terminal
+diagnostic evidence must use the diagnostic-aware field set and cannot validate
+under either older contract. That contract binds a deterministic inventory of
+job, Stage 75 attempt, and Stage 77 terminal-event identities, selected
+diagnostic contract identifiers, both payload SHA-256 values, and count/state
+digests for diagnostic evidence and retry links. Raw diagnostic payloads remain
+only in the SQLite backup; manifests and receipts contain no raw exceptions or
+private content. Missing, mixed, reordered, unknown, or downgraded evidence
+fails closed.
+
 ## Custody controls
 
 The operator must select a canonical absolute custody directory outside the
@@ -159,3 +172,6 @@ payload hashes and ownership state. Current failures require the complete
 qualification-aware diagnostic contract. Mixed, partial, unknown, or
 downgraded pairs fail closed; historical rows are never backfilled, normalized,
 or re-signed.
+The diagnostic-aware recovery contract is required for any custody point whose
+database contains such evidence, including Custody Point 4. No diagnostic
+retry may occur until that point has been captured, exported, and validated.
