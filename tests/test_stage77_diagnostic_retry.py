@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
+from api import governed_report_recovery as recovery
 from api import governed_report_qualifications as qualifications
 from api import record_governed_reports as reports
 
@@ -69,6 +70,15 @@ class DiagnosticRetryTests(unittest.TestCase):
     def authorize(self, rationale="Bounded diagnostic observability correction deployed"):
         return jobs.authorize_diagnostic_retry(self.connection, predecessor_job_id=self.original_job["id"], actor="nick", actor_role="admin", rationale=rationale, acknowledged=True)
 
+    def _set_recovery_state(self, state, *, worker_drained=0, manifest_digest=None, maintenance_epoch=1):
+        recovery.ensure_recovery_tables(self.connection)
+        self.connection.execute("DELETE FROM stage77_recovery_control")
+        self.connection.execute(
+            "INSERT INTO stage77_recovery_control(singleton,operation_id,recovery_point_id,operation_type,requested_actor,governed_action,state,maintenance_epoch,requested_at,schema_version,worker_drained,manifest_digest) VALUES(1,?,?,?,?,?,?,?,?,?,?,?)",
+            ("operation-1", "point-1", "capture", "admin", "capture", state, maintenance_epoch, "2026-01-01T00:00:00Z", recovery.RECOVERY_SCHEMA_VERSION, worker_drained, manifest_digest),
+        )
+        self.connection.commit()
+
     def test_one_linked_retry_is_atomic_and_preserves_original(self):
         successor = self.authorize()
         self.assertEqual(successor["retry_of_job_id"], self.original_job["id"])
@@ -109,6 +119,74 @@ class DiagnosticRetryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "diagnostic_invalid"):
             self.authorize()
         self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL").fetchone()[0], 0)
+
+    def test_completed_recovery_epoch_permits_authorization_without_recovery_mutation(self):
+        self._set_recovery_state("completed", worker_drained=1, manifest_digest="m" * 64, maintenance_epoch=1)
+        before = dict(recovery.recovery_status(self.connection))
+        self.assertTrue(recovery.recovery_allows_claim(self.connection))
+        successor = self.authorize()
+        after = dict(recovery.recovery_status(self.connection))
+        self.assertEqual(successor["retry_of_job_id"], self.original_job["id"])
+        self.assertEqual(after, before)
+
+    def test_worker_revalidation_uses_the_same_completed_recovery_decision(self):
+        self._set_recovery_state("completed", worker_drained=1, manifest_digest="m" * 64, maintenance_epoch=1)
+        successor = self.authorize()
+        report = reports.get_report(self.connection, self.report["id"])
+        jobs._revalidate_diagnostic_retry_job(self.connection, jobs.get_job(self.connection, successor["id"]), report)
+
+    def test_retry_recovery_eligibility_matches_authoritative_claim_matrix(self):
+        permitted = [
+            (None, 0, None),
+            ("completed", 1, "m" * 64),
+            ("failed", 1, None),
+            ("restore_ready", 1, "m" * 64),
+            ("restore_failed", 1, None),
+        ]
+        for state, drained, manifest in permitted:
+            with self.subTest(state=state):
+                if state is None:
+                    self.connection.execute("DROP TABLE IF EXISTS stage77_recovery_control")
+                    self.connection.commit()
+                else:
+                    self._set_recovery_state(state, worker_drained=drained, manifest_digest=manifest)
+                self.assertTrue(recovery.recovery_allows_claim(self.connection))
+                self.assertIsNotNone(jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick"))
+                self.connection.execute("DELETE FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL")
+                self.connection.execute("UPDATE record_governed_reports SET lifecycle_status='validation_failed' WHERE id=?", (self.report["id"],))
+                self.connection.execute("UPDATE record_governed_report_versions SET lifecycle_status='validation_failed' WHERE report_id=?", (self.report["id"],))
+                self.connection.commit()
+
+        blocked = [
+            ("requested", 0, None),
+            ("draining", 0, None),
+            ("quiesced", 1, None),
+            ("capturing", 1, None),
+            ("validating", 1, None),
+            ("restore_validating", 1, None),
+            ("failed", 0, None),
+            ("restore_failed", 0, None),
+            ("restore_ready", 1, None),
+        ]
+        for state, drained, manifest in blocked:
+            with self.subTest(state=state):
+                self._set_recovery_state(state, worker_drained=drained, manifest_digest=manifest)
+                self.assertFalse(recovery.recovery_allows_claim(self.connection))
+                self.assertIsNone(jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick"))
+
+    def test_unknown_or_stale_recovery_evidence_fails_closed_for_retry(self):
+        with patch.object(recovery, "recovery_status", return_value={"state": "unknown", "maintenance_epoch": 0}):
+            self.assertFalse(recovery.recovery_allows_claim(self.connection))
+            self.assertIsNone(jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick"))
+        for epoch in (None, True, False, 1.5, "1", 0, -1, 10**100):
+            with self.subTest(epoch=repr(epoch)), patch.object(recovery, "recovery_status", return_value={"state": "completed", "maintenance_epoch": epoch}):
+                self.assertFalse(recovery.recovery_allows_claim(self.connection))
+                self.assertIsNone(jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick"))
+        self._set_recovery_state("completed", worker_drained=1, manifest_digest="m" * 64, maintenance_epoch=1)
+        self.connection.execute("UPDATE stage77_report_jobs SET maintenance_epoch=2 WHERE id=?", (self.original_job["id"],))
+        self.connection.commit()
+        self.assertFalse(recovery.recovery_allows_claim(self.connection))
+        self.assertIsNone(jobs.diagnostic_retry_candidate(self.connection, self.report["id"], "nick"))
 
     def test_exact_legacy_pair_is_selected_and_bound_to_successor(self):
         attempt_raw = json.dumps(list(__import__("api.governed_report_diagnostics", fromlist=["LEGACY_ATTEMPT_DIAGNOSTICS"]).LEGACY_ATTEMPT_DIAGNOSTICS), separators=(",", ":"))
