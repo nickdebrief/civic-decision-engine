@@ -575,7 +575,7 @@ def supersede_report(conn: sqlite3.Connection, *, report_id: int | str, replacem
     return _row(conn, report_id)
 
 
-def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False, governance_qualification: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False, governance_qualification: Mapping[str, Any] | None = None, post_correction_authorization_id: str | None = None) -> dict[str, Any]:
     report = _row(conn, report_id)
     actor_value = _required(actor, "governed_report_generation_actor_required"); role_value = _required(actor_role, "governed_report_generation_role_required"); key = _required(idempotency_key, "governed_report_generation_idempotency_key_required")
     version = report["versions"][-1]; spec = version["specification"]
@@ -601,7 +601,13 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
                 return _row(conn, report_id)
             raise ValueError("governed_report_generation_failed")
         raise ValueError("governed_report_generation_idempotency_conflict")
-    if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}: raise ValueError("governed_report_generation_approval_required")
+    if post_correction_authorization_id is None and report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}:
+        raise ValueError("governed_report_generation_approval_required")
+    if post_correction_authorization_id is not None:
+        auth = conn.execute("SELECT report_id,report_version_id,state FROM stage77_post_correction_authorizations WHERE id=?", (str(post_correction_authorization_id),)).fetchone()
+        link = conn.execute("SELECT job_id FROM stage77_post_correction_execution_links WHERE authorization_id=?", (str(post_correction_authorization_id),)).fetchone()
+        if report["lifecycle_status"] != "validation_failed" or auth is None or auth["state"] != "authorized" or int(auth["report_id"]) != int(report_id) or int(auth["report_version_id"]) != int(version["id"]) or link is None:
+            raise ValueError("governed_report_post_correction_authorization_invalid")
     _validate_generation_sources(conn, spec)
     final_dir = REPORT_ROOT / str(report_id) / str(version["version_number"])
     target_dir = Path(output_dir) if output_dir is not None else final_dir
@@ -614,9 +620,10 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
     conn.execute("SAVEPOINT stage75_generation_request")
     try:
         conn.execute("INSERT INTO record_governed_report_generation_attempts (version_id,requested_formats_json,actor,actor_role,requested_at,result,diagnostics_json,request_payload_json,idempotency_key) VALUES (?,?,?,?,?,?,?,?,?)", (version["id"], canonical_json(spec["requested_formats"]), actor_value, role_value, now, "requested", "[]", canonical_json(request_payload), key))
-        conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), version["id"], "generation_requested", "generation_requested", "Generation requested for the approved immutable report specification.", actor_value, role_value, '{"acknowledged":true}', now, key + ":requested", canonical_json(request_payload)))
-        conn.execute("UPDATE record_governed_reports SET lifecycle_status='generation_requested' WHERE id=?", (int(report_id),))
-        conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='generation_requested' WHERE id=?", (version["id"],))
+        if post_correction_authorization_id is None:
+            conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (int(report_id), version["id"], "generation_requested", "generation_requested", "Generation requested for the approved immutable report specification.", actor_value, role_value, '{"acknowledged":true}', now, key + ":requested", canonical_json(request_payload)))
+            conn.execute("UPDATE record_governed_reports SET lifecycle_status='generation_requested' WHERE id=?", (int(report_id),))
+            conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='generation_requested' WHERE id=?", (version["id"],))
         conn.execute("RELEASE SAVEPOINT stage75_generation_request")
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT stage75_generation_request")

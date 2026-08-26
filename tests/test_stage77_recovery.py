@@ -53,6 +53,14 @@ class Stage77RecoveryTests(unittest.TestCase):
         root.mkdir(exist_ok=True)
         return recovery.restore_recovery_point(bundle_path=bundle, restore_root=root, database_target=database_target, artifact_root_target=artifact_target, live_database=self.db, live_artifact_root=self.artifacts, live_recovery_root=self.recovery_root, actor="admin", governed_action="restore", approved_root=self.root)
 
+    def test_post_correction_schema_selects_fourth_contract_even_when_empty(self):
+        jobs.ensure_post_correction_tables(self.conn)
+        contract, _evidence, _evidence_digest, _links, _links_digest = recovery._database_contract(self.conn)
+        self.assertEqual(contract, "post_correction_aware")
+        self.conn.execute("DROP TABLE stage77_post_correction_execution_links")
+        with self.assertRaisesRegex(ValueError, "post_correction_schema_incompatible"):
+            recovery._database_contract(self.conn)
+
     def _add_diagnostic_evidence(self, *, linked_successor=False):
         from api import governed_report_diagnostics as diagnostics
         self.conn.executescript("""

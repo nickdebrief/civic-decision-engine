@@ -194,3 +194,17 @@ transitional/current successor evidence entry plus the one retry link. No
 additional retry is permitted, and no renderer correction is implied by the
 transitional classification. No diagnostic retry may occur until the required
 custody point has been captured, exported, and validated.
+
+The post-correction execution is a distinct one-time authorization. It is not
+a retry, a retry-of-retry, ordinary generation, reapproval, or lifecycle
+reset. The authorization binds the unchanged Report 1 version and qualification
+chain, Jobs 1 and 2, the deployed correction identity, and the completed Point
+6 recovery. Point 6 archive and receipt digests are recorded as explicit
+administrator custody attestations; the application validates the recovery
+identity, state, manifest, and database evidence but cannot inspect detached
+encrypted custody bytes. One authorization-bound job is created atomically
+with its immutable link and event. Report 1 remains `validation_failed` while
+queued and running. A terminal failure consumes the authorization and permits
+no further retry. Point 7 is allowed only after successful validation and
+registration of all requested artifacts followed by a final recovery capture
+and deterministic custody export. No public or GET action is available.

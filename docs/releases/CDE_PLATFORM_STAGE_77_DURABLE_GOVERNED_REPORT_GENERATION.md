@@ -217,3 +217,16 @@ Export and restore require an administrator and never run automatically during
 import, startup, GET, listing, diagnostics, or worker startup. Backup creation
 is not proof of successful restoration, and restoration is not approval,
 publication, distribution, or printing.
+
+The controlled post-correction execution is a separate append-only Stage 77
+authorization, not a retry or reapproval. It binds the unchanged report and
+qualification evidence, immutable Jobs 1 and 2, the deployed correction
+identity, and the completed Point 6 recovery. The archive and receipt digests
+are administrator custody attestations because detached encrypted custody is
+not application-readable; recovery identity, state, manifest, and database
+evidence remain server-validated. Exactly one authorization-bound execution
+job may be created, with no `retry_of_job_id`; a failure consumes the
+authorization and leaves the report `validation_failed` permanently. Point 7
+is permitted only after successful DOCX, HTML, and PDF validation, promotion,
+registration, and a final recovery capture. No public route or automatic
+execution is created.

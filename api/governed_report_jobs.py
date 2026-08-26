@@ -48,6 +48,25 @@ DIAGNOSTIC_RETRY_DECLARATION = (
     "report, and does not permit an additional retry."
 )
 DIAGNOSTIC_RETRY_FAILURE_CODE = "governed_report_renderer_failed"
+POST_CORRECTION_ACTION = "post_correction_generation"
+POST_CORRECTION_EVENT = "post_correction_generation_enqueued"
+POST_CORRECTION_AUTH_EVENT = "post_correction_generation_authorized"
+POST_CORRECTION_CONTRACT = "stage77.post_correction_generation_authorization.v1"
+POST_CORRECTION_MAX_RATIONALE = 4000
+POST_CORRECTION_DECLARATION = (
+    "I authorize one execution of the unchanged frozen specification under the "
+    "deployed adapter correction. Jobs 1 and 2 remain immutable. I attest to the "
+    "external Custody Point 6 archive and receipt digests. This action is not "
+    "approval or publication and permits no further retry or execution."
+)
+POST_CORRECTION_REVISION = "fc9af82946905ea93b26d9d6291c8160b23b9d1d"
+POST_CORRECTION_DEPLOYMENT = "3ee7e469-cb77-4d42-9d74-540ba4b25b46"
+POST_CORRECTION_RECOVERY_POINT = "71f4471e987ef38d1bdbd1b64dd7557b"
+POST_CORRECTION_RECOVERY_CONTRACT = "stage77.diagnostic_aware.v1"
+POST_CORRECTION_MANIFEST_DIGEST = "bddaa565d774188e89c3911f44dcdda615a04b302b744a266cf291189f4a1a1d"
+POST_CORRECTION_DATABASE_DIGEST = "93d8ece126d9f1410b7fc5e888710c93575299d18ef1724c72534228185407b8"
+POST_CORRECTION_ARCHIVE_DIGEST = "961991089f669ae28bfa974e69181788ced54e24f419229b0428ab0185fbc35b"
+POST_CORRECTION_RECEIPT_DIGEST = "6026b9907a6c7ae71957208db0f5b38aab0a6cbc66ea1ea73c0a60384b1c82e8"
 DIAGNOSTIC_RETRY_MAX_RATIONALE = 4000
 NON_ADMIN_IDENTITIES = {WORKER_IDENTITY, "automation", "codex", "system", "system_worker", "worker"}
 
@@ -108,6 +127,7 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
       failure_code TEXT,
       idempotency_key TEXT NOT NULL UNIQUE,
       retry_of_job_id INTEGER,
+      post_correction_authorization_id TEXT,
       qualification_id INTEGER,
       qualification_digest TEXT,
       maintenance_epoch INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +160,46 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN qualification_id INTEGER")
     if "qualification_digest" not in columns:
         conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN qualification_digest TEXT")
+    if "post_correction_authorization_id" not in columns:
+        conn.execute("ALTER TABLE stage77_report_jobs ADD COLUMN post_correction_authorization_id TEXT")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_jobs_post_correction_authorization ON stage77_report_jobs(post_correction_authorization_id) WHERE post_correction_authorization_id IS NOT NULL")
+
+
+def ensure_post_correction_tables(conn: sqlite3.Connection) -> None:
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS stage77_post_correction_authorizations (
+      id TEXT PRIMARY KEY,
+      report_id INTEGER NOT NULL,
+      report_version_id INTEGER NOT NULL,
+      qualification_id INTEGER NOT NULL,
+      job1_id INTEGER NOT NULL,
+      job2_id INTEGER NOT NULL,
+      state TEXT NOT NULL CHECK(state IN ('authorized','consumed')),
+      idempotency_key TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      authorization_digest TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      consumed_at TEXT,
+      FOREIGN KEY(report_id) REFERENCES record_governed_reports(id),
+      FOREIGN KEY(report_version_id) REFERENCES record_governed_report_versions(id),
+      FOREIGN KEY(qualification_id) REFERENCES record_governed_report_qualifications(id),
+      FOREIGN KEY(job1_id) REFERENCES stage77_report_jobs(id),
+      FOREIGN KEY(job2_id) REFERENCES stage77_report_jobs(id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_post_correction_report
+      ON stage77_post_correction_authorizations(report_id, report_version_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_post_correction_idempotency
+      ON stage77_post_correction_authorizations(idempotency_key);
+    CREATE TABLE IF NOT EXISTS stage77_post_correction_execution_links (
+      authorization_id TEXT PRIMARY KEY,
+      job_id INTEGER NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(authorization_id) REFERENCES stage77_post_correction_authorizations(id),
+      FOREIGN KEY(job_id) REFERENCES stage77_report_jobs(id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_post_correction_job
+      ON stage77_post_correction_execution_links(job_id);
+    """)
 
 
 def _payload(report: Mapping[str, Any], actor: str, action: str) -> dict[str, Any]:
@@ -247,7 +307,144 @@ def retry_job(conn: sqlite3.Connection, job_id: int | str, actor: str) -> dict[s
     original = _job(conn, int(job_id))
     if original["state"] != "failed_terminal":
         raise ValueError("governed_report_job_retry_ineligible")
+    if original.get("retry_of_job_id") is not None or original.get("post_correction_authorization_id") is not None:
+        raise ValueError("governed_report_job_retry_of_retry_forbidden")
     return enqueue_generation(conn, report_id=original["report_id"], actor=actor, governed_action="retry_generation", idempotency_key=f"stage77-retry-{int(job_id)}", retry_of_job_id=int(job_id))
+
+
+def _post_correction_runtime_identity() -> tuple[str, str]:
+    revision = str(os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("CDE_DEPLOYED_REVISION") or "").strip()
+    deployment = str(os.getenv("RAILWAY_DEPLOYMENT_ID") or os.getenv("CDE_DEPLOYMENT_ID") or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{40}", revision) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", deployment):
+        raise ValueError("governed_report_post_correction_runtime_identity_invalid")
+    if revision != POST_CORRECTION_REVISION or deployment != POST_CORRECTION_DEPLOYMENT:
+        raise ValueError("governed_report_post_correction_runtime_identity_mismatch")
+    return revision, deployment
+
+
+def _post_correction_sha(value: Any, code: str) -> str:
+    value = str(value or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError(code)
+    return value
+
+
+def _post_correction_authorization_payload(*, report, qualification, job1, job2, execution_job_id, evidence1, evidence2, topology_digest, actor, rationale, declaration, idempotency_key, custody_archive_digest, custody_receipt_digest, created_at):
+    revision, deployment = _post_correction_runtime_identity()
+    version = report["versions"][-1]
+    payload = {
+        "authorization_contract": POST_CORRECTION_CONTRACT,
+        "report_id": int(report["id"]), "report_version_id": int(version["id"]),
+        "specification_digest": str(version["specification_digest"]),
+        "qualification_id": int(qualification["id"]), "qualification_digest": str(qualification["digest"]),
+        "qualification_chain_digest": str(qualification.get("chain_digest") or qualification["digest"]),
+        "review_mode": str(qualification["payload"]["review_mode"]),
+        "disclosure_version": str(qualification["payload"]["disclosure_version"]),
+        "distribution_restriction": str(qualification["payload"]["distribution_restriction"]),
+        "job1_id": int(job1["id"]), "job1_state": str(job1["state"]), "job1_contract": str(evidence1["contract_id"]),
+        "job1_stage75_sha256": str(evidence1["attempt_sha256"]), "job1_stage77_sha256": str(evidence1["terminal_sha256"]),
+        "job2_id": int(job2["id"]), "job2_state": str(job2["state"]), "job2_contract": str(evidence2["contract_id"]),
+        "job2_stage75_sha256": str(evidence2["attempt_sha256"]), "job2_stage77_sha256": str(evidence2["terminal_sha256"]),
+        "execution_job_id": int(execution_job_id),
+        "retry_topology": {"successor_job_id": int(job2["id"]), "predecessor_job_id": int(job1["id"])},
+        "retry_topology_digest": str(topology_digest),
+        "correction_revision": revision, "correction_deployment": deployment,
+        "recovery_point_id": POST_CORRECTION_RECOVERY_POINT, "recovery_contract": POST_CORRECTION_RECOVERY_CONTRACT,
+        "recovery_manifest_digest": POST_CORRECTION_MANIFEST_DIGEST, "recovery_database_digest": POST_CORRECTION_DATABASE_DIGEST,
+        "custody_archive_digest": _post_correction_sha(custody_archive_digest, "governed_report_post_correction_archive_digest_invalid"),
+        "custody_receipt_digest": _post_correction_sha(custody_receipt_digest, "governed_report_post_correction_receipt_digest_invalid"),
+        "requesting_actor": str(actor), "rationale": str(rationale), "declaration": dict(declaration),
+        "idempotency_key": str(idempotency_key), "created_at": str(created_at),
+    }
+    payload["authorization_digest"] = hashlib.sha256(reports.canonical_json(payload).encode()).hexdigest()
+    return payload
+
+
+def _post_correction_topology(conn: sqlite3.Connection, report_id: int, version_id: int):
+    rows = conn.execute("SELECT * FROM stage77_report_jobs WHERE report_id=? AND report_version_id=? ORDER BY id", (report_id, version_id)).fetchall()
+    if len(rows) != 2:
+        raise ValueError("governed_report_post_correction_job_topology_invalid")
+    jobs = [dict(row) for row in rows]
+    predecessors = [row for row in jobs if row["retry_of_job_id"] is None]
+    successors = [row for row in jobs if row["retry_of_job_id"] is not None]
+    if len(predecessors) != 1 or len(successors) != 1 or int(successors[0]["retry_of_job_id"]) != int(predecessors[0]["id"]):
+        raise ValueError("governed_report_post_correction_job_topology_invalid")
+    if any(row["state"] != "failed_terminal" for row in jobs) or successors[0]["governed_action"] != DIAGNOSTIC_RETRY_ACTION:
+        raise ValueError("governed_report_post_correction_job_state_invalid")
+    topology = reports.canonical_json({"report_id": report_id, "report_version_id": version_id, "links": [{"predecessor_job_id": int(predecessors[0]["id"]), "successor_job_id": int(successors[0]["id"])}]})
+    return predecessors[0], successors[0], hashlib.sha256(topology.encode()).hexdigest()
+
+
+def authorize_post_correction_generation(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, rationale: str, acknowledged: bool, custody_archive_digest: str, custody_receipt_digest: str, idempotency_key: str) -> dict[str, Any]:
+    reports.ensure_report_tables(conn); ensure_job_tables(conn); ensure_post_correction_tables(conn)
+    if str(actor_role) != "admin" or str(actor).strip() in NON_ADMIN_IDENTITIES:
+        raise ValueError("governed_report_post_correction_actor_invalid")
+    rationale = str(rationale or "").strip(); key = str(idempotency_key or "").strip()
+    if not rationale or len(rationale) > POST_CORRECTION_MAX_RATIONALE: raise ValueError("governed_report_post_correction_rationale_invalid")
+    if acknowledged is not True: raise ValueError("governed_report_post_correction_declaration_required")
+    if not key: raise ValueError("governed_report_post_correction_idempotency_required")
+    declaration = {"acknowledged": True, "version": 1, "text": POST_CORRECTION_DECLARATION}
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        existing = conn.execute("SELECT * FROM stage77_post_correction_authorizations WHERE idempotency_key=?", (key,)).fetchone()
+        if existing:
+            if existing["state"] != "authorized": raise ValueError("governed_report_post_correction_already_consumed")
+            payload = json.loads(existing["payload_json"])
+            if payload.get("rationale") != rationale or payload.get("custody_archive_digest") != custody_archive_digest or payload.get("custody_receipt_digest") != custody_receipt_digest:
+                raise ValueError("governed_report_post_correction_idempotency_conflict")
+            linked = conn.execute("SELECT job_id FROM stage77_post_correction_execution_links WHERE authorization_id=?", (existing["id"],)).fetchone()
+            conn.commit(); return _job(conn, int(linked[0])) if linked else dict(existing)
+        report = reports.get_report(conn, report_id)
+        if report["lifecycle_status"] != "validation_failed": raise ValueError("governed_report_post_correction_lifecycle_invalid")
+        version = report["versions"][-1]
+        from api import governed_report_qualifications as qualification_store
+        qualification = qualification_store.latest_final(conn, report_id)
+        if qualification is None or qualification["payload"].get("review_mode") != qualification_store.SOLE_MODE or qualification["payload"].get("disclosure_version") != qualification_store.DISCLOSURE_VERSION or qualification["payload"].get("distribution_restriction") != "internal_working":
+            raise ValueError("governed_report_post_correction_qualification_invalid")
+        chain = qualification_store.validate_qualification_chain(conn, int(version["id"]))
+        qualification = dict(qualification); qualification["chain"] = chain; qualification["chain_digest"] = hashlib.sha256(reports.canonical_json([dict(item) for item in chain]).encode()).hexdigest()
+        if reports.specification_digest(version["specification"]) != version["specification_digest"]: raise ValueError("governed_report_post_correction_specification_invalid")
+        from api.governed_report_recovery import recovery_allows_claim, recovery_status
+        status = recovery_status(conn)
+        if status.get("state") != "completed" or status.get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT or status.get("manifest_digest") != POST_CORRECTION_MANIFEST_DIGEST or not recovery_allows_claim(conn): raise ValueError("governed_report_post_correction_recovery_invalid")
+        job1, job2, topology_digest = _post_correction_topology(conn, int(report["id"]), int(version["id"]))
+        evidence1 = _validate_diagnostic_retry_predecessor_evidence(conn, job1)
+        evidence2 = _validate_diagnostic_retry_predecessor_evidence(conn, job2)
+        if evidence1["contract_id"] != "legacy_pre_propagation_diagnostic_contract_v1" or evidence2["contract_id"] != "current_pre_terminal_projection_fix_diagnostic_contract_v1": raise ValueError("governed_report_post_correction_diagnostic_invalid")
+        if (evidence1["attempt_sha256"], evidence1["terminal_sha256"], evidence2["attempt_sha256"], evidence2["terminal_sha256"]) != ("f5fa57e6989a8406c99bd3c26b877694515f44af74426684fbcc18a0268abd63", "f7456646b23f037b18af45f5019d5c817b54649cf28da14eecdf838817495239", "6f83de150d27070d4aaf1aac040e18220968f440962ab47d935d39a33dd7fc67", "d62fa6f366270dcb0f3cedf973299d55f3ae0c671b70ea63907c7e378f0b6601"):
+            raise ValueError("governed_report_post_correction_diagnostic_hash_invalid")
+        if custody_archive_digest != POST_CORRECTION_ARCHIVE_DIGEST or custody_receipt_digest != POST_CORRECTION_RECEIPT_DIGEST:
+            raise ValueError("governed_report_post_correction_custody_attestation_invalid")
+        if conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state IN ('queued','leased','running','retry_wait','cancel_requested')").fetchone()[0] != 0 or conn.execute("SELECT COUNT(*) FROM record_governed_report_artifacts WHERE version_id=?", (version["id"],)).fetchone()[0] != 0: raise ValueError("governed_report_post_correction_active_work_exists")
+        now = utc_now()
+        auth_id = secrets.token_hex(16)
+        cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,post_correction_authorization_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), version["specification_digest"], reports.canonical_json(version["specification"]["requested_formats"]), version["specification"]["rendering_profile"], version["specification"]["template_version"], version["specification"]["publication_engine_version"], actor, POST_CORRECTION_ACTION, qualification["id"], qualification["digest"], now, "queued", 0, MAX_ATTEMPTS, now, "stage77-post-correction-" + auth_id, None, auth_id, int(status.get("maintenance_epoch", 0)), JOB_SCHEMA_VERSION))
+        job_id = int(cur.lastrowid)
+        payload = _post_correction_authorization_payload(report=report, qualification=qualification, job1=job1, job2=job2, execution_job_id=job_id, evidence1=evidence1, evidence2=evidence2, topology_digest=topology_digest, actor=actor, rationale=rationale, declaration=declaration, idempotency_key=key, custody_archive_digest=custody_archive_digest, custody_receipt_digest=custody_receipt_digest, created_at=now)
+        conn.execute("INSERT INTO stage77_post_correction_authorizations(id,report_id,report_version_id,qualification_id,job1_id,job2_id,state,idempotency_key,payload_json,authorization_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (auth_id, int(report["id"]), int(version["id"]), int(qualification["id"]), int(job1["id"]), int(job2["id"]), "authorized", key, reports.canonical_json(payload), payload["authorization_digest"], now))
+        conn.execute("INSERT INTO stage77_post_correction_execution_links(authorization_id,job_id,created_at) VALUES(?,?,?)", (auth_id, job_id, now))
+        _event(conn, job_id, POST_CORRECTION_EVENT, "queued", actor, payload)
+        conn.execute("INSERT INTO record_governed_report_events(report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), POST_CORRECTION_AUTH_EVENT, "validation_failed", rationale, actor, actor_role, reports.canonical_json(declaration), now, key + ":report", reports.canonical_json(payload)))
+        conn.commit()
+    except Exception:
+        conn.rollback(); raise
+    return _job(conn, job_id)
+
+
+def _revalidate_post_correction_job(conn: sqlite3.Connection, job: Mapping[str, Any], report: Mapping[str, Any]) -> None:
+    if job.get("governed_action") != POST_CORRECTION_ACTION or not job.get("post_correction_authorization_id") or job.get("retry_of_job_id") is not None:
+        raise ValueError("governed_report_post_correction_job_invalid")
+    row = conn.execute("SELECT * FROM stage77_post_correction_authorizations WHERE id=?", (job["post_correction_authorization_id"],)).fetchone()
+    link = conn.execute("SELECT job_id FROM stage77_post_correction_execution_links WHERE authorization_id=?", (job["post_correction_authorization_id"],)).fetchone()
+    if row is None or link is None or int(link[0]) != int(job["id"]) or row["state"] != "authorized": raise ValueError("governed_report_post_correction_authorization_invalid")
+    payload = json.loads(row["payload_json"])
+    if hashlib.sha256(reports.canonical_json({k: v for k, v in payload.items() if k != "authorization_digest"}).encode()).hexdigest() != row["authorization_digest"] or payload.get("authorization_digest") != row["authorization_digest"]:
+        raise ValueError("governed_report_post_correction_authorization_digest_invalid")
+    if payload.get("declaration") != {"acknowledged": True, "version": 1, "text": POST_CORRECTION_DECLARATION} or payload.get("correction_revision") != POST_CORRECTION_REVISION or payload.get("correction_deployment") != POST_CORRECTION_DEPLOYMENT or payload.get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT or payload.get("recovery_contract") != POST_CORRECTION_RECOVERY_CONTRACT: raise ValueError("governed_report_post_correction_revalidation_invalid")
+    if payload.get("execution_job_id") != int(job["id"]): raise ValueError("governed_report_post_correction_revalidation_invalid")
+    if report["lifecycle_status"] != "validation_failed" or int(payload["report_version_id"]) != int(job["report_version_id"]) or payload["specification_digest"] != job["specification_digest"] or payload.get("qualification_id") != int(job["qualification_id"]) or payload.get("qualification_digest") != job["qualification_digest"]: raise ValueError("governed_report_post_correction_revalidation_invalid")
+    from api.governed_report_recovery import recovery_allows_claim
+    if not recovery_allows_claim(conn): raise ValueError("governed_report_post_correction_maintenance_active")
 
 
 def _diagnostic_retry_payload(
@@ -690,6 +887,9 @@ def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: s
         conn.commit(); return False
     payload = _terminal_payload(phase=phase, code=code, diagnostic=diagnostic)
     _event(conn, job_id, "terminal", state, actor, payload)
+    auth = conn.execute("SELECT post_correction_authorization_id FROM stage77_report_jobs WHERE id=?", (job_id,)).fetchone()
+    if auth and auth[0]:
+        conn.execute("UPDATE stage77_post_correction_authorizations SET state='consumed',consumed_at=? WHERE id=? AND state='authorized'", (utc_now(), auth[0]))
     conn.commit(); return True
 
 
@@ -740,6 +940,12 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
             except (ValueError, TypeError, sqlite3.Error):
                 _terminal_diagnostic_retry_revalidation_failure(conn, job, token)
                 return
+        if job.get("governed_action") == POST_CORRECTION_ACTION:
+            try:
+                _revalidate_post_correction_job(conn, job, report)
+            except (ValueError, TypeError, sqlite3.Error):
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="governed_report_post_correction_revalidation_failed", diagnostic=make_diagnostic(phase="revalidation", operation="post_correction_authorization", checkpoint="validation", code="governed_report_post_correction_revalidation_failed"))
+                return
         if job.get("qualification_id") is not None:
             from api import governed_report_qualifications as qualification_store
             qualification = qualification_store.latest_final(conn, job["report_id"])
@@ -757,7 +963,7 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
             elif qualification_payload.get("review_mode") != qualification_store.INDEPENDENT_MODE or qualification_payload.get("disclosure_version") != "none":
                 _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="qualification_mode_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="qualification_mode_invalid"))
                 return
-        if report["lifecycle_status"] not in {"approved_for_generation", "generation_requested"}:
+        if report["lifecycle_status"] not in ({"approved_for_generation", "generation_requested"} | ({"validation_failed"} if job.get("governed_action") == POST_CORRECTION_ACTION else set())):
             _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="report_lifecycle_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="report_lifecycle_invalid")); return
         version = report["versions"][-1]
         if int(version["id"]) != int(job["report_version_id"]):
@@ -781,7 +987,7 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
                     qualification_id=job["qualification_id"],
                     qualification_digest=job["qualification_digest"],
                 )
-            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification)
+            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification, post_correction_authorization_id=job.get("post_correction_authorization_id"))
         except Exception as exc:
             if str(exc) == "governed_report_generation_cancelled":
                 _terminal(conn, job["id"], token, "cancelled", WORKER_IDENTITY, phase="cancellation", code="cancelled")
@@ -828,6 +1034,7 @@ def worker_loop(db_path: str, stop_event, on_ready=None) -> int:
             try:
                 startup_conn = _connect(db_path)
                 ensure_job_tables(startup_conn)
+                ensure_post_correction_tables(startup_conn)
                 reports.ensure_report_tables(startup_conn)
                 from api.governed_report_recovery import ensure_recovery_tables, recovery_status
                 ensure_recovery_tables(startup_conn)
