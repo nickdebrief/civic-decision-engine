@@ -46,6 +46,11 @@ DIAGNOSTIC_MANIFEST_KEYS = CURRENT_MANIFEST_KEYS | {
     "diagnostic_contract_version", "diagnostic_evidence", "diagnostic_evidence_count",
     "diagnostic_evidence_state_digest", "retry_link_count", "retry_link_state_digest",
 }
+POST_CORRECTION_MANIFEST_KEYS = DIAGNOSTIC_MANIFEST_KEYS | {
+    "post_correction_authorization",
+    "post_correction_authorization_state_digest",
+    "post_correction_authorization_event_bound",
+}
 ALLOWED_ARTIFACT_KEYS = {"artifact_id", "report_id", "version_id", "format", "filename", "size_bytes", "sha256"}
 MAX_MANIFEST_ARTIFACTS = 10000
 MAX_MANIFEST_TEXT = 256
@@ -62,6 +67,10 @@ CURRENT_RECEIPT_KEYS = ALLOWED_RECEIPT_KEYS
 DIAGNOSTIC_RECEIPT_KEYS = CURRENT_RECEIPT_KEYS | {
     "diagnostic_contract_version", "diagnostic_evidence_count", "diagnostic_evidence_state_digest",
     "retry_link_count", "retry_link_state_digest",
+}
+POST_CORRECTION_RECEIPT_KEYS = DIAGNOSTIC_RECEIPT_KEYS | {
+    "post_correction_authorization_state_digest",
+    "post_correction_authorization_event_bound",
 }
 MAX_EXPORT_REASON = 256
 BOUNDED_FAILURE_CODES = {
@@ -790,14 +799,99 @@ def _database_contract(conn: sqlite3.Connection) -> tuple[str, list[dict[str, An
     tables = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     qualification_tables = {"record_governed_report_qualifications", "record_governed_report_qualification_events"}
     evidence, evidence_digest = _diagnostic_evidence_snapshot(conn)
+    post_schema = _post_correction_schema_present(conn)
     if not (qualification_tables & tables):
+        if post_schema:
+            return "post_correction_aware", evidence, evidence_digest, [], digest_bytes(canonical_json([]).encode("utf-8"))
         if evidence:
             raise ValueError("diagnostic_evidence_invalid")
         return "legacy", [], digest_bytes(canonical_json([]).encode("utf-8")), [], digest_bytes(canonical_json([]).encode("utf-8"))
     links, links_digest = _retry_topology_snapshot(conn)
+    if post_schema:
+        return "post_correction_aware", evidence, evidence_digest, links, links_digest
     if evidence:
         return "diagnostic_aware", evidence, evidence_digest, links, links_digest
     return "current", [], evidence_digest, links, links_digest
+
+
+def _post_correction_schema_present(conn: sqlite3.Connection) -> bool:
+    names = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    auth_name = "stage77_post_correction_authorizations"
+    link_name = "stage77_post_correction_execution_links"
+    if auth_name not in names and link_name not in names:
+        return False
+    if auth_name not in names or link_name not in names:
+        raise ValueError("post_correction_schema_incompatible")
+    expected_auth = {"id": "TEXT", "report_id": "INTEGER", "report_version_id": "INTEGER", "qualification_id": "INTEGER", "job1_id": "INTEGER", "job2_id": "INTEGER", "state": "TEXT", "idempotency_key": "TEXT", "payload_json": "TEXT", "authorization_digest": "TEXT", "created_at": "TEXT", "consumed_at": "TEXT"}
+    expected_link = {"authorization_id": "TEXT", "job_id": "INTEGER", "created_at": "TEXT"}
+    for table, expected in ((auth_name, expected_auth), (link_name, expected_link)):
+        rows = conn.execute("PRAGMA table_info(%s)" % table).fetchall()
+        actual = {str(row[1]): str(row[2]).upper() for row in rows}
+        if actual != expected or not rows or int(rows[0][5]) != 1:
+            raise ValueError("post_correction_schema_incompatible")
+    auth_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(%s)" % auth_name).fetchall()}
+    link_indexes = {str(row[1]) for row in conn.execute("PRAGMA index_list(%s)" % link_name).fetchall()}
+    if not any("idempotency" in name for name in auth_indexes) or not any("report" in name for name in auth_indexes) or not any("job" in name for name in link_indexes):
+        raise ValueError("post_correction_schema_incompatible")
+    auth_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % auth_name).fetchall()}
+    link_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % link_name).fetchall()}
+    if {("record_governed_reports", "report_id", "id"), ("record_governed_report_versions", "report_version_id", "id"), ("record_governed_report_qualifications", "qualification_id", "id"), ("stage77_report_jobs", "job1_id", "id"), ("stage77_report_jobs", "job2_id", "id")} - auth_fks:
+        raise ValueError("post_correction_schema_incompatible")
+    if {("stage77_post_correction_authorizations", "authorization_id", "id"), ("stage77_report_jobs", "job_id", "id")} - link_fks:
+        raise ValueError("post_correction_schema_incompatible")
+    return True
+
+
+def _strict_json_object(raw: Any, code: str) -> dict[str, Any]:
+    def reject(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(code)
+            result[key] = value
+        return result
+    try:
+        value = json.loads(str(raw), object_pairs_hook=reject)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError(code) from None
+    if not isinstance(value, dict) or canonical_json(value) != str(raw):
+        raise ValueError(code)
+    return value
+
+
+def _post_correction_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], str, int]:
+    _post_correction_schema_present(conn)
+    auth_rows = conn.execute("SELECT * FROM stage77_post_correction_authorizations ORDER BY id").fetchall()
+    links = conn.execute("SELECT l.authorization_id,l.job_id,l.created_at,j.report_id,j.report_version_id,j.governed_action,j.retry_of_job_id FROM stage77_post_correction_execution_links l JOIN stage77_report_jobs j ON j.id=l.job_id ORDER BY l.authorization_id").fetchall()
+    link_by_auth = {str(row["authorization_id"]): dict(row) for row in links}
+    snapshot: list[dict[str, Any]] = []
+    for row in auth_rows:
+        payload = _strict_json_object(row["payload_json"], "post_correction_authorization_invalid")
+        expected_payload_keys = {
+            "authorization_contract", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "qualification_chain_digest", "review_mode", "disclosure_version", "distribution_restriction", "job1_id", "job1_state", "job1_contract", "job1_stage75_sha256", "job1_stage77_sha256", "job2_id", "job2_state", "job2_contract", "job2_stage75_sha256", "job2_stage77_sha256", "execution_job_id", "retry_topology", "retry_topology_digest", "correction_revision", "correction_deployment", "recovery_point_id", "recovery_contract", "recovery_manifest_digest", "recovery_database_digest", "custody_archive_digest", "custody_receipt_digest", "requesting_actor", "rationale", "declaration", "idempotency_key", "created_at", "authorization_digest",
+        }
+        link = link_by_auth.get(str(row["id"]))
+        if set(payload) != expected_payload_keys or payload.get("authorization_contract") != "stage77.post_correction_generation_authorization.v1":
+            raise ValueError("post_correction_authorization_invalid")
+        for digest_key in ("specification_digest", "qualification_digest", "qualification_chain_digest", "job1_stage75_sha256", "job1_stage77_sha256", "job2_stage75_sha256", "job2_stage77_sha256", "retry_topology_digest", "recovery_manifest_digest", "recovery_database_digest", "custody_archive_digest", "custody_receipt_digest", "authorization_digest"):
+            if not isinstance(payload.get(digest_key), str) or not re.fullmatch(r"[0-9a-f]{64}", payload[digest_key]):
+                raise ValueError("post_correction_authorization_invalid")
+        if (int(row["qualification_id"]) != int(payload["qualification_id"]) or int(row["job1_id"]) != int(payload["job1_id"]) or int(row["job2_id"]) != int(payload["job2_id"]) or int(row["report_id"]) != int(payload["report_id"]) or int(row["report_version_id"]) != int(payload["report_version_id"]) or payload.get("execution_job_id") in {payload.get("job1_id"), payload.get("job2_id")} or payload.get("review_mode") != "sole_administrator" or payload.get("disclosure_version") != "sole-admin-v1" or payload.get("distribution_restriction") != "internal_working" or payload.get("job1_state") != "failed_terminal" or payload.get("job2_state") != "failed_terminal" or payload.get("retry_topology") != {"successor_job_id": payload.get("job2_id"), "predecessor_job_id": payload.get("job1_id")}):
+            raise ValueError("post_correction_authorization_invalid")
+        digest = hashlib.sha256(canonical_json({key: value for key, value in payload.items() if key != "authorization_digest"}).encode()).hexdigest()
+        if payload.get("authorization_digest") != str(row["authorization_digest"]) or digest != str(row["authorization_digest"]):
+            raise ValueError("post_correction_authorization_digest_invalid")
+        if link is None or int(link["job_id"]) != int(payload["execution_job_id"]) or int(link["report_id"]) != int(row["report_id"]) or int(link["report_version_id"]) != int(row["report_version_id"]):
+            raise ValueError("post_correction_authorization_link_invalid")
+        if link["governed_action"] != "post_correction_generation" or link["retry_of_job_id"] is not None:
+            raise ValueError("post_correction_authorization_job_invalid")
+        snapshot.append({"authorization_id": str(row["id"]), "report_id": int(row["report_id"]), "report_version_id": int(row["report_version_id"]), "state": str(row["state"]), "payload": payload, "authorization_digest": str(row["authorization_digest"]), "execution_job_id": int(link["job_id"]), "execution_link_created_at": str(link["created_at"])})
+    raw = canonical_json(snapshot).encode("utf-8")
+    event_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_events'").fetchone()
+    if auth_rows and event_table is None:
+        raise ValueError("post_correction_authorization_event_invalid")
+    event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM record_governed_report_events WHERE event_type='post_correction_generation_authorized'").fetchone()[0]) if event_table else 0
+    return snapshot, digest_bytes(raw), event_bound
 
 
 def _manifest_contract(manifest: Mapping[str, Any]) -> str:
@@ -810,6 +904,8 @@ def _manifest_contract(manifest: Mapping[str, Any]) -> str:
         return "current"
     if fields == DIAGNOSTIC_MANIFEST_KEYS:
         return "diagnostic_aware"
+    if fields == POST_CORRECTION_MANIFEST_KEYS:
+        return "post_correction_aware"
     raise ValueError("manifest_invalid")
 
 
@@ -823,6 +919,8 @@ def _receipt_contract(receipt: Mapping[str, Any]) -> str:
         return "current"
     if fields == DIAGNOSTIC_RECEIPT_KEYS:
         return "diagnostic_aware"
+    if fields == POST_CORRECTION_RECEIPT_KEYS:
+        return "post_correction_aware"
     raise ValueError("export_receipt_invalid")
 
 
@@ -851,12 +949,12 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
         raise ValueError("manifest_invalid")
     if isinstance(manifest["recovery_event_bound"], bool) or not isinstance(manifest["recovery_event_bound"], int) or manifest["recovery_event_bound"] < 0:
         raise ValueError("manifest_invalid")
-    if contract in {"current", "diagnostic_aware"}:
+    if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
         if isinstance(manifest["qualification_event_bound"], bool) or not isinstance(manifest["qualification_event_bound"], int) or manifest["qualification_event_bound"] < 0:
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["qualification_state_digest"], str) or len(manifest["qualification_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["qualification_state_digest"]):
             raise ValueError("manifest_invalid")
-    if contract == "diagnostic_aware":
+    if contract in {"diagnostic_aware", "post_correction_aware"}:
         if manifest["diagnostic_contract_version"] != "stage77.diagnostic_aware.v1":
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["diagnostic_evidence"], list) or len(manifest["diagnostic_evidence"]) > MAX_MANIFEST_ARTIFACTS:
@@ -885,10 +983,18 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["retry_link_state_digest"], str) or len(manifest["retry_link_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["retry_link_state_digest"]):
             raise ValueError("manifest_invalid")
+        if contract == "post_correction_aware":
+            auth_snapshot = manifest.get("post_correction_authorization")
+            if not isinstance(auth_snapshot, list) or any(not isinstance(item, ABCMapping) for item in auth_snapshot):
+                raise ValueError("manifest_invalid")
+            if manifest.get("post_correction_authorization_state_digest") != digest_bytes(canonical_json(auth_snapshot).encode("utf-8")):
+                raise ValueError("manifest_invalid")
+            if isinstance(manifest.get("post_correction_authorization_event_bound"), bool) or not isinstance(manifest.get("post_correction_authorization_event_bound"), int) or manifest["post_correction_authorization_event_bound"] < 0:
+                raise ValueError("manifest_invalid")
     if not isinstance(manifest.get("integrity"), ABCMapping) or set(manifest["integrity"]) != {"integrity_check", "foreign_key_check"} or manifest["integrity"] != {"integrity_check": "ok", "foreign_key_check": "ok"}:
         raise ValueError("manifest_invalid")
     expected_counts = {"jobs", "reports", "versions", "artifacts"}
-    if contract in {"current", "diagnostic_aware"}:
+    if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
         expected_counts.add("qualifications")
     if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != expected_counts or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
         raise ValueError("manifest_invalid")
@@ -982,7 +1088,7 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         database_contract, evidence, evidence_digest, retry_links, retry_links_digest = _database_contract(conn)
         if database_contract != contract:
             raise ValueError("schema_incompatible")
-        if contract in {"current", "diagnostic_aware"}:
+        if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
             from api import governed_report_qualifications as qualifications
             try:
                 qualifications.validate_qualification_tables(conn)
@@ -999,11 +1105,15 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             qualification_state = qualifications.state_snapshot(conn)
             if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)) or qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]:
                 raise ValueError("qualification_state_mismatch")
-        if contract == "diagnostic_aware":
+        if contract in {"diagnostic_aware", "post_correction_aware"}:
             if evidence != manifest["diagnostic_evidence"] or evidence_digest != manifest["diagnostic_evidence_state_digest"] or int(manifest["diagnostic_evidence_count"]) != len(evidence):
                 raise ValueError("diagnostic_evidence_mismatch")
             if retry_links_digest != manifest["retry_link_state_digest"] or int(manifest["retry_link_count"]) != len(retry_links):
                 raise ValueError("retry_topology_mismatch")
+        if contract == "post_correction_aware":
+            snapshot, snapshot_digest, event_bound = _post_correction_snapshot(conn)
+            if snapshot != manifest["post_correction_authorization"] or snapshot_digest != manifest["post_correction_authorization_state_digest"] or event_bound != int(manifest["post_correction_authorization_event_bound"]):
+                raise ValueError("post_correction_evidence_mismatch")
         rows = conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
         if len(rows) != len(manifest["artifacts"]):
             raise ValueError("artifact_inventory_mismatch")
@@ -1158,6 +1268,19 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                         "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
                         "retry_link_count": len(retry_links),
                         "retry_link_state_digest": retry_links_digest,
+                    })
+                if database_contract == "post_correction_aware":
+                    post_snapshot, post_digest, post_event_bound = _post_correction_snapshot(backup_check)
+                    manifest.update({
+                        "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
+                        "diagnostic_evidence": diagnostic_evidence,
+                        "diagnostic_evidence_count": len(diagnostic_evidence),
+                        "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
+                        "retry_link_count": len(retry_links),
+                        "retry_link_state_digest": retry_links_digest,
+                        "post_correction_authorization": post_snapshot,
+                        "post_correction_authorization_state_digest": post_digest,
+                        "post_correction_authorization_event_bound": post_event_bound,
                     })
                 raw_manifest = canonical_json(manifest).encode("utf-8")
                 phase, operation, checkpoint = "validation", "manifest_write", "starting"
@@ -1378,6 +1501,11 @@ def _receipt_from_manifest(manifest: Mapping[str, Any], *, archive_digest: str, 
             "retry_link_count": int(manifest["retry_link_count"]),
             "retry_link_state_digest": str(manifest["retry_link_state_digest"]),
         })
+    if "post_correction_authorization_state_digest" in manifest:
+        receipt.update({
+            "post_correction_authorization_state_digest": str(manifest["post_correction_authorization_state_digest"]),
+            "post_correction_authorization_event_bound": int(manifest["post_correction_authorization_event_bound"]),
+        })
     return receipt
 
 
@@ -1422,18 +1550,23 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
     for key in ("manifest_digest", "database_digest", "archive_digest"):
         if len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
             raise ValueError("export_receipt_invalid")
-    if _receipt_contract(receipt) in {"current", "diagnostic_aware"} and (len(receipt["qualification_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["qualification_state_digest"])):
+    if _receipt_contract(receipt) in {"current", "diagnostic_aware", "post_correction_aware"} and (len(receipt["qualification_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["qualification_state_digest"])):
         raise ValueError("export_receipt_invalid")
     numeric_fields = ["artifact_count", "recovery_event_bound", "job_event_bound"]
-    if _receipt_contract(receipt) in {"current", "diagnostic_aware"}:
+    if _receipt_contract(receipt) in {"current", "diagnostic_aware", "post_correction_aware"}:
         numeric_fields.extend(("qualification_count", "qualification_event_bound"))
-    if _receipt_contract(receipt) == "diagnostic_aware":
+    if _receipt_contract(receipt) in {"diagnostic_aware", "post_correction_aware"}:
         if receipt["diagnostic_contract_version"] != "stage77.diagnostic_aware.v1":
             raise ValueError("export_receipt_invalid")
         for key in ("diagnostic_evidence_state_digest", "retry_link_state_digest"):
             if not isinstance(receipt[key], str) or len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
                 raise ValueError("export_receipt_invalid")
         numeric_fields.extend(("diagnostic_evidence_count", "retry_link_count"))
+    if _receipt_contract(receipt) == "post_correction_aware":
+        if len(receipt["post_correction_authorization_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["post_correction_authorization_state_digest"]):
+            raise ValueError("export_receipt_invalid")
+        if isinstance(receipt["post_correction_authorization_event_bound"], bool) or not isinstance(receipt["post_correction_authorization_event_bound"], int) or receipt["post_correction_authorization_event_bound"] < 0:
+            raise ValueError("export_receipt_invalid")
     for key in numeric_fields:
         if isinstance(receipt[key], bool) or not isinstance(receipt[key], int) or receipt[key] < 0:
             raise ValueError("export_receipt_invalid")
@@ -1528,15 +1661,19 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
         if receipt_contract != manifest_contract:
             raise ValueError("export_receipt_mismatch")
         common_mismatch = result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]
-        qualification_mismatch = manifest_contract in {"current", "diagnostic_aware"} and (int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"])
-        diagnostic_mismatch = manifest_contract == "diagnostic_aware" and (
+        qualification_mismatch = manifest_contract in {"current", "diagnostic_aware", "post_correction_aware"} and (int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"])
+        diagnostic_mismatch = manifest_contract in {"diagnostic_aware", "post_correction_aware"} and (
             receipt.get("diagnostic_contract_version") != manifest["diagnostic_contract_version"]
             or int(receipt.get("diagnostic_evidence_count", -1)) != int(manifest["diagnostic_evidence_count"])
             or receipt.get("diagnostic_evidence_state_digest") != manifest["diagnostic_evidence_state_digest"]
             or int(receipt.get("retry_link_count", -1)) != int(manifest["retry_link_count"])
             or receipt.get("retry_link_state_digest") != manifest["retry_link_state_digest"]
         )
-        if common_mismatch or qualification_mismatch or diagnostic_mismatch:
+        post_correction_mismatch = manifest_contract == "post_correction_aware" and (
+            receipt.get("post_correction_authorization_state_digest") != manifest.get("post_correction_authorization_state_digest")
+            or int(receipt.get("post_correction_authorization_event_bound", -1)) != int(manifest.get("post_correction_authorization_event_bound", -2))
+        )
+        if common_mismatch or qualification_mismatch or diagnostic_mismatch or post_correction_mismatch:
             raise ValueError("export_receipt_mismatch")
         if extract_to is not None:
             extraction_target = _lexical_path(extract_to, error="export_extract_target_invalid")
@@ -1556,7 +1693,7 @@ def export_recovery_bundle(*, bundle_path: str | os.PathLike[str], output_archiv
     bundle_result = validate_recovery_bundle(bundle)
     before_snapshot = _bundle_snapshot(bundle)
     manifest, manifest_digest = _manifest_and_digest(bundle)
-    if _manifest_contract(manifest) not in {"current", "diagnostic_aware"}:
+    if _manifest_contract(manifest) not in {"current", "diagnostic_aware", "post_correction_aware"}:
         raise ValueError("export_source_contract_unsupported")
     manifest = dict(manifest)
     manifest["_manifest_digest"] = manifest_digest
