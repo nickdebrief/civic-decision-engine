@@ -67,6 +67,16 @@ POST_CORRECTION_MANIFEST_DIGEST = "bddaa565d774188e89c3911f44dcdda615a04b302b744
 POST_CORRECTION_DATABASE_DIGEST = "93d8ece126d9f1410b7fc5e888710c93575299d18ef1724c72534228185407b8"
 POST_CORRECTION_ARCHIVE_DIGEST = "961991089f669ae28bfa974e69181788ced54e24f419229b0428ab0185fbc35b"
 POST_CORRECTION_RECEIPT_DIGEST = "6026b9907a6c7ae71957208db0f5b38aab0a6cbc66ea1ea73c0a60384b1c82e8"
+POST_CORRECTION_RECOVERY_EPOCH = 8
+POST_CORRECTION_POINT6_ARCHIVE_SIZE = 1013760
+POST_CORRECTION_POINT6_CUSTODY_ID = "2026-08-25T195900Z_71f4471e987ef38d1bdbd1b64dd7557b"
+POST_CORRECTION_CUSTODY_ATTESTATION_CONTRACT = "stage77.post_correction_custody_attestation.v1"
+POST_CORRECTION_CUSTODY_DECLARATION = (
+    "I previously validated the detached encrypted-custody export. The application "
+    "records this attestation but does not independently read or verify the USB "
+    "archive. This action does not authorize generation, create Job 3, approve, "
+    "publish, restore, or alter Report 1, Jobs 1 or 2, recovery history, or artifacts."
+)
 DIAGNOSTIC_RETRY_MAX_RATIONALE = 4000
 NON_ADMIN_IDENTITIES = {WORKER_IDENTITY, "automation", "codex", "system", "system_worker", "worker"}
 
@@ -166,6 +176,8 @@ def ensure_job_tables(conn: sqlite3.Connection) -> None:
 
 
 def ensure_post_correction_tables(conn: sqlite3.Connection) -> None:
+    from api import governed_report_recovery as recovery
+    recovery.ensure_recovery_tables(conn)
     conn.executescript("""
     CREATE TABLE IF NOT EXISTS stage77_post_correction_authorizations (
       id TEXT PRIMARY KEY,
@@ -199,6 +211,85 @@ def ensure_post_correction_tables(conn: sqlite3.Connection) -> None:
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_post_correction_job
       ON stage77_post_correction_execution_links(job_id);
+    CREATE TABLE IF NOT EXISTS stage77_post_correction_custody_attestations (
+      id TEXT PRIMARY KEY,
+      report_id INTEGER NOT NULL,
+      report_version_id INTEGER NOT NULL,
+      specification_digest TEXT NOT NULL,
+      recovery_evidence_id TEXT NOT NULL,
+      recovery_evidence_digest TEXT NOT NULL,
+      recovery_point_id TEXT NOT NULL UNIQUE,
+      recovery_contract TEXT NOT NULL,
+      maintenance_epoch INTEGER NOT NULL,
+      manifest_digest TEXT NOT NULL,
+      database_digest TEXT NOT NULL,
+      archive_digest TEXT NOT NULL,
+      receipt_digest TEXT NOT NULL,
+      diagnostic_count INTEGER NOT NULL,
+      diagnostic_state_digest TEXT NOT NULL,
+      retry_link_count INTEGER NOT NULL,
+      retry_topology_digest TEXT NOT NULL,
+      report_count INTEGER NOT NULL,
+      version_count INTEGER NOT NULL,
+      qualification_count INTEGER NOT NULL,
+      job_count INTEGER NOT NULL,
+      artifact_count INTEGER NOT NULL,
+      archive_size_bytes INTEGER NOT NULL,
+      custody_directory_identity TEXT NOT NULL,
+      correction_revision TEXT NOT NULL,
+      correction_deployment TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      declaration_json TEXT NOT NULL,
+      contract_version TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      attestation_digest TEXT NOT NULL UNIQUE,
+      state TEXT NOT NULL CHECK(state='finalized'),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(report_id) REFERENCES record_governed_reports(id),
+      FOREIGN KEY(report_version_id) REFERENCES record_governed_report_versions(id),
+      FOREIGN KEY(recovery_evidence_id) REFERENCES stage77_recovery_point_evidence(id)
+    );
+    CREATE TABLE IF NOT EXISTS stage77_post_correction_custody_attestation_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attestation_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      FOREIGN KEY(attestation_id) REFERENCES stage77_post_correction_custody_attestations(id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_custody_attestation_point
+      ON stage77_post_correction_custody_attestations(recovery_point_id);
+    CREATE INDEX IF NOT EXISTS idx_stage77_custody_attestation_events
+      ON stage77_post_correction_custody_attestation_events(attestation_id,id);
+    CREATE TABLE IF NOT EXISTS stage77_post_correction_authorization_custody_bindings (
+      authorization_id TEXT PRIMARY KEY,
+      custody_attestation_id TEXT NOT NULL UNIQUE,
+      authorization_digest TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(authorization_id) REFERENCES stage77_post_correction_authorizations(id),
+      FOREIGN KEY(custody_attestation_id) REFERENCES stage77_post_correction_custody_attestations(id)
+    );
+    CREATE TRIGGER IF NOT EXISTS stage77_post_correction_binding_no_update
+      BEFORE UPDATE ON stage77_post_correction_authorization_custody_bindings
+      BEGIN SELECT RAISE(ABORT, 'post_correction_binding_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_post_correction_binding_no_delete
+      BEFORE DELETE ON stage77_post_correction_authorization_custody_bindings
+      BEGIN SELECT RAISE(ABORT, 'post_correction_binding_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_attestation_no_update
+      BEFORE UPDATE ON stage77_post_correction_custody_attestations
+      BEGIN SELECT RAISE(ABORT, 'custody_attestation_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_attestation_no_delete
+      BEFORE DELETE ON stage77_post_correction_custody_attestations
+      BEGIN SELECT RAISE(ABORT, 'custody_attestation_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_attestation_events_no_update
+      BEFORE UPDATE ON stage77_post_correction_custody_attestation_events
+      BEGIN SELECT RAISE(ABORT, 'custody_attestation_event_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_attestation_events_no_delete
+      BEFORE DELETE ON stage77_post_correction_custody_attestation_events
+      BEGIN SELECT RAISE(ABORT, 'custody_attestation_event_immutable'); END;
     """)
 
 
@@ -329,6 +420,144 @@ def _post_correction_sha(value: Any, code: str) -> str:
     return value
 
 
+def _custody_attestation_payload(*, report_id: int, report_version_id: int, specification_digest: str, evidence: Mapping[str, Any], archive_digest: str, receipt_digest: str, archive_size_bytes: int, custody_directory_identity: str, actor: str, rationale: str, idempotency_key: str, created_at: str) -> dict[str, Any]:
+    return {
+        "attestation_contract": POST_CORRECTION_CUSTODY_ATTESTATION_CONTRACT,
+        "report_id": report_id, "report_version_id": report_version_id,
+        "specification_digest": specification_digest,
+        "recovery_evidence_id": str(evidence["id"]),
+        "recovery_evidence_digest": str(evidence["evidence_digest"]),
+        "recovery_point_id": str(evidence["recovery_point_id"]),
+        "recovery_contract": str(evidence["recovery_contract"]),
+        "maintenance_epoch": int(evidence["maintenance_epoch"]),
+        "manifest_digest": str(evidence["manifest_digest"]),
+        "database_digest": str(evidence["database_digest"]),
+        "archive_digest": archive_digest,
+        "receipt_digest": receipt_digest,
+        "diagnostic_count": int(evidence["diagnostic_count"]),
+        "diagnostic_state_digest": str(evidence["diagnostic_state_digest"]),
+        "retry_link_count": int(evidence["retry_link_count"]),
+        "retry_topology_digest": str(evidence["retry_topology_digest"]),
+        "report_count": int(evidence["report_count"]), "version_count": int(evidence["version_count"]), "qualification_count": int(evidence["qualification_count"]),
+        "job_count": int(evidence["job_count"]), "artifact_count": int(evidence["artifact_count"]),
+        "archive_size_bytes": archive_size_bytes,
+        "custody_directory_identity": custody_directory_identity,
+        "correction_revision": POST_CORRECTION_REVISION,
+        "correction_deployment": POST_CORRECTION_DEPLOYMENT,
+        "actor": str(actor), "rationale": str(rationale),
+        "declaration": {"acknowledged": True, "version": 1, "text": POST_CORRECTION_CUSTODY_DECLARATION},
+        "idempotency_key": str(idempotency_key), "created_at": str(created_at),
+    }
+
+
+def record_post_correction_custody_attestation(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, rationale: str, acknowledged: bool, archive_digest: str, receipt_digest: str, archive_size_bytes: int, custody_directory_identity: str, idempotency_key: str) -> dict[str, Any]:
+    ensure_post_correction_tables(conn)
+    if str(actor_role) != "admin" or str(actor).strip() in NON_ADMIN_IDENTITIES:
+        raise ValueError("governed_report_custody_attestation_actor_invalid")
+    rationale = str(rationale or "").strip()
+    key = str(idempotency_key or "").strip()
+    if not rationale or len(rationale) > POST_CORRECTION_MAX_RATIONALE:
+        raise ValueError("governed_report_custody_attestation_rationale_invalid")
+    if acknowledged is not True:
+        raise ValueError("governed_report_custody_attestation_declaration_required")
+    if not key:
+        raise ValueError("governed_report_custody_attestation_idempotency_required")
+    archive_digest = _post_correction_sha(archive_digest, "governed_report_custody_attestation_archive_digest_invalid")
+    receipt_digest = _post_correction_sha(receipt_digest, "governed_report_custody_attestation_receipt_digest_invalid")
+    if isinstance(archive_size_bytes, bool) or not isinstance(archive_size_bytes, int) or archive_size_bytes <= 0:
+        raise ValueError("governed_report_custody_attestation_archive_size_invalid")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{6}Z_[0-9a-f]{32}", str(custody_directory_identity)):
+        raise ValueError("governed_report_custody_attestation_identity_invalid")
+    if archive_digest != POST_CORRECTION_ARCHIVE_DIGEST or receipt_digest != POST_CORRECTION_RECEIPT_DIGEST or archive_size_bytes != POST_CORRECTION_POINT6_ARCHIVE_SIZE or custody_directory_identity != POST_CORRECTION_POINT6_CUSTODY_ID:
+        raise ValueError("governed_report_custody_attestation_evidence_mismatch")
+    now = utc_now()
+    payload = None
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        existing = conn.execute("SELECT * FROM stage77_post_correction_custody_attestations WHERE idempotency_key=?", (key,)).fetchone()
+        if existing:
+            existing_payload = json.loads(existing["payload_json"])
+            if existing_payload.get("report_id") != int(report_id) or existing_payload.get("rationale") != rationale or existing_payload.get("actor") != str(actor):
+                raise ValueError("governed_report_custody_attestation_idempotency_conflict")
+            conn.commit()
+            return dict(existing)
+        report = reports.get_report(conn, report_id)
+        if report["lifecycle_status"] != "validation_failed":
+            raise ValueError("governed_report_custody_attestation_report_invalid")
+        version = report["versions"][-1]
+        if reports.specification_digest(version["specification"]) != version["specification_digest"]:
+            raise ValueError("governed_report_custody_attestation_specification_invalid")
+        from api import governed_report_recovery as recovery
+        recovery_status = recovery.recovery_status(conn)
+        evidence = recovery.recovery_evidence_for_point(conn, str(recovery_status.get("recovery_point_id") or POST_CORRECTION_RECOVERY_POINT))
+        if evidence["state"] != "finalized" or evidence["payload"].get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT:
+            raise ValueError("governed_report_custody_attestation_recovery_evidence_invalid")
+        if evidence["payload"].get("recovery_contract") != POST_CORRECTION_RECOVERY_CONTRACT:
+            raise ValueError("governed_report_custody_attestation_recovery_evidence_invalid")
+        payload = _custody_attestation_payload(report_id=int(report["id"]), report_version_id=int(version["id"]), specification_digest=str(version["specification_digest"]), evidence=evidence, archive_digest=archive_digest, receipt_digest=receipt_digest, archive_size_bytes=archive_size_bytes, custody_directory_identity=custody_directory_identity, actor=actor, rationale=rationale, idempotency_key=key, created_at=now)
+        digest = hashlib.sha256(reports.canonical_json(payload).encode()).hexdigest()
+        from api import governed_report_qualifications as qualification_store
+        qualification = qualification_store.latest_final(conn, int(report["id"]))
+        if qualification is None or qualification["payload"].get("review_mode") != qualification_store.SOLE_MODE or qualification["payload"].get("disclosure_version") != qualification_store.DISCLOSURE_VERSION or qualification["payload"].get("distribution_restriction") != "internal_working":
+            raise ValueError("governed_report_custody_attestation_qualification_invalid")
+        qualification_store.validate_complete_chain(conn, int(version["id"]))
+        job1, job2, topology_digest = _post_correction_topology(conn, int(report["id"]), int(version["id"]))
+        evidence1 = _validate_diagnostic_retry_predecessor_evidence(conn, job1)
+        evidence2 = _validate_diagnostic_retry_predecessor_evidence(conn, job2)
+        expected_contracts = ("legacy_pre_propagation_diagnostic_contract_v1", "current_pre_terminal_projection_fix_diagnostic_contract_v1")
+        expected_hashes = ("f5fa57e6989a8406c99bd3c26b877694515f44af74426684fbcc18a0268abd63", "f7456646b23f037b18af45f5019d5c817b54649cf28da14eecdf838817495239", "6f83de150d27070d4aaf1aac040e18220968f440962ab47d935d39a33dd7fc67", "d62fa6f366270dcb0f3cedf973299d55f3ae0c671b70ea63907c7e378f0b6601")
+        from api.governed_report_recovery import _retry_topology_snapshot
+        retry_links, retry_topology_digest = _retry_topology_snapshot(conn)
+        captured_retry_count = evidence["payload"].get("retry_link_count")
+        captured_retry_digest = evidence["payload"].get("retry_topology_digest")
+        if (evidence1["contract_id"], evidence2["contract_id"]) != expected_contracts or (evidence1["attempt_sha256"], evidence1["terminal_sha256"], evidence2["attempt_sha256"], evidence2["terminal_sha256"]) != expected_hashes:
+            raise ValueError("governed_report_custody_attestation_diagnostic_invalid")
+        if (isinstance(captured_retry_count, bool) or not isinstance(captured_retry_count, int) or captured_retry_count != len(retry_links) or captured_retry_count != 1 or not re.fullmatch(r"[0-9a-f]{64}", str(captured_retry_digest)) or str(captured_retry_digest) != str(retry_topology_digest)):
+            raise ValueError("governed_report_custody_attestation_diagnostic_invalid")
+        if int(conn.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0]) != 1 or int(conn.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0]) != 1 or int(conn.execute("SELECT COUNT(*) FROM record_governed_report_qualifications").fetchone()[0]) != 4 or int(conn.execute("SELECT COUNT(*) FROM stage77_report_jobs").fetchone()[0]) != 2 or int(conn.execute("SELECT COUNT(*) FROM record_governed_report_artifacts").fetchone()[0]) != 0:
+            raise ValueError("governed_report_custody_attestation_counts_invalid")
+        status = recovery_status
+        if (status.get("state") != "completed" or int(status.get("maintenance_epoch", -1)) != POST_CORRECTION_RECOVERY_EPOCH or status.get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT or not recovery.recovery_allows_claim(conn)):
+            raise ValueError("governed_report_custody_attestation_recovery_invalid")
+        if conn.execute("SELECT COUNT(*) FROM stage77_post_correction_authorizations").fetchone()[0] or conn.execute("SELECT COUNT(*) FROM stage77_post_correction_execution_links").fetchone()[0]:
+            raise ValueError("governed_report_custody_attestation_path_already_started")
+        if conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state IN ('queued','leased','running','retry_wait','cancel_requested')").fetchone()[0] or conn.execute("SELECT COUNT(*) FROM record_governed_report_artifacts WHERE version_id=?", (version["id"],)).fetchone()[0]:
+            raise ValueError("governed_report_custody_attestation_active_work_exists")
+        attestation_id = secrets.token_hex(16)
+        conn.execute("INSERT INTO stage77_post_correction_custody_attestations(id,report_id,report_version_id,specification_digest,recovery_evidence_id,recovery_evidence_digest,recovery_point_id,recovery_contract,maintenance_epoch,manifest_digest,database_digest,archive_digest,receipt_digest,diagnostic_count,diagnostic_state_digest,retry_link_count,retry_topology_digest,report_count,version_count,qualification_count,job_count,artifact_count,archive_size_bytes,custody_directory_identity,correction_revision,correction_deployment,actor,rationale,declaration_json,contract_version,idempotency_key,payload_json,attestation_digest,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (attestation_id, payload["report_id"], payload["report_version_id"], payload["specification_digest"], payload["recovery_evidence_id"], payload["recovery_evidence_digest"], payload["recovery_point_id"], payload["recovery_contract"], payload["maintenance_epoch"], payload["manifest_digest"], payload["database_digest"], payload["archive_digest"], payload["receipt_digest"], payload["diagnostic_count"], payload["diagnostic_state_digest"], payload["retry_link_count"], payload["retry_topology_digest"], payload["report_count"], payload["version_count"], payload["qualification_count"], payload["job_count"], payload["artifact_count"], payload["archive_size_bytes"], payload["custody_directory_identity"], payload["correction_revision"], payload["correction_deployment"], actor, rationale, reports.canonical_json(payload["declaration"]), payload["attestation_contract"], key, reports.canonical_json(payload), digest, "finalized", now))
+        conn.execute("INSERT INTO stage77_post_correction_custody_attestation_events(attestation_id,event_type,actor,occurred_at,payload_json) VALUES(?,?,?,?,?)", (attestation_id, "custody_attestation_recorded", actor, now, reports.canonical_json(payload)))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {"id": attestation_id, "attestation_digest": digest, "payload": payload, "state": "finalized"}
+
+
+def _stored_custody_attestation(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = conn.execute("SELECT * FROM stage77_post_correction_custody_attestations ORDER BY id").fetchall()
+    if len(rows) != 1:
+        raise ValueError("governed_report_post_correction_custody_attestation_required")
+    row = dict(rows[0])
+    try:
+        payload = json.loads(row["payload_json"])
+    except (TypeError, json.JSONDecodeError):
+        raise ValueError("governed_report_post_correction_custody_attestation_invalid") from None
+    required = {"attestation_contract", "report_id", "report_version_id", "specification_digest", "recovery_evidence_id", "recovery_evidence_digest", "recovery_point_id", "recovery_contract", "maintenance_epoch", "manifest_digest", "database_digest", "archive_digest", "receipt_digest", "diagnostic_count", "diagnostic_state_digest", "retry_link_count", "retry_topology_digest", "report_count", "version_count", "qualification_count", "job_count", "artifact_count", "archive_size_bytes", "custody_directory_identity", "correction_revision", "correction_deployment", "actor", "rationale", "declaration", "idempotency_key", "created_at"}
+    if set(payload) != required or hashlib.sha256(reports.canonical_json(payload).encode()).hexdigest() != row["attestation_digest"] or row["state"] != "finalized" or payload["attestation_contract"] != POST_CORRECTION_CUSTODY_ATTESTATION_CONTRACT:
+        raise ValueError("governed_report_post_correction_custody_attestation_invalid")
+    if payload["archive_digest"] != POST_CORRECTION_ARCHIVE_DIGEST or payload["receipt_digest"] != POST_CORRECTION_RECEIPT_DIGEST or payload["archive_size_bytes"] != POST_CORRECTION_POINT6_ARCHIVE_SIZE or payload["custody_directory_identity"] != POST_CORRECTION_POINT6_CUSTODY_ID:
+        raise ValueError("governed_report_post_correction_custody_attestation_invalid")
+    from api import governed_report_recovery as recovery
+    evidence = recovery.recovery_evidence_for_point(conn, str(payload["recovery_point_id"]))
+    if str(evidence["id"]) != str(payload["recovery_evidence_id"]) or str(evidence["evidence_digest"]) != str(payload["recovery_evidence_digest"]):
+        raise ValueError("governed_report_post_correction_recovery_evidence_invalid")
+    if evidence["payload"].get("report_event_bound_status") != "bound":
+        raise ValueError("governed_report_post_correction_recovery_evidence_invalid")
+    if any(payload[key] != row[key] for key in ("report_id", "report_version_id", "specification_digest", "recovery_evidence_id", "recovery_evidence_digest", "recovery_point_id", "recovery_contract", "maintenance_epoch", "manifest_digest", "database_digest", "archive_digest", "receipt_digest", "diagnostic_count", "diagnostic_state_digest", "retry_link_count", "retry_topology_digest", "report_count", "version_count", "qualification_count", "job_count", "artifact_count", "archive_size_bytes", "custody_directory_identity", "correction_revision", "correction_deployment", "actor", "rationale", "contract_version", "idempotency_key", "created_at")):
+        raise ValueError("governed_report_post_correction_custody_attestation_invalid")
+    return row | {"payload": payload}
+
+
 def _post_correction_authorization_payload(*, report, qualification, job1, job2, execution_job_id, evidence1, evidence2, topology_digest, actor, rationale, declaration, idempotency_key, custody_archive_digest, custody_receipt_digest, created_at):
     revision, deployment = _post_correction_runtime_identity()
     version = report["versions"][-1]
@@ -375,7 +604,7 @@ def _post_correction_topology(conn: sqlite3.Connection, report_id: int, version_
     return predecessors[0], successors[0], hashlib.sha256(topology.encode()).hexdigest()
 
 
-def authorize_post_correction_generation(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, rationale: str, acknowledged: bool, custody_archive_digest: str, custody_receipt_digest: str, idempotency_key: str) -> dict[str, Any]:
+def authorize_post_correction_generation(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, rationale: str, acknowledged: bool, custody_attestation_id: str, idempotency_key: str) -> dict[str, Any]:
     reports.ensure_report_tables(conn); ensure_job_tables(conn); ensure_post_correction_tables(conn)
     if str(actor_role) != "admin" or str(actor).strip() in NON_ADMIN_IDENTITIES:
         raise ValueError("governed_report_post_correction_actor_invalid")
@@ -390,7 +619,7 @@ def authorize_post_correction_generation(conn: sqlite3.Connection, *, report_id:
         if existing:
             if existing["state"] != "authorized": raise ValueError("governed_report_post_correction_already_consumed")
             payload = json.loads(existing["payload_json"])
-            if payload.get("rationale") != rationale or payload.get("custody_archive_digest") != custody_archive_digest or payload.get("custody_receipt_digest") != custody_receipt_digest:
+            if payload.get("rationale") != rationale or payload.get("custody_attestation_id") != custody_attestation_id:
                 raise ValueError("governed_report_post_correction_idempotency_conflict")
             linked = conn.execute("SELECT job_id FROM stage77_post_correction_execution_links WHERE authorization_id=?", (existing["id"],)).fetchone()
             conn.commit(); return _job(conn, int(linked[0])) if linked else dict(existing)
@@ -401,27 +630,40 @@ def authorize_post_correction_generation(conn: sqlite3.Connection, *, report_id:
         qualification = qualification_store.latest_final(conn, report_id)
         if qualification is None or qualification["payload"].get("review_mode") != qualification_store.SOLE_MODE or qualification["payload"].get("disclosure_version") != qualification_store.DISCLOSURE_VERSION or qualification["payload"].get("distribution_restriction") != "internal_working":
             raise ValueError("governed_report_post_correction_qualification_invalid")
-        chain = qualification_store.validate_qualification_chain(conn, int(version["id"]))
+        chain = qualification_store.validate_complete_chain(conn, int(version["id"]))
         qualification = dict(qualification); qualification["chain"] = chain; qualification["chain_digest"] = hashlib.sha256(reports.canonical_json([dict(item) for item in chain]).encode()).hexdigest()
         if reports.specification_digest(version["specification"]) != version["specification_digest"]: raise ValueError("governed_report_post_correction_specification_invalid")
-        from api.governed_report_recovery import recovery_allows_claim, recovery_status
+        from api.governed_report_recovery import recovery_allows_claim, recovery_status, recovery_evidence_for_point
         status = recovery_status(conn)
-        if status.get("state") != "completed" or status.get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT or status.get("manifest_digest") != POST_CORRECTION_MANIFEST_DIGEST or not recovery_allows_claim(conn): raise ValueError("governed_report_post_correction_recovery_invalid")
+        if status.get("state") != "completed" or status.get("recovery_point_id") != POST_CORRECTION_RECOVERY_POINT or not recovery_allows_claim(conn): raise ValueError("governed_report_post_correction_recovery_invalid")
         job1, job2, topology_digest = _post_correction_topology(conn, int(report["id"]), int(version["id"]))
         evidence1 = _validate_diagnostic_retry_predecessor_evidence(conn, job1)
         evidence2 = _validate_diagnostic_retry_predecessor_evidence(conn, job2)
         if evidence1["contract_id"] != "legacy_pre_propagation_diagnostic_contract_v1" or evidence2["contract_id"] != "current_pre_terminal_projection_fix_diagnostic_contract_v1": raise ValueError("governed_report_post_correction_diagnostic_invalid")
         if (evidence1["attempt_sha256"], evidence1["terminal_sha256"], evidence2["attempt_sha256"], evidence2["terminal_sha256"]) != ("f5fa57e6989a8406c99bd3c26b877694515f44af74426684fbcc18a0268abd63", "f7456646b23f037b18af45f5019d5c817b54649cf28da14eecdf838817495239", "6f83de150d27070d4aaf1aac040e18220968f440962ab47d935d39a33dd7fc67", "d62fa6f366270dcb0f3cedf973299d55f3ae0c671b70ea63907c7e378f0b6601"):
             raise ValueError("governed_report_post_correction_diagnostic_hash_invalid")
-        if custody_archive_digest != POST_CORRECTION_ARCHIVE_DIGEST or custody_receipt_digest != POST_CORRECTION_RECEIPT_DIGEST:
+        attestation = _stored_custody_attestation(conn)
+        if str(attestation["id"]) != str(custody_attestation_id) or int(attestation["report_id"]) != int(report["id"]) or int(attestation["report_version_id"]) != int(version["id"]):
+            raise ValueError("governed_report_post_correction_custody_attestation_invalid")
+        attestation_payload = attestation["payload"]
+        evidence = recovery_evidence_for_point(conn, POST_CORRECTION_RECOVERY_POINT)
+        if attestation_payload.get("recovery_evidence_id") != evidence["id"] or attestation_payload.get("recovery_evidence_digest") != evidence["evidence_digest"]:
+            raise ValueError("governed_report_post_correction_recovery_evidence_invalid")
+        if attestation_payload["archive_digest"] != POST_CORRECTION_ARCHIVE_DIGEST or attestation_payload["receipt_digest"] != POST_CORRECTION_RECEIPT_DIGEST:
             raise ValueError("governed_report_post_correction_custody_attestation_invalid")
         if conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state IN ('queued','leased','running','retry_wait','cancel_requested')").fetchone()[0] != 0 or conn.execute("SELECT COUNT(*) FROM record_governed_report_artifacts WHERE version_id=?", (version["id"],)).fetchone()[0] != 0: raise ValueError("governed_report_post_correction_active_work_exists")
         now = utc_now()
         auth_id = secrets.token_hex(16)
         cur = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,post_correction_authorization_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), version["specification_digest"], reports.canonical_json(version["specification"]["requested_formats"]), version["specification"]["rendering_profile"], version["specification"]["template_version"], version["specification"]["publication_engine_version"], actor, POST_CORRECTION_ACTION, qualification["id"], qualification["digest"], now, "queued", 0, MAX_ATTEMPTS, now, "stage77-post-correction-" + auth_id, None, auth_id, int(status.get("maintenance_epoch", 0)), JOB_SCHEMA_VERSION))
         job_id = int(cur.lastrowid)
-        payload = _post_correction_authorization_payload(report=report, qualification=qualification, job1=job1, job2=job2, execution_job_id=job_id, evidence1=evidence1, evidence2=evidence2, topology_digest=topology_digest, actor=actor, rationale=rationale, declaration=declaration, idempotency_key=key, custody_archive_digest=custody_archive_digest, custody_receipt_digest=custody_receipt_digest, created_at=now)
+        payload = _post_correction_authorization_payload(report=report, qualification=qualification, job1=job1, job2=job2, execution_job_id=job_id, evidence1=evidence1, evidence2=evidence2, topology_digest=topology_digest, actor=actor, rationale=rationale, declaration=declaration, idempotency_key=key, custody_archive_digest=attestation_payload["archive_digest"], custody_receipt_digest=attestation_payload["receipt_digest"], created_at=now)
+        payload["custody_attestation_id"] = str(attestation["id"])
+        payload["custody_attestation_digest"] = str(attestation["attestation_digest"])
+        payload["recovery_evidence_id"] = str(evidence["id"])
+        payload["recovery_evidence_digest"] = str(evidence["evidence_digest"])
+        payload["authorization_digest"] = hashlib.sha256(reports.canonical_json({k: v for k, v in payload.items() if k != "authorization_digest"}).encode()).hexdigest()
         conn.execute("INSERT INTO stage77_post_correction_authorizations(id,report_id,report_version_id,qualification_id,job1_id,job2_id,state,idempotency_key,payload_json,authorization_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (auth_id, int(report["id"]), int(version["id"]), int(qualification["id"]), int(job1["id"]), int(job2["id"]), "authorized", key, reports.canonical_json(payload), payload["authorization_digest"], now))
+        conn.execute("INSERT INTO stage77_post_correction_authorization_custody_bindings(authorization_id,custody_attestation_id,authorization_digest,created_at) VALUES(?,?,?,?)", (auth_id, str(attestation["id"]), payload["authorization_digest"], now))
         conn.execute("INSERT INTO stage77_post_correction_execution_links(authorization_id,job_id,created_at) VALUES(?,?,?)", (auth_id, job_id, now))
         _event(conn, job_id, POST_CORRECTION_EVENT, "queued", actor, payload)
         conn.execute("INSERT INTO record_governed_report_events(report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), POST_CORRECTION_AUTH_EVENT, "validation_failed", rationale, actor, actor_role, reports.canonical_json(declaration), now, key + ":report", reports.canonical_json(payload)))

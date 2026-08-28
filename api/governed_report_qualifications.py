@@ -268,6 +268,14 @@ def validate_chain(conn: sqlite3.Connection, version_id: int) -> list[dict[str, 
     return chain
 
 
+def validate_complete_chain(conn: sqlite3.Connection, version_id: int) -> list[dict[str, Any]]:
+    """Validate the finalized four-gate chain required by recovery evidence."""
+    chain = validate_chain(conn, version_id)
+    if len(chain) != len(GATES) or chain[-1]["completed_gate"] != GATES[-1]:
+        raise ValueError("governed_report_qualification_gate_order_invalid")
+    return chain
+
+
 def record_gate(
     conn: sqlite3.Connection,
     *,

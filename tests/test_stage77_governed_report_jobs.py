@@ -209,6 +209,12 @@ class Stage77JobTests(unittest.TestCase):
     def test_worker_initialization_adds_stage75_schema_without_touching_recovery_state(self):
         path = Path(self.temp.name) / "production-shaped.db"
         connection = jobs._connect(path)
+        jobs.reports.ensure_report_tables(connection)
+        specification = recovery.canonical_json({"fixture": "worker-initialization"})
+        specification_digest = recovery.digest_bytes(specification.encode("utf-8"))
+        connection.execute("INSERT INTO record_governed_reports (idempotency_key,schema_version,report_type,title,purpose,intended_audience,distribution_class,created_by,created_by_role,created_at,lifecycle_status,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", ("worker-report", "stage75.governed_report.v1", "canonical_record_report", "Worker fixture", "Worker schema validation", "internal", "internal_working", "admin", "administrator", "2026-01-01T00:00:00Z", "generated", "{}"))
+        report_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+        connection.execute("INSERT INTO record_governed_report_versions (report_id,version_number,canonical_record_reference,specification_schema_version,specification_json,specification_digest,requested_formats_json,publication_engine_version,rendering_profile,template_version,created_by,created_at,lifecycle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (report_id, 1, "worker-fixture", "stage75.report_specification.v1", specification, specification_digest, "[]", "2.0.0", "internal", "cde-internal-v1", "admin", "2026-01-01T00:00:00Z", "generated"))
         jobs.ensure_job_tables(connection)
         recovery.ensure_recovery_tables(connection)
         recovery.request_recovery(connection, actor="admin", governed_action="synthetic")
@@ -221,8 +227,8 @@ class Stage77JobTests(unittest.TestCase):
         check = sqlite3.connect(path)
         check.row_factory = sqlite3.Row
         self.assertEqual(ready, [True])
-        self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0], 0)
-        self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0], 0)
+        self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0], 1)
+        self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0], 1)
         self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_report_artifacts").fetchone()[0], 0)
         self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_report_events").fetchone()[0], 0)
         self.assertEqual(check.execute("SELECT COUNT(*) FROM record_governed_report_generation_attempts").fetchone()[0], 0)
@@ -238,9 +244,31 @@ class Stage77JobTests(unittest.TestCase):
         result = recovery.capture_recovery_point(database_path=path, artifact_root=artifact_root, recovery_root=recovery_root, approved_root=Path(self.temp.name), actor="admin", governed_action="synthetic-capture")
         manifest = __import__("json").loads((recovery_root / f"recovery-{result['recovery_point_id']}" / "manifest.json").read_text())
         self.assertEqual(manifest["job_event_bound"], 0)
-        self.assertEqual(manifest["counts"]["reports"], 0)
-        self.assertEqual(manifest["counts"]["versions"], 0)
+        self.assertEqual(manifest["counts"]["reports"], 1)
+        self.assertEqual(manifest["counts"]["versions"], 1)
         self.assertEqual(manifest["counts"]["artifacts"], 0)
+
+    def test_empty_readiness_is_operational_but_recovery_ineligible(self):
+        path = Path(self.temp.name) / "empty-readiness.db"
+        connection = jobs._connect(path)
+        jobs.reports.ensure_report_tables(connection)
+        jobs.ensure_job_tables(connection)
+        jobs.ensure_post_correction_tables(connection)
+        recovery.ensure_recovery_tables(connection)
+        artifact_root = Path(self.temp.name) / "empty-artifacts"
+        artifact_root.mkdir()
+        recovery_root = Path(self.temp.name) / "empty-recovery"
+        before = tuple(connection.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone())
+        with self.assertRaisesRegex(recovery.RecoveryOperationFailure, "recovery_state_ineligible") as raised:
+            recovery.capture_recovery_point(database_path=path, artifact_root=artifact_root, recovery_root=recovery_root, approved_root=Path(self.temp.name), actor="admin", governed_action="synthetic-capture")
+        self.assertEqual(raised.exception.code, "recovery_state_ineligible")
+        self.assertEqual(tuple(connection.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()), before)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0], 0)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], 0)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0], 0)
+        self.assertEqual(connection.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM pragma_foreign_key_check").fetchone()[0], 0)
+        connection.close()
 
     def test_worker_withholds_readiness_on_incompatible_stage75_schema(self):
         path = Path(self.temp.name) / "incompatible-stage75.db"
