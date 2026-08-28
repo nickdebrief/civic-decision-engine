@@ -208,3 +208,53 @@ queued and running. A terminal failure consumes the authorization and permits
 no further retry. Point 7 is allowed only after successful validation and
 registration of all requested artifacts followed by a final recovery capture
 and deterministic custody export. No public or GET action is available.
+### Point 6 custody attestation
+
+The detached Point 6 archive and receipt are not readable by the production
+service. Before the one-time post-correction authorization, an authenticated
+administrator records one immutable `stage77.post_correction_custody_attestation.v1`
+row. It binds the completed recovery identity and server-derived recovery,
+diagnostic, topology, report, qualification, job and artifact evidence, while
+the archive digest, receipt digest, archive size and custody-directory identity
+remain explicitly administrator-attested external-custody claims. The
+application records but does not independently verify those detached bytes.
+The retry topology expected by the attestation is the count and digest already
+preserved by the referenced governed recovery-evidence row; the application
+recomputes the live Job 1 -> Job 2 topology and requires exact agreement rather
+than trusting an unexplained hard-coded topology digest or accepting any
+valid-looking current topology.
+
+The attestation is a separate POST-only action. It is not generation, approval,
+retry, recovery, publication or authorization of Job 3. Its finalized identity
+and digest are the only Point 6 custody source accepted by the later
+post-correction authorization and by the post-correction-aware recovery
+contract. Existing custody points and their closed contracts are unchanged.
+On databases created before this attestation field existed, the authorization
+reference is validated transactionally against the attestation table because
+SQLite cannot add that foreign key in place; newly created schemas retain the
+explicit foreign key.
+
+### Recovery evidence authority
+
+An empty or readiness-only database can be operationally valid without being
+eligible for governed recovery evidence. The
+`stage77.post_correction_aware.v1` contract requires exactly one governed
+report and one owned governed report version before evidence can be captured or
+reconstructed. Pre-authorization means that no post-correction
+authorization-linked execution exists; it does not by itself require the
+absence of all historical governed jobs. No evidence is reconstructed from an
+ambiguous or readiness-only state.
+
+The recovery subsystem persists immutable deterministic evidence in
+`stage77_recovery_point_evidence` and its append-only event table. Native
+capture derives it from the captured manifest and SQLite state before recovery
+completion is committed. A separate authenticated POST-only reconstruction can
+record evidence from a preserved canonical bundle; it is not a capture,
+restore, export, or custody verification. Detached archive and receipt claims,
+archive size, and custody identity remain administrator-attested claims.
+
+The current point's evidence is carried by its manifest, not by a row inside
+the same database snapshot. A database digest cannot be stored in the final
+bytes it digests without a self-referential cycle. The finalized live evidence
+row is appended only after manifest validation; later snapshots carry prior
+finalized evidence rows.

@@ -133,6 +133,14 @@ before worker readiness.
 The recovery root is supplied explicitly for each governed operation. The
 intended production value is `/data/cde-recovery-points`, represented by the
 `CDE_RECOVERY_ROOT` deployment configuration only when separately approved.
+
+The recovery subsystem also owns an immutable recovery-evidence authority. Its
+payload is deterministically recomputed from the preserved recovery manifest
+and SQLite bundle. Native capture records it before completion; a separate
+authenticated historical reconstruction records evidence for an existing
+bundle without creating a capture, restore, export, or custody verification.
+Detached archive and receipt claims remain administrator-attested, and later
+attestation and authorization bind the persisted evidence identity and digest.
 It remains distinct from `RECORDS_DB_PATH` and
 `CDE_REPORT_ARTIFACT_ROOT`; this change does not configure production backups
 or create a recovery point.
@@ -230,3 +238,38 @@ authorization and leaves the report `validation_failed` permanently. Point 7
 is permitted only after successful DOCX, HTML, and PDF validation, promotion,
 registration, and a final recovery capture. No public route or automatic
 execution is created.
+### Recovery eligibility and detached custody evidence
+
+Operational readiness is distinct from governed recovery eligibility: an empty
+or readiness-only database may be valid to operate, but it cannot produce
+governed recovery evidence. `stage77.post_correction_aware.v1` requires exactly
+one governed report and exactly one report version owned by that report. Its
+pre-authorization state forbids post-correction authorization-linked execution
+jobs; it does not require the absence of inherited historical governed jobs in
+states where those jobs are part of the applicable diagnostic contract. An
+ambiguous or readiness-only database is never reconstructed as recovery
+evidence.
+
+Point 6 archive and receipt values are not application-derived: the production
+service cannot inspect the detached encrypted custody device. A separate,
+authenticated, append-only administrator attestation records those bounded
+external-custody claims only after the completed Point 6 recovery evidence is
+revalidated. The attestation is immutable, idempotent and distinct from the
+one-time post-correction generation authorization; it does not approve,
+retry, publish or create a job. Its retry-topology authority is the count and
+digest already preserved by the referenced governed recovery evidence; the
+current Job 1 -> Job 2 topology is recomputed and must match that captured
+evidence exactly.
+
+The `stage77.post_correction_aware.v1` recovery contract binds the attestation
+schema, canonical payload digest, event evidence and authorization references.
+Earlier recovery contracts remain exact and are never upgraded. Point 7 is
+permitted only after successful Job 3 execution and validated registration of
+the required DOCX, HTML and PDF artifacts; it has not occurred here.
+
+The current recovery point carries its deterministic evidence payload and
+payload digest in the canonical manifest. The live finalized evidence row is
+appended after the validated snapshot and is not required inside its own
+snapshot. This avoids the impossible cycle of storing a database digest inside
+the final bytes used to compute that digest; later snapshots preserve prior
+finalized evidence rows.

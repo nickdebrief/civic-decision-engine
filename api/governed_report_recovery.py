@@ -26,6 +26,8 @@ from api import governed_report_qualifications as qualifications
 from api import governed_report_diagnostics as diagnostics
 
 RECOVERY_SCHEMA_VERSION = "stage77.recovery.v1"
+RECOVERY_EVIDENCE_CONTRACT = "stage77.recovery_point_evidence.v1"
+REPORT_EVENT_BOUND_STATUSES = {"bound", "not_bound_by_source_contract"}
 MANIFEST_SCHEMA_VERSION = "stage77.recovery_manifest.v1"
 RECOVERY_STATES = {
     "requested", "draining", "quiesced", "capturing", "validating",
@@ -47,9 +49,14 @@ DIAGNOSTIC_MANIFEST_KEYS = CURRENT_MANIFEST_KEYS | {
     "diagnostic_evidence_state_digest", "retry_link_count", "retry_link_state_digest",
 }
 POST_CORRECTION_MANIFEST_KEYS = DIAGNOSTIC_MANIFEST_KEYS | {
+    "current_recovery_manifest_evidence", "current_recovery_manifest_evidence_digest",
+    "persisted_prior_recovery_evidence", "persisted_prior_recovery_evidence_state_digest", "persisted_prior_recovery_evidence_event_bound",
     "post_correction_authorization",
     "post_correction_authorization_state_digest",
     "post_correction_authorization_event_bound",
+    "post_correction_custody_attestation",
+    "post_correction_custody_attestation_state_digest",
+    "post_correction_custody_attestation_event_bound",
 }
 ALLOWED_ARTIFACT_KEYS = {"artifact_id", "report_id", "version_id", "format", "filename", "size_bytes", "sha256"}
 MAX_MANIFEST_ARTIFACTS = 10000
@@ -71,18 +78,30 @@ DIAGNOSTIC_RECEIPT_KEYS = CURRENT_RECEIPT_KEYS | {
 POST_CORRECTION_RECEIPT_KEYS = DIAGNOSTIC_RECEIPT_KEYS | {
     "post_correction_authorization_state_digest",
     "post_correction_authorization_event_bound",
+    "post_correction_custody_attestation_state_digest",
+    "post_correction_custody_attestation_event_bound",
 }
 MAX_EXPORT_REASON = 256
 BOUNDED_FAILURE_CODES = {
     "artifact_digest_mismatch", "duplicate_artifact_source", "artifact_invalid",
     "artifact_outside_root", "artifact_changed_during_capture", "backup_timeout",
     "integrity_check_failed", "foreign_key_check_failed", "recovery_point_exists",
-    "bundle_file_inventory_invalid", "job_state_count_mismatch", "record_count_mismatch",
-    "version_count_mismatch", "recovery_event_bound_mismatch", "recovery_not_draining",
+    "bundle_file_inventory_invalid", "job_state_count_mismatch", "record_count_mismatch", "qualification_count_mismatch",
+    "version_count_mismatch", "report_lifecycle_invalid", "recovery_event_bound_mismatch", "recovery_not_draining",
     "recovery_not_quiesced", "recovery_already_active", "recovery_terminal_immutable",
     "recovery_operation_failed", "schema_incompatible", "sqlite_error", "digest_mismatch", "manifest_invalid",
     "recovery_root_invalid", "recovery_root_outside_durable_root", "recovery_root_overlap",
     "recovery_root_overlaps_database", "recovery_root_overlaps_artifacts", "symlink_component",
+    "recovery_evidence_conflict", "recovery_state_ineligible", "diagnostic_evidence_count_mismatch", "diagnostic_evidence_digest_mismatch",
+    "specification_digest_mismatch", "governed_report_qualification_chain_invalid",
+    "governed_report_qualification_digest_mismatch", "governed_report_qualification_event_invalid",
+    "governed_report_qualification_mode_changed", "governed_report_qualification_gate_order_invalid",
+    "job_attempt_metadata_invalid", "job_lease_metadata_invalid", "job_maintenance_epoch_mismatch",
+    "job_rendering_binding_mismatch", "job_specification_binding_mismatch",
+    "job_cancellation_evidence_invalid",
+    "job_terminal_evidence_invalid",
+    "job_rendering_binding_mismatch", "job_specification_binding_mismatch",
+    "native_capture_fault_injected",
 }
 RECOVERY_DIAGNOSTIC_PHASES = {"configuration", "initialization", "maintenance", "drain", "capture", "validation", "promotion", "completion"}
 RECOVERY_DIAGNOSTIC_OPERATIONS = {
@@ -95,10 +114,19 @@ RECOVERY_DIAGNOSTIC_OPERATIONS = {
     "job_count_read", "report_count_read", "version_count_read", "artifact_count_read",
     "recovery_event_bound_read", "artifact_registration_inventory_read", "artifact_copy",
     "artifact_stability_check", "manifest_database_reads", "manifest_write", "bundle_validation",
+    "recovery_evidence_persistence",
     "bundle_promotion", "completion_event_write", "completion_transaction_commit",
     "failure_event_write", "failure_transaction_commit", "capture_transaction_rollback",
 }
-RECOVERY_DIAGNOSTIC_CHECKPOINTS = {"starting", "waiting", "progress", "completed", "failed"}
+RECOVERY_DIAGNOSTIC_CHECKPOINTS = {"starting", "waiting", "progress", "creating", "completed", "failed"}
+NATIVE_CAPTURE_CHECKPOINTS = {
+    "before_snapshot_creation", "during_snapshot_creation",
+    "after_snapshot_before_database_digest", "during_sqlite_integrity_validation",
+    "during_sqlite_foreign_key_validation", "after_current_evidence_before_manifest",
+    "during_canonical_manifest_creation", "after_manifest_before_bundle_validation",
+    "after_bundle_validation_before_live_evidence", "after_evidence_row_before_event",
+    "after_evidence_event_before_completion", "during_final_staging_cleanup",
+}
 
 
 def utc_now() -> str:
@@ -143,6 +171,23 @@ class RecoveryOperationFailure(ValueError):
         self.code = code
         self.cleanup_status = cleanup_status
         self.maintenance_status = maintenance_status
+
+
+class CaptureFaultInjector:
+    """Private deterministic test hook; production callers leave this unset."""
+
+    def __init__(self, fail_at: str | None = None) -> None:
+        self.fail_at = fail_at
+        self.entered: list[str] = []
+        self.triggered_failure: str | None = None
+
+    def checkpoint(self, name: str) -> None:
+        if name not in NATIVE_CAPTURE_CHECKPOINTS:
+            raise ValueError("native_capture_checkpoint_invalid")
+        self.entered.append(name)
+        if self.fail_at == name:
+            self.triggered_failure = name
+            raise ValueError("native_capture_fault_injected")
 
 
 def _lexical_path(path: str | os.PathLike[str], *, error: str = "restore_target_invalid") -> Path:
@@ -258,15 +303,16 @@ def _assert_bundle_tree(bundle: Path) -> None:
     pending = [bundle]
     while pending:
         current = pending.pop()
-        for entry in os.scandir(current):
-            child = Path(entry.path)
-            child_metadata = _lstat(child)
-            if child_metadata is None or stat.S_ISLNK(child_metadata.st_mode):
-                raise ValueError("bundle_file_invalid")
-            if stat.S_ISDIR(child_metadata.st_mode):
-                pending.append(child)
-            elif not stat.S_ISREG(child_metadata.st_mode):
-                raise ValueError("bundle_file_invalid")
+        with os.scandir(current) as entries:
+            for entry in entries:
+                child = Path(entry.path)
+                child_metadata = _lstat(child)
+                if child_metadata is None or stat.S_ISLNK(child_metadata.st_mode):
+                    raise ValueError("bundle_file_invalid")
+                if stat.S_ISDIR(child_metadata.st_mode):
+                    pending.append(child)
+                elif not stat.S_ISREG(child_metadata.st_mode):
+                    raise ValueError("bundle_file_invalid")
 
 
 def _copy_file_no_follow(source: Path, destination_dir_fd: int, name: str) -> None:
@@ -418,6 +464,234 @@ def ensure_recovery_tables(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(stage77_recovery_control)").fetchall()}
     if "idempotency_key" not in columns:
         conn.execute("ALTER TABLE stage77_recovery_control ADD COLUMN idempotency_key TEXT NOT NULL DEFAULT ''")
+    ensure_recovery_evidence_tables(conn)
+
+
+def ensure_recovery_evidence_tables(conn: sqlite3.Connection) -> None:
+    """Initialize the immutable recovery-evidence authority without side effects."""
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS stage77_recovery_point_evidence (
+      id TEXT PRIMARY KEY,
+      recovery_point_id TEXT NOT NULL UNIQUE,
+      recovery_contract TEXT NOT NULL,
+      maintenance_epoch INTEGER NOT NULL,
+      manifest_digest TEXT NOT NULL,
+      database_digest TEXT NOT NULL,
+      diagnostic_count INTEGER NOT NULL,
+      diagnostic_state_digest TEXT NOT NULL,
+      retry_link_count INTEGER NOT NULL,
+      retry_topology_digest TEXT NOT NULL,
+      report_count INTEGER NOT NULL,
+      version_count INTEGER NOT NULL,
+      report_event_bound_status TEXT NOT NULL,
+      report_event_bound INTEGER,
+      qualification_count INTEGER NOT NULL,
+      qualification_event_bound INTEGER NOT NULL,
+      job_count INTEGER NOT NULL,
+      job_event_bound INTEGER NOT NULL,
+      artifact_count INTEGER NOT NULL,
+      recovery_event_bound INTEGER NOT NULL,
+      sqlite_integrity TEXT NOT NULL,
+      foreign_key_violation_count INTEGER NOT NULL,
+      evidence_payload_json TEXT NOT NULL,
+      evidence_digest TEXT NOT NULL UNIQUE,
+      evidence_source_mode TEXT NOT NULL,
+      evidence_contract TEXT NOT NULL,
+      state TEXT NOT NULL CHECK(state='finalized'),
+      actor TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      declaration_json TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      canonical_bundle_identity TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      CHECK(evidence_contract='stage77.recovery_point_evidence.v1'),
+      CHECK(evidence_source_mode IN ('native_capture','historical_reconstruction'))
+    );
+    CREATE TABLE IF NOT EXISTS stage77_recovery_point_evidence_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      evidence_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      FOREIGN KEY(evidence_id) REFERENCES stage77_recovery_point_evidence(id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_recovery_evidence_point
+      ON stage77_recovery_point_evidence(recovery_point_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stage77_recovery_evidence_idempotency
+      ON stage77_recovery_point_evidence(idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_stage77_recovery_evidence_events
+      ON stage77_recovery_point_evidence_events(evidence_id,id);
+    CREATE TRIGGER IF NOT EXISTS stage77_recovery_evidence_no_update
+      BEFORE UPDATE ON stage77_recovery_point_evidence
+      BEGIN SELECT RAISE(ABORT, 'recovery_evidence_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_recovery_evidence_no_delete
+      BEFORE DELETE ON stage77_recovery_point_evidence
+      BEGIN SELECT RAISE(ABORT, 'recovery_evidence_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_recovery_evidence_events_no_update
+      BEFORE UPDATE ON stage77_recovery_point_evidence_events
+      BEGIN SELECT RAISE(ABORT, 'recovery_evidence_event_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_recovery_evidence_events_no_delete
+      BEFORE DELETE ON stage77_recovery_point_evidence_events
+      BEGIN SELECT RAISE(ABORT, 'recovery_evidence_event_immutable'); END;
+    """)
+
+
+def _recovery_evidence_payload(manifest: Mapping[str, Any], *, source_mode: str,
+                               actor: str, rationale: str, declaration: Mapping[str, Any],
+                               idempotency_key: str, created_at: str,
+                               report_event_bound: int | None = None,
+                               contract_name: str | None = None) -> dict[str, Any]:
+    """Project already-validated bundle evidence into the durable evidence contract."""
+    contract = contract_name or _manifest_contract(manifest)
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+        raise ValueError("recovery_evidence_contract_invalid")
+    counts = manifest.get("counts")
+    if not isinstance(counts, ABCMapping):
+        raise ValueError("recovery_evidence_manifest_invalid")
+    integrity = manifest.get("integrity")
+    if integrity != {"integrity_check": "ok", "foreign_key_check": "ok"}:
+        raise ValueError("recovery_evidence_integrity_invalid")
+    if contract == "post_correction_aware":
+        if isinstance(report_event_bound, bool) or not isinstance(report_event_bound, int) or report_event_bound < 0:
+            raise ValueError("recovery_evidence_report_event_bound_invalid")
+        report_event_binding = {"report_event_bound_status": "bound", "report_event_bound": report_event_bound}
+    else:
+        if report_event_bound is not None:
+            raise ValueError("recovery_evidence_report_event_bound_invalid")
+        report_event_binding = {"report_event_bound_status": "not_bound_by_source_contract", "report_event_bound": None}
+    payload = {
+        "evidence_contract": RECOVERY_EVIDENCE_CONTRACT,
+        "evidence_source_mode": source_mode,
+        "recovery_point_id": str(manifest["recovery_point_id"]),
+        "recovery_contract": {"legacy": "stage77.recovery.v1", "current": "stage77.recovery.v1", "diagnostic_aware": "stage77.diagnostic_aware.v1", "post_correction_aware": "stage77.post_correction_aware.v1"}[contract],
+        "maintenance_epoch": int(manifest["maintenance_epoch"]),
+        "database_digest": str(manifest["database"]["sha256"]),
+        "diagnostic_count": int(manifest.get("diagnostic_evidence_count", 0)),
+        "diagnostic_state_digest": str(manifest.get("diagnostic_evidence_state_digest", digest_bytes(b"[]"))),
+        "retry_link_count": int(manifest.get("retry_link_count", 0)),
+        "retry_topology_digest": str(manifest.get("retry_link_state_digest", digest_bytes(b"[]"))),
+        "report_count": int(counts["reports"]), "version_count": int(counts["versions"]),
+        "qualification_count": int(counts.get("qualifications", 0)),
+        "qualification_event_bound": int(manifest.get("qualification_event_bound", 0)),
+        "job_count": int(counts["jobs"]), "job_event_bound": int(manifest["job_event_bound"]),
+        "artifact_count": int(counts["artifacts"]),
+        "recovery_event_bound": int(manifest["recovery_event_bound"]),
+        "sqlite_integrity": str(integrity["integrity_check"]),
+        "foreign_key_violation_count": 0,
+        "evidence_contract_version": RECOVERY_EVIDENCE_CONTRACT,
+    }
+    payload.update(report_event_binding)
+    return payload
+
+
+def _validate_report_event_binding(payload: Mapping[str, Any], *, require_bound: bool = False) -> None:
+    status = payload.get("report_event_bound_status")
+    value = payload.get("report_event_bound")
+    if status not in REPORT_EVENT_BOUND_STATUSES:
+        raise ValueError("recovery_evidence_report_event_bound_invalid")
+    if status == "bound":
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError("recovery_evidence_report_event_bound_invalid")
+    elif value is not None:
+        raise ValueError("recovery_evidence_report_event_bound_invalid")
+    if require_bound and status != "bound":
+        raise ValueError("recovery_evidence_report_event_bound_unavailable")
+
+
+def _insert_recovery_evidence(conn: sqlite3.Connection, manifest: Mapping[str, Any], *,
+                              source_mode: str, actor: str, rationale: str,
+                              declaration: Mapping[str, Any], idempotency_key: str,
+                              created_at: str, final_manifest_digest: str | None = None,
+                              fault_injector: CaptureFaultInjector | None = None) -> dict[str, Any]:
+    if source_mode == "native_capture":
+        payload = dict(manifest.get("current_recovery_manifest_evidence") or {})
+        if payload:
+            if manifest.get("current_recovery_manifest_evidence_digest") != digest_bytes(canonical_json(payload).encode("utf-8")):
+                raise ValueError("recovery_evidence_manifest_invalid")
+        else:
+            payload = _recovery_evidence_payload(manifest, source_mode=source_mode, actor=actor,
+                                                 rationale=rationale, declaration=declaration,
+                                                 idempotency_key=idempotency_key, created_at=created_at)
+    else:
+        report_event_bound = None
+        captured = manifest.get("current_recovery_manifest_evidence")
+        if isinstance(captured, ABCMapping) and captured.get("recovery_contract") == "stage77.post_correction_aware.v1" and captured.get("report_event_bound_status") == "bound":
+            report_event_bound = captured.get("report_event_bound")
+        payload = _recovery_evidence_payload(manifest, source_mode=source_mode, actor=actor,
+                                             rationale=rationale, declaration=declaration,
+                                             idempotency_key=idempotency_key, created_at=created_at,
+                                             report_event_bound=report_event_bound)
+    digest = digest_bytes(canonical_json(payload).encode("utf-8"))
+    _validate_report_event_binding(payload, require_bound=payload.get("recovery_contract") == "stage77.post_correction_aware.v1")
+    existing = conn.execute("SELECT * FROM stage77_recovery_point_evidence WHERE recovery_point_id=?", (payload["recovery_point_id"],)).fetchone()
+    if existing:
+        if str(existing["evidence_digest"]) != digest or str(existing["idempotency_key"]) != str(idempotency_key):
+            raise ValueError("recovery_evidence_conflict")
+        return dict(existing)
+    evidence_id = secrets.token_hex(16)
+    conn.execute("""INSERT INTO stage77_recovery_point_evidence
+      (id,recovery_point_id,recovery_contract,maintenance_epoch,manifest_digest,database_digest,
+       diagnostic_count,diagnostic_state_digest,retry_link_count,retry_topology_digest,
+       report_count,version_count,report_event_bound_status,report_event_bound,qualification_count,qualification_event_bound,
+       job_count,job_event_bound,artifact_count,recovery_event_bound,sqlite_integrity,
+       foreign_key_violation_count,evidence_payload_json,evidence_digest,evidence_source_mode,
+       evidence_contract,state,actor,rationale,declaration_json,idempotency_key,canonical_bundle_identity,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+      (evidence_id, payload["recovery_point_id"], payload["recovery_contract"], payload["maintenance_epoch"],
+       final_manifest_digest or str(manifest.get("_manifest_digest") or ""), payload["database_digest"], payload["diagnostic_count"],
+       payload["diagnostic_state_digest"], payload["retry_link_count"], payload["retry_topology_digest"],
+       payload["report_count"], payload["version_count"], payload["report_event_bound_status"], payload["report_event_bound"],
+       payload["qualification_count"], payload["qualification_event_bound"], payload["job_count"],
+       payload["job_event_bound"], payload["artifact_count"], payload["recovery_event_bound"],
+       payload["sqlite_integrity"], payload["foreign_key_violation_count"], canonical_json(payload), digest,
+       source_mode, RECOVERY_EVIDENCE_CONTRACT, "finalized", actor, rationale,
+       canonical_json(dict(declaration)), idempotency_key, str(payload["recovery_point_id"]), created_at))
+    if fault_injector is not None:
+        fault_injector.checkpoint("after_evidence_row_before_event")
+    conn.execute("INSERT INTO stage77_recovery_point_evidence_events(evidence_id,event_type,actor,occurred_at,payload_json) VALUES(?,?,?,?,?)",
+                 (evidence_id, "recovery_evidence_finalized", actor, created_at, canonical_json(payload)))
+    return {"id": evidence_id, "evidence_digest": digest, "payload": payload, "state": "finalized"}
+
+
+def recovery_evidence_for_point(conn: sqlite3.Connection, recovery_point_id: str) -> dict[str, Any]:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_recovery_point_evidence'").fetchone() is None:
+        raise ValueError("recovery_evidence_required")
+    rows = conn.execute("SELECT * FROM stage77_recovery_point_evidence WHERE recovery_point_id=? ORDER BY id", (str(recovery_point_id),)).fetchall()
+    if len(rows) != 1:
+        raise ValueError("recovery_evidence_required")
+    row = dict(rows[0])
+    payload = _strict_json_object(row["evidence_payload_json"], "recovery_evidence_invalid")
+    if digest_bytes(canonical_json(payload).encode("utf-8")) != row["evidence_digest"] or row["state"] != "finalized":
+        raise ValueError("recovery_evidence_invalid")
+    if payload.get("recovery_point_id") != str(recovery_point_id) or payload.get("evidence_contract") != RECOVERY_EVIDENCE_CONTRACT:
+        raise ValueError("recovery_evidence_invalid")
+    _validate_report_event_binding(payload, require_bound=payload.get("recovery_contract") == "stage77.post_correction_aware.v1")
+    if row.get("report_event_bound_status") != payload["report_event_bound_status"] or row.get("report_event_bound") != payload["report_event_bound"]:
+        raise ValueError("recovery_evidence_invalid")
+    events = conn.execute("SELECT event_type,payload_json FROM stage77_recovery_point_evidence_events WHERE evidence_id=? ORDER BY id", (row["id"],)).fetchall()
+    if len(events) != 1 or events[0]["event_type"] != "recovery_evidence_finalized":
+        raise ValueError("recovery_evidence_event_invalid")
+    event_payload = _strict_json_object(events[0]["payload_json"], "recovery_evidence_event_invalid")
+    if event_payload != payload:
+        raise ValueError("recovery_evidence_event_invalid")
+    return row | {"payload": payload}
+
+
+def _recovery_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], str, int]:
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_recovery_point_evidence'").fetchone() is None:
+        raise ValueError("recovery_evidence_required")
+    rows = conn.execute("SELECT id,recovery_point_id,evidence_digest,state,evidence_payload_json FROM stage77_recovery_point_evidence ORDER BY id").fetchall()
+    snapshot = []
+    for row in rows:
+        payload = _strict_json_object(row["evidence_payload_json"], "recovery_evidence_invalid")
+        if row["state"] != "finalized" or digest_bytes(canonical_json(payload).encode("utf-8")) != str(row["evidence_digest"]):
+            raise ValueError("recovery_evidence_invalid")
+        _validate_report_event_binding(payload, require_bound=payload.get("recovery_contract") == "stage77.post_correction_aware.v1")
+        snapshot.append({"evidence_id": str(row["id"]), "recovery_point_id": str(row["recovery_point_id"]), "evidence_digest": str(row["evidence_digest"]), "state": str(row["state"]), "payload": payload})
+    event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_point_evidence_events").fetchone()[0])
+    digest = digest_bytes(canonical_json(snapshot).encode("utf-8"))
+    return snapshot, digest, event_bound
 
 
 def _validate_capture_schema(conn: sqlite3.Connection) -> None:
@@ -440,6 +714,275 @@ def _validate_capture_schema(conn: sqlite3.Connection) -> None:
         qualifications.validate_qualification_tables(conn)
     except ValueError:
         raise ValueError("schema_incompatible") from None
+
+
+def _validate_post_correction_recovery_eligibility(conn: sqlite3.Connection, *, report_count: int, version_count: int) -> None:
+    """Require the governed Report 1/version target before post recovery evidence."""
+    if report_count != 1 or version_count != 1:
+        raise ValueError("recovery_state_ineligible")
+    report = conn.execute("SELECT id,lifecycle_status FROM record_governed_reports ORDER BY id").fetchone()
+    version_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(record_governed_report_versions)").fetchall()}
+    required = {"report_id", "lifecycle_status", "specification_json", "specification_digest"}
+    if not required.issubset(version_columns):
+        raise ValueError("schema_incompatible")
+    version_fields = ["report_id"]
+    if "version_number" in version_columns:
+        version_fields.append("version_number")
+    version_fields.extend(("lifecycle_status", "specification_json", "specification_digest"))
+    version = conn.execute("SELECT " + ",".join(version_fields) + " FROM record_governed_report_versions ORDER BY id").fetchone()
+    if report is None or version is None or int(version[0]) != int(report[0]):
+        raise ValueError("recovery_state_ineligible")
+    version_number = version[1] if "version_number" in version_columns else None
+    lifecycle_index = 2 if version_number is not None else 1
+    if str(report[1]) not in {"generated", "validation_failed"} or str(version[lifecycle_index]) != str(report[1]):
+        raise ValueError("report_lifecycle_invalid")
+    if version_number is not None and int(version_number) != 1:
+        raise ValueError("version_count_mismatch")
+    specification_index = lifecycle_index + 1
+    digest_index = specification_index + 1
+    try:
+        specification = _strict_payload(str(version[specification_index]))
+        if not isinstance(specification, ABCMapping) or canonical_json(specification) != str(version[specification_index]):
+            raise ValueError
+        expected_digest = digest_bytes(canonical_json(specification).encode("utf-8"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("specification_digest_mismatch") from None
+    if expected_digest != str(version[digest_index]):
+        raise ValueError("specification_digest_mismatch")
+
+
+def _validate_archived_job_runtime_metadata(conn: sqlite3.Connection, *, contract: str) -> None:
+    """Validate only runtime fields actually bound by the archived job schema."""
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+        raise ValueError("schema_incompatible")
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+    attempt_fields = {"attempt_count", "max_attempts"}
+    lease_fields = {"lease_owner", "lease_token", "lease_acquired_at", "lease_expires_at", "heartbeat_at"}
+    if attempt_fields & columns and not attempt_fields <= columns:
+        raise ValueError("schema_incompatible")
+    if lease_fields & columns and not lease_fields <= columns:
+        raise ValueError("schema_incompatible")
+    if not attempt_fields <= columns:
+        return
+    epoch_bound = "maintenance_epoch" in columns
+    control = None
+    if epoch_bound and conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_recovery_control'").fetchone():
+        control = conn.execute("SELECT state,maintenance_epoch FROM stage77_recovery_control WHERE singleton=1").fetchone()
+    if not epoch_bound and control is not None:
+        return
+    select_fields = ["id", "state", "attempt_count", "max_attempts"]
+    if lease_fields <= columns:
+        select_fields.extend(sorted(lease_fields))
+    if epoch_bound:
+        select_fields.append("maintenance_epoch")
+    for row in conn.execute("SELECT " + ",".join(select_fields) + " FROM stage77_report_jobs ORDER BY id").fetchall():
+        attempt_count = row["attempt_count"]
+        max_attempts = row["max_attempts"]
+        if isinstance(attempt_count, bool) or not isinstance(attempt_count, int) or attempt_count < 0:
+            raise ValueError("job_attempt_metadata_invalid")
+        if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts <= 0 or attempt_count > max_attempts:
+            raise ValueError("job_attempt_metadata_invalid")
+        state = str(row["state"])
+        if state in {"leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"} and attempt_count < 1:
+            raise ValueError("job_attempt_metadata_invalid")
+        if lease_fields <= columns:
+            lease = {name: row[name] for name in lease_fields}
+            present = {name for name, value in lease.items() if value is not None and str(value) != ""}
+            active = state in {"leased", "running"}
+            if active and present != lease_fields:
+                raise ValueError("job_lease_metadata_invalid")
+            if not active and present and present != lease_fields:
+                raise ValueError("job_lease_metadata_invalid")
+            if present == lease_fields:
+                try:
+                    acquired = datetime.fromisoformat(str(lease["lease_acquired_at"]).replace("Z", "+00:00"))
+                    expires = datetime.fromisoformat(str(lease["lease_expires_at"]).replace("Z", "+00:00"))
+                    heartbeat = datetime.fromisoformat(str(lease["heartbeat_at"]).replace("Z", "+00:00"))
+                except (TypeError, ValueError, OverflowError):
+                    raise ValueError("job_lease_metadata_invalid") from None
+                if expires <= acquired or heartbeat < acquired or (active and heartbeat >= expires):
+                    raise ValueError("job_lease_metadata_invalid")
+        if epoch_bound:
+            epoch = row["maintenance_epoch"]
+            if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+                raise ValueError("job_maintenance_epoch_mismatch")
+            if control is not None and epoch and int(epoch) != int(control["maintenance_epoch"]):
+                raise ValueError("job_maintenance_epoch_mismatch")
+
+
+def _validate_archived_job_cancellation(conn: sqlite3.Connection, *, contract: str) -> None:
+    """Validate only cancellation evidence bound by the archived job schema."""
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+        return
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+    if "cancellation_requested_at" not in columns:
+        return
+    event_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_report_job_events'").fetchone()
+    if event_table is None:
+        raise ValueError("schema_incompatible")
+    rows = conn.execute("SELECT id,state,cancellation_requested_at,terminal_at,terminal_outcome FROM stage77_report_jobs ORDER BY id").fetchall()
+    for row in rows:
+        state = str(row["state"])
+        requested = row["cancellation_requested_at"]
+        events = conn.execute(
+            "SELECT resulting_state,occurred_at FROM stage77_report_job_events WHERE job_id=? AND event_type='cancel_requested' ORDER BY id",
+            (int(row["id"]),),
+        ).fetchall()
+        if requested is not None and not str(requested).strip():
+            raise ValueError("job_cancellation_evidence_invalid")
+        if requested is None and events:
+            raise ValueError("job_cancellation_evidence_invalid")
+        if state in {"cancel_requested", "cancelled"}:
+            if requested is None or len(events) != 1 or str(events[0]["resulting_state"]) not in {"cancel_requested", "cancelled"}:
+                raise ValueError("job_cancellation_evidence_invalid")
+            try:
+                requested_at = datetime.fromisoformat(str(requested).replace("Z", "+00:00"))
+                event_at = datetime.fromisoformat(str(events[0]["occurred_at"]).replace("Z", "+00:00"))
+                terminal_at = None if row["terminal_at"] is None else datetime.fromisoformat(str(row["terminal_at"]).replace("Z", "+00:00"))
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError("job_cancellation_evidence_invalid") from None
+            if event_at < requested_at or (terminal_at is not None and terminal_at < requested_at):
+                raise ValueError("job_cancellation_evidence_invalid")
+            if state == "cancel_requested" and terminal_at is not None:
+                raise ValueError("job_cancellation_evidence_invalid")
+            if state == "cancelled" and row["terminal_outcome"] not in {None, "cancelled"}:
+                raise ValueError("job_cancellation_evidence_invalid")
+        elif requested is not None or events:
+            raise ValueError("job_cancellation_evidence_invalid")
+
+
+def _validate_archived_job_terminal_evidence(conn: sqlite3.Connection, *, contract: str) -> None:
+    """Validate failed/succeeded terminal metadata without changing cancellation rules."""
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+        return
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+    terminal_fields = {"terminal_at", "terminal_outcome", "failure_phase", "failure_code"}
+    present = columns & terminal_fields
+    if not present:
+        return
+    if present != terminal_fields:
+        raise ValueError("schema_incompatible")
+    event_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_report_job_events'").fetchone()
+    if event_table is None:
+        raise ValueError("schema_incompatible")
+    for row in conn.execute("SELECT id,state,terminal_at,terminal_outcome,failure_phase,failure_code FROM stage77_report_jobs ORDER BY id").fetchall():
+        state = str(row["state"])
+        if state == "cancelled":
+            continue
+        events = conn.execute(
+            "SELECT resulting_state,occurred_at,payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal' ORDER BY id",
+            (int(row["id"]),),
+        ).fetchall()
+        if row["terminal_at"] is None and row["terminal_outcome"] is None:
+            # Older diagnostic archives may retain only the terminal event.
+            continue
+        if state in {"failed_terminal", "succeeded"}:
+            if row["terminal_at"] is None or row["terminal_outcome"] is None or len(events) != 1:
+                raise ValueError("job_terminal_evidence_invalid")
+            try:
+                terminal_at = datetime.fromisoformat(str(row["terminal_at"]).replace("Z", "+00:00"))
+                event_at = datetime.fromisoformat(str(events[0]["occurred_at"]).replace("Z", "+00:00"))
+                payload = json.loads(events[0]["payload_json"])
+            except (TypeError, ValueError, OverflowError, json.JSONDecodeError):
+                raise ValueError("job_terminal_evidence_invalid") from None
+            if event_at < terminal_at or events[0]["resulting_state"] != state or not isinstance(payload, Mapping):
+                raise ValueError("job_terminal_evidence_invalid")
+            if state == "failed_terminal" and (not row["failure_phase"] or not row["failure_code"] or payload.get("phase") != row["failure_phase"] or payload.get("code") != row["failure_code"]):
+                raise ValueError("job_terminal_evidence_invalid")
+            if state == "succeeded" and (payload.get("code") != row["failure_code"] or (row["failure_phase"] is not None and payload.get("phase") != row["failure_phase"])):
+                raise ValueError("job_terminal_evidence_invalid")
+        elif events or row["terminal_at"] is not None or row["terminal_outcome"] is not None or row["failure_phase"] is not None or row["failure_code"] is not None:
+            raise ValueError("job_terminal_evidence_invalid")
+
+
+def _validate_archived_job_generation_configuration(conn: sqlite3.Connection, *, contract: str) -> None:
+    """Bind archived job configuration to its immutable report-version snapshot."""
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+        raise ValueError("schema_incompatible")
+    job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+    bound_fields = {
+        "specification_digest", "requested_formats_json", "rendering_profile",
+        "template_version", "publication_engine_version",
+    }
+    present = job_columns & bound_fields
+    if not present:
+        return
+    if present != bound_fields:
+        raise ValueError("schema_incompatible")
+    rows = conn.execute(
+        "SELECT report_version_id,specification_digest,requested_formats_json,rendering_profile,"
+        "template_version,publication_engine_version FROM stage77_report_jobs ORDER BY id"
+    ).fetchall()
+    if not rows:
+        return
+    version_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(record_governed_report_versions)").fetchall()}
+    version_configuration_fields = {
+        "requested_formats_json", "rendering_profile", "template_version",
+        "publication_engine_version",
+    }
+    present_version = version_columns & version_configuration_fields
+    if not present_version:
+        return
+    if present_version != version_configuration_fields or "specification_digest" not in version_columns:
+        raise ValueError("schema_incompatible")
+    placeholders = ",".join("?" for _ in rows)
+    versions = conn.execute(
+        "SELECT id,specification_digest,requested_formats_json,rendering_profile,template_version,"
+        "publication_engine_version FROM record_governed_report_versions WHERE id IN (" + placeholders + ")",
+        [int(row[0]) for row in rows],
+    ).fetchall()
+    by_id = {int(row[0]): row for row in versions}
+    for job in rows:
+        version = by_id.get(int(job[0]))
+        if version is None or str(job[1]) != str(version[1]):
+            raise ValueError("job_specification_binding_mismatch")
+        try:
+            job_formats = json.loads(str(job[2]))
+            version_formats = json.loads(str(version[2]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raise ValueError("job_rendering_binding_mismatch") from None
+        if (not isinstance(job_formats, list) or not isinstance(version_formats, list)
+                or any(not isinstance(item, str) for item in job_formats + version_formats)
+                or not job_formats or len(job_formats) != len(set(job_formats))
+                or any(item not in reports.OUTPUT_FORMATS for item in job_formats)
+                or job_formats != version_formats
+                or str(job[2]) != canonical_json(job_formats)
+                or str(version[2]) != canonical_json(version_formats)):
+            raise ValueError("job_rendering_binding_mismatch")
+        if any(str(job[index]) != str(version[index]) for index in (3, 4, 5)):
+            raise ValueError("job_rendering_binding_mismatch")
+
+
+def _validate_archived_job_qualification_binding(conn: sqlite3.Connection, *, contract: str) -> None:
+    """Bind persisted job qualification snapshots to the finalized chain."""
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+        return
+    columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+    qualification_fields = {"qualification_id", "qualification_digest"}
+    present = columns & qualification_fields
+    if not present:
+        return
+    if present != qualification_fields:
+        raise ValueError("schema_incompatible")
+    rows = conn.execute("SELECT id,report_id,report_version_id,qualification_id,qualification_digest FROM stage77_report_jobs ORDER BY id").fetchall()
+    if not rows or all(row[3] is None and row[4] is None for row in rows):
+        return
+    from api import governed_report_qualifications as qualification_store
+    for row in rows:
+        if row[3] is None or row[4] is None:
+            raise ValueError("job_qualification_binding_mismatch")
+        qualification = conn.execute(
+            "SELECT id,report_id,report_version_id,qualification_digest FROM record_governed_report_qualifications WHERE id=?",
+            (int(row[3]),),
+        ).fetchone()
+        if (qualification is None or int(qualification["report_id"]) != int(row[1])
+                or int(qualification["report_version_id"]) != int(row[2])
+                or str(qualification["qualification_digest"]) != str(row[4])):
+            raise ValueError("job_qualification_binding_mismatch")
+        try:
+            qualification_store.validate_complete_chain(conn, int(row[2]))
+        except (TypeError, ValueError, sqlite3.Error):
+            raise ValueError("job_qualification_binding_mismatch") from None
 
 
 def _control(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -700,35 +1243,47 @@ def _retry_topology_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[str, A
         "SELECT id,retry_of_job_id,report_id,report_version_id,state,governed_action "
         "FROM stage77_report_jobs WHERE retry_of_job_id IS NOT NULL ORDER BY id"
     ).fetchall()
-    inventory = [
-        {
-            "job_id": int(row["id"]),
-            "retry_of_job_id": int(row["retry_of_job_id"]),
-            "report_id": int(row["report_id"]),
-            "report_version_id": int(row["report_version_id"]),
-            "state": str(row["state"]),
-            "governed_action": str(row["governed_action"]),
-        }
-        for row in rows
-    ]
-    if any(item["job_id"] == item["retry_of_job_id"] for item in inventory):
-        raise ValueError("retry_topology_invalid")
     jobs = {
         int(row["id"]): row
-        for row in conn.execute("SELECT id,report_id,report_version_id,retry_of_job_id FROM stage77_report_jobs")
+        for row in conn.execute("SELECT id,report_id,report_version_id,state,governed_action,retry_of_job_id FROM stage77_report_jobs")
     }
-    children: dict[int, int] = {}
-    for item in inventory:
-        predecessor = jobs.get(item["retry_of_job_id"])
-        successor = jobs.get(item["job_id"])
-        if predecessor is None or successor is None:
+    inventory = []
+    for row in rows:
+        predecessor = jobs.get(int(row["retry_of_job_id"]))
+        if predecessor is None:
             raise ValueError("retry_topology_invalid")
         if predecessor["retry_of_job_id"] is not None:
             raise ValueError("retry_topology_invalid")
-        if int(predecessor["report_id"]) != item["report_id"] or int(predecessor["report_version_id"]) != item["report_version_id"]:
+        if predecessor["state"] != "failed_terminal" or predecessor["governed_action"] != "enqueue_generation":
             raise ValueError("retry_topology_invalid")
-        children[item["retry_of_job_id"]] = children.get(item["retry_of_job_id"], 0) + 1
-        if children[item["retry_of_job_id"]] > 1:
+        if row["governed_action"] != "authorize_diagnostic_retry":
+            raise ValueError("retry_topology_invalid")
+        if int(predecessor["report_id"]) != int(row["report_id"]) or int(predecessor["report_version_id"]) != int(row["report_version_id"]):
+            raise ValueError("retry_topology_invalid")
+        inventory.append({
+            "predecessor_job_id": int(predecessor["id"]),
+            "successor_job_id": int(row["id"]),
+            "predecessor_retry_of_job_id": predecessor["retry_of_job_id"],
+            "successor_retry_of_job_id": int(row["retry_of_job_id"]),
+            "report_id": int(row["report_id"]),
+            "report_version_id": int(row["report_version_id"]),
+            "predecessor_state": str(predecessor["state"]),
+            "successor_state": str(row["state"]),
+            "predecessor_governed_action": str(predecessor["governed_action"]),
+            "successor_governed_action": str(row["governed_action"]),
+        })
+    if any(item["predecessor_job_id"] == item["successor_job_id"] for item in inventory):
+        raise ValueError("retry_topology_invalid")
+    children: dict[int, int] = {}
+    for item in inventory:
+        predecessor = jobs.get(item["predecessor_job_id"])
+        successor = jobs.get(item["successor_job_id"])
+        if predecessor is None or successor is None:
+            raise ValueError("retry_topology_invalid")
+        if item["predecessor_retry_of_job_id"] is not None or item["successor_retry_of_job_id"] != item["predecessor_job_id"]:
+            raise ValueError("retry_topology_invalid")
+        children[item["predecessor_job_id"]] = children.get(item["predecessor_job_id"], 0) + 1
+        if children[item["predecessor_job_id"]] > 1:
             raise ValueError("retry_topology_invalid")
     raw = canonical_json(inventory).encode("utf-8")
     return inventory, digest_bytes(raw)
@@ -743,11 +1298,22 @@ def _diagnostic_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[s
         empty = canonical_json([]).encode("utf-8")
         return [], digest_bytes(empty)
     rows = conn.execute(
-        "SELECT id,report_version_id,state,attempt_count,governed_action FROM stage77_report_jobs "
+        "SELECT id,report_version_id,state,attempt_count,governed_action,retry_of_job_id FROM stage77_report_jobs "
         "WHERE state='failed_terminal' ORDER BY id"
     ).fetchall()
     inventory: list[dict[str, Any]] = []
     for job in rows:
+        ownership = conn.execute(
+            "SELECT v.report_id FROM record_governed_report_versions v "
+            "JOIN stage77_report_jobs j ON j.report_version_id=v.id AND j.report_id=v.report_id "
+            "WHERE j.id=?",
+            (int(job["id"]),),
+        ).fetchone()
+        if ownership is None:
+            raise ValueError("diagnostic_evidence_invalid")
+        expected_action = "authorize_diagnostic_retry" if job["retry_of_job_id"] is not None else "enqueue_generation"
+        if job["governed_action"] != expected_action:
+            raise ValueError("diagnostic_evidence_invalid")
         terminal_rows = conn.execute(
             "SELECT id,payload_json FROM stage77_report_job_events "
             "WHERE job_id=? AND event_type='terminal' AND resulting_state='failed_terminal' ORDER BY id DESC LIMIT 1",
@@ -800,13 +1366,13 @@ def _database_contract(conn: sqlite3.Connection) -> tuple[str, list[dict[str, An
     qualification_tables = {"record_governed_report_qualifications", "record_governed_report_qualification_events"}
     evidence, evidence_digest = _diagnostic_evidence_snapshot(conn)
     post_schema = _post_correction_schema_present(conn)
+    links, links_digest = _retry_topology_snapshot(conn)
     if not (qualification_tables & tables):
         if post_schema:
             return "post_correction_aware", evidence, evidence_digest, [], digest_bytes(canonical_json([]).encode("utf-8"))
         if evidence:
             raise ValueError("diagnostic_evidence_invalid")
         return "legacy", [], digest_bytes(canonical_json([]).encode("utf-8")), [], digest_bytes(canonical_json([]).encode("utf-8"))
-    links, links_digest = _retry_topology_snapshot(conn)
     if post_schema:
         return "post_correction_aware", evidence, evidence_digest, links, links_digest
     if evidence:
@@ -818,13 +1384,25 @@ def _post_correction_schema_present(conn: sqlite3.Connection) -> bool:
     names = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     auth_name = "stage77_post_correction_authorizations"
     link_name = "stage77_post_correction_execution_links"
-    if auth_name not in names and link_name not in names:
+    attestation_name = "stage77_post_correction_custody_attestations"
+    event_name = "stage77_post_correction_custody_attestation_events"
+    evidence_name = "stage77_recovery_point_evidence"
+    evidence_event_name = "stage77_recovery_point_evidence_events"
+    if auth_name not in names and link_name not in names and attestation_name not in names and event_name not in names:
         return False
-    if auth_name not in names or link_name not in names:
+    if {auth_name, link_name, attestation_name, event_name, evidence_name, evidence_event_name} - names:
         raise ValueError("post_correction_schema_incompatible")
     expected_auth = {"id": "TEXT", "report_id": "INTEGER", "report_version_id": "INTEGER", "qualification_id": "INTEGER", "job1_id": "INTEGER", "job2_id": "INTEGER", "state": "TEXT", "idempotency_key": "TEXT", "payload_json": "TEXT", "authorization_digest": "TEXT", "created_at": "TEXT", "consumed_at": "TEXT"}
     expected_link = {"authorization_id": "TEXT", "job_id": "INTEGER", "created_at": "TEXT"}
-    for table, expected in ((auth_name, expected_auth), (link_name, expected_link)):
+    expected_attestation = {"id": "TEXT", "report_id": "INTEGER", "report_version_id": "INTEGER", "specification_digest": "TEXT", "recovery_evidence_id": "TEXT", "recovery_evidence_digest": "TEXT", "recovery_point_id": "TEXT", "recovery_contract": "TEXT", "maintenance_epoch": "INTEGER", "manifest_digest": "TEXT", "database_digest": "TEXT", "archive_digest": "TEXT", "receipt_digest": "TEXT", "diagnostic_count": "INTEGER", "diagnostic_state_digest": "TEXT", "retry_link_count": "INTEGER", "retry_topology_digest": "TEXT", "report_count": "INTEGER", "version_count": "INTEGER", "qualification_count": "INTEGER", "job_count": "INTEGER", "artifact_count": "INTEGER", "archive_size_bytes": "INTEGER", "custody_directory_identity": "TEXT", "correction_revision": "TEXT", "correction_deployment": "TEXT", "actor": "TEXT", "rationale": "TEXT", "declaration_json": "TEXT", "contract_version": "TEXT", "idempotency_key": "TEXT", "payload_json": "TEXT", "attestation_digest": "TEXT", "state": "TEXT", "created_at": "TEXT"}
+    expected_event = {"id": "INTEGER", "attestation_id": "TEXT", "event_type": "TEXT", "actor": "TEXT", "occurred_at": "TEXT", "payload_json": "TEXT"}
+    binding_name = "stage77_post_correction_authorization_custody_bindings"
+    expected_binding = {"authorization_id": "TEXT", "custody_attestation_id": "TEXT", "authorization_digest": "TEXT", "created_at": "TEXT"}
+    expected_evidence = {"id": "TEXT", "recovery_point_id": "TEXT", "recovery_contract": "TEXT", "maintenance_epoch": "INTEGER", "manifest_digest": "TEXT", "database_digest": "TEXT", "diagnostic_count": "INTEGER", "diagnostic_state_digest": "TEXT", "retry_link_count": "INTEGER", "retry_topology_digest": "TEXT", "report_count": "INTEGER", "version_count": "INTEGER", "report_event_bound_status": "TEXT", "report_event_bound": "INTEGER", "qualification_count": "INTEGER", "qualification_event_bound": "INTEGER", "job_count": "INTEGER", "job_event_bound": "INTEGER", "artifact_count": "INTEGER", "recovery_event_bound": "INTEGER", "sqlite_integrity": "TEXT", "foreign_key_violation_count": "INTEGER", "evidence_payload_json": "TEXT", "evidence_digest": "TEXT", "evidence_source_mode": "TEXT", "evidence_contract": "TEXT", "state": "TEXT", "actor": "TEXT", "rationale": "TEXT", "declaration_json": "TEXT", "idempotency_key": "TEXT", "canonical_bundle_identity": "TEXT", "created_at": "TEXT"}
+    expected_evidence_event = {"id": "INTEGER", "evidence_id": "TEXT", "event_type": "TEXT", "actor": "TEXT", "occurred_at": "TEXT", "payload_json": "TEXT"}
+    if binding_name not in names:
+        raise ValueError("post_correction_schema_incompatible")
+    for table, expected in ((auth_name, expected_auth), (link_name, expected_link), (attestation_name, expected_attestation), (event_name, expected_event), (binding_name, expected_binding), (evidence_name, expected_evidence), (evidence_event_name, expected_evidence_event)):
         rows = conn.execute("PRAGMA table_info(%s)" % table).fetchall()
         actual = {str(row[1]): str(row[2]).upper() for row in rows}
         if actual != expected or not rows or int(rows[0][5]) != 1:
@@ -838,6 +1416,12 @@ def _post_correction_schema_present(conn: sqlite3.Connection) -> bool:
     if {("record_governed_reports", "report_id", "id"), ("record_governed_report_versions", "report_version_id", "id"), ("record_governed_report_qualifications", "qualification_id", "id"), ("stage77_report_jobs", "job1_id", "id"), ("stage77_report_jobs", "job2_id", "id")} - auth_fks:
         raise ValueError("post_correction_schema_incompatible")
     if {("stage77_post_correction_authorizations", "authorization_id", "id"), ("stage77_report_jobs", "job_id", "id")} - link_fks:
+        raise ValueError("post_correction_schema_incompatible")
+    attestation_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % attestation_name).fetchall()}
+    event_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % event_name).fetchall()}
+    binding_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % binding_name).fetchall()}
+    evidence_event_fks = {(str(row[2]), str(row[3]), str(row[4])) for row in conn.execute("PRAGMA foreign_key_list(%s)" % evidence_event_name).fetchall()}
+    if {("record_governed_reports", "report_id", "id"), ("record_governed_report_versions", "report_version_id", "id"), (evidence_name, "recovery_evidence_id", "id")} - attestation_fks or (attestation_name, "attestation_id", "id") not in event_fks or {(auth_name, "authorization_id", "id"), (attestation_name, "custody_attestation_id", "id")} - binding_fks or (evidence_name, "evidence_id", "id") not in evidence_event_fks:
         raise ValueError("post_correction_schema_incompatible")
     return True
 
@@ -868,29 +1452,52 @@ def _post_correction_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[str, 
     for row in auth_rows:
         payload = _strict_json_object(row["payload_json"], "post_correction_authorization_invalid")
         expected_payload_keys = {
-            "authorization_contract", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "qualification_chain_digest", "review_mode", "disclosure_version", "distribution_restriction", "job1_id", "job1_state", "job1_contract", "job1_stage75_sha256", "job1_stage77_sha256", "job2_id", "job2_state", "job2_contract", "job2_stage75_sha256", "job2_stage77_sha256", "execution_job_id", "retry_topology", "retry_topology_digest", "correction_revision", "correction_deployment", "recovery_point_id", "recovery_contract", "recovery_manifest_digest", "recovery_database_digest", "custody_archive_digest", "custody_receipt_digest", "requesting_actor", "rationale", "declaration", "idempotency_key", "created_at", "authorization_digest",
+            "authorization_contract", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "qualification_chain_digest", "review_mode", "disclosure_version", "distribution_restriction", "job1_id", "job1_state", "job1_contract", "job1_stage75_sha256", "job1_stage77_sha256", "job2_id", "job2_state", "job2_contract", "job2_stage75_sha256", "job2_stage77_sha256", "execution_job_id", "retry_topology", "retry_topology_digest", "correction_revision", "correction_deployment", "recovery_evidence_id", "recovery_evidence_digest", "recovery_point_id", "recovery_contract", "recovery_manifest_digest", "recovery_database_digest", "custody_archive_digest", "custody_receipt_digest", "custody_attestation_id", "custody_attestation_digest", "requesting_actor", "rationale", "declaration", "idempotency_key", "created_at", "authorization_digest",
         }
         link = link_by_auth.get(str(row["id"]))
+        binding = conn.execute("SELECT custody_attestation_id,authorization_digest FROM stage77_post_correction_authorization_custody_bindings WHERE authorization_id=?", (row["id"],)).fetchone()
+        attestation = conn.execute("SELECT id,attestation_digest,state,recovery_evidence_id FROM stage77_post_correction_custody_attestations WHERE id=?", (binding["custody_attestation_id"],)).fetchone() if binding else None
         if set(payload) != expected_payload_keys or payload.get("authorization_contract") != "stage77.post_correction_generation_authorization.v1":
             raise ValueError("post_correction_authorization_invalid")
         for digest_key in ("specification_digest", "qualification_digest", "qualification_chain_digest", "job1_stage75_sha256", "job1_stage77_sha256", "job2_stage75_sha256", "job2_stage77_sha256", "retry_topology_digest", "recovery_manifest_digest", "recovery_database_digest", "custody_archive_digest", "custody_receipt_digest", "authorization_digest"):
             if not isinstance(payload.get(digest_key), str) or not re.fullmatch(r"[0-9a-f]{64}", payload[digest_key]):
                 raise ValueError("post_correction_authorization_invalid")
-        if (int(row["qualification_id"]) != int(payload["qualification_id"]) or int(row["job1_id"]) != int(payload["job1_id"]) or int(row["job2_id"]) != int(payload["job2_id"]) or int(row["report_id"]) != int(payload["report_id"]) or int(row["report_version_id"]) != int(payload["report_version_id"]) or payload.get("execution_job_id") in {payload.get("job1_id"), payload.get("job2_id")} or payload.get("review_mode") != "sole_administrator" or payload.get("disclosure_version") != "sole-admin-v1" or payload.get("distribution_restriction") != "internal_working" or payload.get("job1_state") != "failed_terminal" or payload.get("job2_state") != "failed_terminal" or payload.get("retry_topology") != {"successor_job_id": payload.get("job2_id"), "predecessor_job_id": payload.get("job1_id")}):
+        if (not binding or str(binding["authorization_digest"]) != str(row["authorization_digest"]) or str(binding["custody_attestation_id"]) != str(payload.get("custody_attestation_id")) or attestation is None or str(attestation["recovery_evidence_id"]) != str(payload.get("recovery_evidence_id")) or int(row["qualification_id"]) != int(payload["qualification_id"]) or int(row["job1_id"]) != int(payload["job1_id"]) or int(row["job2_id"]) != int(payload["job2_id"]) or int(row["report_id"]) != int(payload["report_id"]) or int(row["report_version_id"]) != int(payload["report_version_id"]) or payload.get("execution_job_id") in {payload.get("job1_id"), payload.get("job2_id")} or payload.get("review_mode") != "sole_administrator" or payload.get("disclosure_version") != "sole-admin-v1" or payload.get("distribution_restriction") != "internal_working" or payload.get("job1_state") != "failed_terminal" or payload.get("job2_state") != "failed_terminal" or payload.get("retry_topology") != {"successor_job_id": payload.get("job2_id"), "predecessor_job_id": payload.get("job1_id")}):
             raise ValueError("post_correction_authorization_invalid")
         digest = hashlib.sha256(canonical_json({key: value for key, value in payload.items() if key != "authorization_digest"}).encode()).hexdigest()
         if payload.get("authorization_digest") != str(row["authorization_digest"]) or digest != str(row["authorization_digest"]):
             raise ValueError("post_correction_authorization_digest_invalid")
+        if attestation is None or attestation["state"] != "finalized" or str(attestation["attestation_digest"]) != str(payload["custody_attestation_digest"]):
+            raise ValueError("post_correction_authorization_attestation_invalid")
         if link is None or int(link["job_id"]) != int(payload["execution_job_id"]) or int(link["report_id"]) != int(row["report_id"]) or int(link["report_version_id"]) != int(row["report_version_id"]):
             raise ValueError("post_correction_authorization_link_invalid")
         if link["governed_action"] != "post_correction_generation" or link["retry_of_job_id"] is not None:
             raise ValueError("post_correction_authorization_job_invalid")
-        snapshot.append({"authorization_id": str(row["id"]), "report_id": int(row["report_id"]), "report_version_id": int(row["report_version_id"]), "state": str(row["state"]), "payload": payload, "authorization_digest": str(row["authorization_digest"]), "execution_job_id": int(link["job_id"]), "execution_link_created_at": str(link["created_at"])})
+        snapshot.append({"authorization_id": str(row["id"]), "custody_attestation_id": str(binding["custody_attestation_id"]), "custody_attestation_digest": str(payload["custody_attestation_digest"]), "recovery_evidence_id": str(payload["recovery_evidence_id"]), "recovery_evidence_digest": str(payload["recovery_evidence_digest"]), "report_id": int(row["report_id"]), "report_version_id": int(row["report_version_id"]), "state": str(row["state"]), "payload": payload, "authorization_digest": str(row["authorization_digest"]), "execution_job_id": int(link["job_id"]), "execution_link_created_at": str(link["created_at"])})
     raw = canonical_json(snapshot).encode("utf-8")
     event_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_events'").fetchone()
     if auth_rows and event_table is None:
         raise ValueError("post_correction_authorization_event_invalid")
     event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM record_governed_report_events WHERE event_type='post_correction_generation_authorized'").fetchone()[0]) if event_table else 0
+    return snapshot, digest_bytes(raw), event_bound
+
+
+def _post_correction_custody_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[str, Any]], str, int]:
+    _post_correction_schema_present(conn)
+    rows = conn.execute("SELECT * FROM stage77_post_correction_custody_attestations ORDER BY id").fetchall()
+    snapshot = []
+    for row in rows:
+        payload = _strict_json_object(row["payload_json"], "post_correction_custody_attestation_invalid")
+        if payload.get("attestation_contract") != "stage77.post_correction_custody_attestation.v1" or row["state"] != "finalized":
+            raise ValueError("post_correction_custody_attestation_invalid")
+        if set(payload) != {"attestation_contract", "report_id", "report_version_id", "specification_digest", "recovery_evidence_id", "recovery_evidence_digest", "recovery_point_id", "recovery_contract", "maintenance_epoch", "manifest_digest", "database_digest", "archive_digest", "receipt_digest", "diagnostic_count", "diagnostic_state_digest", "retry_link_count", "retry_topology_digest", "report_count", "version_count", "qualification_count", "job_count", "artifact_count", "archive_size_bytes", "custody_directory_identity", "correction_revision", "correction_deployment", "actor", "rationale", "declaration", "idempotency_key", "created_at"}:
+            raise ValueError("post_correction_custody_attestation_invalid")
+        digest = digest_bytes(canonical_json(payload).encode("utf-8"))
+        if digest != str(row["attestation_digest"]):
+            raise ValueError("post_correction_custody_attestation_digest_invalid")
+        snapshot.append({"attestation_id": str(row["id"]), "report_id": int(row["report_id"]), "report_version_id": int(row["report_version_id"]), "state": str(row["state"]), "attestation_digest": digest, "payload": payload})
+    raw = canonical_json(snapshot).encode("utf-8")
+    event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_post_correction_custody_attestation_events").fetchone()[0])
     return snapshot, digest_bytes(raw), event_bound
 
 
@@ -974,16 +1581,27 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
             if previous is not None and int(item["job_id"]) <= previous:
                 raise ValueError("manifest_invalid")
             previous = int(item["job_id"])
-        if isinstance(manifest["diagnostic_evidence_count"], bool) or not isinstance(manifest["diagnostic_evidence_count"], int) or manifest["diagnostic_evidence_count"] != len(manifest["diagnostic_evidence"]):
+        if isinstance(manifest["diagnostic_evidence_count"], bool) or not isinstance(manifest["diagnostic_evidence_count"], int):
             raise ValueError("manifest_invalid")
+        if manifest["diagnostic_evidence_count"] != len(manifest["diagnostic_evidence"]):
+            raise ValueError("diagnostic_evidence_count_mismatch")
         evidence_digest = digest_bytes(canonical_json(manifest["diagnostic_evidence"]).encode("utf-8"))
         if manifest["diagnostic_evidence_state_digest"] != evidence_digest:
-            raise ValueError("manifest_invalid")
+            raise ValueError("diagnostic_evidence_digest_mismatch")
         if isinstance(manifest["retry_link_count"], bool) or not isinstance(manifest["retry_link_count"], int) or manifest["retry_link_count"] < 0:
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["retry_link_state_digest"], str) or len(manifest["retry_link_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["retry_link_state_digest"]):
             raise ValueError("manifest_invalid")
         if contract == "post_correction_aware":
+            current_evidence = manifest.get("current_recovery_manifest_evidence")
+            if not isinstance(current_evidence, ABCMapping) or manifest.get("current_recovery_manifest_evidence_digest") != digest_bytes(canonical_json(dict(current_evidence)).encode("utf-8")):
+                raise ValueError("manifest_invalid")
+            if set(current_evidence) != {"evidence_contract", "evidence_source_mode", "recovery_point_id", "recovery_contract", "maintenance_epoch", "database_digest", "diagnostic_count", "diagnostic_state_digest", "retry_link_count", "retry_topology_digest", "report_count", "version_count", "report_event_bound_status", "report_event_bound", "qualification_count", "qualification_event_bound", "job_count", "job_event_bound", "artifact_count", "recovery_event_bound", "sqlite_integrity", "foreign_key_violation_count", "evidence_contract_version"} or current_evidence.get("evidence_source_mode") != "native_capture" or current_evidence.get("evidence_contract") != RECOVERY_EVIDENCE_CONTRACT:
+                raise ValueError("manifest_invalid")
+            _validate_report_event_binding(current_evidence, require_bound=True)
+            prior = manifest.get("persisted_prior_recovery_evidence")
+            if not isinstance(prior, list) or manifest.get("persisted_prior_recovery_evidence_state_digest") != digest_bytes(canonical_json(prior).encode("utf-8")) or isinstance(manifest.get("persisted_prior_recovery_evidence_event_bound"), bool) or not isinstance(manifest.get("persisted_prior_recovery_evidence_event_bound"), int) or manifest["persisted_prior_recovery_evidence_event_bound"] < 0:
+                raise ValueError("manifest_invalid")
             auth_snapshot = manifest.get("post_correction_authorization")
             if not isinstance(auth_snapshot, list) or any(not isinstance(item, ABCMapping) for item in auth_snapshot):
                 raise ValueError("manifest_invalid")
@@ -1085,6 +1703,10 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         required = {"record_governed_reports", "record_governed_report_versions", "record_governed_report_artifacts", "stage77_report_jobs", "stage77_report_job_events", "stage77_recovery_control", "stage77_recovery_events"}
         if not required.issubset(tables):
             raise ValueError("schema_incompatible")
+        artifact_columns = {str(row[1]): str(row[2]).upper() for row in conn.execute("PRAGMA table_info(record_governed_report_artifacts)").fetchall()}
+        required_artifact_columns = {"id": "INTEGER", "version_id": "INTEGER", "format": "TEXT", "storage_reference": "TEXT", "sha256": "TEXT", "size_bytes": "INTEGER", "validation_state": "TEXT"}
+        if any(artifact_columns.get(name) != expected_type for name, expected_type in required_artifact_columns.items()):
+            raise ValueError("schema_incompatible")
         database_contract, evidence, evidence_digest, retry_links, retry_links_digest = _database_contract(conn)
         if database_contract != contract:
             raise ValueError("schema_incompatible")
@@ -1101,9 +1723,14 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
         if event_bound != int(manifest["recovery_event_bound"]):
             raise ValueError("recovery_event_bound_mismatch")
-        if contract == "current":
+        if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
             qualification_state = qualifications.state_snapshot(conn)
-            if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)) or qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]:
+            if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)):
+                raise ValueError("qualification_count_mismatch")
+            version_ids = [int(row[0]) for row in conn.execute("SELECT DISTINCT report_version_id FROM record_governed_report_qualifications ORDER BY report_version_id").fetchall()]
+            for version_id in version_ids:
+                qualifications.validate_complete_chain(conn, version_id)
+            if contract == "current" and (qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]):
                 raise ValueError("qualification_state_mismatch")
         if contract in {"diagnostic_aware", "post_correction_aware"}:
             if evidence != manifest["diagnostic_evidence"] or evidence_digest != manifest["diagnostic_evidence_state_digest"] or int(manifest["diagnostic_evidence_count"]) != len(evidence):
@@ -1111,6 +1738,14 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             if retry_links_digest != manifest["retry_link_state_digest"] or int(manifest["retry_link_count"]) != len(retry_links):
                 raise ValueError("retry_topology_mismatch")
         if contract == "post_correction_aware":
+            base_manifest = {key: manifest[key] for key in DIAGNOSTIC_MANIFEST_KEYS}
+            report_event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM record_governed_report_events").fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_events'").fetchone() else 0
+            expected_current = _recovery_evidence_payload(base_manifest, source_mode="native_capture", actor="", rationale="", declaration={}, idempotency_key="", created_at="", report_event_bound=report_event_bound, contract_name="post_correction_aware")
+            if expected_current != manifest["current_recovery_manifest_evidence"]:
+                raise ValueError("recovery_evidence_mismatch")
+            evidence_snapshot, evidence_snapshot_digest, evidence_event_bound = _recovery_evidence_snapshot(conn)
+            if evidence_snapshot != manifest["persisted_prior_recovery_evidence"] or evidence_snapshot_digest != manifest["persisted_prior_recovery_evidence_state_digest"] or evidence_event_bound != int(manifest["persisted_prior_recovery_evidence_event_bound"]):
+                raise ValueError("recovery_evidence_mismatch")
             snapshot, snapshot_digest, event_bound = _post_correction_snapshot(conn)
             if snapshot != manifest["post_correction_authorization"] or snapshot_digest != manifest["post_correction_authorization_state_digest"] or event_bound != int(manifest["post_correction_authorization_event_bound"]):
                 raise ValueError("post_correction_evidence_mismatch")
@@ -1120,17 +1755,75 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         actual_job_states = {state: int(conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
         if actual_job_states != manifest["job_state_counts"] or sum(actual_job_states.values()) != int(manifest["counts"]["jobs"]):
             raise ValueError("job_state_count_mismatch")
+        _validate_archived_job_runtime_metadata(conn, contract=contract)
+        _validate_archived_job_cancellation(conn, contract=contract)
+        _validate_archived_job_terminal_evidence(conn, contract=contract)
+        _validate_archived_job_generation_configuration(conn, contract=contract)
+        _validate_archived_job_qualification_binding(conn, contract=contract)
+        total_jobs = sum(actual_job_states.values())
+        if contract == "diagnostic_aware" and int(manifest["retry_link_count"]) == 1 and total_jobs != 2:
+            raise ValueError("job_state_count_mismatch")
+        if contract == "post_correction_aware":
+            authorization_count = int(conn.execute("SELECT COUNT(*) FROM stage77_post_correction_authorizations").fetchone()[0])
+            if authorization_count == 0 and total_jobs != 0:
+                raise ValueError("job_state_count_mismatch")
         if int(manifest["counts"]["artifacts"]) != len(rows):
             raise ValueError("artifact_inventory_mismatch")
         if int(conn.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0]) != int(manifest["counts"]["reports"]):
             raise ValueError("record_count_mismatch")
         if int(conn.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0]) != int(manifest["counts"]["versions"]):
             raise ValueError("version_count_mismatch")
+        if contract == "post_correction_aware":
+            _validate_post_correction_recovery_eligibility(
+                conn,
+                report_count=int(conn.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0]),
+                version_count=int(conn.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0]),
+            )
+        if contract == "diagnostic_aware":
+            if int(manifest["counts"]["reports"]) != 1:
+                raise ValueError("record_count_mismatch")
+            if int(manifest["counts"]["versions"]) != 1:
+                raise ValueError("version_count_mismatch")
+            lifecycle_rows = conn.execute("SELECT lifecycle_status FROM record_governed_reports ORDER BY id").fetchall()
+            if any(str(row[0]) not in {"generated", "validation_failed"} for row in lifecycle_rows):
+                raise ValueError("report_lifecycle_invalid")
+            version_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(record_governed_report_versions)").fetchall()}
+            if {"specification_json", "specification_digest"}.issubset(version_columns):
+                for version in conn.execute("SELECT specification_json,specification_digest FROM record_governed_report_versions ORDER BY id").fetchall():
+                    try:
+                        specification = _strict_payload(str(version[0]))
+                        expected_digest = digest_bytes(canonical_json(specification).encode("utf-8"))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        raise ValueError("specification_digest_mismatch") from None
+                    if not isinstance(specification, Mapping) or expected_digest != str(version[1]):
+                        raise ValueError("specification_digest_mismatch")
         by_id = {int(item["artifact_id"]): item for item in manifest["artifacts"]}
         for row in rows:
             item = by_id.get(int(row["id"]))
             if not item or int(item["report_id"]) != int(conn.execute("SELECT report_id FROM record_governed_report_versions WHERE id=?", (row["version_id"],)).fetchone()[0]) or int(item["version_id"]) != int(row["version_id"]) or str(item["format"]) != str(row["format"]) or int(item["size_bytes"]) != int(row["size_bytes"]) or str(item["sha256"]) != str(row["sha256"]):
                 raise ValueError("artifact_inventory_mismatch")
+        job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
+        if {"state", "report_version_id", "requested_formats_json"}.issubset(job_columns):
+            succeeded = conn.execute("SELECT id,report_version_id,requested_formats_json FROM stage77_report_jobs WHERE state='succeeded' ORDER BY id").fetchall()
+            succeeded_versions = {int(row["report_version_id"]) for row in succeeded}
+            if succeeded_versions:
+                artifact_versions = {int(row["version_id"]) for row in rows}
+                if not artifact_versions.issubset(succeeded_versions):
+                    raise ValueError("artifact_inventory_mismatch")
+            for job in succeeded:
+                try:
+                    expected_formats = _strict_payload(str(job["requested_formats_json"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raise ValueError("artifact_inventory_mismatch") from None
+                actual_formats = [
+                    str(row["format"])
+                    for row in conn.execute(
+                        "SELECT format FROM record_governed_report_artifacts WHERE version_id=? AND validation_state='valid' ORDER BY format",
+                        (int(job["report_version_id"]),),
+                    ).fetchall()
+                ]
+                if not isinstance(expected_formats, list) or sorted(str(item) for item in expected_formats) != actual_formats:
+                    raise ValueError("artifact_inventory_mismatch")
     finally:
         conn.close()
     for item in manifest["artifacts"]:
@@ -1139,7 +1832,7 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             raise ValueError("artifact_digest_mismatch")
 
 
-def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_root: str | os.PathLike[str], recovery_root: str | os.PathLike[str], actor: str, governed_action: str, idempotency_key: str = "", approved_root: str | os.PathLike[str] = "/data", drain_timeout: float = 30.0, application_version: str = "unknown", publication_engine_version: str = "2.0.0") -> dict[str, Any]:
+def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_root: str | os.PathLike[str], recovery_root: str | os.PathLike[str], actor: str, governed_action: str, idempotency_key: str = "", approved_root: str | os.PathLike[str] = "/data", drain_timeout: float = 30.0, application_version: str = "unknown", publication_engine_version: str = "2.0.0", fault_injector: CaptureFaultInjector | None = None) -> dict[str, Any]:
     phase = "configuration"
     operation = "recovery_root_validation"
     checkpoint = "starting"
@@ -1190,6 +1883,8 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
             raise ValueError("recovery_point_exists")
         stage.mkdir(parents=True, exist_ok=False)
         (stage / "artifacts").mkdir()
+        if fault_injector is not None:
+            fault_injector.checkpoint("before_snapshot_creation")
         phase, operation, checkpoint = "capture", "wal_checkpoint", "starting"
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         phase, operation, checkpoint = "capture", "capture_transaction_begin", "starting"
@@ -1209,6 +1904,8 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     if time.monotonic() >= deadline:
                         raise TimeoutError("backup_timeout")
                 phase, operation, checkpoint = "capture", "online_backup_execution", "progress"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("during_snapshot_creation")
                 backup_source.backup(backup_conn, pages=100, sleep=0.01, progress=backup_progress)
                 phase, operation, checkpoint = "capture", "backup_completion", "starting"
                 backup_conn.execute("PRAGMA journal_mode=DELETE")
@@ -1219,11 +1916,17 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     backup_conn.close()
             backup_data = backup_path.read_bytes()
             phase, operation, checkpoint = "validation", "database_integrity_check", "starting"
+            if fault_injector is not None:
+                fault_injector.checkpoint("after_snapshot_before_database_digest")
             backup_check = _read_connection(backup_path)
             try:
+                if fault_injector is not None:
+                    fault_injector.checkpoint("during_sqlite_integrity_validation")
                 if backup_check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ValueError("integrity_check_failed")
                 phase, operation, checkpoint = "validation", "foreign_key_check", "starting"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("during_sqlite_foreign_key_validation")
                 if not _foreign_keys_are_clean(backup_check):
                     raise ValueError("foreign_key_check_failed")
                 job_counts = {state: int(backup_check.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
@@ -1257,6 +1960,9 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                 phase, operation, checkpoint = "validation", "recovery_event_bound_read", "starting"
                 recovery_event_bound = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
                 database_contract, diagnostic_evidence, diagnostic_evidence_digest, retry_links, retry_links_digest = _database_contract(backup_check)
+                _validate_archived_job_runtime_metadata(backup_check, contract=database_contract)
+                if database_contract == "post_correction_aware":
+                    _validate_post_correction_recovery_eligibility(backup_check, report_count=report_count, version_count=version_count)
                 qualification_state = qualifications.state_snapshot(backup_check)
                 phase, operation, checkpoint = "validation", "manifest_database_reads", "starting"
                 manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "qualification_event_bound": qualification_state["event_bound"], "qualification_state_digest": qualification_state["digest"], "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count, "qualifications": qualification_state["count"]}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
@@ -1271,6 +1977,21 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     })
                 if database_contract == "post_correction_aware":
                     post_snapshot, post_digest, post_event_bound = _post_correction_snapshot(backup_check)
+                    custody_snapshot, custody_digest, custody_event_bound = _post_correction_custody_snapshot(backup_check)
+                    evidence_snapshot, evidence_digest, evidence_event_bound = _recovery_evidence_snapshot(backup_check)
+                    manifest.update({
+                        "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
+                        "diagnostic_evidence": diagnostic_evidence,
+                        "diagnostic_evidence_count": len(diagnostic_evidence),
+                        "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
+                        "retry_link_count": len(retry_links),
+                        "retry_link_state_digest": retry_links_digest,
+                    })
+                    report_event_bound = int(backup_check.execute("SELECT COALESCE(MAX(id),0) FROM record_governed_report_events").fetchone()[0]) if backup_check.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_events'").fetchone() else 0
+                    current_evidence = _recovery_evidence_payload(manifest, source_mode="native_capture", actor="", rationale="", declaration={}, idempotency_key="", created_at="", report_event_bound=report_event_bound, contract_name="post_correction_aware")
+                    current_evidence_digest = digest_bytes(canonical_json(current_evidence).encode("utf-8"))
+                    if fault_injector is not None:
+                        fault_injector.checkpoint("after_current_evidence_before_manifest")
                     manifest.update({
                         "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
                         "diagnostic_evidence": diagnostic_evidence,
@@ -1281,15 +2002,44 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                         "post_correction_authorization": post_snapshot,
                         "post_correction_authorization_state_digest": post_digest,
                         "post_correction_authorization_event_bound": post_event_bound,
+                        "post_correction_custody_attestation": custody_snapshot,
+                        "post_correction_custody_attestation_state_digest": custody_digest,
+                        "post_correction_custody_attestation_event_bound": custody_event_bound,
+                        "current_recovery_manifest_evidence": current_evidence,
+                        "current_recovery_manifest_evidence_digest": current_evidence_digest,
+                        "persisted_prior_recovery_evidence": evidence_snapshot,
+                        "persisted_prior_recovery_evidence_state_digest": evidence_digest,
+                        "persisted_prior_recovery_evidence_event_bound": evidence_event_bound,
                     })
-                raw_manifest = canonical_json(manifest).encode("utf-8")
                 phase, operation, checkpoint = "validation", "manifest_write", "starting"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("during_canonical_manifest_creation")
+                raw_manifest = canonical_json(manifest).encode("utf-8")
                 (stage / "manifest.json").write_bytes(raw_manifest)
                 (stage / "manifest.sha256").write_text(digest_bytes(raw_manifest) + "\n", encoding="ascii")
                 phase, operation, checkpoint = "validation", "bundle_validation", "starting"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("after_manifest_before_bundle_validation")
                 _verify_bundle(stage, manifest)
+                phase, operation, checkpoint = "validation", "recovery_evidence_persistence", "starting"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("after_bundle_validation_before_live_evidence")
+                _insert_recovery_evidence(conn, manifest, source_mode="native_capture", actor=actor,
+                                          rationale="native recovery capture", declaration={"acknowledged": True, "version": 1},
+                                          idempotency_key=f"native-{control['recovery_point_id']}", created_at=manifest["created_at"],
+                                          final_manifest_digest=digest_bytes(raw_manifest), fault_injector=fault_injector)
+                conn.commit()
                 phase, operation, checkpoint = "promotion", "bundle_promotion", "starting"
                 os.replace(stage, final)
+                phase, operation, checkpoint = "completion", "completion_event_write", "starting"
+                if fault_injector is not None:
+                    fault_injector.checkpoint("after_evidence_event_before_completion")
+                stage_parent = stage.parent
+                if stage_parent.exists() and not any(stage_parent.iterdir()):
+                    phase, operation, checkpoint = "completion", "staging_directory", "starting"
+                    if fault_injector is not None:
+                        fault_injector.checkpoint("during_final_staging_cleanup")
+                    stage_parent.rmdir()
                 phase, operation, checkpoint = "completion", "completion_event_write", "starting"
                 conn.execute("UPDATE stage77_recovery_control SET state='completed',completed_at=?,manifest_digest=?,source_database_identity=?,worker_drained=1 WHERE singleton=1", (utc_now(), digest_bytes(raw_manifest), manifest["source_database_identity"]))
                 updated = _control(conn)
@@ -1319,20 +2069,24 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
         cleanup_status = "not_required"
         if stage is not None:
             try:
-                shutil.rmtree(stage, ignore_errors=False)
+                if stage.exists():
+                    shutil.rmtree(stage, ignore_errors=False)
                 cleanup_status = "completed"
             except Exception:
                 cleanup_status = "failed"
         if rollback_failed:
             cleanup_status = "failed"
         maintenance_status = "unknown"
-        try:
-            fail_recovery(conn, phase=phase, code=primary_code)
-            maintenance_status = "failed"
-        except Exception:
-            maintenance_status = "unknown"
-        finally:
-            conn.close()
+        durable_interruption = fault_injector is not None and fault_injector.triggered_failure in {
+            "after_evidence_event_before_completion", "during_final_staging_cleanup",
+        }
+        if not durable_interruption:
+            try:
+                fail_recovery(conn, phase=phase, code=primary_code)
+                maintenance_status = "failed"
+            except Exception:
+                maintenance_status = "unknown"
+        conn.close()
         raise RecoveryOperationFailure(phase=phase, operation=operation, checkpoint=checkpoint, code=primary_code, cleanup_status=cleanup_status, maintenance_status=maintenance_status) from exc
     finally:
         if not conn is None:
@@ -1403,6 +2157,16 @@ def restore_recovery_point(*, bundle_path: str | os.PathLike[str], restore_root:
                     _event(conn, row, "job_recovered_retryable", "restore_validating", actor, {"job_id": int(job["id"])})
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
                 raise ValueError("restore_integrity_failed")
+            if _manifest_contract(manifest) == "post_correction_aware":
+                _insert_recovery_evidence(
+                    conn, manifest, source_mode="native_capture", actor=actor,
+                    rationale="restored from validated recovery manifest",
+                    declaration={"acknowledged": True, "version": 1},
+                    idempotency_key=f"restore-{point_id}", created_at=utc_now(),
+                    final_manifest_digest=manifest_digest,
+                )
+                if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or not _foreign_keys_are_clean(conn):
+                    raise ValueError("restore_integrity_failed")
             conn.execute("UPDATE stage77_recovery_control SET state='restore_ready',restore_validation_required=0,completed_at=?,worker_drained=1 WHERE singleton=1", (utc_now(),))
             row = _control(conn)
             _event(conn, row, "restore_validation_completed", "restore_ready", actor, {})
@@ -1427,12 +2191,114 @@ def restore_recovery_point(*, bundle_path: str | os.PathLike[str], restore_root:
                     pass
 
 
+def reconcile_interrupted_recovery(*, database_path: str | os.PathLike[str], recovery_root: str | os.PathLike[str], actor: str, approved_root: str | os.PathLike[str] = "/data") -> dict[str, Any]:
+    """Explicitly reconcile a promoted bundle left before completion commit."""
+    root = _require_recovery_root(recovery_root, approved_root=approved_root)
+    conn = _connect(database_path)
+    try:
+        ensure_recovery_tables(conn)
+        control = _control(conn)
+        if control is None:
+            raise ValueError("recovery_reconciliation_not_interrupted")
+        bundle = root / f"recovery-{control['recovery_point_id']}"
+        manifest, manifest_digest = _manifest_and_digest(bundle)
+        _verify_bundle(bundle, manifest)
+        if control["state"] == "completed":
+            evidence = recovery_evidence_for_point(conn, str(control["recovery_point_id"]))
+            if str(evidence.get("manifest_digest")) != manifest_digest:
+                raise ValueError("recovery_reconciliation_conflict")
+            return {"recovery_point_id": str(control["recovery_point_id"]), "manifest_digest": manifest_digest, "state": "completed"}
+        if control["state"] not in {"capturing", "validating"}:
+            raise ValueError("recovery_reconciliation_not_interrupted")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            current = _control(conn)
+            if current is None or current["operation_id"] != control["operation_id"] or current["state"] not in {"capturing", "validating"}:
+                raise ValueError("recovery_reconciliation_conflict")
+            stage_parent = root / ".stage"
+            stage_metadata = _lstat(stage_parent)
+            if stage_metadata is not None:
+                if stat.S_ISLNK(stage_metadata.st_mode) or not stat.S_ISDIR(stage_metadata.st_mode) or any(stage_parent.iterdir()):
+                    raise ValueError("recovery_reconciliation_conflict")
+                try:
+                    stage_parent.rmdir()
+                except OSError:
+                    raise ValueError("recovery_operation_failed") from None
+            _insert_recovery_evidence(
+                conn, manifest, source_mode="native_capture", actor=actor,
+                rationale="explicit interrupted recovery reconciliation",
+                declaration={"acknowledged": True, "version": 1},
+                idempotency_key=f"native-{control['recovery_point_id']}",
+                created_at=manifest["created_at"], final_manifest_digest=manifest_digest,
+            )
+            recovery_evidence_for_point(conn, str(control["recovery_point_id"]))
+            conn.execute("UPDATE stage77_recovery_control SET state='completed',completed_at=?,manifest_digest=?,source_database_identity=?,worker_drained=1 WHERE singleton=1", (utc_now(), manifest_digest, manifest["source_database_identity"]))
+            updated = _control(conn)
+            _event(conn, updated, "recovery_reconciled_completed", "completed", actor, {"manifest_digest": manifest_digest})
+            conn.commit()
+            return {"recovery_point_id": str(control["recovery_point_id"]), "manifest_digest": manifest_digest, "state": "completed"}
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+
 def validate_recovery_bundle(bundle_path: str | os.PathLike[str]) -> dict[str, Any]:
     bundle = _lexical_path(bundle_path, error="bundle_file_invalid")
     _assert_bundle_tree(bundle)
     manifest, digest = _manifest_and_digest(bundle)
     _verify_bundle(bundle, manifest)
     return {"state": "valid", "manifest_digest": digest, "recovery_point_id": str(manifest["recovery_point_id"])}
+
+
+def reconstruct_recovery_point_evidence(*, database_path: str | os.PathLike[str], recovery_root: str | os.PathLike[str], recovery_point_id: str, actor: str, rationale: str, acknowledged: bool, idempotency_key: str, approved_root: str | os.PathLike[str] = "/data") -> dict[str, Any]:
+    """Record deterministic evidence for one preserved bundle; never changes the bundle."""
+    if not str(actor).strip() or not str(rationale).strip() or len(str(rationale).strip()) > 4000 or acknowledged is not True or not str(idempotency_key).strip():
+        raise ValueError("recovery_evidence_reconstruction_input_invalid")
+    if not re.fullmatch(r"[0-9a-f]{32}", str(recovery_point_id)):
+        raise ValueError("recovery_evidence_identity_invalid")
+    root = _require_recovery_root(recovery_root, approved_root=approved_root)
+    bundle = _lexical_path(root / f"recovery-{recovery_point_id}", error="bundle_file_invalid")
+    if not bundle.is_relative_to(root) or bundle.is_symlink():
+        raise ValueError("path_outside_recovery_root")
+    _assert_no_symlink_components(bundle.parent, require_directory=True, error="symlink_component")
+    manifest, _manifest_digest = _manifest_and_digest(bundle)
+    if str(manifest["recovery_point_id"]) != str(recovery_point_id):
+        raise ValueError("recovery_evidence_identity_invalid")
+    try:
+        _verify_bundle(bundle, manifest)
+    except sqlite3.Error:
+        raise ValueError("sqlite_error") from None
+    archived = _read_connection(bundle / "database.sqlite3")
+    try:
+        if archived.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_recovery_point_evidence'").fetchone() is not None and archived.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence WHERE recovery_point_id=?", (str(recovery_point_id),)).fetchone()[0]:
+            raise ValueError("recovery_evidence_conflict")
+    finally:
+        archived.close()
+    conn = _connect(database_path)
+    try:
+        ensure_recovery_tables(conn)
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing = conn.execute("SELECT * FROM stage77_recovery_point_evidence WHERE recovery_point_id=?", (str(recovery_point_id),)).fetchone()
+            declaration = {"acknowledged": True, "version": 1, "text": "I confirm this is a reconstruction of deterministic recovery evidence from the preserved canonical production recovery bundle; it is not a new capture, restore, export or custody verification."}
+            if existing:
+                if str(existing["idempotency_key"]) != str(idempotency_key):
+                    raise ValueError("recovery_evidence_conflict")
+                conn.commit()
+                return dict(existing)
+            try:
+                result = _insert_recovery_evidence(conn, manifest, source_mode="historical_reconstruction", actor=str(actor), rationale=str(rationale).strip(), declaration=declaration, idempotency_key=str(idempotency_key).strip(), created_at=utc_now(), final_manifest_digest=_manifest_digest)
+            except sqlite3.Error:
+                raise ValueError("sqlite_error") from None
+            conn.commit()
+            return result
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
 
 
 def _safe_export_destination(path: Path, *, error: str = "export_target_invalid") -> Path:
@@ -1505,6 +2371,11 @@ def _receipt_from_manifest(manifest: Mapping[str, Any], *, archive_digest: str, 
         receipt.update({
             "post_correction_authorization_state_digest": str(manifest["post_correction_authorization_state_digest"]),
             "post_correction_authorization_event_bound": int(manifest["post_correction_authorization_event_bound"]),
+        })
+    if "post_correction_custody_attestation_state_digest" in manifest:
+        receipt.update({
+            "post_correction_custody_attestation_state_digest": str(manifest["post_correction_custody_attestation_state_digest"]),
+            "post_correction_custody_attestation_event_bound": int(manifest["post_correction_custody_attestation_event_bound"]),
         })
     return receipt
 
@@ -1672,6 +2543,8 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
         post_correction_mismatch = manifest_contract == "post_correction_aware" and (
             receipt.get("post_correction_authorization_state_digest") != manifest.get("post_correction_authorization_state_digest")
             or int(receipt.get("post_correction_authorization_event_bound", -1)) != int(manifest.get("post_correction_authorization_event_bound", -2))
+            or receipt.get("post_correction_custody_attestation_state_digest") != manifest.get("post_correction_custody_attestation_state_digest")
+            or int(receipt.get("post_correction_custody_attestation_event_bound", -1)) != int(manifest.get("post_correction_custody_attestation_event_bound", -2))
         )
         if common_mismatch or qualification_mismatch or diagnostic_mismatch or post_correction_mismatch:
             raise ValueError("export_receipt_mismatch")
