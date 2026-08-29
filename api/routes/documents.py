@@ -1635,6 +1635,39 @@ def _render_mbox_relationship_graph(item: dict) -> str:
 </section>"""
 
 
+def _mailbox_page_link(document_id: str, page: int, label: str, *, current: bool = False) -> str:
+    href = f"/documents/{escape(document_id)}?{escape(urlencode({'page': str(page)}))}#mailbox-message-index"
+    current_attr = ' aria-current="page"' if current else ""
+    return (
+        f'<a class="mailbox-page-link" aria-label="Mailbox message index page {page}"'
+        f'{current_attr} href="{href}">{escape(label)}</a>'
+    )
+
+
+def _render_mbox_message_pagination(
+    *, document_id: str, page: int, page_count: int, page_size: int, total: int
+) -> str:
+    if total == 0 or page_count <= 1:
+        return ""
+    previous_link = ""
+    next_link = ""
+    if page > 1:
+        previous_link = _mailbox_page_link(document_id, page - 1, "Previous page")
+    if page < page_count:
+        next_link = _mailbox_page_link(document_id, page + 1, "Next page")
+    numbered = "".join(
+        _mailbox_page_link(document_id, index, str(index), current=index == page)
+        for index in range(1, page_count + 1)
+    )
+    return (
+        '<nav class="mailbox-message-pagination" aria-label="Mailbox message index pagination">'
+        f'<span>Page {page} of {page_count}</span>{previous_link}'
+        f'<span class="mailbox-page-numbers">{numbered}</span>{next_link}'
+        f'<span class="mailbox-page-size">Bounded to {page_size} message projections per page.</span>'
+        "</nav>"
+    )
+
+
 def _render_mbox_document(item: dict, *, message_index: object | None = None, page: object | None = None) -> str:
     metadata = _email_metadata(item)
     messages = [message for message in (metadata.get("messages") or []) if isinstance(message, dict)]
@@ -1644,9 +1677,10 @@ def _render_mbox_document(item: dict, *, message_index: object | None = None, pa
         current_page = 1
     current_page = current_page if current_page > 0 else 1
     page_size = 25
+    total_pages = max(1, (len(messages) + page_size - 1) // page_size)
+    current_page = min(current_page, total_pages)
     start = (current_page - 1) * page_size
     visible_messages = messages[start : start + page_size]
-    total_pages = max(1, (len(messages) + page_size - 1) // page_size)
     overview_fields = (
         ("Detected format", metadata.get("source_format_label") or document_type_label(item.get("document_type"))),
         ("Detected MBOX variant", metadata.get("detected_mbox_variant")),
@@ -1680,6 +1714,13 @@ def _render_mbox_document(item: dict, *, message_index: object | None = None, pa
         for message in visible_messages
     ) or '<tr><td colspan="8">No contained message projections are available.</td></tr>'
     pagination = f'<p class="provenance-boundary">Showing messages {start + 1 if messages else 0}-{min(start + page_size, len(messages))} of {len(messages)}. Page {current_page} of {total_pages}. Public rendering is bounded to {page_size} message projections per page.</p>'
+    pagination_controls = _render_mbox_message_pagination(
+        document_id=str(item.get("intake_id") or ""),
+        page=current_page,
+        page_count=total_pages,
+        page_size=page_size,
+        total=len(messages),
+    )
     selected = _message_by_index(metadata, message_index)
     detail = ""
     if selected:
@@ -1721,7 +1762,7 @@ def _render_mbox_document(item: dict, *, message_index: object | None = None, pa
     graph = _render_mbox_relationship_graph(item)
     return f"""<nav class="mailbox-tabs" aria-label="Mailbox sections"><a href="#mailbox-inbox">Inbox</a><a href="#mailbox-cases">Cases</a><a href="#mailbox-timeline">Timeline</a><a href="#mailbox-relationship-graph">Relationship Graph</a></nav>
 <section class="public-mbox-summary" id="mailbox-inbox"><h2>Mailbox Overview</h2><p class="provenance-boundary">{escape(MBOX_GOVERNANCE_BOUNDARY)}</p><table>{overview_rows}</table></section>
-<section class="public-mbox-index"><h2>Mailbox Message Index</h2>{pagination}<div class="email-attachments-wrapper"><table class="public-mbox-message-index"><thead><tr><th>Index</th><th>Date</th><th>From</th><th>Subject</th><th>To</th><th>Attachment count</th><th>Parse status</th><th>Warning indicator</th></tr></thead><tbody>{index_rows}</tbody></table></div><p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
+<section class="public-mbox-index" id="mailbox-message-index"><h2>Mailbox Message Index</h2>{pagination}{pagination_controls}<div class="email-attachments-wrapper"><table class="public-mbox-message-index"><thead><tr><th>Index</th><th>Date</th><th>From</th><th>Subject</th><th>To</th><th>Attachment count</th><th>Parse status</th><th>Warning indicator</th></tr></thead><tbody>{index_rows}</tbody></table></div>{pagination_controls}<p class="provenance-boundary">Parser warnings: {escape(_display_value(warning_text))}</p></section>
 <section class="public-mbox-placeholder" id="mailbox-cases"><h2>Cases</h2><p class="provenance-boundary">Case relationships are represented in the Relationship Graph when case references are present in the mailbox projection.</p></section>
 <section class="public-mbox-placeholder" id="mailbox-timeline"><h2>Timeline</h2><p class="provenance-boundary">Chronological access remains available through the Mailbox Message Index and message dates recorded in the preserved archive.</p></section>
 {graph}

@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from api.document_intake import (
     intake_document_file,
     is_mailbox_document,
     list_published_documents,
+    load_pending_document,
     store_pending_document,
     update_intake_status,
     validate_document_file,
@@ -151,6 +153,74 @@ class MBOXArchiveSupportTests(unittest.TestCase):
                 root=self.root,
             )
         return item
+
+    def _numbered_mbox(self, count: int) -> bytes:
+        messages = [
+            message(
+                sender=f"Sender {index:03d} <sender-{index:03d}@example.test>",
+                recipient=f"Recipient {index:03d} <recipient-{index:03d}@example.test>",
+                subject=f"Mailbox page message {index:03d}",
+                message_id=f"<mbox-page-{index:03d}@example.test>",
+                date=f"Tue, 21 Jul 2026 10:{index % 60:02d}:00 +0000",
+                body=f"Synthetic mailbox body {index:03d}.",
+            )
+            for index in range(1, count + 1)
+        ]
+        separators = [
+            f"From sender-{index:03d}@example.test Tue Jul 21 10:{index % 60:02d}:00 2026\n".encode()
+            for index in range(1, count + 1)
+        ]
+        return mbox(*messages, separators=separators)
+
+    def _published_numbered_mailbox(self, count: int):
+        data = self._numbered_mbox(count)
+        if count == 0:
+            data = mbox(
+                message(
+                    subject="Mailbox zero fixture placeholder",
+                    message_id="<mbox-page-zero-placeholder@example.test>",
+                    body="Synthetic placeholder removed from zero-message metadata.",
+                )
+            )
+        item = self._publish(
+            self._store(
+                data,
+                title=f"Synthetic {count} message mailbox",
+                reference_identifier=f"MBOX-PAGE-{count:03d}",
+            )
+        )
+        if count:
+            return item
+        stored = load_pending_document(item["intake_id"], root=self.root)
+        stored["email_metadata"]["messages"] = []
+        stored["email_metadata"]["message_count"] = 0
+        stored["email_metadata"]["parsed_message_count"] = 0
+        stored["email_metadata"]["unparsed_message_count"] = 0
+        stored["email_metadata"]["warning_message_count"] = 0
+        stored["email_metadata"]["attachment_total"] = 0
+        stored["email_metadata"]["message_ids_present"] = 0
+        stored["email_metadata"]["message_ids_missing"] = 0
+        stored["email_metadata"]["exact_duplicate_count"] = 0
+        stored["email_metadata"]["earliest_message_date"] = None
+        stored["email_metadata"]["latest_message_date"] = None
+        metadata_path = self.root / item["intake_id"] / "metadata.json"
+        metadata_path.write_text(json.dumps(stored, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return stored
+
+    @staticmethod
+    def _message_index_table(page: str) -> str:
+        start = page.index('<table class="public-mbox-message-index"')
+        end = page.index("</table>", start)
+        return page[start:end]
+
+    @staticmethod
+    def _message_subjects(page: str) -> set[str]:
+        table = MBOXArchiveSupportTests._message_index_table(page)
+        return {
+            f"Mailbox page message {index:03d}"
+            for index in range(1, 80)
+            if f"Mailbox page message {index:03d}" in table
+        }
 
     def test_valid_mbox_upload_preserves_original_bytes_and_indexes_messages(self):
         data = mbox(message(), html_message(), attachment_message())
@@ -298,6 +368,106 @@ class MBOXArchiveSupportTests(unittest.TestCase):
         self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
         self.assertIn("attachment", response.headers["Content-Disposition"])
         self.assertEqual(Path(response.path).read_bytes(), data)
+
+    def test_published_mbox_zero_one_and_exact_page_size_have_no_pagination_controls(self):
+        for count, summary in (
+            (0, "Showing messages 0-0 of 0. Page 1 of 1."),
+            (1, "Showing messages 1-1 of 1. Page 1 of 1."),
+            (25, "Showing messages 1-25 of 25. Page 1 of 1."),
+        ):
+            with self.subTest(count=count):
+                item = self._published_numbered_mailbox(count)
+                page = documents.public_document_page(item["intake_id"]).content
+                self.assertIn(summary, page)
+                self.assertNotIn("mailbox-message-pagination", page)
+                self.assertNotIn("Next page", page)
+                self.assertNotIn("Previous page", page)
+
+    def test_published_mbox_twenty_six_messages_exposes_second_page(self):
+        item = self._published_numbered_mailbox(26)
+        page_one = documents.public_document_page(item["intake_id"]).content
+        page_two = documents.public_document_page(item["intake_id"], page="2").content
+        self.assertIn("Showing messages 1-25 of 26. Page 1 of 2.", page_one)
+        self.assertIn("Showing messages 26-26 of 26. Page 2 of 2.", page_two)
+        self.assertIn(f'/documents/{item["intake_id"]}?page=2#mailbox-message-index', page_one)
+        self.assertIn(f'/documents/{item["intake_id"]}?page=1#mailbox-message-index', page_two)
+        self.assertNotIn("Previous page", page_one)
+        self.assertNotIn("Next page", page_two)
+        self.assertEqual(self._message_subjects(page_one), {f"Mailbox page message {index:03d}" for index in range(1, 26)})
+        self.assertEqual(self._message_subjects(page_two), {"Mailbox page message 026"})
+        self.assertFalse(self._message_subjects(page_one) & self._message_subjects(page_two))
+
+    def test_published_mbox_thirty_four_message_pages_do_not_overlap_or_omit_messages(self):
+        item = self._published_numbered_mailbox(34)
+        page_one = documents.public_document_page(item["intake_id"], page="1").content
+        page_two = documents.public_document_page(item["intake_id"], page="2").content
+        first_subjects = self._message_subjects(page_one)
+        second_subjects = self._message_subjects(page_two)
+        self.assertIn("Showing messages 1-25 of 34. Page 1 of 2.", page_one)
+        self.assertIn("Showing messages 26-34 of 34. Page 2 of 2.", page_two)
+        self.assertEqual(first_subjects, {f"Mailbox page message {index:03d}" for index in range(1, 26)})
+        self.assertEqual(second_subjects, {f"Mailbox page message {index:03d}" for index in range(26, 35)})
+        self.assertEqual(first_subjects | second_subjects, {f"Mailbox page message {index:03d}" for index in range(1, 35)})
+        self.assertFalse(first_subjects & second_subjects)
+        self.assertEqual(
+            page_one.count(
+                f'aria-current="page" href="/documents/{item["intake_id"]}?page=1#mailbox-message-index"'
+            ),
+            2,
+        )
+        self.assertIn('aria-label="Mailbox message index page 2"', page_one)
+        self.assertIn('id="mailbox-message-index"', page_one)
+        self.assertNotIn("Mailbox page message 026", self._message_index_table(page_one))
+        self.assertNotIn("Mailbox page message 025", self._message_index_table(page_two))
+
+    def test_published_mbox_fifty_and_fifty_one_message_page_counts(self):
+        fifty = self._published_numbered_mailbox(50)
+        fifty_one = self._published_numbered_mailbox(51)
+        page_two = documents.public_document_page(fifty["intake_id"], page="2").content
+        middle = documents.public_document_page(fifty_one["intake_id"], page="2").content
+        last = documents.public_document_page(fifty_one["intake_id"], page="3").content
+        self.assertIn("Showing messages 26-50 of 50. Page 2 of 2.", page_two)
+        self.assertIn("Showing messages 26-50 of 51. Page 2 of 3.", middle)
+        self.assertIn("Showing messages 51-51 of 51. Page 3 of 3.", last)
+        self.assertIn("Previous page", middle)
+        self.assertIn("Next page", middle)
+        self.assertNotIn("Next page", last)
+
+    def test_published_mbox_invalid_page_inputs_are_bounded(self):
+        item = self._published_numbered_mailbox(34)
+        for value in (None, "0", "-2", "not-an-integer", "true", ["1", "2"]):
+            with self.subTest(value=value):
+                page = documents.public_document_page(item["intake_id"], page=value).content
+                self.assertIn("Showing messages 1-25 of 34. Page 1 of 2.", page)
+        clamped = documents.public_document_page(item["intake_id"], page="999999999").content
+        self.assertIn("Showing messages 26-34 of 34. Page 2 of 2.", clamped)
+
+    def test_published_mbox_detail_and_download_behaviour_are_unchanged_by_pagination(self):
+        data = self._numbered_mbox(34)
+        item = self._publish(self._store(data))
+        page_one = documents.public_document_page(item["intake_id"], page="1").content
+        self.assertIn(f'/documents/{item["intake_id"]}?message=1', page_one)
+        self.assertIn(f'/documents/{item["intake_id"]}?message=25', page_one)
+        self.assertNotIn(f'/documents/{item["intake_id"]}?message=26', page_one)
+        detail = documents.public_document_page(item["intake_id"], message="26", page="2").content
+        self.assertIn("Message Detail", detail)
+        self.assertIn("Mailbox page message 026", detail)
+        self.assertIn("Showing messages 26-34 of 34. Page 2 of 2.", detail)
+        response = documents.public_document_download(item["intake_id"])
+        self.assertEqual(response.media_type, "application/mbox")
+        self.assertEqual(Path(response.path).read_bytes(), data)
+
+    def test_published_mbox_pagination_preserves_publication_enforcement_and_archive_bytes(self):
+        data = self._numbered_mbox(26)
+        pending = self._store(data, title="Private pagination mailbox")
+        with self.assertRaises(Exception):
+            documents.public_document_page(pending["intake_id"], page="2")
+        item = self._publish(pending)
+        before = Path(intake_document_file(item["intake_id"], root=self.root)[0]).read_bytes()
+        documents.public_document_page(item["intake_id"], page="2")
+        after = Path(intake_document_file(item["intake_id"], root=self.root)[0]).read_bytes()
+        self.assertEqual(before, data)
+        self.assertEqual(after, data)
 
     def test_pending_mbox_private_admin_form_and_review_boundary(self):
         item = self._store()
