@@ -20,8 +20,18 @@ from api.governed_report_diagnostics import bounded_code, combine_cleanup_status
 
 SCHEMA_VERSION = "stage75.governed_report.v1"
 SPECIFICATION_SCHEMA_VERSION = "stage75.report_specification.v1"
+PATHWAY_SPECIFICATION_SCHEMA_VERSION = "stage78.procedural_pathway_report_specification.v1"
 PUBLICATION_ENGINE_VERSION = "2.0.0"
+PATHWAY_PROJECTION_CONTRACT = "stage78.pathway_projection.v1"
+PATHWAY_PROJECTION_VERSION = "78a2b2"
+PATHWAY_REPORT_TYPE = "procedural_pathway_report"
+PATHWAY_SOURCE_IDENTITY_KIND = "governed_pathway_projection"
+PATHWAY_RENDERING_PROFILE = "internal_pathway_v1"
+PATHWAY_TEMPLATE_VERSION = "cde-internal-pathway-v1"
+PATHWAY_INCLUSION_MODE = "full_canonical_record_scope"
+PATHWAY_EXCLUSION_RULE = "full_scope_no_selected_subset_or_caller_supplied_authority"
 REPORT_TYPES = {"canonical_record_report"}
+_SUPPORTED_REPORT_TYPES = REPORT_TYPES | {PATHWAY_REPORT_TYPE}
 DISTRIBUTION_CLASSES = {"internal_working", "restricted_review"}
 OUTPUT_FORMATS = {"docx", "html", "pdf"}
 CONTENT_TYPES = {"verbatim_source", "faithful_paraphrase", "administrative_summary", "qualification", "limitation", "redaction_notice"}
@@ -32,6 +42,7 @@ MAX_REPORT_TEXT = 1_000_000
 MAX_SECTIONS = 50
 MAX_BLOCKS = 500
 MAX_SELECTED_OBJECTS = 100
+_LOWER_SHA256 = set("0123456789abcdef")
 
 BOUNDARY = "A REPORT PRESENTS THE RECORD—IT DOES NOT REPLACE IT. Inclusion is not endorsement. Exclusion is not proof of absence. A summary is not original language. Printing is not publication. Publication Engine validation is not legal validation."
 
@@ -174,7 +185,30 @@ def validate_report_tables(conn: sqlite3.Connection) -> None:
 
 
 def _record_snapshot(conn: sqlite3.Connection, reference: str) -> dict[str, Any]:
-    value = rda.record_context(conn, reference)
+    value = None
+    if _table_exists(conn, "records"):
+        available_columns = {
+            str(row[1])
+            for row in conn.execute("PRAGMA table_info(records)").fetchall()
+        }
+        preferred_columns = (
+            "reference", "record_type", "title", "public_title", "record_title",
+            "institution", "institution_type", "institution_source", "summary",
+            "public_summary", "finding", "generated_at", "exported_at", "trajectory",
+            "system_state", "version", "language", "source_document_id",
+            "source_document_reference", "status",
+        )
+        selected_columns = [column for column in preferred_columns if column in available_columns]
+        if "reference" in selected_columns:
+            latest_clause = " AND is_latest = 1" if "is_latest" in available_columns else ""
+            order_clause = " ORDER BY version DESC" if "version" in available_columns else ""
+            row = conn.execute(
+                f"SELECT {', '.join(selected_columns)} FROM records WHERE reference = ?{latest_clause}{order_clause} LIMIT 1",
+                (str(reference or "").strip(),),
+            ).fetchone()
+            value = dict(row) if row else None
+    else:
+        value = rda.record_context(conn, reference)
     if not value:
         raise ValueError("governed_report_canonical_record_not_found")
     if str(value.get("status") or "").lower() in {"withdrawn", "superseded", "inactive"}:
@@ -233,9 +267,7 @@ def _blocks(blocks: Any, *, record: Mapping[str, Any], documents: list[Mapping[s
     return result
 
 
-def _canonical_specification(*, record: Mapping[str, Any], documents: list[Mapping[str, Any]], associations: list[Mapping[str, Any]], sections: Any, exclusions: Any, title: str, purpose: str, audience: str, distribution_class: str, requested_formats: Any, rendering_profile: str, template_version: str) -> dict[str, Any]:
-    if distribution_class not in DISTRIBUTION_CLASSES:
-        raise ValueError("governed_report_distribution_class_invalid")
+def _formats(requested_formats: Any) -> list[str]:
     if not isinstance(requested_formats, (list, tuple)):
         raise ValueError("governed_report_output_formats_invalid")
     formats = list(requested_formats)
@@ -245,7 +277,200 @@ def _canonical_specification(*, record: Mapping[str, Any], documents: list[Mappi
         raise ValueError("governed_report_output_formats_invalid")
     if "pdf" in formats and not {"docx", "html"}.issubset(formats):
         raise ValueError("governed_report_pdf_companion_formats_required")
-    formats = sorted(formats)
+    return sorted(formats)
+
+
+def _plain_sha256(value: Any, error: str) -> str:
+    text = str(value or "")
+    if text.startswith("sha256:"):
+        text = text.removeprefix("sha256:")
+    if len(text) != 64 or any(character not in _LOWER_SHA256 for character in text):
+        raise ValueError(error)
+    return text
+
+
+def _required_exact_string(value: Any, error: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(error)
+    return value
+
+
+def _projection_module():
+    from api import record_governed_pathway_projection as projection
+    return projection
+
+
+def _logical_identity_for_projection_row(conn: sqlite3.Connection, row: Mapping[str, Any]) -> str:
+    projection = _projection_module()
+    identity = projection._logical_identity(conn, str(row.get("object_kind") or ""), row.get("object_id"))  # type: ignore[attr-defined]
+    if not identity:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    return str(identity)
+
+
+def _compact_pathway_row(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[str, Any]:
+    object_kind = _required(row.get("object_kind"), "governed_report_pathway_specification_invalid")
+    governed_identity = _logical_identity_for_projection_row(conn, row)
+    ownership_path = _required(row.get("ownership_path"), "governed_report_pathway_specification_invalid")
+    source_authority_key = _required_exact_string(row.get("governed_digest"), "governed_report_pathway_specification_invalid")
+    endpoints = []
+    for link in row.get("object_links") or []:
+        if not isinstance(link, Mapping):
+            raise ValueError("governed_report_pathway_specification_invalid")
+        endpoint_identity = _required(link.get("object_governed_identity"), "governed_report_pathway_specification_invalid")
+        endpoints.append({
+            "object_type": _required(link.get("object_type"), "governed_report_pathway_specification_invalid"),
+            "object_governed_identity": endpoint_identity,
+            "relationship_role": _required(link.get("relationship_role"), "governed_report_pathway_specification_invalid"),
+        })
+    endpoints.sort(key=lambda item: (item["object_type"], item["object_governed_identity"], item["relationship_role"]))
+    compact = {
+        "object_kind": object_kind,
+        "governed_logical_identity": governed_identity,
+        "parent_governed_identity": row.get("parent_governed_identity"),
+        "endpoint_identities": endpoints,
+        "status": row.get("status"),
+        "source_authority_key": source_authority_key,
+        "ownership_path": ownership_path,
+    }
+    compact["row_authority_digest"] = _row_authority_digest(compact)
+    return compact
+
+
+def _row_authority_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "object_kind": row.get("object_kind"),
+        "governed_logical_identity": row.get("governed_logical_identity"),
+        "parent_governed_identity": row.get("parent_governed_identity"),
+        "endpoint_identities": row.get("endpoint_identities"),
+        "status": row.get("status"),
+        "ownership_path": row.get("ownership_path"),
+        "source_authority_key": row.get("source_authority_key"),
+    }
+
+
+def _row_authority_digest(row: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(_row_authority_payload(row)).encode("utf-8")).hexdigest()
+
+
+def _compact_pathway_identity(conn: sqlite3.Connection, record_reference: str) -> dict[str, Any]:
+    projection = _projection_module()
+    try:
+        projected = projection.project_pathway(conn, record_reference)
+    except ValueError as exc:
+        if str(exc).endswith("_schema_incomplete"):
+            raise ValueError("governed_report_pathway_schema_incomplete") from None
+        raise
+    if projected.get("projection_contract") != PATHWAY_PROJECTION_CONTRACT:
+        raise ValueError("governed_report_pathway_projection_contract_unsupported")
+    if projected.get("projection_version") != PATHWAY_PROJECTION_VERSION:
+        raise ValueError("governed_report_pathway_projection_version_unsupported")
+    if str(projected.get("record_reference") or "") != record_reference:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    rows = [_compact_pathway_row(conn, row) for row in projected.get("rows") or []]
+    identities = [row["governed_logical_identity"] for row in rows]
+    if len(identities) != len(set(identities)):
+        raise ValueError("governed_report_pathway_row_inventory_invalid")
+    coverage = dict(projected.get("coverage") or {})
+    gaps = [dict(item) for item in projected.get("gaps") or []]
+    unavailable = sorted(
+        key.removesuffix("_schema_present")
+        for key, value in coverage.items()
+        if key.startswith("stage") and key.endswith("_schema_present") and value is False
+    )
+    return {
+        "source_identity": {
+            "object_kind": PATHWAY_SOURCE_IDENTITY_KIND,
+            "object_id": record_reference,
+        },
+        "canonical_record_reference": record_reference,
+        "projection_contract": PATHWAY_PROJECTION_CONTRACT,
+        "projection_version": PATHWAY_PROJECTION_VERSION,
+        "projection_digest": _plain_sha256(projected.get("projection_digest"), "governed_report_pathway_projection_digest_invalid"),
+        "inclusion_mode": PATHWAY_INCLUSION_MODE,
+        "exclusion_rule": PATHWAY_EXCLUSION_RULE,
+        "rows": rows,
+        "coverage": coverage,
+        "unavailable_families": unavailable,
+        "gaps": gaps,
+    }
+
+
+def _validate_pathway_section(section: Any, *, record_reference: str) -> dict[str, Any]:
+    if not isinstance(section, Mapping):
+        raise ValueError("governed_report_pathway_specification_invalid")
+    expected_keys = {
+        "source_identity", "canonical_record_reference", "projection_contract", "projection_version",
+        "projection_digest", "inclusion_mode", "exclusion_rule", "rows", "coverage",
+        "unavailable_families", "gaps",
+    }
+    if set(section) != expected_keys:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if section["canonical_record_reference"] != record_reference:
+        raise ValueError("governed_report_pathway_record_mismatch")
+    source_identity = section["source_identity"]
+    if not isinstance(source_identity, Mapping) or set(source_identity) != {"object_kind", "object_id"}:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if source_identity.get("object_kind") != PATHWAY_SOURCE_IDENTITY_KIND or source_identity.get("object_id") != record_reference:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if section["projection_contract"] != PATHWAY_PROJECTION_CONTRACT:
+        raise ValueError("governed_report_pathway_projection_contract_unsupported")
+    if section["projection_version"] != PATHWAY_PROJECTION_VERSION:
+        raise ValueError("governed_report_pathway_projection_version_unsupported")
+    _plain_sha256(section["projection_digest"], "governed_report_pathway_projection_digest_invalid")
+    if section["inclusion_mode"] != PATHWAY_INCLUSION_MODE or section["exclusion_rule"] != PATHWAY_EXCLUSION_RULE:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if not isinstance(section["coverage"], Mapping) or not isinstance(section["unavailable_families"], list) or not isinstance(section["gaps"], list):
+        raise ValueError("governed_report_pathway_specification_invalid")
+    expected_unavailable = sorted(
+        key.removesuffix("_schema_present")
+        for key, value in section["coverage"].items()
+        if str(key).startswith("stage") and str(key).endswith("_schema_present") and value is False
+    )
+    if section["unavailable_families"] != expected_unavailable:
+        raise ValueError("governed_report_pathway_coverage_drift")
+    rows = section["rows"]
+    if not isinstance(rows, list):
+        raise ValueError("governed_report_pathway_specification_invalid")
+    identities: set[str] = set()
+    projection = _projection_module()
+    recognized = set(projection.KIND_RANK)  # type: ignore[attr-defined]
+    for row in rows:
+        if not isinstance(row, Mapping) or set(row) != {
+            "object_kind", "governed_logical_identity", "parent_governed_identity",
+            "endpoint_identities", "status", "source_authority_key", "row_authority_digest",
+            "ownership_path",
+        }:
+            raise ValueError("governed_report_pathway_specification_invalid")
+        if row["object_kind"] not in recognized:
+            raise ValueError("governed_report_pathway_row_inventory_invalid")
+        identity = _required(row.get("governed_logical_identity"), "governed_report_pathway_specification_invalid")
+        if identity in identities:
+            raise ValueError("governed_report_pathway_row_inventory_invalid")
+        identities.add(identity)
+        _required_exact_string(row.get("source_authority_key"), "governed_report_pathway_specification_invalid")
+        _required(row.get("ownership_path"), "governed_report_pathway_specification_invalid")
+        digest = _plain_sha256(row.get("row_authority_digest"), "governed_report_pathway_row_authority_digest_invalid")
+        if row["parent_governed_identity"] is not None and not str(row["parent_governed_identity"]):
+            raise ValueError("governed_report_pathway_specification_invalid")
+        endpoints = row["endpoint_identities"]
+        if not isinstance(endpoints, list):
+            raise ValueError("governed_report_pathway_specification_invalid")
+        for endpoint in endpoints:
+            if not isinstance(endpoint, Mapping) or set(endpoint) != {"object_type", "object_governed_identity", "relationship_role"}:
+                raise ValueError("governed_report_pathway_specification_invalid")
+            _required(endpoint.get("object_type"), "governed_report_pathway_specification_invalid")
+            _required(endpoint.get("object_governed_identity"), "governed_report_pathway_specification_invalid")
+            _required(endpoint.get("relationship_role"), "governed_report_pathway_specification_invalid")
+        if digest != _row_authority_digest(row):
+            raise ValueError("governed_report_pathway_row_authority_digest_invalid")
+    return dict(section)
+
+
+def _canonical_specification(*, record: Mapping[str, Any], documents: list[Mapping[str, Any]], associations: list[Mapping[str, Any]], sections: Any, exclusions: Any, title: str, purpose: str, audience: str, distribution_class: str, requested_formats: Any, rendering_profile: str, template_version: str) -> dict[str, Any]:
+    if distribution_class not in DISTRIBUTION_CLASSES:
+        raise ValueError("governed_report_distribution_class_invalid")
+    formats = _formats(requested_formats)
     if not isinstance(sections, list) or not sections or len(sections) > MAX_SECTIONS:
         raise ValueError("governed_report_sections_required")
     normalized_sections = []
@@ -265,6 +490,154 @@ def _canonical_specification(*, record: Mapping[str, Any], documents: list[Mappi
     if len(normalized_exclusions) != len({(item["object_kind"], item["object_id"]) for item in normalized_exclusions}):
         raise ValueError("governed_report_exclusions_duplicate")
     return {"specification_schema_version": SPECIFICATION_SCHEMA_VERSION, "report_type": "canonical_record_report", "title": _required(title, "governed_report_title_required"), "purpose": _required(purpose, "governed_report_purpose_required"), "intended_audience": _required(audience, "governed_report_audience_required"), "distribution_class": distribution_class, "primary_record": dict(record), "selected_documents": sorted(documents, key=lambda x: str(x["document_id"])), "selected_associations": sorted(associations, key=lambda x: int(x["association_id"])), "sections": normalized_sections, "exclusions": sorted(normalized_exclusions, key=lambda x: (x["object_kind"], x["object_id"])), "qualifications": [BOUNDARY, "THE RECORD MUST PRESERVE THE ORIGINAL LANGUAGE."], "requested_formats": formats, "publication_engine_version": PUBLICATION_ENGINE_VERSION, "rendering_profile": _required(rendering_profile, "governed_report_rendering_profile_required"), "template_version": _required(template_version, "governed_report_template_version_required")}
+
+
+def _pathway_specification(*, conn: sqlite3.Connection, record: Mapping[str, Any], sections: Any, exclusions: Any, document_ids: Any, association_ids: Any, title: str, purpose: str, audience: str, distribution_class: str, requested_formats: Any, rendering_profile: str, template_version: str) -> dict[str, Any]:
+    if distribution_class != "internal_working":
+        raise ValueError("governed_report_pathway_distribution_invalid")
+    if rendering_profile != PATHWAY_RENDERING_PROFILE:
+        raise ValueError("governed_report_pathway_rendering_profile_invalid")
+    if template_version != PATHWAY_TEMPLATE_VERSION:
+        raise ValueError("governed_report_pathway_template_version_invalid")
+    if document_ids not in (None, [], ()):
+        raise ValueError("governed_report_pathway_authority_caller_supplied")
+    if association_ids not in (None, [], ()):
+        raise ValueError("governed_report_pathway_authority_caller_supplied")
+    if sections not in (None, [], ()):
+        raise ValueError("governed_report_pathway_authority_caller_supplied")
+    if exclusions not in (None, [], ()):
+        raise ValueError("governed_report_pathway_authority_caller_supplied")
+    formats = _formats(requested_formats)
+    pathway = _compact_pathway_identity(conn, str(record["reference"]))
+    return {
+        "specification_schema_version": PATHWAY_SPECIFICATION_SCHEMA_VERSION,
+        "report_type": PATHWAY_REPORT_TYPE,
+        "title": _required(title, "governed_report_title_required"),
+        "purpose": _required(purpose, "governed_report_purpose_required"),
+        "intended_audience": _required(audience, "governed_report_audience_required"),
+        "distribution_class": "internal_working",
+        "primary_record": dict(record),
+        "pathway_projection": pathway,
+        "selected_documents": [],
+        "selected_associations": [],
+        "sections": [],
+        "exclusions": [],
+        "qualifications": [
+            BOUNDARY,
+            "THE PROCEDURAL PATHWAY REPORT PRESENTS GOVERNED PATHWAY RECORDS ONLY.",
+            "Projection does not establish legality, truth, fairness, completeness, compliance, or publication.",
+        ],
+        "requested_formats": formats,
+        "publication_engine_version": PUBLICATION_ENGINE_VERSION,
+        "rendering_profile": PATHWAY_RENDERING_PROFILE,
+        "template_version": PATHWAY_TEMPLATE_VERSION,
+    }
+
+
+def _acquire_pathway_freeze_write_intent(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("UPDATE record_governed_reports SET id=id WHERE 0")
+    except sqlite3.Error:
+        raise ValueError("governed_report_pathway_freeze_transaction_unavailable") from None
+
+
+def _create_pathway_report_transactionally(conn: sqlite3.Connection, *, title: str, purpose: str, audience: str, distribution_class: str, canonical_record_reference: str, document_ids: Any, association_ids: Any, sections: Any, exclusions: Any, requested_formats: Any, rendering_profile: str, template_version: str, actor: str, actor_role: str, idempotency_key: str, created_at: str | None, _commit: bool) -> dict[str, Any]:
+    actor_value = _required(actor, "governed_report_actor_required")
+    role_value = _required(actor_role, "governed_report_actor_role_required")
+    key = _required(idempotency_key, "governed_report_idempotency_key_required")
+    owns_transaction = False
+    savepoint_active = False
+    if conn.in_transaction:
+        validate_report_tables(conn)
+        from api import governed_report_qualifications as qualifications
+        qualifications.validate_qualification_tables(conn)
+    else:
+        try:
+            ensure_report_tables(conn)
+        except sqlite3.Error:
+            raise ValueError("governed_report_pathway_freeze_transaction_unavailable") from None
+    try:
+        if not conn.in_transaction:
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+            except sqlite3.Error:
+                raise ValueError("governed_report_pathway_freeze_transaction_unavailable") from None
+            owns_transaction = True
+        conn.execute("SAVEPOINT stage75_create")
+        savepoint_active = True
+        _acquire_pathway_freeze_write_intent(conn)
+        record = _record_snapshot(conn, canonical_record_reference)
+        specification = _pathway_specification(conn=conn, record=record, sections=sections, exclusions=exclusions, document_ids=document_ids, association_ids=association_ids, title=title, purpose=purpose, audience=audience, distribution_class=distribution_class, requested_formats=requested_formats, rendering_profile=rendering_profile, template_version=template_version)
+        digest = specification_digest(specification)
+        payload = {"specification": specification, "actor": actor_value, "actor_role": role_value, "declaration": {"acknowledged": True}}
+        existing = conn.execute("SELECT id,request_payload_json FROM record_governed_reports WHERE idempotency_key=?", (key,)).fetchone()
+        if existing:
+            if json.loads(existing[1]) != payload:
+                raise ValueError("governed_report_idempotency_conflict")
+            conn.execute("RELEASE SAVEPOINT stage75_create")
+            savepoint_active = False
+            if owns_transaction and _commit:
+                conn.commit()
+            return _row(conn, existing[0])
+        now = created_at or utc_now()
+        conn.execute("INSERT INTO record_governed_reports (idempotency_key,schema_version,report_type,title,purpose,intended_audience,distribution_class,created_by,created_by_role,created_at,lifecycle_status,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (key, SCHEMA_VERSION, specification["report_type"], specification["title"], specification["purpose"], specification["intended_audience"], specification["distribution_class"], actor_value, role_value, now, "draft_specification", canonical_json(payload)))
+        report_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute("INSERT INTO record_governed_report_versions (report_id,version_number,canonical_record_reference,specification_schema_version,specification_json,specification_digest,requested_formats_json,publication_engine_version,rendering_profile,template_version,created_by,created_at,lifecycle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (report_id, 1, record["reference"], specification["specification_schema_version"], canonical_json(specification), digest, canonical_json(specification["requested_formats"]), specification["publication_engine_version"], specification["rendering_profile"], specification["template_version"], actor_value, now, "draft_specification"))
+        version_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        event_payload = {"report_id": report_id, "version_id": version_id, "event_type": "created", "resulting_status": "draft_specification", "actor": actor_value, "actor_role": role_value, "declaration": {"acknowledged": True}}
+        conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (report_id, version_id, "created", "draft_specification", "Report specification created as a deliberate internal assembly.", actor_value, role_value, '{"acknowledged":true}', now, key + ":created", canonical_json(event_payload)))
+        conn.execute("RELEASE SAVEPOINT stage75_create")
+        savepoint_active = False
+        if _commit:
+            conn.commit()
+    except sqlite3.Error as exc:
+        if savepoint_active:
+            conn.execute("ROLLBACK TO SAVEPOINT stage75_create")
+            conn.execute("RELEASE SAVEPOINT stage75_create")
+        if owns_transaction:
+            conn.rollback()
+        if "readonly" in str(exc).lower():
+            raise ValueError("governed_report_pathway_freeze_transaction_unavailable") from None
+        raise
+    except Exception:
+        if savepoint_active:
+            conn.execute("ROLLBACK TO SAVEPOINT stage75_create")
+            conn.execute("RELEASE SAVEPOINT stage75_create")
+        if owns_transaction:
+            conn.rollback()
+        raise
+    return _row(conn, report_id)
+
+
+def validate_pathway_report_specification(conn: sqlite3.Connection, specification: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(specification, Mapping):
+        raise ValueError("governed_report_pathway_specification_invalid")
+    expected = {
+        "specification_schema_version", "report_type", "title", "purpose", "intended_audience",
+        "distribution_class", "primary_record", "pathway_projection", "selected_documents",
+        "selected_associations", "sections", "exclusions", "qualifications", "requested_formats",
+        "publication_engine_version", "rendering_profile", "template_version",
+    }
+    if set(specification) != expected:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if specification.get("report_type") != PATHWAY_REPORT_TYPE or specification.get("specification_schema_version") != PATHWAY_SPECIFICATION_SCHEMA_VERSION:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    if specification.get("distribution_class") != "internal_working":
+        raise ValueError("governed_report_pathway_distribution_invalid")
+    if specification.get("rendering_profile") != PATHWAY_RENDERING_PROFILE:
+        raise ValueError("governed_report_pathway_rendering_profile_invalid")
+    if specification.get("template_version") != PATHWAY_TEMPLATE_VERSION:
+        raise ValueError("governed_report_pathway_template_version_invalid")
+    if specification.get("publication_engine_version") != PUBLICATION_ENGINE_VERSION:
+        raise ValueError("governed_report_publication_engine_version_invalid")
+    if specification.get("selected_documents") != [] or specification.get("selected_associations") != [] or specification.get("sections") != [] or specification.get("exclusions") != []:
+        raise ValueError("governed_report_pathway_authority_caller_supplied")
+    _formats(specification.get("requested_formats"))
+    record = specification.get("primary_record")
+    if not isinstance(record, Mapping) or not record.get("reference"):
+        raise ValueError("governed_report_pathway_specification_invalid")
+    _validate_pathway_section(specification.get("pathway_projection"), record_reference=str(record["reference"]))
+    return dict(specification)
 
 
 def _row(conn: sqlite3.Connection, report_id: int | str) -> dict[str, Any]:
@@ -313,6 +686,28 @@ def read_candidates(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]
 
 
 def _validate_generation_sources(conn: sqlite3.Connection, specification: Mapping[str, Any]) -> None:
+    if specification.get("report_type") == PATHWAY_REPORT_TYPE:
+        validate_pathway_report_specification(conn, specification)
+        current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
+        for key in ("reference", "title", "description", "status", "version"):
+            if current_record.get(key) != specification["primary_record"].get(key):
+                raise ValueError("governed_report_canonical_record_changed")
+        frozen = specification["pathway_projection"]
+        live = _compact_pathway_identity(conn, str(specification["primary_record"]["reference"]))
+        if live["projection_digest"] != frozen["projection_digest"]:
+            raise ValueError("governed_report_pathway_projection_digest_drift")
+        if live["rows"] != frozen["rows"]:
+            raise ValueError("governed_report_pathway_row_inventory_drift")
+        if (
+            live["coverage"] != frozen["coverage"]
+            or live["unavailable_families"] != frozen["unavailable_families"]
+        ):
+            raise ValueError("governed_report_pathway_coverage_drift")
+        if live["gaps"] != frozen["gaps"]:
+            raise ValueError("governed_report_pathway_gap_drift")
+        if live != frozen:
+            raise ValueError("governed_report_pathway_specification_invalid")
+        return
     current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
     for key in ("reference", "title", "description", "status", "version"):
         if current_record.get(key) != specification["primary_record"].get(key):
@@ -327,21 +722,29 @@ def _validate_generation_sources(conn: sqlite3.Connection, specification: Mappin
             raise ValueError("governed_report_association_changed")
 
 
-def create_report(conn: sqlite3.Connection, *, title: str, purpose: str, audience: str, distribution_class: str, canonical_record_reference: str, document_ids: Any, association_ids: Any, sections: Any, exclusions: Any, requested_formats: Any, rendering_profile: str, template_version: str, actor: str, actor_role: str, idempotency_key: str, created_at: str | None = None, _commit: bool = True) -> dict[str, Any]:
+def create_report(conn: sqlite3.Connection, *, title: str, purpose: str, audience: str, distribution_class: str, canonical_record_reference: str, document_ids: Any, association_ids: Any, sections: Any, exclusions: Any, requested_formats: Any, rendering_profile: str, template_version: str, actor: str, actor_role: str, idempotency_key: str, report_type: str = "canonical_record_report", created_at: str | None = None, _commit: bool = True) -> dict[str, Any]:
+    if str(report_type or "").strip() == PATHWAY_REPORT_TYPE:
+        return _create_pathway_report_transactionally(conn, title=title, purpose=purpose, audience=audience, distribution_class=distribution_class, canonical_record_reference=canonical_record_reference, document_ids=document_ids, association_ids=association_ids, sections=sections, exclusions=exclusions, requested_formats=requested_formats, rendering_profile=rendering_profile, template_version=template_version, actor=actor, actor_role=actor_role, idempotency_key=idempotency_key, created_at=created_at, _commit=_commit)
     ensure_report_tables(conn)
     actor_value = _required(actor, "governed_report_actor_required")
     role_value = _required(actor_role, "governed_report_actor_role_required")
     key = _required(idempotency_key, "governed_report_idempotency_key_required")
+    report_type_value = _required(report_type, "governed_report_type_required")
+    if report_type_value not in _SUPPORTED_REPORT_TYPES:
+        raise ValueError("governed_report_type_invalid")
     record = _record_snapshot(conn, canonical_record_reference)
-    document_values = _unique_values(document_ids, "governed_report_document_selection_invalid")
-    association_values = _unique_values(association_ids, "governed_report_association_selection_invalid")
-    if len(document_values) > MAX_SELECTED_OBJECTS or len(association_values) > MAX_SELECTED_OBJECTS:
-        raise ValueError("governed_report_selected_objects_too_many")
-    documents = [_document_snapshot(value) for value in document_values]
-    associations = [_association_snapshot(conn, value) for value in association_values]
-    if any(item["record_reference"] != record["reference"] for item in associations):
-        raise ValueError("governed_report_association_record_mismatch")
-    specification = _canonical_specification(record=record, documents=documents, associations=associations, sections=sections, exclusions=exclusions, title=title, purpose=purpose, audience=audience, distribution_class=distribution_class, requested_formats=requested_formats, rendering_profile=rendering_profile, template_version=template_version)
+    if report_type_value == PATHWAY_REPORT_TYPE:
+        specification = _pathway_specification(conn=conn, record=record, sections=sections, exclusions=exclusions, document_ids=document_ids, association_ids=association_ids, title=title, purpose=purpose, audience=audience, distribution_class=distribution_class, requested_formats=requested_formats, rendering_profile=rendering_profile, template_version=template_version)
+    else:
+        document_values = _unique_values(document_ids, "governed_report_document_selection_invalid")
+        association_values = _unique_values(association_ids, "governed_report_association_selection_invalid")
+        if len(document_values) > MAX_SELECTED_OBJECTS or len(association_values) > MAX_SELECTED_OBJECTS:
+            raise ValueError("governed_report_selected_objects_too_many")
+        documents = [_document_snapshot(value) for value in document_values]
+        associations = [_association_snapshot(conn, value) for value in association_values]
+        if any(item["record_reference"] != record["reference"] for item in associations):
+            raise ValueError("governed_report_association_record_mismatch")
+        specification = _canonical_specification(record=record, documents=documents, associations=associations, sections=sections, exclusions=exclusions, title=title, purpose=purpose, audience=audience, distribution_class=distribution_class, requested_formats=requested_formats, rendering_profile=rendering_profile, template_version=template_version)
     digest = specification_digest(specification)
     payload = {"specification": specification, "actor": actor_value, "actor_role": role_value, "declaration": {"acknowledged": True}}
     existing = conn.execute("SELECT id,request_payload_json FROM record_governed_reports WHERE idempotency_key=?", (key,)).fetchone()
@@ -352,9 +755,9 @@ def create_report(conn: sqlite3.Connection, *, title: str, purpose: str, audienc
     now = created_at or utc_now()
     conn.execute("SAVEPOINT stage75_create")
     try:
-        conn.execute("INSERT INTO record_governed_reports (idempotency_key,schema_version,report_type,title,purpose,intended_audience,distribution_class,created_by,created_by_role,created_at,lifecycle_status,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (key, SCHEMA_VERSION, "canonical_record_report", specification["title"], specification["purpose"], specification["intended_audience"], distribution_class, actor_value, role_value, now, "draft_specification", canonical_json(payload)))
+        conn.execute("INSERT INTO record_governed_reports (idempotency_key,schema_version,report_type,title,purpose,intended_audience,distribution_class,created_by,created_by_role,created_at,lifecycle_status,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (key, SCHEMA_VERSION, specification["report_type"], specification["title"], specification["purpose"], specification["intended_audience"], specification["distribution_class"], actor_value, role_value, now, "draft_specification", canonical_json(payload)))
         report_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        conn.execute("INSERT INTO record_governed_report_versions (report_id,version_number,canonical_record_reference,specification_schema_version,specification_json,specification_digest,requested_formats_json,publication_engine_version,rendering_profile,template_version,created_by,created_at,lifecycle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (report_id, 1, record["reference"], SPECIFICATION_SCHEMA_VERSION, canonical_json(specification), digest, canonical_json(specification["requested_formats"]), PUBLICATION_ENGINE_VERSION, specification["rendering_profile"], specification["template_version"], actor_value, now, "draft_specification"))
+        conn.execute("INSERT INTO record_governed_report_versions (report_id,version_number,canonical_record_reference,specification_schema_version,specification_json,specification_digest,requested_formats_json,publication_engine_version,rendering_profile,template_version,created_by,created_at,lifecycle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (report_id, 1, record["reference"], specification["specification_schema_version"], canonical_json(specification), digest, canonical_json(specification["requested_formats"]), specification["publication_engine_version"], specification["rendering_profile"], specification["template_version"], actor_value, now, "draft_specification"))
         version_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         event_payload = {"report_id": report_id, "version_id": version_id, "event_type": "created", "resulting_status": "draft_specification", "actor": actor_value, "actor_role": role_value, "declaration": {"acknowledged": True}}
         conn.execute("INSERT INTO record_governed_report_events (report_id,version_id,event_type,resulting_status,rationale,actor,actor_role,declaration_json,occurred_at,idempotency_key,request_payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (report_id, version_id, "created", "draft_specification", "Report specification created as a deliberate internal assembly.", actor_value, role_value, '{"acknowledged":true}', now, key + ":created", canonical_json(event_payload)))
