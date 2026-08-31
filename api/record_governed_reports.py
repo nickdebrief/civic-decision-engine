@@ -30,6 +30,7 @@ PATHWAY_RENDERING_PROFILE = "internal_pathway_v1"
 PATHWAY_TEMPLATE_VERSION = "cde-internal-pathway-v1"
 PATHWAY_INCLUSION_MODE = "full_canonical_record_scope"
 PATHWAY_EXCLUSION_RULE = "full_scope_no_selected_subset_or_caller_supplied_authority"
+PATHWAY_RENDER_MODEL_CONTRACT = "stage78.pathway_render_model.v1"
 REPORT_TYPES = {"canonical_record_report"}
 _SUPPORTED_REPORT_TYPES = REPORT_TYPES | {PATHWAY_REPORT_TYPE}
 DISTRIBUTION_CLASSES = {"internal_working", "restricted_review"}
@@ -353,14 +354,7 @@ def _row_authority_digest(row: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(_row_authority_payload(row)).encode("utf-8")).hexdigest()
 
 
-def _compact_pathway_identity(conn: sqlite3.Connection, record_reference: str) -> dict[str, Any]:
-    projection = _projection_module()
-    try:
-        projected = projection.project_pathway(conn, record_reference)
-    except ValueError as exc:
-        if str(exc).endswith("_schema_incomplete"):
-            raise ValueError("governed_report_pathway_schema_incomplete") from None
-        raise
+def _compact_pathway_identity_from_projected(conn: sqlite3.Connection, record_reference: str, projected: Mapping[str, Any]) -> dict[str, Any]:
     if projected.get("projection_contract") != PATHWAY_PROJECTION_CONTRACT:
         raise ValueError("governed_report_pathway_projection_contract_unsupported")
     if projected.get("projection_version") != PATHWAY_PROJECTION_VERSION:
@@ -393,6 +387,242 @@ def _compact_pathway_identity(conn: sqlite3.Connection, record_reference: str) -
         "coverage": coverage,
         "unavailable_families": unavailable,
         "gaps": gaps,
+    }
+
+
+def _compact_pathway_identity(conn: sqlite3.Connection, record_reference: str) -> dict[str, Any]:
+    projection = _projection_module()
+    try:
+        projected = projection.project_pathway(conn, record_reference)
+    except ValueError as exc:
+        if str(exc).endswith("_schema_incomplete"):
+            raise ValueError("governed_report_pathway_schema_incomplete") from None
+        raise
+    return _compact_pathway_identity_from_projected(conn, record_reference, projected)
+
+
+def _validate_live_pathway_identity(conn: sqlite3.Connection, specification: Mapping[str, Any]) -> dict[str, Any]:
+    validate_pathway_report_specification(conn, specification)
+    current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
+    for key in ("reference", "title", "description", "status", "version"):
+        if current_record.get(key) != specification["primary_record"].get(key):
+            raise ValueError("governed_report_canonical_record_changed")
+    frozen = specification["pathway_projection"]
+    live = _compact_pathway_identity(conn, str(specification["primary_record"]["reference"]))
+    if live["projection_digest"] != frozen["projection_digest"]:
+        raise ValueError("governed_report_pathway_projection_digest_drift")
+    if live["rows"] != frozen["rows"]:
+        raise ValueError("governed_report_pathway_row_inventory_drift")
+    if (
+        live["coverage"] != frozen["coverage"]
+        or live["unavailable_families"] != frozen["unavailable_families"]
+    ):
+        raise ValueError("governed_report_pathway_coverage_drift")
+    if live["gaps"] != frozen["gaps"]:
+        raise ValueError("governed_report_pathway_gap_drift")
+    if live != frozen:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    return live
+
+
+_PATHWAY_SECTION_MAP = {
+    "governed_observation": "Observations",
+    "governed_inference": "Inferences",
+    "governed_allegation": "Allegations",
+    "governed_response": "Responses and express declinations",
+    "governed_characterisation": "Characterisations",
+    "decision_authority": "Authority and mandate",
+    "decision_mandate": "Authority and mandate",
+    "governed_determination": "Determinations and reasons",
+    "determination_effect_event": "Determinations and reasons",
+    "governed_challenge": "Challenges",
+    "challenge_event": "Challenges",
+    "challenge_outcome": "Challenges",
+    "governed_remedy": "Remedies",
+    "implementation_event": "Implementation, compliance and verification",
+    "formal_completion_determination": "Implementation, compliance and verification",
+    "determination_publication": "Determination publications",
+    "procedural_notice": "Notice and participation",
+    "procedural_deadline": "Procedural chronology",
+    "procedural_time_event": "Procedural chronology",
+    "deadline_calculation": "Procedural chronology",
+    "pathway_link": "Pathway relationships",
+}
+_PATHWAY_RENDER_OBJECT_KINDS = frozenset(_PATHWAY_SECTION_MAP)
+
+_PATHWAY_SECTION_ORDER = [
+    "Report identity and scope",
+    "Authority and mandate",
+    "Procedural chronology",
+    "Notice and participation",
+    "Observations",
+    "Inferences",
+    "Allegations",
+    "Responses and express declinations",
+    "Characterisations",
+    "Determinations and reasons",
+    "Challenges",
+    "Remedies",
+    "Implementation, compliance and verification",
+    "Determination publications",
+    "Pathway relationships",
+    "Contested matters",
+    "Scoped gaps",
+    "Provenance and limitations",
+]
+
+
+def _pathway_render_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _pathway_render_value(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_pathway_render_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_pathway_render_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def _pathway_render_governance_state(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _pathway_render_governance_state(value[key])
+            for key in sorted(value)
+            if str(key) not in {"actor", "actor_role", "reviewer", "reviewed_by", "reviewed_by_role"}
+        }
+    if isinstance(value, list):
+        return [_pathway_render_governance_state(item) for item in value]
+    return _pathway_render_value(value)
+
+
+def _pathway_render_object_kind(value: Any) -> str:
+    object_kind = _required_exact_string(value, "governed_report_pathway_render_model_invalid")
+    if object_kind not in _PATHWAY_RENDER_OBJECT_KINDS:
+        raise ValueError("governed_report_pathway_render_model_invalid")
+    return object_kind
+
+
+def _pathway_render_row(conn: sqlite3.Connection, row: Mapping[str, Any], compact: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "object_kind": _pathway_render_object_kind(row.get("object_kind")),
+        "governed_logical_identity": _required(compact.get("governed_logical_identity"), "governed_report_pathway_render_model_invalid"),
+        "parent_governed_identity": compact.get("parent_governed_identity"),
+        "endpoint_identities": _pathway_render_value(compact.get("endpoint_identities") or []),
+        "category": row.get("category"),
+        "status": row.get("status"),
+        "source_authority_key": _required_exact_string(compact.get("source_authority_key"), "governed_report_pathway_render_model_invalid"),
+        "row_authority_digest": _plain_sha256(compact.get("row_authority_digest"), "governed_report_pathway_render_model_invalid"),
+        "ownership_path": _required(compact.get("ownership_path"), "governed_report_pathway_render_model_invalid"),
+        "represented_time": row.get("represented_time"),
+        "recorded_at": row.get("recorded_at"),
+        "chronology": {
+            "basis": row.get("chronology_basis"),
+            "precision": row.get("chronology_precision"),
+            "lower_bound": row.get("chronology_lower_bound"),
+            "upper_bound": row.get("chronology_upper_bound"),
+            "ordering_relation": row.get("ordering_relation"),
+        },
+        "source_bindings": _pathway_render_value(row.get("source_bindings") or []),
+        "object_links": _pathway_render_value([
+            {key: value for key, value in dict(link).items() if key != "object_id"}
+            for link in row.get("object_links") or []
+            if isinstance(link, Mapping)
+        ]),
+        "contestation": _pathway_render_value(row.get("contestation") or {}),
+        "supersession": _pathway_render_governance_state(row.get("supersession") or {}),
+        "reliance": _pathway_render_value(row.get("reliance") or {"status": "unavailable"}),
+        "limitations": _pathway_render_value(row.get("limitations")),
+        "epistemic_label": row.get("epistemic_label"),
+        "attribution": _pathway_render_value(row.get("attribution") or {}),
+        "representation_mode": row.get("representation_mode"),
+        "review_state": _pathway_render_governance_state(row.get("review_state") or {}),
+        "contrary_sources": _pathway_render_value(row.get("contrary_sources") or []),
+        "does_not_establish": _pathway_render_value(row.get("does_not_establish") or {}),
+    }
+
+
+def materialize_pathway_render_model(conn: sqlite3.Connection, specification: Mapping[str, Any]) -> dict[str, Any]:
+    validate_pathway_report_specification(conn, specification)
+    current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
+    for key in ("reference", "title", "description", "status", "version"):
+        if current_record.get(key) != specification["primary_record"].get(key):
+            raise ValueError("governed_report_canonical_record_changed")
+    try:
+        projection = _projection_module().project_pathway(conn, str(specification["primary_record"]["reference"]))
+    except ValueError as exc:
+        if str(exc).endswith("_schema_incomplete"):
+            raise ValueError("governed_report_pathway_schema_incomplete") from None
+        raise
+    live_identity = _compact_pathway_identity_from_projected(conn, str(specification["primary_record"]["reference"]), projection)
+    frozen = specification["pathway_projection"]
+    if live_identity["projection_digest"] != frozen["projection_digest"]:
+        raise ValueError("governed_report_pathway_projection_digest_drift")
+    if live_identity["rows"] != frozen["rows"]:
+        raise ValueError("governed_report_pathway_row_inventory_drift")
+    if (
+        live_identity["coverage"] != frozen["coverage"]
+        or live_identity["unavailable_families"] != frozen["unavailable_families"]
+    ):
+        raise ValueError("governed_report_pathway_coverage_drift")
+    if live_identity["gaps"] != frozen["gaps"]:
+        raise ValueError("governed_report_pathway_gap_drift")
+    if live_identity != frozen:
+        raise ValueError("governed_report_pathway_specification_invalid")
+    compact_by_identity = {
+        row["governed_logical_identity"]: row
+        for row in live_identity["rows"]
+    }
+    rows = []
+    for row in projection.get("rows") or []:
+        compact_identity = _logical_identity_for_projection_row(conn, row)
+        compact = compact_by_identity.get(compact_identity)
+        if compact is None:
+            raise ValueError("governed_report_pathway_render_model_invalid")
+        rows.append(_pathway_render_row(conn, row, compact))
+    sections: dict[str, list[dict[str, Any]]] = {name: [] for name in _PATHWAY_SECTION_ORDER}
+    for row in rows:
+        section = _PATHWAY_SECTION_MAP[row["object_kind"]]
+        sections[section].append(row)
+    contested = [
+        {
+            "governed_logical_identity": row["governed_logical_identity"],
+            "object_kind": row["object_kind"],
+            "category": row["category"],
+            "status": row["status"],
+            "contestation": row["contestation"],
+            "supersession": row["supersession"],
+        }
+        for row in rows
+        if (isinstance(row.get("contestation"), Mapping) and row["contestation"].get("status") not in {None, "not_represented"})
+        or (isinstance(row.get("supersession"), Mapping) and row["supersession"].get("superseded"))
+    ]
+    sections["Contested matters"] = contested
+    section_list = [{"title": name, "rows": sections[name]} for name in _PATHWAY_SECTION_ORDER if sections[name] or name in {"Report identity and scope", "Scoped gaps", "Provenance and limitations"}]
+    return {
+        "render_model_contract": PATHWAY_RENDER_MODEL_CONTRACT,
+        "report_type": PATHWAY_REPORT_TYPE,
+        "specification_schema_version": PATHWAY_SPECIFICATION_SCHEMA_VERSION,
+        "title": specification["title"],
+        "purpose": specification["purpose"],
+        "intended_audience": specification["intended_audience"],
+        "distribution_class": "internal_working",
+        "canonical_record_reference": live_identity["canonical_record_reference"],
+        "projection_contract": live_identity["projection_contract"],
+        "projection_version": live_identity["projection_version"],
+        "projection_digest": live_identity["projection_digest"],
+        "inclusion_mode": live_identity["inclusion_mode"],
+        "exclusion_rule": live_identity["exclusion_rule"],
+        "coverage": _pathway_render_value(live_identity["coverage"]),
+        "unavailable_families": list(live_identity["unavailable_families"]),
+        "gaps": _pathway_render_value(live_identity["gaps"]),
+        "sections": section_list,
+        "row_count": len(rows),
+        "limitations": [
+            "The procedural pathway report presents governed records only.",
+            "Rendering does not establish legality, truth, fairness, completeness, compliance, publication or endorsement.",
+            "Scoped gaps report unavailable or absent governed records within the frozen Canonical Record scope only.",
+        ],
     }
 
 
@@ -687,26 +917,7 @@ def read_candidates(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]
 
 def _validate_generation_sources(conn: sqlite3.Connection, specification: Mapping[str, Any]) -> None:
     if specification.get("report_type") == PATHWAY_REPORT_TYPE:
-        validate_pathway_report_specification(conn, specification)
-        current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
-        for key in ("reference", "title", "description", "status", "version"):
-            if current_record.get(key) != specification["primary_record"].get(key):
-                raise ValueError("governed_report_canonical_record_changed")
-        frozen = specification["pathway_projection"]
-        live = _compact_pathway_identity(conn, str(specification["primary_record"]["reference"]))
-        if live["projection_digest"] != frozen["projection_digest"]:
-            raise ValueError("governed_report_pathway_projection_digest_drift")
-        if live["rows"] != frozen["rows"]:
-            raise ValueError("governed_report_pathway_row_inventory_drift")
-        if (
-            live["coverage"] != frozen["coverage"]
-            or live["unavailable_families"] != frozen["unavailable_families"]
-        ):
-            raise ValueError("governed_report_pathway_coverage_drift")
-        if live["gaps"] != frozen["gaps"]:
-            raise ValueError("governed_report_pathway_gap_drift")
-        if live != frozen:
-            raise ValueError("governed_report_pathway_specification_invalid")
+        _validate_live_pathway_identity(conn, specification)
         return
     current_record = _record_snapshot(conn, str(specification["primary_record"]["reference"]))
     for key in ("reference", "title", "description", "status", "version"):
@@ -1034,10 +1245,11 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         raise
     try:
         from api.report_rendering import AdapterFailure, render_frozen_report
+        pathway_render_model = materialize_pathway_render_model(conn, spec) if spec.get("report_type") == PATHWAY_REPORT_TYPE else None
         if governance_qualification is not None and governance_qualification.get("review_mode") == "sole_administrator":
-            result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification)
+            result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification, pathway_render_model=pathway_render_model)
         else:
-            result = render_frozen_report(spec, version["specification_digest"], target_dir)
+            result = render_frozen_report(spec, version["specification_digest"], target_dir, pathway_render_model=pathway_render_model)
     except Exception as exc:
         diagnostic = None
         if isinstance(exc, AdapterFailure) or callable(getattr(exc, "diagnostic_payload", None)):
