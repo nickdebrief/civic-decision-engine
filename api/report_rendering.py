@@ -277,7 +277,7 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
             pass
 
 
-def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path, governance_qualification: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path, governance_qualification: Mapping[str, Any] | None = None, pathway_render_model: Mapping[str, Any] | None = None) -> dict[str, Any]:
     if specification.get("publication_engine_version") != ENGINE_VERSION:
         raise ValueError("governed_report_publication_engine_version_invalid")
     if __import__("hashlib").sha256(canonical_json(specification).encode("utf-8")).hexdigest() != digest:
@@ -290,7 +290,7 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         request = Path(temp) / "specification.json"
         staged_output = Path(temp) / "output"
         staged_output.mkdir()
-        request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification, "pathway_render_model": pathway_render_model}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         result_path = Path(temp) / "adapter-result.json"
         command = [sys.executable, str(ADAPTER), str(request), str(staged_output), str(result_path)]
         try:

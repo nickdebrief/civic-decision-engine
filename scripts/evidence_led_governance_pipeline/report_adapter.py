@@ -34,6 +34,31 @@ PDF_TOTAL_TIMEOUT = 180
 PDF_FORBIDDEN_METADATA = ("/tmp", "/private/tmp", "/app", "/data", "password", "secret", "canary")
 PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Creator", "/Producer", "/CreationDate", "/ModDate"}
 RESULT_SCHEMA_VERSION = "1"
+PATHWAY_REPORT_TYPE = "procedural_pathway_report"
+PATHWAY_RENDER_MODEL_CONTRACT = "stage78.pathway_render_model.v1"
+PATHWAY_RENDER_OBJECT_KINDS = frozenset({
+    "governed_observation",
+    "governed_inference",
+    "governed_allegation",
+    "governed_response",
+    "governed_characterisation",
+    "decision_authority",
+    "decision_mandate",
+    "governed_determination",
+    "determination_effect_event",
+    "governed_challenge",
+    "challenge_event",
+    "challenge_outcome",
+    "governed_remedy",
+    "implementation_event",
+    "formal_completion_determination",
+    "determination_publication",
+    "procedural_notice",
+    "procedural_deadline",
+    "procedural_time_event",
+    "deadline_calculation",
+    "pathway_link",
+})
 
 
 class AdapterFailure(RuntimeError):
@@ -699,7 +724,184 @@ def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def make_book(spec, governance_qualification=None):
+def _pathway_required(value, error="adapter_input_invalid"):
+    if not isinstance(value, str) or not value.strip():
+        raise AdapterFailure("specification_validation", error)
+    return value
+
+
+def _pathway_object_kind(value):
+    object_kind = _pathway_required(value, "adapter_model_invalid")
+    if object_kind not in PATHWAY_RENDER_OBJECT_KINDS:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    return object_kind
+
+
+def _pathway_text(value) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        text = str(value)
+    else:
+        text = canonical(value)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _validate_pathway_render_model(spec, model):
+    if not isinstance(model, dict):
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    expected = {
+        "render_model_contract", "report_type", "specification_schema_version", "title", "purpose",
+        "intended_audience", "distribution_class", "canonical_record_reference", "projection_contract",
+        "projection_version", "projection_digest", "inclusion_mode", "exclusion_rule", "coverage",
+        "unavailable_families", "gaps", "sections", "row_count", "limitations",
+    }
+    if set(model) != expected:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    if model["render_model_contract"] != PATHWAY_RENDER_MODEL_CONTRACT or model["report_type"] != PATHWAY_REPORT_TYPE:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    if model["specification_schema_version"] != spec.get("specification_schema_version"):
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    pathway = spec.get("pathway_projection")
+    if not isinstance(pathway, dict):
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    for key in ("canonical_record_reference", "projection_contract", "projection_version", "projection_digest", "inclusion_mode", "exclusion_rule", "coverage", "unavailable_families", "gaps"):
+        if model[key] != pathway.get(key):
+            raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    if model["distribution_class"] != "internal_working" or spec.get("distribution_class") != "internal_working":
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    if not isinstance(model["sections"], list) or not isinstance(model["limitations"], list):
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    count = 0
+    identities = set()
+    row_fields = {
+        "object_kind", "governed_logical_identity", "parent_governed_identity", "endpoint_identities",
+        "category", "status", "source_authority_key", "row_authority_digest", "ownership_path",
+        "represented_time", "recorded_at", "chronology", "source_bindings", "object_links",
+        "contestation", "supersession", "reliance", "limitations", "epistemic_label",
+        "attribution", "representation_mode", "review_state", "contrary_sources", "does_not_establish",
+    }
+    contested_fields = {"governed_logical_identity", "object_kind", "category", "status", "contestation", "supersession"}
+    for section in model["sections"]:
+        if not isinstance(section, dict) or set(section) != {"title", "rows"}:
+            raise AdapterFailure("specification_validation", "adapter_model_invalid")
+        section_title = _pathway_required(section.get("title"))
+        if not isinstance(section["rows"], list):
+            raise AdapterFailure("specification_validation", "adapter_model_invalid")
+        if section_title == "Contested matters":
+            for row in section["rows"]:
+                if not isinstance(row, dict) or set(row) != contested_fields:
+                    raise AdapterFailure("specification_validation", "adapter_model_invalid")
+                _pathway_required(row.get("governed_logical_identity"))
+                _pathway_object_kind(row.get("object_kind"))
+            continue
+        for row in section["rows"]:
+            if not isinstance(row, dict) or set(row) != row_fields:
+                raise AdapterFailure("specification_validation", "adapter_model_invalid")
+            identity = _pathway_required(row.get("governed_logical_identity"))
+            if identity in identities:
+                raise AdapterFailure("specification_validation", "adapter_model_invalid")
+            identities.add(identity)
+            _pathway_object_kind(row.get("object_kind"))
+            _pathway_required(row.get("source_authority_key"))
+            _pathway_required(row.get("ownership_path"))
+            digest = row.get("row_authority_digest")
+            if not isinstance(digest, str) or len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+                raise AdapterFailure("specification_validation", "adapter_model_invalid")
+            if not isinstance(row.get("chronology"), dict):
+                raise AdapterFailure("specification_validation", "adapter_model_invalid")
+            count += 1
+    if count != model["row_count"]:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid")
+    return model
+
+
+def _pathway_row_paragraph(row, section_index: int, row_index: int):
+    chronology = row["chronology"]
+    time_value = _pathway_text(row["represented_time"])
+    if time_value == "not recorded":
+        time_value = "represented time not recorded; temporal ordering indeterminate"
+    details = [
+        f"Kind: {_pathway_text(row['object_kind'])}",
+        f"Identity: {_pathway_text(row['governed_logical_identity'])}",
+        f"Category: {_pathway_text(row['category'])}",
+        f"Status: {_pathway_text(row['status'])}",
+        f"Represented time: {time_value}",
+        f"Recording time: {_pathway_text(row['recorded_at'])}",
+        f"Chronology: {_pathway_text(chronology.get('basis'))} / {_pathway_text(chronology.get('precision'))} / {_pathway_text(chronology.get('ordering_relation'))}",
+        f"Ownership path: {_pathway_text(row['ownership_path'])}",
+        f"Source authority: {_pathway_text(row['source_authority_key'])}",
+        f"Row authority digest: {row['row_authority_digest']}",
+    ]
+    if row.get("parent_governed_identity"):
+        details.append(f"Parent: {_pathway_text(row['parent_governed_identity'])}")
+    if row.get("endpoint_identities"):
+        details.append(f"Endpoints: {_pathway_text(row['endpoint_identities'])}")
+    if row.get("contestation"):
+        details.append(f"Contestation: {_pathway_text(row['contestation'])}")
+    if row.get("supersession"):
+        details.append(f"Historical state: {_pathway_text(row['supersession'])}")
+    if row.get("reliance"):
+        details.append(f"Reliance: {_pathway_text(row['reliance'])}")
+    if row.get("does_not_establish"):
+        details.append(f"Epistemic boundary: {_pathway_text(row['does_not_establish'])}")
+    if row.get("limitations"):
+        details.append(f"Limitations: {_pathway_text(row['limitations'])}")
+    return Paragraph(text=" — ".join(details), role="body", identifier=f"stage78-pathway-row-{section_index}-{row_index}")
+
+
+def _pathway_make_book(spec, governance_qualification=None, pathway_render_model=None):
+    model = _validate_pathway_render_model(spec, pathway_render_model)
+    blocks = []
+    identity_rows = [
+        Paragraph(text=f"Canonical Record: {model['canonical_record_reference']}", role="body", identifier="stage78-pathway-scope-record"),
+        Paragraph(text=f"Projection: {model['projection_contract']} / {model['projection_version']} / {model['projection_digest']}", role="body", identifier="stage78-pathway-scope-projection"),
+        Paragraph(text=f"Inclusion: {model['inclusion_mode']} — Exclusion rule: {model['exclusion_rule']}", role="body", identifier="stage78-pathway-scope-rules"),
+    ]
+    blocks.append(Section(title="Report identity and scope", number="1", level=1, blocks=identity_rows, identifier="stage78-section-identity-scope"))
+    section_number = 2
+    for section in model["sections"]:
+        if section["title"] in {"Report identity and scope", "Provenance and limitations"}:
+            continue
+        if section["title"] == "Scoped gaps":
+            paragraphs = [
+                Paragraph(text=f"Scoped gap: {_pathway_text(gap.get('statement'))} Binding: {_pathway_text(gap.get('binding_mechanism'))}.", role="body", identifier=f"stage78-gap-{index}")
+                for index, gap in enumerate(model["gaps"])
+            ] or [Paragraph(text="Scoped gap: no scoped gaps recorded in the frozen pathway projection.", role="body", identifier="stage78-gap-none")]
+        elif section["title"] == "Contested matters":
+            paragraphs = [
+                Paragraph(text=f"Contested or historical governed row: {_pathway_text(row['object_kind'])} — {_pathway_text(row['governed_logical_identity'])} — status {_pathway_text(row['status'])} — contestation {_pathway_text(row['contestation'])} — historical state {_pathway_text(row['supersession'])}", role="body", identifier=f"stage78-contested-{index}")
+                for index, row in enumerate(section["rows"])
+            ]
+        else:
+            paragraphs = [_pathway_row_paragraph(row, section_number, index) for index, row in enumerate(section["rows"])]
+        if paragraphs:
+            blocks.append(Section(title=section["title"], number=str(section_number), level=1, blocks=paragraphs, identifier=f"stage78-section-{section_number}"))
+            section_number += 1
+    provenance = [
+        Paragraph(text=f"Coverage: {_pathway_text(model['coverage'])}", role="body", identifier="stage78-provenance-coverage"),
+        Paragraph(text=f"Unavailable families: {_pathway_text(model['unavailable_families'])}", role="body", identifier="stage78-provenance-unavailable"),
+    ]
+    for index, limitation in enumerate(model["limitations"]):
+        provenance.append(Paragraph(text=f"Limitation: {_pathway_text(limitation)}", role="body", identifier=f"stage78-provenance-limitation-{index}"))
+    for index, value in enumerate(spec.get("qualifications", [])):
+        provenance.append(Paragraph(text=f"Qualification: {_pathway_text(value)}", role="body", identifier=f"stage78-provenance-qualification-{index}"))
+    if governance_qualification is not None:
+        if set(governance_qualification) != {"review_mode", "disclosure_version", "disclosure", "qualification_id", "qualification_digest"}:
+            raise AdapterFailure("specification_validation", "adapter_input_invalid")
+        provenance.append(Paragraph(text=f"Qualification disclosure: {_pathway_text(governance_qualification['disclosure'])}", role="body", identifier="stage78-provenance-qualification-disclosure"))
+    blocks.append(Section(title="Provenance and limitations", number=str(section_number), level=1, blocks=provenance, identifier="stage78-section-provenance-limitations"))
+    chapter = Chapter(title=spec["title"], number=1, blocks=blocks, identifier="stage78-procedural-pathway-report")
+    return Book(title=spec["title"], subtitle=spec["purpose"], author="Civic Decision Engine", version=spec["specification_schema_version"], running_title=spec["title"], tagline="A governed internal report specification", blocks=[chapter], metadata={"subject": "Internal governed report", "edition": "Stage 78B2A", "language": "en", "comments": "Rendering presents governed pathway records; it does not publish, endorse, verify or determine them."})
+
+
+def make_book(spec, governance_qualification=None, pathway_render_model=None):
+    if spec.get("report_type") == PATHWAY_REPORT_TYPE:
+        return _pathway_make_book(spec, governance_qualification, pathway_render_model)
+    if pathway_render_model is not None:
+        raise AdapterFailure("specification_validation", "adapter_input_invalid")
     blocks = []
     for section in spec["sections"]:
         paragraphs = []
@@ -767,7 +969,10 @@ def main():
     if "pdf" in requested and not {"docx", "html"}.issubset(requested):
         raise AdapterFailure("specification_validation", "adapter_input_invalid")
     governance_qualification = payload.get("governance_qualification")
-    book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec, governance_qualification))
+    pathway_render_model = payload.get("pathway_render_model")
+    if spec.get("report_type") != PATHWAY_REPORT_TYPE and pathway_render_model is not None:
+        raise AdapterFailure("specification_validation", "adapter_input_invalid")
+    book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec, governance_qualification, pathway_render_model))
     effective = EffectiveTheme(theme=HANDBOOK_THEME, publication_profile=PUBLICATION_PROFILES["digital"], page=HANDBOOK_THEME.page, title_page=HANDBOOK_THEME.title_page, volume_page=HANDBOOK_THEME.volume_page, chapter_opening=HANDBOOK_THEME.chapter_opening)
     artifacts = []
     html_path = output / "report.html"
