@@ -46,17 +46,25 @@ RECORDS_DB_PATH=/path/to/records.db python3 -m uvicorn api.main:app --reload
 Run all tests:
 
 ```bash
-python3 -m unittest discover -s tests
+python3 scripts/run_isolated_tests.py unittest discover -s tests
 ```
 
 Run semantic subsystem tests:
 
 ```bash
-python3 -m unittest tests.test_record_indexing tests.test_semantic_search tests.test_backfill_record_embeddings tests.test_semantic_retrieval tests.test_query_record_embeddings tests.test_run_semantic_experiments
+python3 scripts/run_isolated_tests.py unittest tests.test_record_indexing tests.test_semantic_search tests.test_backfill_record_embeddings tests.test_semantic_retrieval tests.test_query_record_embeddings tests.test_run_semantic_experiments
 ```
 
 Use stdlib `unittest`, in-memory SQLite, and fake providers in tests. Do not
 call external embedding providers in tests.
+
+All local `unittest` and `pytest` commands must run through
+`scripts/run_isolated_tests.py`. Direct `.venv/bin/python -m unittest`, direct
+`python3 -m unittest`, direct `pytest`, and direct discovery commands are
+prohibited because application imports can initialize the repo-root
+`records.db` before test hooks run. The current repo-root `records.db` remains
+quarantined and must not be used by automated tests. Homebrew commands remain
+subject to the three established incident guards until separately re-baselined.
 
 ## Commit And Check Workflow
 
@@ -75,7 +83,7 @@ Useful checks:
 ```bash
 git status --short
 git diff --stat
-python3 -m unittest discover -s tests
+python3 scripts/run_isolated_tests.py unittest discover -s tests
 ```
 
 ## Public Route Restrictions

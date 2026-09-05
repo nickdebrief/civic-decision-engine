@@ -178,7 +178,7 @@ class Stage75PersistenceTests(unittest.TestCase):
         item = self.create()
         for status, actor, key in (("assembly_reviewed", "reviewer", "artifact-assembly"), ("privacy_reviewed", "privacy", "artifact-privacy"), ("redaction_reviewed", "redactor", "artifact-redaction"), ("approved_for_generation", "approver", "artifact-approval")):
             item = reports.transition_report(self.conn, report_id=item["id"], resulting_status=status, rationale="Review", actor=actor, actor_role="administrator", declaration={"acknowledged": True}, idempotency_key=key)
-        def fake_render(specification, digest, output_dir):
+        def fake_render(specification, digest, output_dir, governance_qualification=None, pathway_render_model=None):
             output_dir.mkdir(parents=True, exist_ok=True)
             path = output_dir / "report.docx"
             path.write_text("validated", encoding="utf-8")
@@ -287,7 +287,7 @@ class Stage75PersistenceTests(unittest.TestCase):
         item = self.create()
         for status, actor, key in (("assembly_reviewed", "reviewer", "promote-assembly"), ("privacy_reviewed", "privacy", "promote-privacy"), ("redaction_reviewed", "redactor", "promote-redaction"), ("approved_for_generation", "approver", "promote-approval")):
             item = reports.transition_report(self.conn, report_id=item["id"], resulting_status=status, rationale="Review", actor=actor, actor_role="administrator", declaration={"acknowledged": True}, idempotency_key=key)
-        def fake_render(_specification, _digest, output_dir):
+        def fake_render(_specification, _digest, output_dir, governance_qualification=None, pathway_render_model=None):
             output_dir.mkdir(parents=True)
             path = output_dir / "report.docx"
             path.write_bytes(b"promoted")
@@ -307,7 +307,7 @@ class Stage75PersistenceTests(unittest.TestCase):
         item = self.create()
         for status, actor, key in (("assembly_reviewed", "reviewer", "replay-assembly"), ("privacy_reviewed", "privacy", "replay-privacy"), ("redaction_reviewed", "redactor", "replay-redaction"), ("approved_for_generation", "approver", "replay-approval")):
             item = reports.transition_report(self.conn, report_id=item["id"], resulting_status=status, rationale="Review", actor=actor, actor_role="administrator", declaration={"acknowledged": True}, idempotency_key=key)
-        def fake_render(specification, digest, output_dir):
+        def fake_render(specification, digest, output_dir, governance_qualification=None, pathway_render_model=None):
             output_dir.mkdir(parents=True, exist_ok=True)
             artifacts = []
             for format_name in ("docx", "html"):
