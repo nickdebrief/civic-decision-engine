@@ -7,7 +7,7 @@ from api import public_origin
 
 
 class CanonicalPublicOriginTests(unittest.TestCase):
-    def asgi_get(self, path, host, query=b""):
+    def asgi_get(self, path, host, query=b"", method="GET"):
         from api.main import app
 
         messages = []
@@ -22,7 +22,7 @@ class CanonicalPublicOriginTests(unittest.TestCase):
             "type": "http",
             "asgi": {"version": "3.0"},
             "http_version": "1.1",
-            "method": "GET",
+            "method": method,
             "scheme": "https",
             "path": path,
             "raw_path": path.encode(),
@@ -118,3 +118,36 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                 self.assertEqual(start["status"], 200)
                 self.assertEqual(body.count(b'rel="canonical"'), 1)
                 self.assertIn(b'https://civicdecisionengine.ie/"', body)
+
+    def test_indexnow_ownership_key_is_fixed_text_and_respects_host_policy(self):
+        key = "199f69ef74214688b3aff215441ae226"
+        path = f"/{key}.txt"
+
+        start, body = self.asgi_get(path, "civicdecisionengine.ie")
+        headers = dict(start["headers"])
+        self.assertEqual(start["status"], 200)
+        self.assertEqual(body, key.encode("ascii"))
+        self.assertTrue(headers[b"content-type"].startswith(b"text/plain"))
+        self.assertNotIn(b"location", headers)
+
+        head_start, _ = self.asgi_get(path, "civicdecisionengine.ie", method="HEAD")
+        self.assertEqual(head_start["status"], 200)
+        self.assertTrue(
+            dict(head_start["headers"])[b"content-type"].startswith(b"text/plain")
+        )
+
+        for host in (
+            "www.civicdecisionengine.ie",
+            "civic-decision-engine-production.up.railway.app",
+        ):
+            with self.subTest(host=host):
+                start, _ = self.asgi_get(path, host, b"source=alias")
+                self.assertEqual(start["status"], 308)
+                self.assertEqual(
+                    dict(start["headers"])[b"location"],
+                    f"https://civicdecisionengine.ie{path}?source=alias".encode("ascii"),
+                )
+
+        start, body = self.asgi_get(f"{path}/extra", "civicdecisionengine.ie")
+        self.assertEqual(start["status"], 404)
+        self.assertNotIn(key.encode("ascii"), body)

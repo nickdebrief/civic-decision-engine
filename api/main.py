@@ -19,6 +19,8 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
 
+INDEXNOW_OWNERSHIP_KEY = "199f69ef74214688b3aff215441ae226"
+
 
 @app.middleware("http")
 async def canonical_public_origin_middleware(request, call_next):
@@ -44,6 +46,15 @@ async def canonical_public_origin_middleware(request, call_next):
 @app.get("/")
 def root():
     return FileResponse("api/static/index.html")
+
+
+@app.api_route(
+    f"/{INDEXNOW_OWNERSHIP_KEY}.txt",
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+)
+def indexnow_ownership_key():
+    return Response(content=INDEXNOW_OWNERSHIP_KEY, media_type="text/plain")
 
 
 app.include_router(health.router)
