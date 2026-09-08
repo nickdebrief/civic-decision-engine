@@ -36,7 +36,7 @@ class GovernedSuiteTests(unittest.TestCase):
 
     def test_complete_manifest_is_sorted_and_classified(self):
         temp, root = self.make_root()
-        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha", "tests.test_beta"})), patch.object(runner, "CANDIDATE_GOVERNED_MODULES", frozenset()), patch.object(runner, "REAL_ASGI_MODULES", frozenset({"tests.test_alpha"})), patch.object(runner, "LEGACY_FASTAPI_STUB_MODULES", frozenset({"tests.test_beta"})):
+        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha", "tests.test_beta"})), patch.object(runner, "REAL_ASGI_MODULES", frozenset({"tests.test_alpha"})), patch.object(runner, "LEGACY_FASTAPI_STUB_MODULES", frozenset({"tests.test_beta"})):
             entries, excluded = self.manifest(root, {"tests.test_beta", "tests.test_alpha"})
         self.assertEqual([(item.module, item.classification, item.framework) for item in entries], [("tests.test_alpha", "real_asgi", "unittest"), ("tests.test_beta", "legacy_fastapi_stub", "unittest")])
         self.assertEqual(excluded, ())
@@ -54,7 +54,7 @@ class GovernedSuiteTests(unittest.TestCase):
 
     def test_inventory_rejects_missing_tracked_unknown_untracked_and_missing_file(self):
         temp, root = self.make_root(("tests.test_alpha",))
-        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha"})), patch.object(runner, "CANDIDATE_GOVERNED_MODULES", frozenset()):
+        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha"})):
             with self.assertRaisesRegex(runner.ManifestError, "tracked_inventory"):
                 self.manifest(root, set())
             with self.assertRaisesRegex(runner.ManifestError, "unclassified_untracked"):
@@ -65,7 +65,7 @@ class GovernedSuiteTests(unittest.TestCase):
 
     def test_known_untracked_candidate_is_excluded_not_governed(self):
         temp, root = self.make_root()
-        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha", "tests.test_beta"})), patch.object(runner, "CANDIDATE_GOVERNED_MODULES", frozenset()), patch.object(runner, "EXCLUDED_UNTRACKED_MODULES", frozenset({"tests.test_stage78"})):
+        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha", "tests.test_beta"})), patch.object(runner, "EXCLUDED_UNTRACKED_MODULES", frozenset({"tests.test_stage78"})):
             entries, excluded = self.manifest(root, {"tests.test_alpha", "tests.test_beta"}, {"tests.test_stage78"})
         self.assertEqual([entry.module for entry in entries], ["tests.test_alpha", "tests.test_beta"])
         self.assertEqual(excluded, ("tests.test_stage78",))
@@ -105,7 +105,7 @@ class GovernedSuiteTests(unittest.TestCase):
 
     def test_manifest_check_mode_never_starts_children(self):
         temp, root = self.make_root(("tests.test_alpha",))
-        with temp, patch.object(runner, "repository_root", return_value=root), patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha"})), patch.object(runner, "CANDIDATE_GOVERNED_MODULES", frozenset()), patch.object(runner, "git_test_modules", side_effect=[{"tests.test_alpha"}, set()]):
+        with temp, patch.object(runner, "repository_root", return_value=root), patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha"})), patch.object(runner, "git_test_modules", side_effect=[{"tests.test_alpha"}, set()]):
             self.assertEqual(runner.main(["--manifest-check"]), 0)
 
     def test_framework_validation_rejects_invalid_mismatch_and_empty_sources(self):
@@ -134,6 +134,39 @@ class GovernedSuiteTests(unittest.TestCase):
 
     def test_stage71_is_explicitly_pytest(self):
         self.assertEqual(runner.framework_for("tests.test_stage71_1_procedural_time_ui"), "pytest")
+
+    def test_transitioned_modules_are_tracked_once_with_preserved_execution_properties(self):
+        transitioned = {
+            "tests.test_canonical_public_origin": ("real_asgi", "unittest", 19),
+            "tests.test_run_governed_test_suite": ("neutral", "unittest", 77),
+        }
+        entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
+        self.assertEqual(len(entries), 132)
+        self.assertEqual(len({entry.module for entry in entries}), 132)
+        self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
+        self.assertEqual(
+            runner.EXCLUDED_UNTRACKED_MODULES,
+            frozenset({"tests.test_stage78b_pathway_output_equivalence"}),
+        )
+        for module, (classification, framework, ordinal) in transitioned.items():
+            self.assertIn(module, runner.GOVERNED_TRACKED_MODULES)
+            entry = entries[ordinal - 1]
+            self.assertEqual((entry.module, entry.classification, entry.framework), (module, classification, framework))
+            self.assertEqual(entry.module, module)
+
+    def test_live_tracked_inventory_matches_governed_authority(self):
+        root = runner.repository_root()
+        tracked = runner.git_test_modules(
+            root,
+            ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"],
+        )
+        self.assertEqual(tracked, set(runner.GOVERNED_TRACKED_MODULES))
+
+    def test_tracked_transition_mismatch_fails_closed(self):
+        temp, root = self.make_root(("tests.test_alpha", "tests.test_transitioned"))
+        with temp, patch.object(runner, "GOVERNED_TRACKED_MODULES", frozenset({"tests.test_alpha"})):
+            with self.assertRaisesRegex(runner.ManifestError, "tracked_inventory"):
+                self.manifest(root, {"tests.test_alpha", "tests.test_transitioned"})
 
 
 if __name__ == "__main__":
