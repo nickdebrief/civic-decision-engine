@@ -6839,13 +6839,14 @@ async def verify_record(reference: str, return_to: str | None = None):
         s = strings.get(lang, strings["en"])
 
         # ── Escape all user-derived fields ────────────────────────
+        normalized_record_type = normalize_record_type(
+            record["record_type"] if "record_type" in record.keys() else None
+        )
         safe = {
             "lang": escape(lang),
             "reference": escape(record["reference"] or ""),
             "record_type": escape(
-                record_type_label(
-                    record["record_type"] if "record_type" in record.keys() else None
-                )
+                record_type_label(normalized_record_type)
             ),
             "record_title": escape(
                 record["record_title"] if "record_title" in record.keys() and record["record_title"] else ""
@@ -7031,17 +7032,27 @@ async def verify_record(reference: str, return_to: str | None = None):
             indent=2,
         )
 
+        existing_description = escape((record["finding"] or "")[:155])
+        if normalized_record_type == "strike":
+            metadata_title = (
+                f"{safe['record_type']} — {s['page_title']} — {safe['reference']}"
+            )
+            metadata_description = f"{safe['record_type']} — {existing_description}"
+        else:
+            metadata_title = f"{s['page_title']} — {safe['reference']}"
+            metadata_description = existing_description
+
         html = f"""<!DOCTYPE html>
 
 <html lang="{safe['lang']}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{s["page_title"]} — {safe['reference']}</title>
+  <title>{metadata_title}</title>
   <link rel="canonical" href="{verify_url}">
   <link rel="alternate" type="application/json" href="/verify/{safe['reference']}/manifest">
   <link rel="alternate" type="application/json" href="/api/verify/{safe['reference']}">
-  <meta name="description" content="{escape((record['finding'] or '')[:155])}">
+  <meta name="description" content="{metadata_description}">
   <script type="application/ld+json">
   {json_ld}
 

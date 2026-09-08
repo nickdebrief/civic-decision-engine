@@ -1,4 +1,5 @@
 import asyncio
+from html import escape
 import importlib
 import json
 import os
@@ -80,10 +81,12 @@ class MachineDiscoverabilityTests(unittest.TestCase):
         version=1,
         is_latest=1,
         exported_at="2026-05-23T10:00:00Z",
+        record_type="strike",
+        language="en",
+        finding="Institutional delay remains visible in the record.",
     ):
         conditions = ["Institutional Delay", "Transfer of Burden"]
         generated_at = "2026-05-23T09:00:00Z"
-        finding = "Institutional delay remains visible in the record."
         trajectory = "Deteriorating"
         system_state = "Awaiting substantive response"
         generated_by = "Civic Decision Engine"
@@ -102,15 +105,16 @@ class MachineDiscoverabilityTests(unittest.TestCase):
             conn.execute(
                 """
                 INSERT INTO records (
-                    reference, version, supersedes, generated_at, trajectory,
+                    reference, record_type, version, supersedes, generated_at, trajectory,
                     system_state, conditions_json, signals_json, finding,
                     report_json, language, generated_by, verification_hash,
                     exported_at, is_latest, source_narrative
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     reference,
+                    record_type,
                     version,
                     None,
                     generated_at,
@@ -120,7 +124,7 @@ class MachineDiscoverabilityTests(unittest.TestCase):
                     "[]",
                     finding,
                     "{}",
-                    "en",
+                    language,
                     generated_by,
                     verification_hash,
                     exported_at,
@@ -193,6 +197,11 @@ class MachineDiscoverabilityTests(unittest.TestCase):
         content = response.content
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.count('rel="canonical"'), 1)
+        self.assertIn(
+            f'href="https://civicdecisionengine.ie/verify/{reference}"',
+            content,
+        )
         self.assertIn(
             f'<link rel="alternate" type="application/json" href="/verify/{reference}/manifest">',
             content,
@@ -200,6 +209,55 @@ class MachineDiscoverabilityTests(unittest.TestCase):
         self.assertIn(
             f'<link rel="alternate" type="application/json" href="/api/verify/{reference}">',
             content,
+        )
+        self.assertIn('"additionalType": "Strike"', content)
+
+    def test_strike_verify_metadata_uses_literal_type_and_escaped_finding(self):
+        reference = "Strike-LA-20260523-META"
+        finding = '<sensitive & "untrusted">'
+        self.insert_record(reference=reference, finding=finding)
+
+        content = asyncio.run(self.records.verify_record(reference)).content
+        title = content.split("<title>", 1)[1].split("</title>", 1)[0]
+        description = content.split('<meta name="description" content="', 1)[1].split('">', 1)[0]
+
+        self.assertEqual(
+            title,
+            f"Strike — Public Record Verification — {reference}",
+        )
+        self.assertEqual(title.count(reference), 1)
+        self.assertEqual(description, f"Strike — {escape(finding[:155])}")
+        self.assertNotIn(finding, description)
+        for unsupported in ("HSE", "DPC", "GDPR", "FOI", "ComReg", "Ombudsman", "eir", "Solar 21"):
+            self.assertNotIn(unsupported, title + description)
+
+    def test_non_strike_verify_metadata_is_unchanged(self):
+        reference = "CMP-META-001"
+        finding = "Complaint record metadata remains unchanged."
+        self.insert_record(
+            reference=reference,
+            record_type="complaint",
+            finding=finding,
+        )
+
+        content = asyncio.run(self.records.verify_record(reference)).content
+        title = content.split("<title>", 1)[1].split("</title>", 1)[0]
+        description = content.split('<meta name="description" content="', 1)[1].split('">', 1)[0]
+
+        self.assertEqual(title, f"Public Record Verification — {reference}")
+        self.assertEqual(description, escape(finding[:155]))
+        self.assertNotIn("Strike", title + description)
+
+    def test_non_english_strike_retains_localized_page_title_in_metadata(self):
+        reference = "Strike-LA-20260523-PL"
+        self.insert_record(reference=reference, language="pl")
+
+        content = asyncio.run(self.records.verify_record(reference)).content
+        title = content.split("<title>", 1)[1].split("</title>", 1)[0]
+
+        self.assertEqual(
+            title,
+            f"Strike — Weryfikacja dokumentu publicznego — {reference}",
         )
 
     def test_root_page_has_plain_archive_links(self):
