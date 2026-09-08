@@ -43,11 +43,20 @@ RECORDS_DB_PATH=/path/to/records.db python3 -m uvicorn api.main:app --reload
 
 ## Tests
 
-Run all tests:
+Run the governed full suite:
 
 ```bash
-python3 scripts/run_isolated_tests.py unittest discover -s tests
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/run_governed_test_suite.py
 ```
+
+The governed suite runs every governed test module in a fresh
+launcher-contained interpreter. Its manifest rejects missing, duplicate, and
+newly tracked unclassified test modules. Focused named unittest modules and
+pytest files continue to run through `scripts/run_isolated_tests.py`. Do not
+use `scripts/run_isolated_tests.py unittest discover -s tests`: it still
+collects legacy FastAPI stubs and genuine-ASGI tests in one Python interpreter.
+Direct `python -m unittest`, direct unittest discovery, direct `python -m
+pytest`, and direct `pytest` remain prohibited.
 
 Run semantic subsystem tests:
 
@@ -83,7 +92,6 @@ Useful checks:
 ```bash
 git status --short
 git diff --stat
-python3 scripts/run_isolated_tests.py unittest discover -s tests
 ```
 
 ## Public Route Restrictions
