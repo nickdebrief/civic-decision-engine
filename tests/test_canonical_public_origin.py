@@ -1,0 +1,120 @@
+import os
+import asyncio
+import unittest
+from unittest.mock import patch
+
+from api import public_origin
+
+
+class CanonicalPublicOriginTests(unittest.TestCase):
+    def asgi_get(self, path, host, query=b""):
+        from api.main import app
+
+        messages = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            messages.append(message)
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "https",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": query,
+            "headers": [(b"host", host.encode())],
+            "client": ("127.0.0.1", 1),
+            "server": (host, 443),
+        }
+        asyncio.run(app(scope, receive, send))
+        start = next(message for message in messages if message["type"] == "http.response.start")
+        body = b"".join(message.get("body", b"") for message in messages if message["type"] == "http.response.body")
+        return start, body
+
+    def test_default_origin_is_fixed_https_domain(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                public_origin.canonical_public_origin(),
+                "https://civicdecisionengine.ie",
+            )
+
+    def test_configuration_rejects_non_origin_values(self):
+        for value in (
+            "http://civicdecisionengine.ie",
+            "https://civicdecisionengine.ie/extra",
+            "https://civicdecisionengine.ie/?x=1",
+        ):
+            with self.subTest(value=value), patch.dict(
+                os.environ,
+                {public_origin.CANONICAL_PUBLIC_ORIGIN_ENV: value},
+                clear=True,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "canonical_public_origin_invalid"):
+                    public_origin.canonical_public_origin()
+
+    def test_only_approved_aliases_redirect_to_fixed_origin(self):
+        self.assertEqual(
+            public_origin.public_alias_redirect_location(
+                "www.civicdecisionengine.ie", "/records", b"page=2"
+            ),
+            "https://civicdecisionengine.ie/records?page=2",
+        )
+        self.assertEqual(
+            public_origin.public_alias_redirect_location(
+                "civic-decision-engine-production.up.railway.app", "/verify/R-1", b""
+            ),
+            "https://civicdecisionengine.ie/verify/R-1",
+        )
+        for host in (
+            "civicdecisionengine.ie",
+            "localhost:8000",
+            "attacker.example",
+        ):
+            with self.subTest(host=host):
+                self.assertIsNone(public_origin.public_alias_redirect_location(host, "/records", b"x=1"))
+
+    def test_canonical_injection_uses_path_only_and_replaces_existing_tag(self):
+        html = (
+            b'<html><head><link rel="canonical" href="https://attacker.example/x">'
+            b'<link rel="canonical" href="/records"></head><body>ok</body></html>'
+        )
+        result = public_origin.inject_canonical_link(html, "/records")
+        self.assertEqual(result.count(b'rel="canonical"'), 1)
+        self.assertIn(
+            b'https://civicdecisionengine.ie/records', result
+        )
+        self.assertNotIn(b"attacker.example", result)
+
+    def test_only_explicit_public_paths_are_indexable(self):
+        for path in ("/", "/records", "/determinations", "/verify/R-1"):
+            with self.subTest(path=path):
+                self.assertTrue(public_origin.is_public_indexable_path(path))
+        for path in ("/admin", "/api/admin/records", "/health", "/api/records"):
+            with self.subTest(path=path):
+                self.assertFalse(public_origin.is_public_indexable_path(path))
+
+    def test_asgi_redirects_only_public_aliases_and_preserves_path_query(self):
+        start, _ = self.asgi_get("/records", "www.civicdecisionengine.ie", b"page=2")
+        headers = dict(start["headers"])
+        self.assertEqual(start["status"], 308)
+        self.assertEqual(headers[b"location"], b"https://civicdecisionengine.ie/records?page=2")
+
+        start, _ = self.asgi_get("/verify/R-1", "civic-decision-engine-production.up.railway.app")
+        self.assertEqual(start["status"], 308)
+        self.assertEqual(
+            dict(start["headers"])[b"location"],
+            b"https://civicdecisionengine.ie/verify/R-1",
+        )
+
+    def test_asgi_canonical_and_local_hosts_serve_root_with_fixed_metadata(self):
+        for host in ("civicdecisionengine.ie", "localhost:8000", "attacker.example"):
+            with self.subTest(host=host):
+                start, body = self.asgi_get("/", host)
+                self.assertEqual(start["status"], 200)
+                self.assertEqual(body.count(b'rel="canonical"'), 1)
+                self.assertIn(b'https://civicdecisionengine.ie/"', body)

@@ -160,6 +160,8 @@ class MachineDiscoverabilityTests(unittest.TestCase):
             self.assertIn(path, content)
         self.assertIn("/verify/Strike-LA-20260523-001", content)
         self.assertNotIn("/verify/Strike-LA-20260523-002", content)
+        self.assertIn("https://civicdecisionengine.ie/records", content)
+        self.assertNotIn("civic-decision-engine-production.up.railway.app", content)
 
     def test_robots_policy_is_archive_friendly(self):
         response = asyncio.run(self.records.robots())
@@ -170,8 +172,18 @@ class MachineDiscoverabilityTests(unittest.TestCase):
             "User-agent: *\n"
             "Allow: /\n"
             "\n"
-            "Sitemap: https://civic-decision-engine-production.up.railway.app/sitemap.xml\n",
+            "Sitemap: https://civicdecisionengine.ie/sitemap.xml\n",
         )
+
+    def test_public_html_uses_one_fixed_origin_canonical_link(self):
+        response = asyncio.run(self.records.records_index())
+        content = response.content
+
+        self.assertEqual(content.count('rel="canonical"'), 1)
+        self.assertIn(
+            'href="https://civicdecisionengine.ie/records"', content
+        )
+        self.assertNotIn("civic-decision-engine-production.up.railway.app", content)
 
     def test_verify_page_links_machine_readable_json_alternates(self):
         reference = "Strike-LA-20260523-003"

@@ -11,18 +11,18 @@
   <meta
   name="keywords" content="Civic Decision Engine, institutional behaviour, public record analysis, civic systems, structural accountability, decision diagnostics, institutional analysis" />
 
-<link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/" />
+<link rel="canonical" href="https://civicdecisionengine.ie/" />
 
   <meta property="og:title" content="Civic Decision Engine" />
   <meta property="og:description" content="A system for diagnosing institutional behaviour." />
-  <meta property="og:url" content="https://civic-decision-engine-production.up.railway.app/" />
+  <meta property="og:url" content="https://civicdecisionengine.ie/" />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="https://civic-decision-engine-production.up.railway.app/static/preview.png" />
+  <meta property="og:image" content="https://civicdecisionengine.ie/static/preview.png" />
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Civic Decision Engine" />
   <meta name="twitter:description" content="A system for diagnosing institutional behaviour." />
-  <meta name="twitter:image" content="https://civic-decision-engine-production.up.railway.app/static/preview.png" />
+  <meta name="twitter:image" content="https://civicdecisionengine.ie/static/preview.png" />
 
   <link rel="icon" href="/static/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -35,7 +35,7 @@
   "name": "Civic Decision Engine",
   "applicationCategory": "Civic Technology",
   "operatingSystem": "Web",
-  "url": "https://civic-decision-engine-production.up.railway.app/",
+  "url": "https://civicdecisionengine.ie/",
   "creator": {
     "@type": "Person",
     "name": "Nick Moloney",
@@ -2859,7 +2859,7 @@ recordDownloadManifestBtn.addEventListener("click", () => {
   const ref = latestReportData.strike_reference;
   const url = latestReportData.verify_url
     ? `${latestReportData.verify_url}/manifest`
-    : `https://civic-decision-engine-production.up.railway.app/verify/${encodeURIComponent(ref)}/manifest`;
+    : `https://civicdecisionengine.ie/verify/${encodeURIComponent(ref)}/manifest`;
   const a = document.createElement("a");
   a.href = url;
   a.download = `manifest-${ref}-v${latestReportData.record_version || 1}.json`;
@@ -2875,7 +2875,7 @@ function buildVerifyUrl(reportData) {
   const ref = reportData?.strike_reference;
   if (!ref) return null;
 
-  return `https://civic-decision-engine-production.up.railway.app/verify/${encodeURIComponent(ref)}`;
+  return `https://civicdecisionengine.ie/verify/${encodeURIComponent(ref)}`;
 }
 
 function renderQrCode(containerId, url, options = {}) {

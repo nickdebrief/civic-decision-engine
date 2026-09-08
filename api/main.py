@@ -1,6 +1,11 @@
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from api.public_origin import (
+    inject_canonical_link,
+    is_public_indexable_path,
+    public_alias_redirect_location,
+)
 from api.platform_identity import PLATFORM_NAME, PLATFORM_VERSION_LABEL
 from api.routes import records
 
@@ -13,6 +18,27 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
+
+
+@app.middleware("http")
+async def canonical_public_origin_middleware(request, call_next):
+    host = request.headers.get("host", "")
+    location = public_alias_redirect_location(host, request.url.path, request.scope["query_string"])
+    if location is not None:
+        return Response(status_code=308, headers={"Location": location})
+    response = await call_next(request)
+    if (
+        request.method != "GET"
+        or not is_public_indexable_path(request.url.path)
+        or response.status_code != 200
+        or not response.headers.get("content-type", "").startswith("text/html")
+    ):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    body = inject_canonical_link(body, request.url.path)
+    headers = dict(response.headers)
+    headers["content-length"] = str(len(body))
+    return Response(content=body, status_code=response.status_code, headers=headers, media_type="text/html")
 
 
 @app.get("/")

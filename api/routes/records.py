@@ -49,8 +49,10 @@ from api.canonical_record_types import (
     RECORD_TYPE_LABELS,
     RECORD_TYPE_PREFIXES,
 )
+from api.public_origin import canonical_public_origin
 
 router = APIRouter()
+CANONICAL_PUBLIC_ORIGIN = canonical_public_origin()
 
 DB_PATH = Path(os.getenv("RECORDS_DB_PATH", "records.db"))
 ADMIN_TOKEN_ENV = "CDE_ADMIN_TOKEN"
@@ -809,7 +811,7 @@ def create_record_entry(payload: RecordPayload) -> dict[str, Any]:
 
         conn.commit()
 
-        verify_url = f"https://civic-decision-engine-production.up.railway.app/verify/{payload.reference}"
+        verify_url = f"{CANONICAL_PUBLIC_ORIGIN}/verify/{payload.reference}"
 
         return {
             "reference": payload.reference,
@@ -1202,7 +1204,7 @@ async def records_index(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Public Record Index — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/records">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/records">
   <meta name="description" content="Public record index for the Civic Decision Engine. Verified civic records with structured references, conditions, and trajectories.">
   <style>
     {PUBLIC_NAVIGATION_CSS}
@@ -1845,7 +1847,7 @@ async def api_docs():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Public API Documentation — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/api/docs">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/api/docs">
   <meta name="description" content="Public API documentation for the Civic Decision Engine. Machine-readable access to verified civic records, conditions, and archive statistics.">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -2257,7 +2259,7 @@ async def api_docs():
     <p>No authentication is required for read operations. These records are intentionally public — they are generated and published by consent at the point of export. Write operations (record creation, superseding) are not exposed through this API.</p>
 
     <h2>Base URL</h2>
-    <div class="code-block">https://civic-decision-engine-production.up.railway.app</div>
+    <div class="code-block">{CANONICAL_PUBLIC_ORIGIN}</div>
 
 
 
@@ -2347,7 +2349,7 @@ async def api_docs():
 }</div>
 
     <div class="curl-label">Example request</div>
-    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/verify/Strike-LA-20260508-001</div>
+    <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/verify/Strike-LA-20260508-001</div>
 
     <h3>Retrieve archive statistics</h3>
     <div class="endpoint">
@@ -2382,7 +2384,7 @@ async def api_docs():
     }</div>
 
         <div class="curl-label">Example request</div>
-        <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/stats</div>
+        <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/stats</div>
 
     <h3>Retrieve the record index</h3>
     <div class="endpoint">
@@ -2447,11 +2449,11 @@ async def api_docs():
 }</div>
 
     <div class="curl-label">Example requests</div>
-    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/records
+    <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/records
 
-curl https://civic-decision-engine-production.up.railway.app/api/records?trajectory=Deteriorating
+curl {CANONICAL_PUBLIC_ORIGIN}/api/records?trajectory=Deteriorating
 
-curl https://civic-decision-engine-production.up.railway.app/api/records?institution=LA&limit=10</div>
+curl {CANONICAL_PUBLIC_ORIGIN}/api/records?institution=LA&limit=10</div>
 
     <h3>Retrieve the condition registry</h3>
     <div class="endpoint">
@@ -2461,7 +2463,7 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
     <p>Returns the canonical condition registry — the civic observation taxonomy used to classify case sequences. Each entry includes the condition name, internal code, formal description, and detection indicators.</p>
 
     <div class="curl-label">Example request</div>
-    <div class="curl-block">curl https://civic-decision-engine-production.up.railway.app/api/conditions</div>
+    <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/conditions</div>
 
     <h3>Download verification manifest</h3>
     <div class="endpoint">
@@ -2498,12 +2500,12 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
     "algorithm": "SHA-256",
     "method": "Serialize canonical_fields as JSON with keys in sorted order, no spaces, and conditions sorted alphabetically. Compute SHA-256 of the UTF-8 encoded string. The result must match verification_hash.",
     "canonical_serialization": "{\"conditions\":[...],\"finding\":\"...\"}",
-    "verify_url": "https://civic-decision-engine-production.up.railway.app/verify/Strike-LA-20260508-001"
+    "verify_url": "{CANONICAL_PUBLIC_ORIGIN}/verify/Strike-LA-20260508-001"
   }
 }</div>
 
     <div class="curl-label">Example request</div>
-    <div class="curl-block">curl -O https://civic-decision-engine-production.up.railway.app/verify/Strike-LA-20260508-001/manifest</div>
+    <div class="curl-block">curl -O {CANONICAL_PUBLIC_ORIGIN}/verify/Strike-LA-20260508-001/manifest</div>
 
     <h2>Verification Integrity</h2>
     <div class="hash-note">
@@ -2570,7 +2572,7 @@ curl https://civic-decision-engine-production.up.railway.app/api/records?institu
       <div class="footer-note">
         Civic Decision Engine public API — open access, read only.
         For the human-readable record index, see
-        <a href="/records" style="color:#888;">civic-decision-engine-production.up.railway.app/records</a>
+        <a href="/records" style="color:#888;">{CANONICAL_PUBLIC_ORIGIN}/records</a>
       </div>
       <div class="footer-seal" aria-label="Civic Decision Engine v13.0">
         <svg width="28" height="35" viewBox="0 0 512 512" fill="none">
@@ -2623,7 +2625,7 @@ async def conditions_registry():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Registry — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/conditions">
   <meta name="description" content="Canonical condition registry for the Civic Decision Engine. Formal definitions of civic observation conditions used in verified public records.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -3134,7 +3136,7 @@ async def conditions_map():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Relationship Map — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions/map">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/conditions/map">
   <meta name="description" content="Structural relationship map of civic conditions. Shows precursor, escalation, and co-occurrence relationships across the condition taxonomy.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -3629,7 +3631,7 @@ async def condition_page(condition_id: str):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{escape(condition['name'])} — Condition — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/conditions/{escape(condition['id'])}">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/conditions/{escape(condition['id'])}">
   <meta name="description" content="{escape(condition['description'][:160])}">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -4195,7 +4197,7 @@ async def stats_page():
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/stats">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/stats">
   <meta name="description" content="Archive statistics for the Civic Decision Engine. Record counts, condition distributions, and institutional breakdowns across the verified public record archive.">
   <title>Archive Statistics — Civic Decision Engine</title>
   <style>
@@ -4698,7 +4700,7 @@ async def stats_timeline():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Archive Timeline — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/stats/timeline">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/stats/timeline">
   <meta name="description" content="Temporal pattern analysis of the Civic Decision Engine archive. Monthly condition frequency, trajectory emergence, and archive growth over time.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -5182,7 +5184,7 @@ async def archive_manifest():
         )
         rows = cur.fetchall()
 
-        base = "https://civic-decision-engine-production.up.railway.app"
+        base = CANONICAL_PUBLIC_ORIGIN
         records_out = []
         latest_exported_at = rows[0]["exported_at"] if rows else None
 
@@ -5259,7 +5261,7 @@ async def sitemap():
         )
         records = cur.fetchall()
 
-        base = "https://civic-decision-engine-production.up.railway.app"
+        base = CANONICAL_PUBLIC_ORIGIN
 
         # Static routes
         static_urls = [
@@ -5332,7 +5334,7 @@ async def robots():
         "User-agent: *\n"
         "Allow: /\n"
         "\n"
-        "Sitemap: https://civic-decision-engine-production.up.railway.app/sitemap.xml\n"
+        f"Sitemap: {CANONICAL_PUBLIC_ORIGIN}/sitemap.xml\n"
     )
     return Response(content=content, media_type="text/plain")
 
@@ -5571,7 +5573,7 @@ async def patterns_page():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Patterns — Civic Decision Engine</title>
-  <link rel="canonical" href="https://civic-decision-engine-production.up.railway.app/patterns">
+  <link rel="canonical" href="{CANONICAL_PUBLIC_ORIGIN}/patterns">
   <meta name="description" content="Structural pattern analysis of civic conditions across verified public records. Shows condition co-occurrence, institutional clustering, and trajectory distribution.">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
@@ -6884,7 +6886,7 @@ async def verify_record(reference: str, return_to: str | None = None):
         record_archive_back_link = archive_back_link(archive_return)
 
         # ── Citation data ─────────────────────────────────────────
-        verify_url = f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}"
+        verify_url = f"{CANONICAL_PUBLIC_ORIGIN}/verify/{record['reference']}"
         export_year = (record["exported_at"] or "")[:4] or "2026"
         ref_id = record["reference"].replace("-", "")
 
@@ -7012,12 +7014,12 @@ async def verify_record(reference: str, return_to: str | None = None):
                 "author": {
                     "@type": "Organization",
                     "name": "Civic Decision Engine",
-                    "url": "https://civic-decision-engine-production.up.railway.app",
+                    "url": CANONICAL_PUBLIC_ORIGIN,
                 },
                 "publisher": {
                     "@type": "Organization",
                     "name": "Civic Decision Engine",
-                    "url": "https://civic-decision-engine-production.up.railway.app",
+                    "url": CANONICAL_PUBLIC_ORIGIN,
                 },
                 "keywords": ", ".join(conditions),
                 "about": {
@@ -7680,7 +7682,7 @@ async def record_manifest(reference: str):
                 "canonical_serialization": json.dumps(
                     canonical_fields, separators=(",", ":"), sort_keys=True
                 ),
-                "verify_url": f"https://civic-decision-engine-production.up.railway.app/verify/{record['reference']}",
+                "verify_url": f"{CANONICAL_PUBLIC_ORIGIN}/verify/{record['reference']}",
             },
             "attachments": public_manifest_attachments(
                 conn,
