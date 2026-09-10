@@ -1,3 +1,4 @@
+import hashlib
 import json
 import io
 import os
@@ -14,6 +15,11 @@ from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
 from api import governed_report_qualifications as qualifications
 from api import record_governed_reports as reports
+
+ROOT = Path(__file__).resolve().parents[1]
+ENGINE = ROOT / "scripts" / "evidence_led_governance_pipeline"
+sys.path.insert(0, str(ENGINE))
+import output_validation  # noqa: E402
 
 
 class Stage77RecoveryTests(unittest.TestCase):
@@ -2924,6 +2930,7 @@ class Stage77RecoveryTests(unittest.TestCase):
                 with patch("api.report_rendering.render_frozen_report", side_effect=fake_render) as renderer:
                     jobs.execute_job(str(database), claimed)
                 self.assertEqual(renderer.call_count, 1)
+                self.assertEqual(renderer.call_args.kwargs["governed_job_id"], job["id"])
         finally:
             reports.REPORT_ROOT = original_report_root
             try:
@@ -3356,6 +3363,7 @@ class Stage77RecoveryTests(unittest.TestCase):
                     with patch("api.report_rendering.render_frozen_report", side_effect=fake_render) as renderer:
                         jobs.execute_job(str(database), claimed)
                     self.assertEqual(renderer.call_count, 1)
+                    self.assertEqual(renderer.call_args.kwargs["governed_job_id"], job["id"])
             finally:
                 reports.REPORT_ROOT = original_report_root
                 try:
@@ -4501,6 +4509,77 @@ class Stage77RecoveryTests(unittest.TestCase):
                 self._runtime_job(conn, state="queued", attempt_count=0, max_attempts=3)
                 recovery._validate_archived_job_runtime_metadata(conn, contract=contract)
                 conn.close()
+
+    def test_registered_event_recovery_mode_uses_materialized_pair_bytes(self):
+        """Recovery's shared event verifier rejects an altered archived pair."""
+        docx = self.root / "registered.docx"
+        pdf = self.root / "registered.pdf"
+        docx.write_bytes(b"registered-docx")
+        pdf.write_bytes(b"registered-pdf")
+        specification = {
+            "specification_schema_version": "stage78.fixture.v1",
+            "rendering_profile": "fixture-profile",
+            "template_version": "fixture-template",
+            "publication_engine_version": "fixture-engine",
+        }
+        model = {"render_model_contract": "stage78.fixture-model.v1"}
+        event = output_validation.pathway_pdf_conversion_authority_record(
+            model, specification, None,
+            governed_job_id=17, governed_attempt_count=2, retry_of_job_id=11,
+            docx_sha256=hashlib.sha256(docx.read_bytes()).hexdigest(),
+            pdf_sha256=hashlib.sha256(pdf.read_bytes()).hexdigest(),
+            converter_identity="headless-libreoffice", converter_version="fixture-version",
+            created_at="2026-09-09T00:00:00Z",
+        )
+        historical = {
+            "specification_sha256": event["specification_sha256"],
+            "template_version": "fixture-template",
+            "publication_engine_version": "fixture-engine",
+        }
+        output_validation.verify_pathway_pdf_conversion_event(
+            event, docx_path=docx, pdf_path=pdf, specification={}, model={},
+            governance_qualification=None, governed_job_id=17,
+            governed_attempt_count=2, retry_of_job_id=11,
+            registered_event=True, historical_authority=historical,
+        )
+        pdf.write_bytes(b"altered-pdf")
+        with self.assertRaisesRegex(ValueError, "invalid_pdf_conversion_event"):
+            output_validation.verify_pathway_pdf_conversion_event(
+                event, docx_path=docx, pdf_path=pdf, specification={}, model={},
+                governance_qualification=None, governed_job_id=17,
+                governed_attempt_count=2, retry_of_job_id=11,
+                registered_event=True, historical_authority=historical,
+            )
+
+    def test_registered_event_recovery_rejects_cross_version_pair_before_verification(self):
+        """A self-consistent artifact pair cannot borrow another job's version."""
+        bundle = self.root / "cross-version-bundle"
+        bundle.mkdir()
+        docx = bundle / "docx"
+        pdf = bundle / "pdf"
+        docx.write_bytes(b"DOCX")
+        pdf.write_bytes(b"PDF")
+        docx_row = {"id": 31, "version_id": 11, "format": "docx", "sha256": recovery.digest_bytes(b"DOCX"), "size_bytes": 4}
+        pdf_row = {
+            "id": 32, "version_id": 11, "format": "pdf", "sha256": recovery.digest_bytes(b"PDF"), "size_bytes": 3,
+            "governed_job_id": 17, "governed_attempt_count": 1,
+            "pdf_conversion_authority_json": "{}", "pdf_conversion_authority_digest": "present",
+        }
+
+        class Cursor:
+            def fetchone(self):
+                return {"id": 17, "report_version_id": 99, "attempt_count": 1, "retry_of_job_id": None, "state": "succeeded"}
+
+        class Connection:
+            def execute(self, *_args):
+                return Cursor()
+
+        with self.assertRaisesRegex(ValueError, "pdf_conversion_authority_invalid"):
+            recovery._verify_registered_pdf_conversion_event(
+                Connection(), bundle,
+                {31: {"filename": "docx"}, 32: {"filename": "pdf"}},
+                [docx_row, pdf_row], pdf_row,
+            )
 
 if __name__ == "__main__":
     unittest.main()

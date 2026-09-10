@@ -39,7 +39,15 @@ RESULT_CODES = {
     "cleanup_failed", "unexpected_adapter_failure", "adapter_result_missing",
     "adapter_result_invalid", "governed_report_renderer_timeout",
 }
-RESULT_FIELDS = {"schema_version", "ok", "phase", "code", "cleanup", "specification_digest", "artifacts", "diagnostics"}
+RESULT_FIELDS = {"schema_version", "ok", "phase", "code", "cleanup", "specification_digest", "artifacts", "diagnostics", "pdf_conversion_authority"}
+PDF_CONVERSION_AUTHORITY_FIELDS = {
+    "conversion_contract", "job_identity", "attempt_identity", "retry_predecessor_identity",
+    "specification_identity", "specification_sha256", "render_model_identity", "render_model_sha256",
+    "governance_qualification_identity", "governance_qualification_sha256", "gate_chain_identity",
+    "source_docx_artifact_identity", "source_docx_sha256", "pdf_artifact_identity", "pdf_sha256",
+    "converter_identity", "converter_version", "conversion_profile", "template_version",
+    "publication_engine_version", "created_at", "conversion_record_digest",
+}
 DIAGNOSTIC_FIELDS = {
     "format", "libreoffice_version", "pdfinfo_version", "pypdf_version",
     "extraction_backend", "page_count", "size_bytes", "ordered_content",
@@ -173,6 +181,22 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
         raise AdapterFailure("result_serialization", "adapter_result_invalid")
     if not isinstance(result["artifacts"], list) or not isinstance(result["diagnostics"], list):
         raise AdapterFailure("result_serialization", "adapter_result_invalid")
+    authority = result["pdf_conversion_authority"]
+    if authority is not None:
+        if (
+            not isinstance(authority, dict)
+            or set(authority) != PDF_CONVERSION_AUTHORITY_FIELDS
+            or not all(isinstance(key, str) and isinstance(value, str) and value.strip() for key, value in authority.items())
+        ):
+            raise AdapterFailure("result_serialization", "adapter_result_invalid")
+        record_digest = authority.get("conversion_record_digest")
+        if not isinstance(record_digest, str) or len(record_digest) != 64 or any(value not in "0123456789abcdef" for value in record_digest):
+            raise AdapterFailure("result_serialization", "adapter_result_invalid")
+        if hashlib.sha256(canonical_json({key: value for key, value in authority.items() if key != "conversion_record_digest"}).encode("utf-8")).hexdigest() != record_digest:
+            raise AdapterFailure("artifact_digest", "artifact_digest_failed")
+        pdf_artifacts = [item for item in result["artifacts"] if isinstance(item, dict) and item.get("format") == "pdf"]
+        if len(pdf_artifacts) != 1 or authority["pdf_sha256"] != pdf_artifacts[0].get("sha256"):
+            raise AdapterFailure("artifact_digest", "artifact_digest_failed")
     if result["code"] == "unexpected_adapter_failure":
         if (
             result["ok"]
@@ -263,6 +287,12 @@ def _read_adapter_result(path: Path, staged_output: Path, digest: str, expected_
             raise AdapterFailure("result_serialization", "adapter_result_invalid")
         if item["size_bytes"] != expected.stat().st_size or hashlib.sha256(expected.read_bytes()).hexdigest() != item["sha256"]:
             raise AdapterFailure("artifact_digest", "artifact_digest_failed")
+    if "pdf" in formats and authority is not None:
+        pdf = next(item for item in result["artifacts"] if item["format"] == "pdf")
+        if authority.get("pdf_sha256") != pdf["sha256"]:
+            raise AdapterFailure("artifact_digest", "artifact_digest_failed")
+    elif authority is not None:
+        raise AdapterFailure("result_serialization", "adapter_result_invalid")
     return result
 
 
@@ -277,11 +307,31 @@ def _terminate_process_group(process: subprocess.Popen[str]) -> None:
             pass
 
 
-def render_frozen_report(specification: Mapping[str, Any], digest: str, output_dir: Path, governance_qualification: Mapping[str, Any] | None = None, pathway_render_model: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _valid_governed_job_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def render_frozen_report(
+    specification: Mapping[str, Any],
+    digest: str,
+    output_dir: Path,
+    governance_qualification: Mapping[str, Any] | None = None,
+    pathway_render_model: Mapping[str, Any] | None = None,
+    *,
+    governed_job_id: int | None = None,
+    governed_attempt_count: int | None = None,
+    retry_of_job_id: int | None = None,
+) -> dict[str, Any]:
     if specification.get("publication_engine_version") != ENGINE_VERSION:
         raise ValueError("governed_report_publication_engine_version_invalid")
     if __import__("hashlib").sha256(canonical_json(specification).encode("utf-8")).hexdigest() != digest:
         raise ValueError("governed_report_specification_digest_mismatch")
+    if governed_job_id is not None and not _valid_governed_job_id(governed_job_id):
+        raise ValueError("governed_report_job_identity_invalid")
+    if pathway_render_model is not None and "pdf" in set(specification.get("requested_formats", [])) and not _valid_governed_job_id(governed_job_id):
+        raise ValueError("governed_report_job_identity_required")
+    if pathway_render_model is not None and "pdf" in set(specification.get("requested_formats", [])) and (not isinstance(governed_attempt_count, int) or isinstance(governed_attempt_count, bool) or governed_attempt_count <= 0):
+        raise ValueError("governed_report_attempt_identity_required")
     if governance_qualification is not None:
         if governance_qualification.get("review_mode") != "sole_administrator" or governance_qualification.get("disclosure_version") != "sole-admin-v1" or governance_qualification.get("disclosure") != "Independent administrator review did not occur. This report was confirmed and approved by its creator under the declared sole-administrator operating constraint. It remains restricted to authorised internal use.":
             raise ValueError("governed_report_qualification_disclosure_invalid")
@@ -290,7 +340,7 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
         request = Path(temp) / "specification.json"
         staged_output = Path(temp) / "output"
         staged_output.mkdir()
-        request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification, "pathway_render_model": pathway_render_model}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        request.write_text(json.dumps({"specification": specification, "digest": digest, "governance_qualification": governance_qualification, "pathway_render_model": pathway_render_model, "governed_job_id": governed_job_id, "governed_attempt_count": governed_attempt_count, "retry_of_job_id": retry_of_job_id}, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         result_path = Path(temp) / "adapter-result.json"
         command = [sys.executable, str(ADAPTER), str(request), str(staged_output), str(result_path)]
         try:
@@ -333,10 +383,26 @@ def render_frozen_report(specification: Mapping[str, Any], digest: str, output_d
             staged_destination = output_dir / f".{source.name}.stage75-{os.getpid()}"
             shutil.copy2(source, staged_destination)
             os.replace(staged_destination, destination)
+            promoted_sha256 = hashlib.sha256(destination.read_bytes()).hexdigest()
+            promoted_size_bytes = destination.stat().st_size
+            if (
+                promoted_sha256 != item["sha256"]
+                or promoted_size_bytes != item["size_bytes"]
+            ):
+                try:
+                    destination.unlink()
+                except OSError:
+                    pass
+                raise AdapterFailure("artifact_digest", "artifact_digest_failed", result["cleanup"])
             promoted_item = dict(item)
             promoted_item["path"] = str(destination)
-            promoted_item["sha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
-            promoted_item["size_bytes"] = destination.stat().st_size
+            promoted_item["sha256"] = promoted_sha256
+            promoted_item["size_bytes"] = promoted_size_bytes
             promoted.append(promoted_item)
         result["artifacts"] = promoted
+        authority = result.get("pdf_conversion_authority")
+        if authority is not None:
+            pdf = next(item for item in promoted if item["format"] == "pdf")
+            if authority.get("pdf_sha256") != pdf["sha256"] or hashlib.sha256(canonical_json({key: value for key, value in authority.items() if key != "conversion_record_digest"}).encode("utf-8")).hexdigest() != authority.get("conversion_record_digest"):
+                raise AdapterFailure("artifact_digest", "artifact_digest_failed", result["cleanup"])
     return result

@@ -166,6 +166,9 @@ def ensure_report_tables(conn: sqlite3.Connection) -> None:
     for name, definition in (("qualification_id", "INTEGER"), ("qualification_digest", "TEXT"), ("disclosure_version", "TEXT")):
         if name not in columns:
             conn.execute(f"ALTER TABLE record_governed_report_artifacts ADD COLUMN {name} {definition}")
+    for name, definition in (("governed_job_id", "INTEGER"), ("governed_attempt_count", "INTEGER"), ("pdf_conversion_authority_json", "TEXT"), ("pdf_conversion_authority_digest", "TEXT")):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE record_governed_report_artifacts ADD COLUMN {name} {definition}")
     validate_report_tables(conn)
     from api import governed_report_qualifications as qualifications
     qualifications.ensure_qualification_tables(conn)
@@ -236,6 +239,10 @@ def _association_snapshot(conn: sqlite3.Connection, association_id: Any, *, root
         raise ValueError("governed_report_association_ineligible")
     document = _document_snapshot(str(value.get("document_id") or ""), root=root)
     return {"association_id": int(value["id"]), "record_reference": str(value.get("record_reference") or ""), "document_id": document["document_id"], "relationship_type": str(value.get("relationship_type") or ""), "document_sha256": document.get("sha256")}
+
+
+def _valid_governed_job_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _blocks(blocks: Any, *, record: Mapping[str, Any], documents: list[Mapping[str, Any]], associations: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -1189,12 +1196,18 @@ def supersede_report(conn: sqlite3.Connection, *, report_id: int | str, replacem
     return _row(conn, report_id)
 
 
-def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False, governance_qualification: Mapping[str, Any] | None = None, post_correction_authorization_id: str | None = None) -> dict[str, Any]:
+def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: str, actor_role: str, idempotency_key: str, _commit: bool = True, execution_guard: Any = None, output_dir: Path | None = None, promote_to: Path | None = None, finalization_transaction: bool = False, governance_qualification: Mapping[str, Any] | None = None, post_correction_authorization_id: str | None = None, governed_job_id: int | None = None, governed_attempt_count: int | None = None, retry_of_job_id: int | None = None) -> dict[str, Any]:
     report = _row(conn, report_id)
     actor_value = _required(actor, "governed_report_generation_actor_required"); role_value = _required(actor_role, "governed_report_generation_role_required"); key = _required(idempotency_key, "governed_report_generation_idempotency_key_required")
     version = report["versions"][-1]; spec = version["specification"]
     if specification_digest(spec) != version["specification_digest"]:
         raise ValueError("governed_report_specification_digest_mismatch")
+    if governed_job_id is not None and not _valid_governed_job_id(governed_job_id):
+        raise ValueError("governed_report_job_identity_invalid")
+    if spec.get("report_type") == PATHWAY_REPORT_TYPE and "pdf" in set(spec.get("requested_formats", [])) and not _valid_governed_job_id(governed_job_id):
+        raise ValueError("governed_report_job_identity_required")
+    if spec.get("report_type") == PATHWAY_REPORT_TYPE and "pdf" in set(spec.get("requested_formats", [])) and (not isinstance(governed_attempt_count, int) or isinstance(governed_attempt_count, bool) or governed_attempt_count <= 0):
+        raise ValueError("governed_report_attempt_identity_required")
     if "qualifications" in report:
         from api import governed_report_qualifications as qualification_store
         qualification = qualification_store.latest_final(conn, report_id)
@@ -1222,6 +1235,8 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
         link = conn.execute("SELECT job_id FROM stage77_post_correction_execution_links WHERE authorization_id=?", (str(post_correction_authorization_id),)).fetchone()
         if report["lifecycle_status"] != "validation_failed" or auth is None or auth["state"] != "authorized" or int(auth["report_id"]) != int(report_id) or int(auth["report_version_id"]) != int(version["id"]) or link is None:
             raise ValueError("governed_report_post_correction_authorization_invalid")
+        if governed_job_id is not None and int(link["job_id"]) != governed_job_id:
+            raise ValueError("governed_report_post_correction_authorization_invalid")
     _validate_generation_sources(conn, spec)
     final_dir = REPORT_ROOT / str(report_id) / str(version["version_number"])
     target_dir = Path(output_dir) if output_dir is not None else final_dir
@@ -1246,10 +1261,15 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
     try:
         from api.report_rendering import AdapterFailure, render_frozen_report
         pathway_render_model = materialize_pathway_render_model(conn, spec) if spec.get("report_type") == PATHWAY_REPORT_TYPE else None
+        render_kwargs = {"pathway_render_model": pathway_render_model}
+        if governed_job_id is not None:
+            render_kwargs["governed_job_id"] = governed_job_id
+            render_kwargs["governed_attempt_count"] = governed_attempt_count
+            render_kwargs["retry_of_job_id"] = retry_of_job_id
         if governance_qualification is not None and governance_qualification.get("review_mode") == "sole_administrator":
-            result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification, pathway_render_model=pathway_render_model)
+            result = render_frozen_report(spec, version["specification_digest"], target_dir, governance_qualification, **render_kwargs)
         else:
-            result = render_frozen_report(spec, version["specification_digest"], target_dir, pathway_render_model=pathway_render_model)
+            result = render_frozen_report(spec, version["specification_digest"], target_dir, **render_kwargs)
     except Exception as exc:
         diagnostic = None
         if isinstance(exc, AdapterFailure) or callable(getattr(exc, "diagnostic_payload", None)):
@@ -1315,11 +1335,34 @@ def generate_report(conn: sqlite3.Connection, *, report_id: int | str, actor: st
             raise GovernedReportGenerationFailure(make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="finalization", code="governed_report_generation_source_changed", exc=exc, cleanup_status=cleanup_status)) from None
     try:
         conn.execute("SAVEPOINT stage75_generation_db")
+        authority = result.get("pdf_conversion_authority")
+        if authority is not None:
+            if not isinstance(authority, Mapping) or authority.get("pdf_sha256") != next((item["sha256"] for item in result["artifacts"] if item["format"] == "pdf"), None):
+                raise ValueError("governed_report_pdf_conversion_authority_invalid")
+            authority_digest = authority.get("conversion_record_digest")
+            if not isinstance(authority_digest, str) or authority_digest != hashlib.sha256(canonical_json({key: value for key, value in authority.items() if key != "conversion_record_digest"}).encode("utf-8")).hexdigest():
+                raise ValueError("governed_report_pdf_conversion_authority_invalid")
+            from scripts.evidence_led_governance_pipeline import output_validation
+            artifact_paths = {item["format"]: Path(item["path"]) for item in result["artifacts"]}
+            if set(("docx", "pdf")) - set(artifact_paths):
+                raise ValueError("governed_report_pdf_conversion_authority_invalid")
+            output_validation.verify_pathway_pdf_conversion_event(
+                authority,
+                docx_path=artifact_paths["docx"],
+                pdf_path=artifact_paths["pdf"],
+                specification=spec,
+                model=pathway_render_model,
+                governance_qualification=governance_qualification,
+                governed_job_id=governed_job_id,
+                governed_attempt_count=governed_attempt_count,
+                retry_of_job_id=retry_of_job_id,
+            )
         for item in result["artifacts"]:
             qualification_id = governance_qualification.get("qualification_id") if governance_qualification else None
             qualification_digest = governance_qualification.get("qualification_digest") if governance_qualification else None
             disclosure_version = governance_qualification.get("disclosure_version") if governance_qualification else None
-            conn.execute("INSERT INTO record_governed_report_artifacts (version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status,qualification_id,qualification_digest,disclosure_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (version["id"], item["format"], item["path"], item["sha256"], item["size_bytes"], item["renderer_version"], spec["template_version"], now, "valid", canonical_json(result["diagnostics"]), "current", qualification_id, qualification_digest, disclosure_version))
+            item_authority = authority if item["format"] == "pdf" else None
+            conn.execute("INSERT INTO record_governed_report_artifacts (version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status,qualification_id,qualification_digest,disclosure_version,governed_job_id,governed_attempt_count,pdf_conversion_authority_json,pdf_conversion_authority_digest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (version["id"], item["format"], item["path"], item["sha256"], item["size_bytes"], item["renderer_version"], spec["template_version"], now, "valid", canonical_json(result["diagnostics"]), "current", qualification_id, qualification_digest, disclosure_version, governed_job_id if item_authority else None, governed_attempt_count if item_authority else None, canonical_json(item_authority) if item_authority else None, item_authority.get("conversion_record_digest") if item_authority else None))
         conn.execute("UPDATE record_governed_report_generation_attempts SET result=?,diagnostics_json=? WHERE idempotency_key=?", ("generated", canonical_json(result["diagnostics"]), key))
         conn.execute("UPDATE record_governed_reports SET lifecycle_status='generated' WHERE id=?", (int(report_id),))
         conn.execute("UPDATE record_governed_report_versions SET lifecycle_status='generated' WHERE id=?", (version["id"],))

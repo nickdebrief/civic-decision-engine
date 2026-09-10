@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -118,11 +119,17 @@ class Stage76AdapterSyntheticGateTests(unittest.TestCase):
             checker.run_check()
         render.assert_called_once()
 
-    def test_direct_invocation_fails_closed_without_traceback(self):
-        completed = subprocess.run([sys.executable, str(SCRIPT)], cwd=ROOT, capture_output=True, text=True, check=False)
+    def test_direct_invocation_fails_closed_when_backend_path_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            environment = os.environ.copy()
+            environment["PATH"] = str(Path(temp).resolve())
+            completed = subprocess.run([sys.executable, str(SCRIPT)], cwd=ROOT, env=environment, capture_output=True, text=True, check=False)
         self.assertEqual(completed.returncode, 1)
         self.assertRegex(completed.stderr, r"^stage76_adapter_gate=failed phase=[a-z_]+ code=[a-z_]+\nstage76_adapter_gate_cleanup=(passed|failed)$")
-        self.assertNotIn("Traceback", completed.stderr)
+        self.assertIn("stage76_adapter_gate_cleanup=passed", completed.stderr)
+        self.assertNotIn("stage76_adapter_gate=passed", completed.stdout)
+        self.assertNotIn("Traceback (most recent call last)", completed.stdout)
+        self.assertNotIn("Traceback (most recent call last)", completed.stderr)
 
     def test_adapter_input_mutation_is_rejected(self):
         checker = load_checker()
