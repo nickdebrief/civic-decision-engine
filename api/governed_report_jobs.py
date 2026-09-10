@@ -81,6 +81,10 @@ DIAGNOSTIC_RETRY_MAX_RATIONALE = 4000
 NON_ADMIN_IDENTITIES = {WORKER_IDENTITY, "automation", "codex", "system", "system_worker", "worker"}
 
 
+def _valid_governed_job_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -1218,6 +1222,10 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
         staging_dir = reports.REPORT_ROOT / ".stage77" / str(job["id"]) / str(attempt) / token
         promoted_dir = reports.REPORT_ROOT / str(job["report_id"]) / str(version["version_number"]) / f"job-{job['id']}-attempt-{attempt}"
         try:
+            if not _valid_governed_job_id(job["id"]):
+                _terminal(conn, job["id"], token, "failed_terminal", WORKER_IDENTITY, phase="revalidation", code="job_identity_invalid", diagnostic=make_diagnostic(phase="revalidation", operation="generation_revalidation", checkpoint="validation", code="job_identity_invalid"))
+                return
+            current_job_id = int(job["id"])
             governance_qualification = None
             if job.get("qualification_id") is not None:
                 from api import governed_report_qualifications as qualification_store
@@ -1229,7 +1237,7 @@ def execute_job(db_path: str, job: Mapping[str, Any]) -> None:
                     qualification_id=job["qualification_id"],
                     qualification_digest=job["qualification_digest"],
                 )
-            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification, post_correction_authorization_id=job.get("post_correction_authorization_id"))
+            reports.generate_report(conn, report_id=job["report_id"], actor=WORKER_IDENTITY, actor_role="system_worker", idempotency_key=f"stage77-job-{job['id']}", execution_guard=execution_guard, output_dir=staging_dir, promote_to=promoted_dir, _commit=False, finalization_transaction=True, governance_qualification=governance_qualification, post_correction_authorization_id=job.get("post_correction_authorization_id"), governed_job_id=current_job_id, governed_attempt_count=attempt, retry_of_job_id=job.get("retry_of_job_id"))
         except Exception as exc:
             if str(exc) == "governed_report_generation_cancelled":
                 _terminal(conn, job["id"], token, "cancelled", WORKER_IDENTITY, phase="cancellation", code="cancelled")

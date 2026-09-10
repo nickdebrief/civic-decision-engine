@@ -139,14 +139,16 @@ class GovernedSuiteTests(unittest.TestCase):
         transitioned = {
             "tests.test_canonical_public_origin": ("real_asgi", "unittest", 19),
             "tests.test_run_governed_test_suite": ("neutral", "unittest", 77),
+            "tests.test_stage78b_pathway_output_equivalence": ("neutral", "unittest", 128),
         }
         entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
-        self.assertEqual(len(entries), 132)
-        self.assertEqual(len({entry.module for entry in entries}), 132)
+        self.assertEqual(len(entries), 133)
+        self.assertEqual(len({entry.module for entry in entries}), 133)
         self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
-        self.assertEqual(
+        self.assertEqual(runner.EXCLUDED_UNTRACKED_MODULES, frozenset())
+        self.assertNotIn(
+            "tests.test_stage78b_pathway_output_equivalence",
             runner.EXCLUDED_UNTRACKED_MODULES,
-            frozenset({"tests.test_stage78b_pathway_output_equivalence"}),
         )
         for module, (classification, framework, ordinal) in transitioned.items():
             self.assertIn(module, runner.GOVERNED_TRACKED_MODULES)
@@ -158,9 +160,15 @@ class GovernedSuiteTests(unittest.TestCase):
         root = runner.repository_root()
         tracked = runner.git_test_modules(
             root,
-            ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"],
+            ["git", "ls-files", "--", "tests"],
         )
-        self.assertEqual(tracked, set(runner.GOVERNED_TRACKED_MODULES))
+        transitioned = "tests.test_stage78b_pathway_output_equivalence"
+        self.assertEqual(
+            tracked | {transitioned},
+            set(runner.GOVERNED_TRACKED_MODULES),
+        )
+        self.assertIn(transitioned, runner.GOVERNED_TRACKED_MODULES)
+        self.assertNotIn(transitioned, runner.EXCLUDED_UNTRACKED_MODULES)
 
     def test_tracked_transition_mismatch_fails_closed(self):
         temp, root = self.make_root(("tests.test_alpha", "tests.test_transitioned"))

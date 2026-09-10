@@ -78,6 +78,7 @@ class Stage77JobTests(unittest.TestCase):
             jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
             jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
         self.assertEqual(render.call_count, 1)
+        self.assertEqual(render.call_args.kwargs["governed_job_id"], item["id"])
         self.assertEqual(jobs.get_job(self.conn, item["id"])["state"], "succeeded")
 
     def test_worker_preserves_stage75_bounded_failure_diagnostic(self):
@@ -321,6 +322,17 @@ class Stage77JobTests(unittest.TestCase):
         self.conn.execute("UPDATE stage77_report_jobs SET state='failed_terminal' WHERE id=?", (item["id"],))
         retry = jobs.retry_job(self.conn, item["id"], "admin-a")
         self.assertEqual(retry["retry_of_job_id"], item["id"])
+
+    def test_retry_successor_execution_passes_successor_job_id_not_predecessor(self):
+        item = jobs.enqueue_generation(self.conn, report_id=7, actor="admin-a", governed_action="enqueue_generation", idempotency_key="retry-current-job")
+        self.conn.execute("UPDATE stage77_report_jobs SET state='failed_terminal' WHERE id=?", (item["id"],))
+        successor = jobs.retry_job(self.conn, item["id"], "admin-a")
+        claimed = jobs.claim_one(self.conn)
+        self.assertEqual(claimed["id"], successor["id"])
+        with patch.object(jobs.reports, "generate_report", side_effect=lambda *_args, **_kwargs: self.report) as render, patch.object(jobs, "_artifact_rows_valid", return_value=True):
+            jobs.execute_job(str(Path(self.temp.name) / "records.db"), claimed)
+        self.assertEqual(render.call_args.kwargs["governed_job_id"], successor["id"])
+        self.assertNotEqual(render.call_args.kwargs["governed_job_id"], item["id"])
 
 
 class Stage77SupervisorContractTests(unittest.TestCase):

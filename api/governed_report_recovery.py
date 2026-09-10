@@ -1189,6 +1189,90 @@ def _live_artifact_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
 
 
+_PDF_CONVERSION_AUTHORITY_FIELDS = {
+    "conversion_contract", "job_identity", "attempt_identity", "retry_predecessor_identity",
+    "specification_identity", "specification_sha256", "render_model_identity", "render_model_sha256",
+    "governance_qualification_identity", "governance_qualification_sha256", "gate_chain_identity",
+    "source_docx_artifact_identity", "source_docx_sha256", "pdf_artifact_identity", "pdf_sha256",
+    "converter_identity", "converter_version", "conversion_profile", "template_version",
+    "publication_engine_version", "created_at", "conversion_record_digest",
+}
+
+
+def _verify_registered_pdf_conversion_event(
+    conn: sqlite3.Connection,
+    bundle: Path,
+    manifest_artifacts: Mapping[int, Mapping[str, Any]],
+    rows: list[sqlite3.Row],
+    pdf_row: sqlite3.Row,
+) -> None:
+    """Verify a registered Stage 78 PDF event against the archived pair.
+
+    The copied bundle bytes are materialized before acceptance.  This avoids
+    treating a later second copy as though it were the artifact the event
+    actually authenticated.
+    """
+    if str(pdf_row["format"]) != "pdf" or not pdf_row["pdf_conversion_authority_json"] or not pdf_row["pdf_conversion_authority_digest"]:
+        raise ValueError("pdf_conversion_authority_invalid")
+    pair = [row for row in rows if int(row["version_id"]) == int(pdf_row["version_id"]) and str(row["format"]) in {"docx", "pdf"}]
+    docx_rows = [row for row in pair if str(row["format"]) == "docx"]
+    pdf_rows = [row for row in pair if str(row["format"]) == "pdf"]
+    if len(docx_rows) != 1 or len(pdf_rows) != 1 or int(pdf_rows[0]["id"]) != int(pdf_row["id"]):
+        raise ValueError("pdf_conversion_authority_invalid")
+    docx_row = docx_rows[0]
+    docx_item = manifest_artifacts.get(int(docx_row["id"]))
+    pdf_item = manifest_artifacts.get(int(pdf_row["id"]))
+    if docx_item is None or pdf_item is None:
+        raise ValueError("pdf_conversion_authority_invalid")
+    docx_path = bundle / str(docx_item["filename"])
+    pdf_path = bundle / str(pdf_item["filename"])
+    if not docx_path.is_file() or not pdf_path.is_file():
+        raise ValueError("pdf_conversion_authority_invalid")
+    for path, row in ((docx_path, docx_row), (pdf_path, pdf_row)):
+        data = path.read_bytes()
+        if len(data) != int(row["size_bytes"]) or digest_bytes(data) != str(row["sha256"]):
+            raise ValueError("pdf_conversion_authority_invalid")
+    job = conn.execute(
+        "SELECT id,report_version_id,attempt_count,retry_of_job_id,specification_digest,template_version,publication_engine_version,qualification_id,qualification_digest,state "
+        "FROM stage77_report_jobs WHERE id=?",
+        (pdf_row["governed_job_id"],),
+    ).fetchone()
+    if (
+        job is None
+        or job["report_version_id"] is None
+        or int(job["report_version_id"]) != int(pdf_row["version_id"])
+        or str(job["state"]) != "succeeded"
+        or int(pdf_row["governed_attempt_count"]) != int(job["attempt_count"])
+    ):
+        raise ValueError("pdf_conversion_authority_invalid")
+    conversion = _strict_payload(str(pdf_row["pdf_conversion_authority_json"]))
+    if not isinstance(conversion, Mapping) or str(pdf_row["pdf_conversion_authority_digest"]) != str(conversion.get("conversion_record_digest", "")):
+        raise ValueError("pdf_conversion_authority_invalid")
+    historical = {
+        "specification_sha256": str(job["specification_digest"]),
+        "template_version": str(job["template_version"]),
+        "publication_engine_version": str(job["publication_engine_version"]),
+    }
+    if job["qualification_id"] is not None:
+        historical.update({
+            "governance_qualification_identity": str(job["qualification_id"]),
+            "governance_qualification_sha256": str(job["qualification_digest"]),
+        })
+    from scripts.evidence_led_governance_pipeline import output_validation
+    try:
+        output_validation.verify_pathway_pdf_conversion_event(
+            conversion,
+            docx_path=docx_path,
+            pdf_path=pdf_path,
+            specification={}, model={}, governance_qualification=None,
+            governed_job_id=int(job["id"]), governed_attempt_count=int(job["attempt_count"]),
+            retry_of_job_id=None if job["retry_of_job_id"] is None else int(job["retry_of_job_id"]),
+            registered_event=True, historical_authority=historical,
+        )
+    except (TypeError, ValueError):
+        raise ValueError("pdf_conversion_authority_invalid") from None
+
+
 def _copy_artifact(root: Path, destination: Path, row: sqlite3.Row) -> dict[str, Any]:
     source = Path(str(row["storage_reference"]))
     if source.is_symlink() or not source.is_file():
@@ -1707,6 +1791,9 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         required_artifact_columns = {"id": "INTEGER", "version_id": "INTEGER", "format": "TEXT", "storage_reference": "TEXT", "sha256": "TEXT", "size_bytes": "INTEGER", "validation_state": "TEXT"}
         if any(artifact_columns.get(name) != expected_type for name, expected_type in required_artifact_columns.items()):
             raise ValueError("schema_incompatible")
+        conversion_columns = {"governed_job_id": "INTEGER", "governed_attempt_count": "INTEGER", "pdf_conversion_authority_json": "TEXT", "pdf_conversion_authority_digest": "TEXT"}
+        if conversion_columns.keys() & artifact_columns.keys() and any(artifact_columns.get(name) != expected_type for name, expected_type in conversion_columns.items()):
+            raise ValueError("schema_incompatible")
         database_contract, evidence, evidence_digest, retry_links, retry_links_digest = _database_contract(conn)
         if database_contract != contract:
             raise ValueError("schema_incompatible")
@@ -1749,7 +1836,8 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             snapshot, snapshot_digest, event_bound = _post_correction_snapshot(conn)
             if snapshot != manifest["post_correction_authorization"] or snapshot_digest != manifest["post_correction_authorization_state_digest"] or event_bound != int(manifest["post_correction_authorization_event_bound"]):
                 raise ValueError("post_correction_evidence_mismatch")
-        rows = conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
+        extra = ",governed_job_id,governed_attempt_count,pdf_conversion_authority_json,pdf_conversion_authority_digest" if conversion_columns.keys() <= artifact_columns.keys() else ""
+        rows = conn.execute("SELECT id,version_id,format,storage_reference,sha256,size_bytes" + extra + " FROM record_governed_report_artifacts WHERE validation_state='valid' ORDER BY id").fetchall()
         if len(rows) != len(manifest["artifacts"]):
             raise ValueError("artifact_inventory_mismatch")
         actual_job_states = {state: int(conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
@@ -1802,6 +1890,8 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             item = by_id.get(int(row["id"]))
             if not item or int(item["report_id"]) != int(conn.execute("SELECT report_id FROM record_governed_report_versions WHERE id=?", (row["version_id"],)).fetchone()[0]) or int(item["version_id"]) != int(row["version_id"]) or str(item["format"]) != str(row["format"]) or int(item["size_bytes"]) != int(row["size_bytes"]) or str(item["sha256"]) != str(row["sha256"]):
                 raise ValueError("artifact_inventory_mismatch")
+            if str(row["format"]) == "pdf" and conversion_columns.keys() <= artifact_columns.keys() and row["pdf_conversion_authority_json"] is not None:
+                _verify_registered_pdf_conversion_event(conn, bundle, by_id, rows, row)
         job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
         if {"state", "report_version_id", "requested_formats_json"}.issubset(job_columns):
             succeeded = conn.execute("SELECT id,report_version_id,requested_formats_json FROM stage77_report_jobs WHERE state='succeeded' ORDER BY id").fetchall()

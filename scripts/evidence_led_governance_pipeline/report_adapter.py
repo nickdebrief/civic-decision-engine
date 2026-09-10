@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -10,8 +11,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -22,6 +27,7 @@ from renderers.html_renderer import HtmlRenderer  # noqa: E402
 from themes.base import EffectiveTheme  # noqa: E402
 from themes.handbook import HANDBOOK_THEME  # noqa: E402
 from themes.registry import PUBLICATION_PROFILES  # noqa: E402
+import output_validation as _output_validation  # noqa: E402
 from output_validation import audit_html, docx_text, source_text_blocks, validate_cross_format_equivalence, validate_docx_output, validate_html_output  # noqa: E402
 from renderers.pdf_renderer import PdfRenderer, discover_tool  # noqa: E402
 
@@ -36,6 +42,7 @@ PDF_ALLOWED_METADATA_KEYS = {"/Title", "/Author", "/Subject", "/Keywords", "/Cre
 RESULT_SCHEMA_VERSION = "1"
 PATHWAY_REPORT_TYPE = "procedural_pathway_report"
 PATHWAY_RENDER_MODEL_CONTRACT = "stage78.pathway_render_model.v1"
+PATHWAY_OUTPUT_EQUIVALENCE_CONTRACT = "stage78.pathway_output_equivalence.v1"
 PATHWAY_RENDER_OBJECT_KINDS = frozenset({
     "governed_observation",
     "governed_inference",
@@ -59,6 +66,94 @@ PATHWAY_RENDER_OBJECT_KINDS = frozenset({
     "deadline_calculation",
     "pathway_link",
 })
+
+
+_PATHWAY_OUTPUT_VALIDATION_MODULE_NAME = "_stage78_pathway_output_validation"
+_PATHWAY_OUTPUT_VALIDATION_REQUIRED = (
+    "canonical_pathway_units",
+    "pathway_docx_frame_contract",
+    "pathway_trusted_pdf_conversion_binding",
+    "validate_pathway_output_equivalence",
+)
+_PATHWAY_OUTPUT_VALIDATION_AUTHORITY = None
+_PATHWAY_OUTPUT_VALIDATION_AUTHORITY_FUNCTIONS = None
+_PATHWAY_OUTPUT_VALIDATION_LOCK = threading.Lock()
+
+
+def _resolved_module_file(module) -> Path | None:
+    origin = getattr(getattr(module, "__spec__", None), "origin", None) or getattr(module, "__file__", None)
+    if not origin:
+        return None
+    try:
+        return Path(origin).resolve(strict=True)
+    except OSError:
+        return None
+
+
+def _pathway_validator_source_path() -> Path:
+    adapter_source = Path(__file__).resolve(strict=True)
+    expected_dir = adapter_source.parent
+    sibling = adapter_source.with_name("output_validation.py")
+    try:
+        validator_source = sibling.resolve(strict=True)
+    except OSError as exc:
+        raise ImportError("stage78_pathway_output_validation_unavailable") from exc
+    if validator_source.parent != expected_dir or not validator_source.is_file():
+        raise ImportError("stage78_pathway_output_validation_unavailable")
+    return validator_source
+
+
+def _validate_pathway_output_validation_module(module, source_path: Path):
+    if _resolved_module_file(module) != source_path:
+        raise ImportError("stage78_pathway_output_validation_unavailable")
+    for name in _PATHWAY_OUTPUT_VALIDATION_REQUIRED:
+        value = getattr(module, name, None)
+        if not callable(value):
+            raise ImportError("stage78_pathway_output_validation_unavailable")
+        if getattr(value, "__module__", module.__name__) != module.__name__:
+            raise ImportError("stage78_pathway_output_validation_unavailable")
+    return module
+
+
+def _pathway_output_validation_module():
+    global _PATHWAY_OUTPUT_VALIDATION_AUTHORITY, _PATHWAY_OUTPUT_VALIDATION_AUTHORITY_FUNCTIONS
+    source_path = _pathway_validator_source_path()
+    authority = _PATHWAY_OUTPUT_VALIDATION_AUTHORITY
+    if authority is not None:
+        _validate_pathway_output_validation_module(authority, source_path)
+        if tuple(getattr(authority, name) for name in _PATHWAY_OUTPUT_VALIDATION_REQUIRED) != _PATHWAY_OUTPUT_VALIDATION_AUTHORITY_FUNCTIONS:
+            raise ImportError("stage78_pathway_output_validation_unavailable")
+        return authority
+    with _PATHWAY_OUTPUT_VALIDATION_LOCK:
+        authority = _PATHWAY_OUTPUT_VALIDATION_AUTHORITY
+        if authority is not None:
+            _validate_pathway_output_validation_module(authority, source_path)
+            if tuple(getattr(authority, name) for name in _PATHWAY_OUTPUT_VALIDATION_REQUIRED) != _PATHWAY_OUTPUT_VALIDATION_AUTHORITY_FUNCTIONS:
+                raise ImportError("stage78_pathway_output_validation_unavailable")
+            return authority
+        spec = importlib.util.spec_from_file_location(_PATHWAY_OUTPUT_VALIDATION_MODULE_NAME, source_path)
+        if spec is None or spec.loader is None:
+            raise ImportError("stage78_pathway_output_validation_unavailable")
+        real_module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = real_module
+        try:
+            spec.loader.exec_module(real_module)
+            authority = _validate_pathway_output_validation_module(real_module, source_path)
+            _PATHWAY_OUTPUT_VALIDATION_AUTHORITY_FUNCTIONS = tuple(
+                getattr(authority, name) for name in _PATHWAY_OUTPUT_VALIDATION_REQUIRED
+            )
+            _PATHWAY_OUTPUT_VALIDATION_AUTHORITY = authority
+            return authority
+        except Exception as exc:
+            if sys.modules.get(spec.name) is real_module:
+                del sys.modules[spec.name]
+            if isinstance(exc, ImportError) and str(exc) == "stage78_pathway_output_validation_unavailable":
+                raise
+            raise ImportError("stage78_pathway_output_validation_unavailable") from exc
+
+
+_output_validation = _pathway_output_validation_module()
+validate_pathway_output_equivalence = _output_validation.validate_pathway_output_equivalence
 
 
 class AdapterFailure(RuntimeError):
@@ -749,6 +844,10 @@ def _pathway_text(value) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _valid_governed_job_id(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _validate_pathway_render_model(spec, model):
     if not isinstance(model, dict):
         raise AdapterFailure("specification_validation", "adapter_model_invalid")
@@ -854,46 +953,73 @@ def _pathway_row_paragraph(row, section_index: int, row_index: int):
 
 def _pathway_make_book(spec, governance_qualification=None, pathway_render_model=None):
     model = _validate_pathway_render_model(spec, pathway_render_model)
+    try:
+        expected_units = _output_validation.canonical_pathway_units(model, spec, governance_qualification)
+        docx_frames = _output_validation.pathway_docx_frame_contract(expected_units)
+    except Exception:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid") from None
+    unit_bookmarks = docx_frames["unit_token_by_frame"]
+    structural_bookmarks = docx_frames["structural_token_by_frame"]
+
+    def unit_bookmark(frame: str) -> str:
+        bookmark = unit_bookmarks.get(frame)
+        if not bookmark:
+            raise AdapterFailure("specification_validation", "adapter_model_invalid")
+        return bookmark
+
+    def structural_bookmark(frame: str) -> str:
+        bookmark = structural_bookmarks.get(frame)
+        if not bookmark:
+            raise AdapterFailure("specification_validation", "adapter_model_invalid")
+        return bookmark
+
     blocks = []
     identity_rows = [
-        Paragraph(text=f"Canonical Record: {model['canonical_record_reference']}", role="body", identifier="stage78-pathway-scope-record"),
-        Paragraph(text=f"Projection: {model['projection_contract']} / {model['projection_version']} / {model['projection_digest']}", role="body", identifier="stage78-pathway-scope-projection"),
-        Paragraph(text=f"Inclusion: {model['inclusion_mode']} — Exclusion rule: {model['exclusion_rule']}", role="body", identifier="stage78-pathway-scope-rules"),
+        Paragraph(text=f"Pathway output equivalence: {PATHWAY_OUTPUT_EQUIVALENCE_CONTRACT}", role="body", identifier="stage78-pathway-output-equivalence", bookmark=unit_bookmark("stage78-pathway-output-equivalence")),
+        Paragraph(text=f"Report type: {model['report_type']} — Distribution: {model['distribution_class']} — Render model: {model['render_model_contract']}", role="body", identifier="stage78-pathway-render-authority", bookmark=unit_bookmark("stage78-pathway-render-authority")),
+        Paragraph(text=f"Canonical Record: {model['canonical_record_reference']}", role="body", identifier="stage78-pathway-scope-record", bookmark=unit_bookmark("stage78-pathway-scope-record")),
+        Paragraph(text=f"Projection: {model['projection_contract']} / {model['projection_version']} / {model['projection_digest']}", role="body", identifier="stage78-pathway-scope-projection", bookmark=unit_bookmark("stage78-pathway-scope-projection")),
+        Paragraph(text=f"Inclusion: {model['inclusion_mode']} — Exclusion rule: {model['exclusion_rule']}", role="body", identifier="stage78-pathway-scope-rules", bookmark=unit_bookmark("stage78-pathway-scope-rules")),
+        Paragraph(text=f"Governed pathway rows: {model['row_count']}", role="body", identifier="stage78-pathway-row-count", bookmark=unit_bookmark("stage78-pathway-row-count")),
     ]
-    blocks.append(Section(title="Report identity and scope", number="1", level=1, blocks=identity_rows, identifier="stage78-section-identity-scope"))
+    blocks.append(Section(title="Report identity and scope", number="1", level=1, blocks=identity_rows, identifier="stage78-section-identity-scope", bookmark=structural_bookmark("stage78-section-identity-scope")))
     section_number = 2
     for section in model["sections"]:
         if section["title"] in {"Report identity and scope", "Provenance and limitations"}:
             continue
         if section["title"] == "Scoped gaps":
             paragraphs = [
-                Paragraph(text=f"Scoped gap: {_pathway_text(gap.get('statement'))} Binding: {_pathway_text(gap.get('binding_mechanism'))}.", role="body", identifier=f"stage78-gap-{index}")
+                Paragraph(text=f"Scoped gap: {_pathway_text(gap.get('statement'))} Binding: {_pathway_text(gap.get('binding_mechanism'))}.", role="body", identifier=f"stage78-gap-{index}", bookmark=unit_bookmark(f"stage78-gap-{index}"))
                 for index, gap in enumerate(model["gaps"])
-            ] or [Paragraph(text="Scoped gap: no scoped gaps recorded in the frozen pathway projection.", role="body", identifier="stage78-gap-none")]
+            ] or [Paragraph(text="Scoped gap: no scoped gaps recorded in the frozen pathway projection.", role="body", identifier="stage78-gap-none", bookmark=unit_bookmark("stage78-gap-none"))]
         elif section["title"] == "Contested matters":
             paragraphs = [
-                Paragraph(text=f"Contested or historical governed row: {_pathway_text(row['object_kind'])} — {_pathway_text(row['governed_logical_identity'])} — status {_pathway_text(row['status'])} — contestation {_pathway_text(row['contestation'])} — historical state {_pathway_text(row['supersession'])}", role="body", identifier=f"stage78-contested-{index}")
+                Paragraph(text=f"Contested or historical governed row: {_pathway_text(row['object_kind'])} — {_pathway_text(row['governed_logical_identity'])} — status {_pathway_text(row['status'])} — contestation {_pathway_text(row['contestation'])} — historical state {_pathway_text(row['supersession'])}", role="body", identifier=f"stage78-contested-{index}", bookmark=unit_bookmark(f"stage78-contested-{index}"))
                 for index, row in enumerate(section["rows"])
             ]
         else:
-            paragraphs = [_pathway_row_paragraph(row, section_number, index) for index, row in enumerate(section["rows"])]
+            paragraphs = []
+            for index, row in enumerate(section["rows"]):
+                paragraph = _pathway_row_paragraph(row, section_number, index)
+                paragraph.bookmark = unit_bookmark(paragraph.identifier)
+                paragraphs.append(paragraph)
         if paragraphs:
-            blocks.append(Section(title=section["title"], number=str(section_number), level=1, blocks=paragraphs, identifier=f"stage78-section-{section_number}"))
+            blocks.append(Section(title=section["title"], number=str(section_number), level=1, blocks=paragraphs, identifier=f"stage78-section-{section_number}", bookmark=structural_bookmark(f"stage78-section-{section_number}")))
             section_number += 1
     provenance = [
-        Paragraph(text=f"Coverage: {_pathway_text(model['coverage'])}", role="body", identifier="stage78-provenance-coverage"),
-        Paragraph(text=f"Unavailable families: {_pathway_text(model['unavailable_families'])}", role="body", identifier="stage78-provenance-unavailable"),
+        Paragraph(text=f"Coverage: {_pathway_text(model['coverage'])}", role="body", identifier="stage78-provenance-coverage", bookmark=unit_bookmark("stage78-provenance-coverage")),
+        Paragraph(text=f"Unavailable families: {_pathway_text(model['unavailable_families'])}", role="body", identifier="stage78-provenance-unavailable", bookmark=unit_bookmark("stage78-provenance-unavailable")),
     ]
     for index, limitation in enumerate(model["limitations"]):
-        provenance.append(Paragraph(text=f"Limitation: {_pathway_text(limitation)}", role="body", identifier=f"stage78-provenance-limitation-{index}"))
+        provenance.append(Paragraph(text=f"Limitation: {_pathway_text(limitation)}", role="body", identifier=f"stage78-provenance-limitation-{index}", bookmark=unit_bookmark(f"stage78-provenance-limitation-{index}")))
     for index, value in enumerate(spec.get("qualifications", [])):
-        provenance.append(Paragraph(text=f"Qualification: {_pathway_text(value)}", role="body", identifier=f"stage78-provenance-qualification-{index}"))
+        provenance.append(Paragraph(text=f"Qualification: {_pathway_text(value)}", role="body", identifier=f"stage78-provenance-qualification-{index}", bookmark=unit_bookmark(f"stage78-provenance-qualification-{index}")))
     if governance_qualification is not None:
         if set(governance_qualification) != {"review_mode", "disclosure_version", "disclosure", "qualification_id", "qualification_digest"}:
             raise AdapterFailure("specification_validation", "adapter_input_invalid")
-        provenance.append(Paragraph(text=f"Qualification disclosure: {_pathway_text(governance_qualification['disclosure'])}", role="body", identifier="stage78-provenance-qualification-disclosure"))
-    blocks.append(Section(title="Provenance and limitations", number=str(section_number), level=1, blocks=provenance, identifier="stage78-section-provenance-limitations"))
-    chapter = Chapter(title=spec["title"], number=1, blocks=blocks, identifier="stage78-procedural-pathway-report")
+        provenance.append(Paragraph(text=f"Qualification disclosure: {_pathway_text(governance_qualification['disclosure'])}", role="body", identifier="stage78-provenance-qualification-disclosure", bookmark=unit_bookmark("stage78-provenance-qualification-disclosure")))
+    blocks.append(Section(title="Provenance and limitations", number=str(section_number), level=1, blocks=provenance, identifier="stage78-section-provenance-limitations", bookmark=structural_bookmark("stage78-section-provenance-limitations")))
+    chapter = Chapter(title=spec["title"], number=1, blocks=blocks, identifier="stage78-procedural-pathway-report", bookmark=structural_bookmark("stage78-procedural-pathway-report"))
     return Book(title=spec["title"], subtitle=spec["purpose"], author="Civic Decision Engine", version=spec["specification_schema_version"], running_title=spec["title"], tagline="A governed internal report specification", blocks=[chapter], metadata={"subject": "Internal governed report", "edition": "Stage 78B2A", "language": "en", "comments": "Rendering presents governed pathway records; it does not publish, endorse, verify or determine them."})
 
 
@@ -950,6 +1076,71 @@ def make_book(spec, governance_qualification=None, pathway_render_model=None):
     return Book(title=spec["title"], subtitle=spec["purpose"], author="Civic Decision Engine", version=spec["specification_schema_version"], running_title=spec["title"], tagline="A governed internal report specification", blocks=[chapter], metadata={"subject": spec["BOUNDARY"] if "BOUNDARY" in spec else "Internal governed report", "edition": "Stage 75", "language": "en", "comments": "A report presents the record; it does not replace it."})
 
 
+def _apply_pathway_docx_heading_unit_frames(path: Path, spec, governance_qualification=None, pathway_render_model=None) -> None:
+    if pathway_render_model is None:
+        return
+    try:
+        units = _output_validation.canonical_pathway_units(pathway_render_model, spec, governance_qualification)
+        frames = _output_validation.pathway_docx_frame_contract(units)
+    except Exception:
+        raise AdapterFailure("specification_validation", "adapter_model_invalid") from None
+    heading_units = [
+        unit
+        for unit in units
+        if unit.unit_kind == "heading" and unit.field_identity in {"chapter", "section"}
+    ]
+    namespace = _output_validation.WORD_NAMESPACE
+    ElementTree.register_namespace("w", namespace)
+    with zipfile.ZipFile(path) as source:
+        root = ElementTree.fromstring(source.read("word/document.xml"))
+        existing_ids = [
+            int(value)
+            for node in root.findall(f".//{{{namespace}}}bookmarkStart")
+            for value in [node.attrib.get(f"{{{namespace}}}id", "")]
+            if value.isdigit()
+        ]
+        next_id = max(existing_ids or [0]) + 1
+        for unit in heading_units:
+            anchor = frames["structural_token_by_frame"][unit.framing_identity]
+            token = frames["unit_token_by_frame"][unit.framing_identity]
+            matches = [
+                paragraph
+                for paragraph in root.findall(f".//{{{namespace}}}p")
+                if any(
+                    node.attrib.get(f"{{{namespace}}}name") == anchor
+                    for node in paragraph.findall(f".//{{{namespace}}}bookmarkStart")
+                )
+            ]
+            if len(matches) != 1:
+                raise AdapterFailure("docx_render", "docx_render_failed")
+            paragraph = matches[0]
+            if any(node.attrib.get(f"{{{namespace}}}name") == token for node in paragraph.findall(f".//{{{namespace}}}bookmarkStart")):
+                continue
+            start = ElementTree.Element(f"{{{namespace}}}bookmarkStart")
+            start.set(f"{{{namespace}}}id", str(next_id))
+            start.set(f"{{{namespace}}}name", token)
+            end = ElementTree.Element(f"{{{namespace}}}bookmarkEnd")
+            end.set(f"{{{namespace}}}id", str(next_id))
+            next_id += 1
+            children = list(paragraph)
+            insert_at = 1 if children and children[0].tag == f"{{{namespace}}}bookmarkStart" else 0
+            paragraph.insert(insert_at, start)
+            children = list(paragraph)
+            end_at = len(children)
+            for index in range(len(children) - 1, -1, -1):
+                if children[index].tag == f"{{{namespace}}}bookmarkEnd":
+                    end_at = index
+                    break
+            paragraph.insert(end_at, end)
+        updated = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+        temporary = path.with_name(f".{path.name}.stage78-docx.tmp")
+        with zipfile.ZipFile(temporary, "w") as destination:
+            for item in source.infolist():
+                data = updated if item.filename == "word/document.xml" else source.read(item.filename)
+                destination.writestr(item, data)
+    os.replace(temporary, path)
+
+
 def main():
     started = time.monotonic()
     if len(sys.argv) != 4:
@@ -970,21 +1161,38 @@ def main():
         raise AdapterFailure("specification_validation", "adapter_input_invalid")
     governance_qualification = payload.get("governance_qualification")
     pathway_render_model = payload.get("pathway_render_model")
+    governed_job_id = payload.get("governed_job_id")
+    governed_attempt_count = payload.get("governed_attempt_count")
+    retry_of_job_id = payload.get("retry_of_job_id")
+    if governed_job_id is not None and not _valid_governed_job_id(governed_job_id):
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
+    if governed_attempt_count is not None and (not isinstance(governed_attempt_count, int) or isinstance(governed_attempt_count, bool) or governed_attempt_count <= 0):
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
+    if retry_of_job_id is not None and not _valid_governed_job_id(retry_of_job_id):
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
     if spec.get("report_type") != PATHWAY_REPORT_TYPE and pathway_render_model is not None:
         raise AdapterFailure("specification_validation", "adapter_input_invalid")
+    if pathway_render_model is not None and "pdf" in requested and not _valid_governed_job_id(governed_job_id):
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
+    if pathway_render_model is not None and "pdf" in requested and governed_attempt_count is None:
+        raise AdapterFailure("input_validation", "adapter_input_invalid")
     book = _run_phase("model_adaptation", "adapter_model_invalid", lambda: make_book(spec, governance_qualification, pathway_render_model))
     effective = EffectiveTheme(theme=HANDBOOK_THEME, publication_profile=PUBLICATION_PROFILES["digital"], page=HANDBOOK_THEME.page, title_page=HANDBOOK_THEME.title_page, volume_page=HANDBOOK_THEME.volume_page, chapter_opening=HANDBOOK_THEME.chapter_opening)
     artifacts = []
     html_path = output / "report.html"
     docx_path = output / "report.docx"
+    docx_sha256 = ""
     if "docx" in requested or "pdf" in requested:
         def render_docx():
             DocxRenderer(effective).render(book, docx_path)
+            if pathway_render_model is not None:
+                _apply_pathway_docx_heading_unit_frames(docx_path, spec, governance_qualification, pathway_render_model)
             validation, _ = validate_docx_output(docx_path, book)
             if not validation.ok:
                 raise RuntimeError("docx validation failed")
             return docx_path
         artifacts.append(_run_phase("docx_render", "docx_render_failed", render_docx))
+        docx_sha256 = hashlib.sha256(docx_path.read_bytes()).hexdigest()
     if "html" in requested or "pdf" in requested:
         def render_html():
             HtmlRenderer(effective, HtmlOutputConfig()).render(book, html_path)
@@ -1033,13 +1241,49 @@ def main():
         except Exception as exc:
             raise _classify_pdf_failure(UnexpectedPdfInspectionError("pdf_inspection", "validate_pdf", _exception_class(exc), caller_step, caller_boundary)) from None
         artifacts.append(pdf_path)
+    pdf_conversion_authority = None
+    if pathway_render_model is not None:
+        def check_pathway_output_equivalence():
+            if not callable(validate_pathway_output_equivalence):
+                raise RuntimeError("pathway output equivalence validator unavailable")
+            trusted_pdf_conversion = None
+            if "pdf" in requested:
+                trusted_pdf_conversion = _output_validation.pathway_pdf_conversion_authority_record(
+                    pathway_render_model,
+                    spec,
+                    governance_qualification,
+                    governed_job_id=governed_job_id,
+                    governed_attempt_count=governed_attempt_count,
+                    retry_of_job_id=retry_of_job_id,
+                    docx_sha256=docx_sha256,
+                    pdf_sha256=hashlib.sha256(pdf_path.read_bytes()).hexdigest(),
+                    converter_identity="headless-libreoffice",
+                    converter_version=str(getattr(renderer_result, "renderer_version", "")),
+                    created_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                )
+            validation, _ = validate_pathway_output_equivalence(
+                pathway_render_model,
+                specification=spec,
+                governance_qualification=governance_qualification,
+                docx_path=docx_path if "docx" in requested or "pdf" in requested else None,
+                html_path=html_path if "html" in requested or "pdf" in requested else None,
+                pdf_path=pdf_path if "pdf" in requested else None,
+                trusted_pdf_conversion=trusted_pdf_conversion,
+                governed_job_id=governed_job_id,
+                governed_attempt_count=governed_attempt_count,
+                retry_of_job_id=retry_of_job_id,
+            )
+            if not validation.ok:
+                raise RuntimeError("pathway output equivalence failed")
+            return trusted_pdf_conversion
+        pdf_conversion_authority = _run_phase("cross_format_equivalence", "equivalence_failed", check_pathway_output_equivalence)
     descriptors = []
     try:
         for path in artifacts:
             descriptors.append({"format": path.suffix[1:], "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size, "renderer_version": ENGINE_VERSION})
     except Exception:
         raise AdapterFailure("artifact_digest", "artifact_digest_failed") from None
-    result = {"schema_version": RESULT_SCHEMA_VERSION, "ok": True, "phase": "result_serialization", "code": "completed", "cleanup": "passed", "specification_digest": digest, "diagnostics": diagnostics, "artifacts": descriptors}
+    result = {"schema_version": RESULT_SCHEMA_VERSION, "ok": True, "phase": "result_serialization", "code": "completed", "cleanup": "passed", "specification_digest": digest, "diagnostics": diagnostics, "artifacts": descriptors, "pdf_conversion_authority": pdf_conversion_authority}
     _write_result(result_path, result)
 
 
@@ -1050,14 +1294,14 @@ if __name__ == "__main__":
     except AdapterFailure as exc:
         if result_path is not None:
             try:
-                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": exc.phase, "code": exc.code, "cleanup": "unknown", "specification_digest": "", "diagnostics": [exc.diagnostic] if exc.diagnostic else [], "artifacts": []})
+                _write_result(result_path, {"schema_version": RESULT_SCHEMA_VERSION, "ok": False, "phase": exc.phase, "code": exc.code, "cleanup": "unknown", "specification_digest": "", "diagnostics": [exc.diagnostic] if exc.diagnostic else [], "artifacts": [], "pdf_conversion_authority": None})
             except AdapterFailure:
                 pass
         raise SystemExit(1)
     except Exception as exc:
         if result_path is not None:
             try:
-                _write_result(result_path, _unexpected_failure_result(exc))
+                _write_result(result_path, {**_unexpected_failure_result(exc), "pdf_conversion_authority": None})
             except AdapterFailure:
                 pass
         raise SystemExit(1)

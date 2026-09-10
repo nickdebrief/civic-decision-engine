@@ -58,7 +58,57 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 {"format": name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size_bytes": path.stat().st_size, "renderer_version": "2.0.0"}
                 for name, path in files.items()
             ],
+            "pdf_conversion_authority": None,
         }
+
+    def _valid_pdf_conversion_authority(self, result):
+        artifact_by_format = {item["format"]: item for item in result["artifacts"]}
+        authority = {
+            "conversion_contract": "stage78.trusted_pdf_conversion_authority.v2",
+            "job_identity": "stage77-report-job:17",
+            "attempt_identity": "stage77-report-job:17:attempt:1",
+            "retry_predecessor_identity": "none",
+            "specification_identity": "stage78.fixture.v1",
+            "specification_sha256": "1" * 64,
+            "render_model_identity": "stage78.fixture-model.v1",
+            "render_model_sha256": "2" * 64,
+            "governance_qualification_identity": "none",
+            "governance_qualification_sha256": "3" * 64,
+            "gate_chain_identity": "none",
+            "source_docx_artifact_identity": "stage78-docx:stage77-report-job:17:attempt:1",
+            "source_docx_sha256": artifact_by_format["docx"]["sha256"],
+            "pdf_artifact_identity": "stage78-pdf:stage77-report-job:17:attempt:1",
+            "pdf_sha256": artifact_by_format["pdf"]["sha256"],
+            "converter_identity": "headless-libreoffice",
+            "converter_version": "fixture-version",
+            "conversion_profile": "fixture-profile",
+            "template_version": "fixture-template",
+            "publication_engine_version": "fixture-engine",
+            "created_at": "2026-09-09T00:00:00Z",
+        }
+        authority["conversion_record_digest"] = hashlib.sha256(
+            self.rendering.canonical_json(authority).encode("utf-8")
+        ).hexdigest()
+        return authority
+
+    def test_pdf_conversion_authority_is_strict_and_bound_to_pdf_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result = self._valid_result(root)
+            result["pdf_conversion_authority"] = self._valid_pdf_conversion_authority(result)
+            path = root / "adapter-result.json"
+            self.adapter._write_result(path, result)
+            self.assertEqual(self.rendering._read_adapter_result(path, root, "a" * 64), result)
+            for mutation in (
+                lambda value: value["pdf_conversion_authority"].pop("converter_version"),
+                lambda value: value["pdf_conversion_authority"].update(extra="forbidden"),
+                lambda value: value["pdf_conversion_authority"].update(pdf_sha256="0" * 64),
+            ):
+                candidate = json.loads(json.dumps(result))
+                mutation(candidate)
+                path.write_text(json.dumps(candidate), encoding="utf-8")
+                with self.assertRaises(self.rendering.AdapterFailure):
+                    self.rendering._read_adapter_result(path, root, "a" * 64)
 
     def test_success_result_is_written_atomically_and_strictly_read(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -107,7 +157,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             self.adapter._write_result(result_path, {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "pdf_metadata_invalid", "cleanup": "failed",
-                "specification_digest": "", "diagnostics": [], "artifacts": [],
+                "specification_digest": "", "diagnostics": [], "artifacts": [], "pdf_conversion_authority": None,
             })
             result = self.rendering._read_adapter_result(result_path, root, "a" * 64)
             self.assertEqual((result["phase"], result["code"], result["cleanup"]), ("pdf_inspection", "pdf_metadata_invalid", "failed"))
@@ -124,7 +174,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "code": "pdf_metadata_invalid", "cleanup": "passed",
                 "specification_digest": "", "diagnostics": [{
                     "format": "pdf", "failure_field": "/Producer", "failure_reason": "unexpected_value",
-                }], "artifacts": [],
+                }], "artifacts": [], "pdf_conversion_authority": None,
             })
             result = self.rendering._read_adapter_result(result_path, root, "a" * 64)
             self.assertEqual(result["diagnostics"], [{"format": "pdf", "failure_field": "/Producer", "failure_reason": "unexpected_value"}])
@@ -143,7 +193,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "pdf_action_invalid", "cleanup": "passed", "specification_digest": "",
                 "diagnostics": [{"format": "pdf", "failure_location": "catalog_open_action", "failure_reason": "executable_action", "failure_step": "open_action_resolution", "failure_structure": "action_dictionary", "failure_operand": "none", "failure_operand_kind": "none", "failure_operand_count": "not_applicable", "failure_operand_kinds": [], "failure_destination_mode": "not_applicable", "failure_trailing_kinds": [], "page_registry_state": "populated", "reference_identity_result": "not_applicable", "resolution_result": "not_applicable", "resolved_target_comparison": "not_applicable", "page_reference_attribute": "indirect_reference"}],
-                "artifacts": [],
+                "artifacts": [], "pdf_conversion_authority": None,
             }
             self.adapter._write_result(result_path, result)
             self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
@@ -162,7 +212,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
                 "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error", "failure_boundary": "function_body"}],
-                "artifacts": [],
+                "artifacts": [], "pdf_conversion_authority": None,
             }
             self.adapter._write_result(result_path, result)
             self.assertEqual(self.rendering._read_adapter_result(result_path, root, "a" * 64)["diagnostics"], result["diagnostics"])
@@ -181,7 +231,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
                 "diagnostics": [{"format": "pdf", "failure_step": "page_reference_attribute", "failure_operation": "read_indirect_reference", "inspection_step": "page_reference_registry", "failure_exception_class": "attribute_error", "failure_boundary": "function_body"}],
-                "artifacts": [],
+                "artifacts": [], "pdf_conversion_authority": None,
             }
             for field in ("failure_step", "failure_operation", "inspection_step", "failure_exception_class", "failure_boundary"):
                 candidate = json.loads(json.dumps(result))
@@ -210,7 +260,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
 
             def communicate(self, timeout=None):
                 result_path = Path(command[-1])
-                result_path.write_text(json.dumps({"schema_version": "1", "ok": False, "phase": "pdf_inspection", "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "", "diagnostics": [diagnostic], "artifacts": []}), encoding="utf-8")
+                result_path.write_text(json.dumps({"schema_version": "1", "ok": False, "phase": "pdf_inspection", "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "", "diagnostics": [diagnostic], "artifacts": [], "pdf_conversion_authority": None}), encoding="utf-8")
                 return "", ""
 
         with tempfile.TemporaryDirectory() as temp:
@@ -235,7 +285,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [diagnostic], "artifacts": [],
+                "diagnostics": [diagnostic], "artifacts": [], "pdf_conversion_authority": None,
             }
             self.adapter._write_result(result_path, result)
             parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
@@ -253,7 +303,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             result = {
                 "schema_version": "1", "ok": False, "phase": "pdf_inspection",
                 "code": "unexpected_adapter_failure", "cleanup": "passed", "specification_digest": "",
-                "diagnostics": [diagnostic], "artifacts": [],
+                "diagnostics": [diagnostic], "artifacts": [], "pdf_conversion_authority": None,
             }
             child = (
                 "import importlib.util, json, sys; "
@@ -277,7 +327,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                 "import importlib.util, sys; "
                 "spec=importlib.util.spec_from_file_location('child_adapter', sys.argv[2]); "
                 "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
-                "module._write_result(__import__('pathlib').Path(sys.argv[1]), module._unexpected_failure_result(ValueError()))"
+                "module._write_result(__import__('pathlib').Path(sys.argv[1]), {**module._unexpected_failure_result(ValueError()), 'pdf_conversion_authority': None})"
             )
             completed = subprocess.run(
                 [sys.executable, "-c", child, str(result_path), str(ADAPTER_PATH)],
@@ -309,7 +359,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             self.adapter._write_result(result_path, {
                 "schema_version": "1", "ok": False, "phase": failure.phase,
                 "code": failure.code, "cleanup": "unknown", "specification_digest": "",
-                "diagnostics": [failure.diagnostic], "artifacts": [],
+                "diagnostics": [failure.diagnostic], "artifacts": [], "pdf_conversion_authority": None,
             })
             parsed = self.rendering._read_adapter_result(result_path, root, "a" * 64)
             self.assertEqual(parsed["diagnostics"], [failure.diagnostic])
@@ -337,7 +387,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
                     self.adapter._write_result(result_path, {
                         "schema_version": "1", "ok": False, "phase": phase,
                         "code": code, "cleanup": "unknown", "specification_digest": "",
-                        "diagnostics": [], "artifacts": [],
+                        "diagnostics": [], "artifacts": [], "pdf_conversion_authority": None,
                     })
                     result = self.rendering._read_adapter_result(result_path, root, "a" * 64)
                     self.assertEqual((result["phase"], result["code"]), (phase, code))
@@ -391,7 +441,7 @@ class Stage76AdapterResultContractTests(unittest.TestCase):
             self.assertEqual(completed.stdout, "")
             self.assertEqual(completed.stderr, "")
             result = json.loads(result_path.read_text(encoding="utf-8"))
-            self.assertEqual(set(result), {"schema_version", "ok", "phase", "code", "cleanup", "specification_digest", "diagnostics", "artifacts"})
+            self.assertEqual(set(result), {"schema_version", "ok", "phase", "code", "cleanup", "specification_digest", "diagnostics", "artifacts", "pdf_conversion_authority"})
             self.assertFalse(result["ok"])
             self.assertIn(result["phase"], self.rendering.RESULT_PHASES)
             self.assertIn(result["code"], self.rendering.RESULT_CODES)

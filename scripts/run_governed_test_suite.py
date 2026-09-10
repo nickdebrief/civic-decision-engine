@@ -29,6 +29,7 @@ tests.test_admin_audit_traceability tests.test_admin_console_navigation_and_tabl
 ).union({
     "tests.test_canonical_public_origin",
     "tests.test_run_governed_test_suite",
+    "tests.test_stage78b_pathway_output_equivalence",
 })
 REAL_ASGI_MODULES = frozenset({"tests.test_canonical_public_origin"})
 LEGACY_FASTAPI_STUB_MODULES = frozenset(
@@ -36,7 +37,7 @@ LEGACY_FASTAPI_STUB_MODULES = frozenset(
 tests.test_admin_audit_traceability tests.test_admin_console_navigation_and_table_readability tests.test_admin_document_intake tests.test_admin_navigation_console tests.test_admin_session tests.test_apple_emlx_support tests.test_archive_collection_membership_governance tests.test_archive_manifest tests.test_association_card_visual_refinement tests.test_association_public_traceability tests.test_attachment_audit_events tests.test_attachment_manifest tests.test_attachment_read_only_ui tests.test_attachment_upload tests.test_attachments tests.test_authoritative_source_visual_emphasis tests.test_canonical_record_from_published_document tests.test_canonical_record_types tests.test_collection_ordered_sequence_continuity tests.test_document_keywords tests.test_gmail_takeout_support tests.test_governed_archive_collections tests.test_governed_audio_artefact_support tests.test_governed_intake_corrections tests.test_governed_public_transmissions tests.test_governed_rich_text_format_artefact_support tests.test_governed_source_relationship_selection tests.test_governed_spreadsheet_artefact_support tests.test_imap_acquisition tests.test_machine_discoverability tests.test_mailbox_relationship_graph tests.test_mbox_archive_support tests.test_outlook_archive_attachment_governance tests.test_outlook_archive_governed_promotion tests.test_outlook_archive_intake_boundary tests.test_outlook_archive_jobs tests.test_outlook_archive_projection tests.test_outlook_msg_support tests.test_paste_json_analysis_flow tests.test_platform_identity_transition tests.test_public_archive_explorer tests.test_public_archive_ux_refinements tests.test_public_association_index tests.test_public_collection_pages tests.test_public_document_library tests.test_public_document_preview_enhancements tests.test_public_footer_administration_link tests.test_public_navigation_completion tests.test_public_navigation_information_architecture tests.test_public_record_document_association tests.test_public_traceability_map tests.test_record_document_association_record_selection tests.test_record_document_association_searchable_record_selection tests.test_record_synthetic_attachment_audit_event tests.test_rfc5322_eml_support tests.test_stage49_email_attachment_preservation tests.test_stage51_outlook_msg_attachment_preservation tests.test_stage52_apple_emlx_attachment_preservation tests.test_stage53_1_mailbox_attachment_relationship_navigation tests.test_stage53_mbox_attachment_preservation tests.test_stage54_apple_mail_mailbox_relationship_projection_and_navigation tests.test_stage55_attachment_published_document_source_context_and_navigation tests.test_stage56_durable_document_lifecycle_decision_record tests.test_stage57_governed_lifecycle_decision_confirmation tests.test_stage58_governed_document_reconsideration_and_lifecycle_episodes tests.test_stage59_lifecycle_episode_presentation tests.test_stage61_1_relationship_decision_admin_inspection tests.test_stage61_2_relationship_corrections tests.test_stage62_governed_pattern_observation tests.test_stage63_governed_inference tests.test_stage64_governed_allegation tests.test_stage65_governed_response tests.test_stage72_1_declaration_checkbox_ui tests.test_stage74_governed_characterisations tests.test_stage75_governed_report_generation_ui tests.test_stage75_governed_reports tests.test_streaming_mbox_ingestion tests.test_streaming_mbox_large_message_support
 """.split()
 )
-EXCLUDED_UNTRACKED_MODULES = frozenset({"tests.test_stage78b_pathway_output_equivalence"})
+EXCLUDED_UNTRACKED_MODULES = frozenset()
 PYTEST_MODULES = frozenset({"tests.test_stage71_1_procedural_time_ui"})
 
 
@@ -137,7 +138,7 @@ def git_test_modules(root: Path, args: Sequence[str]) -> set[str]:
 
 
 def governed_entries(root: Path, *, tracked: set[str] | None = None, untracked: set[str] | None = None) -> tuple[tuple[Entry, ...], tuple[str, ...]]:
-    tracked = tracked if tracked is not None else git_test_modules(root, ["git", "ls-tree", "-r", "--name-only", "HEAD", "--", "tests"])
+    tracked = tracked if tracked is not None else git_test_modules(root, ["git", "ls-files", "--", "tests"])
     untracked = untracked if untracked is not None else git_test_modules(root, ["git", "ls-files", "--others", "--exclude-standard", "--", "tests"])
     expected = set(GOVERNED_TRACKED_MODULES)
     if tracked != set(GOVERNED_TRACKED_MODULES):
