@@ -1,5 +1,6 @@
 from html.parser import HTMLParser
 import unittest
+from api import governed_report_publications as stage79_publications
 from unittest.mock import Mock, patch
 
 from tests.test_admin_session import install_fastapi_stubs

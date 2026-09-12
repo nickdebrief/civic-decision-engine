@@ -12,6 +12,9 @@ DECLARATION = {"acknowledged": True, "human_recorded": True}
 
 
 class Stage78EGovernedReportPublicationReviewTests(unittest.TestCase):
+    QUALIFICATION_ID = 7
+    QUALIFICATION_DIGEST = hashlib.sha256(b"stage78e-qualification").hexdigest()
+
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
@@ -19,9 +22,9 @@ class Stage78EGovernedReportPublicationReviewTests(unittest.TestCase):
         jobs.ensure_job_tables(self.conn)
         self.conn.execute("INSERT INTO record_governed_reports (id,idempotency_key,schema_version,report_type,title,purpose,intended_audience,distribution_class,created_by,created_by_role,created_at,lifecycle_status,request_payload_json) VALUES (1,'report','v','x','title','purpose','admin','internal','creator','admin','now','generated','{}')")
         self.conn.execute("INSERT INTO record_governed_report_versions (id,report_id,version_number,canonical_record_reference,specification_schema_version,specification_json,specification_digest,requested_formats_json,publication_engine_version,rendering_profile,template_version,created_by,created_at,lifecycle_status) VALUES (2,1,1,'record','v','{}','spec','[\"docx\",\"pdf\"]','2.0.0','profile','template','creator','now','generated')")
-        self.conn.execute("INSERT INTO stage77_report_jobs (id,report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,schema_version) VALUES (3,1,2,'spec','[\"docx\",\"pdf\"]','profile','template','2.0.0','creator','generate','now','succeeded',1,1,'now','job','v')")
+        self.conn.execute("INSERT INTO stage77_report_jobs (id,report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,qualification_id,qualification_digest,schema_version) VALUES (3,1,2,'spec','[\"docx\",\"pdf\"]','profile','template','2.0.0','creator','generate','now','succeeded',1,1,'now','job',?,?, 'v')", (self.QUALIFICATION_ID, self.QUALIFICATION_DIGEST))
         for artifact_id, fmt, data in ((4, "docx", b"docx"), (5, "pdf", b"pdf")):
-            self.conn.execute("INSERT INTO record_governed_report_artifacts (id,version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status,governed_job_id,governed_attempt_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (artifact_id,2,fmt,"/registered/"+fmt,hashlib.sha256(data).hexdigest(),len(data),"renderer","template","now","valid","[]","current",3,1))
+            self.conn.execute("INSERT INTO record_governed_report_artifacts (id,version_id,format,storage_reference,sha256,size_bytes,renderer_version,template_version,generated_at,validation_state,diagnostics_json,lifecycle_status,qualification_id,qualification_digest,governed_job_id,governed_attempt_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (artifact_id,2,fmt,"/registered/"+fmt,hashlib.sha256(data).hexdigest(),len(data),"renderer","template","now","valid","[]","current",self.QUALIFICATION_ID,self.QUALIFICATION_DIGEST,3,1))
 
     def tearDown(self):
         self.conn.close()
@@ -33,7 +36,7 @@ class Stage78EGovernedReportPublicationReviewTests(unittest.TestCase):
         first = self._open()
         second = self._open()
         self.assertEqual(first["id"], second["id"])
-        expected = [{"id": 4, "format": "docx", "sha256": hashlib.sha256(b"docx").hexdigest(), "size_bytes": 4, "validation_state": "valid", "lifecycle_status": "current", "version_id": 2, "governed_job_id": 3, "governed_attempt_count": 1, "pdf_conversion_authority_digest": None}, {"id": 5, "format": "pdf", "sha256": hashlib.sha256(b"pdf").hexdigest(), "size_bytes": 3, "validation_state": "valid", "lifecycle_status": "current", "version_id": 2, "governed_job_id": 3, "governed_attempt_count": 1, "pdf_conversion_authority_digest": None}]
+        expected = [{"id": 4, "format": "docx", "sha256": hashlib.sha256(b"docx").hexdigest(), "size_bytes": 4, "validation_state": "valid", "lifecycle_status": "current", "version_id": 2, "governed_job_id": 3, "governed_attempt_count": 1, "pdf_conversion_authority_digest": None, "qualification_id": self.QUALIFICATION_ID, "qualification_digest": self.QUALIFICATION_DIGEST}, {"id": 5, "format": "pdf", "sha256": hashlib.sha256(b"pdf").hexdigest(), "size_bytes": 3, "validation_state": "valid", "lifecycle_status": "current", "version_id": 2, "governed_job_id": 3, "governed_attempt_count": 1, "pdf_conversion_authority_digest": None, "qualification_id": self.QUALIFICATION_ID, "qualification_digest": self.QUALIFICATION_DIGEST}]
         self.assertEqual(first["artifact_set"], expected)
         self.assertEqual(first["artifact_set_digest"], hashlib.sha256(json.dumps(expected, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
         with self.assertRaisesRegex(ValueError, "incomplete"):
@@ -75,6 +78,15 @@ class Stage78EGovernedReportPublicationReviewTests(unittest.TestCase):
         self.conn.execute("UPDATE stage77_report_jobs SET report_version_id=2,attempt_count=2 WHERE id=3")
         with self.assertRaisesRegex(ValueError, "job_binding_invalid"):
             self._open("open-wrong-attempt")
+
+    def test_open_review_rejects_missing_or_mismatched_qualification_authority(self):
+        self.conn.execute("UPDATE stage77_report_jobs SET qualification_id=NULL WHERE id=3")
+        with self.assertRaisesRegex(ValueError, "qualification"):
+            self._open("open-null-job-qualification")
+        self.conn.execute("UPDATE stage77_report_jobs SET qualification_id=? WHERE id=3", (self.QUALIFICATION_ID,))
+        self.conn.execute("UPDATE record_governed_report_artifacts SET qualification_digest=NULL WHERE id=4")
+        with self.assertRaisesRegex(ValueError, "qualification"):
+            self._open("open-null-artifact-qualification")
 
     def test_current_eligibility_rebinds_every_frozen_artifact_field(self):
         item = self._open()

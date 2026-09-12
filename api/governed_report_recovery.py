@@ -1895,6 +1895,9 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_publication_reviews'").fetchone():
             from api import governed_report_publication_reviews as publication_reviews
             publication_reviews.verify_preserved_review_history(conn)
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_publications'").fetchone():
+            from api import governed_report_publications as publications
+            publications.verify_preserved_publication_history(conn)
         job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
         if {"state", "report_version_id", "requested_formats_json"}.issubset(job_columns):
             succeeded = conn.execute("SELECT id,report_version_id,requested_formats_json FROM stage77_report_jobs WHERE state='succeeded' ORDER BY id").fetchall()

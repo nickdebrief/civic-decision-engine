@@ -172,8 +172,10 @@ def ensure_report_tables(conn: sqlite3.Connection) -> None:
     validate_report_tables(conn)
     from api import governed_report_qualifications as qualifications
     from api import governed_report_publication_reviews as publication_reviews
+    from api import governed_report_publications as publications
     qualifications.ensure_qualification_tables(conn)
     publication_reviews.ensure_publication_review_tables(conn)
+    publications.ensure_publication_tables(conn)
 
 
 def validate_report_tables(conn: sqlite3.Connection) -> None:

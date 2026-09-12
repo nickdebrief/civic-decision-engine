@@ -93,6 +93,7 @@ from api import record_governed_determination_publications as rg73
 from api import record_governed_characterisations as rg74
 from api import record_governed_reports as rg75
 from api import governed_report_publication_reviews as rg78e
+from api import governed_report_publications as rg79
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -55355,3 +55356,43 @@ def admin_governed_report_artifact(report_id: str, artifact_id: str, request: Re
     if root not in path.parents or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row[3]:
         raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(path, media_type="application/octet-stream", filename=f"governed-report-{numeric_report}.{row[1]}", headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/api/admin/session/governed-reports/{report_id}/versions/{version_id}/publications", response_class=JSONResponse)
+def admin_publish_governed_report(report_id: str, version_id: str, request: Request, title: str = Form(...), summary: str = Form(...), language: str = Form(...), limitations: str = Form(...), epistemic_classification: str = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1": raise HTTPException(status_code=409, detail="governed_report_publication_declaration_required")
+    conn = get_db()
+    try:
+        item = rg79.publish(conn, report_id=int(report_id), report_version_id=int(version_id), representation={"title": title, "summary": summary, "language": language, "limitations": limitations, "epistemic_classification": epistemic_classification}, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "boundary": rg79.PUBLICATION_DECLARATION}, idempotency_key=idempotency_key)
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"publication_id": item["id"], "public_identifier": item["public_identifier"], "public": True, "notice": "Published does not mean endorsed."})
+
+
+@router.post("/api/admin/session/governed-report-publications/{publication_id}/withdraw", response_class=JSONResponse)
+def admin_withdraw_governed_report_publication(publication_id: int, request: Request, rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1": raise HTTPException(status_code=409, detail="governed_report_publication_declaration_required")
+    conn = get_db()
+    try:
+        item = rg79.withdraw(conn, publication_id, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "boundary": rg79.PUBLICATION_DECLARATION}, idempotency_key=idempotency_key); conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_rejected") from None
+    finally: conn.close()
+    return JSONResponse({"publication_id": item["id"], "state": item["lifecycle_status"], "public": False})
+
+
+@router.post("/api/admin/session/governed-report-publications/{publication_id}/supersede", response_class=JSONResponse)
+def admin_supersede_governed_report_publication(publication_id: int, request: Request, replacement_publication_id: int = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1": raise HTTPException(status_code=409, detail="governed_report_publication_declaration_required")
+    conn = get_db()
+    try:
+        item = rg79.supersede(conn, publication_id, replacement_publication_id, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "boundary": rg79.PUBLICATION_DECLARATION}, idempotency_key=idempotency_key); conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_rejected") from None
+    finally: conn.close()
+    return JSONResponse({"publication_id": item["id"], "state": item["lifecycle_status"], "public": False})

@@ -9,6 +9,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from api import governed_report_publications as stage79_publications
 from pathlib import Path
 from unittest.mock import patch
 
