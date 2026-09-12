@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
@@ -15,6 +16,7 @@ SCHEMA_VERSION = "stage78e.governed_report_publication_review.v1"
 OUTCOMES = {"eligible", "ineligible", "deferred"}
 ASSESSMENTS = {"cleared", "not_cleared", "deferred"}
 ACTIVE_STATES = {"open", "privacy_redaction_reviewed", "eligible", "ineligible", "deferred"}
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def canonical_json(value: Any) -> str:
@@ -98,7 +100,8 @@ def _registered_artifacts(conn: sqlite3.Connection, report_id: int, version_id: 
     placeholders = ",".join("?" for _ in ids)
     rows = conn.execute(
         "SELECT a.id,a.version_id,a.format,a.sha256,a.size_bytes,a.validation_state,a.lifecycle_status,"
-        "a.governed_job_id,a.governed_attempt_count,a.pdf_conversion_authority_digest,v.report_id "
+        "a.governed_job_id,a.governed_attempt_count,a.pdf_conversion_authority_digest,"
+        "a.qualification_id,a.qualification_digest,v.report_id "
         "FROM record_governed_report_artifacts a JOIN record_governed_report_versions v ON v.id=a.version_id "
         f"WHERE a.id IN ({placeholders}) ORDER BY a.format,a.id", ids,
     ).fetchall()
@@ -126,7 +129,8 @@ def _registered_artifacts(conn: sqlite3.Connection, report_id: int, version_id: 
     if len({row["format"] for row in values}) != len(values):
         raise ValueError("governed_report_publication_review_format_duplicate")
     expected = conn.execute(
-        "SELECT id,report_id,report_version_id,state,attempt_count,requested_formats_json "
+        "SELECT id,report_id,report_version_id,state,attempt_count,requested_formats_json,"
+        "qualification_id,qualification_digest "
         "FROM stage77_report_jobs WHERE id=?", (job_id,),
     ).fetchone()
     if expected is None or expected["state"] != "succeeded":
@@ -142,6 +146,19 @@ def _registered_artifacts(conn: sqlite3.Connection, report_id: int, version_id: 
     if not job_matches:
         raise ValueError("governed_report_publication_review_job_binding_invalid")
     try:
+        qualification_id = int(expected["qualification_id"])
+    except (TypeError, ValueError):
+        raise ValueError("governed_report_publication_review_qualification_invalid") from None
+    qualification_digest = expected["qualification_digest"]
+    if qualification_id <= 0 or not isinstance(qualification_digest, str) or _SHA256.fullmatch(qualification_digest) is None:
+        raise ValueError("governed_report_publication_review_qualification_invalid")
+    qualifications = {
+        (row["qualification_id"], row["qualification_digest"])
+        for row in values
+    }
+    if qualifications != {(qualification_id, qualification_digest)}:
+        raise ValueError("governed_report_publication_review_qualification_mismatch")
+    try:
         requested = sorted(str(x) for x in json.loads(str(expected["requested_formats_json"])))
     except (TypeError, ValueError, json.JSONDecodeError):
         requested = []
@@ -152,7 +169,7 @@ def _registered_artifacts(conn: sqlite3.Connection, report_id: int, version_id: 
 
 def _artifact_set(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [
-        {key: row[key] for key in ("id", "format", "sha256", "size_bytes", "validation_state", "lifecycle_status", "version_id", "governed_job_id", "governed_attempt_count", "pdf_conversion_authority_digest")}
+        {key: row[key] for key in ("id", "format", "sha256", "size_bytes", "validation_state", "lifecycle_status", "version_id", "governed_job_id", "governed_attempt_count", "pdf_conversion_authority_digest", "qualification_id", "qualification_digest")}
         for row in sorted(rows, key=lambda row: (str(row["format"]), int(row["id"])))
     ]
 

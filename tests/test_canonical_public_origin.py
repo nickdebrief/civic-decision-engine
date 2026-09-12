@@ -1,6 +1,7 @@
 import os
 import asyncio
 import unittest
+from api import governed_report_publications as stage79_publications
 from unittest.mock import patch
 
 from api import public_origin
@@ -100,8 +101,21 @@ class CanonicalPublicOriginTests(unittest.TestCase):
 
     def test_governed_report_review_and_artifact_paths_are_not_public_or_indexable(self):
         for path in (
+            "/governed-reports",
+            "/governed-reports/",
             "/governed-reports/1",
+            "/governed-reports/1/",
             "/governed-reports/1/artifacts/2",
+            "/governed-reports/1/reviews",
+            "/governed-reports/1/eligibility",
+            "/governed-reports/gr-1.json/anything",
+            "/governed-reports/gr-0.json",
+            "/governed-reports/gr-01.json",
+            "/governed-reports/gr-identifier.json",
+            "/governed-reports/1.json",
+            "/governed-reports/gr-1.pdf",
+            "/governed-reports/gr-1%2Fartifacts%2F2.json",
+            "/governed-reports/gr-1.json/../artifacts/2",
             "/admin/governed-reports/1/publication-reviews",
             "/api/admin/session/governed-reports/1/publication-reviews",
         ):
@@ -110,6 +124,18 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         start, body = self.asgi_get("/governed-reports/1", "civicdecisionengine.ie")
         self.assertEqual(start["status"], 404)
         self.assertNotIn(b"governed", body.lower())
+
+    def test_exact_stage79_machine_readable_publication_path_is_indexable(self):
+        for path in (
+            "/governed-reports/gr-1.json",
+            "/governed-reports/gr-42.json",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(public_origin.is_public_indexable_path(path))
+                self.assertEqual(
+                    public_origin.canonical_url(path),
+                    f"https://civicdecisionengine.ie{path}",
+                )
 
     def test_asgi_redirects_only_public_aliases_and_preserves_path_query(self):
         start, _ = self.asgi_get("/records", "www.civicdecisionengine.ie", b"page=2")

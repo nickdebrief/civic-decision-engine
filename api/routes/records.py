@@ -5302,6 +5302,10 @@ async def sitemap():
 
         entries = [url_entry(u["loc"], priority=u["priority"]) for u in static_urls]
 
+        if cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_publications'").fetchone():
+            for publication in cur.execute("SELECT public_identifier,represented_published_at FROM record_governed_report_publications WHERE lifecycle_status='published' ORDER BY id").fetchall():
+                entries.append(url_entry(f"{base}/governed-reports/{publication['public_identifier']}.json", lastmod=publication['represented_published_at'], priority="0.5"))
+
         for rec in records:
             entries.append(
                 url_entry(

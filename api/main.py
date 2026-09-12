@@ -9,7 +9,7 @@ from api.public_origin import (
 from api.platform_identity import PLATFORM_NAME, PLATFORM_VERSION_LABEL
 from api.routes import records
 
-from api.routes import health, civic, adaptation, timeline, pattern, admin_session, documents, associations, collections, archive, traceability, transmissions, governed_determination_publications
+from api.routes import health, civic, adaptation, timeline, pattern, admin_session, documents, associations, collections, archive, traceability, transmissions, governed_determination_publications, governed_report_publications
 
 app = FastAPI(
     title=f"{PLATFORM_NAME} API",
@@ -71,3 +71,4 @@ app.include_router(traceability.router)
 app.include_router(transmissions.router)
 app.include_router(records.router)
 app.include_router(governed_determination_publications.router)
+app.include_router(governed_report_publications.router)

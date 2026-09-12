@@ -15,6 +15,9 @@ CANONICAL_ALIAS_HOSTS = frozenset(
     }
 )
 _CANONICAL_TAG = re.compile(r"\s*<link\b[^>]*\brel=[\"']canonical[\"'][^>]*>", re.I)
+_GOVERNED_REPORT_PUBLICATION_PATH = re.compile(
+    r"/governed-reports/gr-[1-9][0-9]*\.json\Z"
+)
 
 
 def canonical_public_origin() -> str:
@@ -60,6 +63,8 @@ def is_public_indexable_path(path: str) -> bool:
         "/transmissions",
     }
     if path in exact:
+        return True
+    if _GOVERNED_REPORT_PUBLICATION_PATH.fullmatch(path):
         return True
     return path.startswith(
         (
