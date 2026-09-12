@@ -1,4 +1,5 @@
 import os
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -85,9 +86,30 @@ class PlatformIdentityTransitionTests(unittest.TestCase):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
-            "Current release: CDE Platform Stage 77 — Durable Governed Report Generation",
+            "Current release: CDE Platform Stage 79 — Governed Machine-Readable Publication",
             readme,
         )
+        expected_release_targets = [
+            "docs/releases/CDE_PLATFORM_STAGE_68_GOVERNED_APPEAL_AND_REVIEW_PROCEEDING.md",
+            "docs/releases/CDE_PLATFORM_STAGE_69_GOVERNED_REMEDY_AND_DIRECTION.md",
+            "docs/releases/CDE_PLATFORM_STAGE_70_GOVERNED_IMPLEMENTATION_AND_COMPLIANCE_EVENT.md",
+            "docs/releases/CDE_PLATFORM_STAGE_71_GOVERNED_PROCEDURAL_DEADLINE_AND_NOTICE.md",
+            "docs/releases/CDE_PLATFORM_STAGE_72_GOVERNED_DECISION_PATHWAY.md",
+            "docs/releases/CDE_PLATFORM_STAGE_73_GOVERNED_PUBLICATION_OF_DETERMINATIONS.md",
+            "docs/releases/CDE_PLATFORM_STAGE_74_GOVERNED_TERMINOLOGY_REPRESENTATIONS_AND_CHARACTERISATIONS.md",
+            "docs/releases/CDE_PLATFORM_STAGE_75_GOVERNED_REPORT_ASSEMBLY_AND_PUBLICATION_ENGINE_RENDERING.md",
+            "docs/releases/CDE_PLATFORM_STAGE_76_GOVERNED_PDF_REPORT_RENDERING_AND_EQUIVALENCE.md",
+            "docs/releases/CDE_PLATFORM_STAGE_77_DURABLE_GOVERNED_REPORT_GENERATION.md",
+            "docs/releases/CDE_PLATFORM_STAGE_78_GOVERNED_PATHWAY_OUTPUT_AND_DURABLE_CONVERSION_AUTHORITY.md",
+            "docs/releases/CDE_PLATFORM_STAGE_78E_GOVERNED_INSPECTION_AND_PUBLICATION_ELIGIBILITY.md",
+            "docs/releases/CDE_PLATFORM_STAGE_79_GOVERNED_MACHINE_READABLE_PUBLICATION.md",
+        ]
+        markdown_targets = re.findall(r"\]\((docs/releases/[^)]+\.md)\)", readme)
+        curated_targets = [target for target in markdown_targets if target in expected_release_targets]
+        self.assertEqual(curated_targets, expected_release_targets)
+        for target in expected_release_targets:
+            self.assertEqual(markdown_targets.count(target), 1)
+            self.assertTrue(Path(target).is_file())
         self.assertIn("## Stage Numbering", readme)
         self.assertIn("CREF stage numbers describe the evolution of the governance methodology.", readme)
         self.assertIn("CDE Platform stage numbers describe implementation milestones within the Civic Decision Engine software.", readme)

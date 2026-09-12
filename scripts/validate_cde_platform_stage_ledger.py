@@ -14,7 +14,11 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 LEDGER_RELATIVE_PATH = Path("docs/releases/CDE_PLATFORM_STAGE_LEDGER.md")
 RELEASES_RELATIVE_PATH = Path("docs/releases")
 README_RELATIVE_PATH = Path("README.md")
-STAGE_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
+NUMERIC_STAGE_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
+# Letter-suffix stages are exceptional canonical identifiers, not a general
+# extension grammar.  78E is an independently governed Stage 78 extension;
+# it is neither a decimal child nor a replacement for Stage 78.
+CANONICAL_LETTER_SUFFIX_STAGES = frozenset({"78E"})
 RELEASE_HEADING_PATTERN = re.compile(
     r"^# CDE Platform Stage (?P<stage>\S+) — (?P<title>.+)$"
 )
@@ -36,6 +40,22 @@ class StageEntry:
     pull_request: str
     release_note: str
     status: str
+
+
+def stage_sort_key(stage: str) -> tuple[int, int, Decimal, str]:
+    """Return the deterministic canonical ordering key for a valid stage."""
+    if stage in CANONICAL_LETTER_SUFFIX_STAGES:
+        return (int(stage[:-1]), 2, Decimal(0), stage[-1])
+    if not NUMERIC_STAGE_PATTERN.fullmatch(stage):
+        raise ValueError(f"stage_identifier_invalid: {stage}")
+    if "." not in stage:
+        return (int(stage), 0, Decimal(0), "")
+    root, suffix = stage.split(".", 1)
+    return (int(root), 1, Decimal(f"0.{suffix}"), "")
+
+
+def is_valid_stage_identifier(stage: str) -> bool:
+    return bool(NUMERIC_STAGE_PATTERN.fullmatch(stage)) or stage in CANONICAL_LETTER_SUFFIX_STAGES
 
 
 def _cells(line: str) -> list[str]:
@@ -90,13 +110,13 @@ def validate_entries(entries: list[StageEntry]) -> list[str]:
     errors: list[str] = []
     seen: dict[str, StageEntry] = {}
     top_level_roots: set[int] = set()
-    previous: Decimal | None = None
+    previous: tuple[int, int, Decimal, str] | None = None
 
     if not entries:
         return ["stage_ledger_empty"]
 
     for index, entry in enumerate(entries):
-        if not STAGE_PATTERN.fullmatch(entry.stage):
+        if not is_valid_stage_identifier(entry.stage):
             errors.append(f"stage_identifier_invalid: {entry.stage}")
             continue
         if entry.stage in seen:
@@ -105,14 +125,18 @@ def validate_entries(entries: list[StageEntry]) -> list[str]:
                 errors.append(f"stage_root_duplicate: {entry.stage}")
             continue
 
-        value = Decimal(entry.stage)
+        value = stage_sort_key(entry.stage)
         if previous is not None and value <= previous:
             errors.append(
-                f"stage_chronology_not_monotonic: {entry.stage} follows {previous}"
+                f"stage_chronology_not_monotonic: {entry.stage} follows {seen_stage}"
             )
         previous = value
+        seen_stage = entry.stage
 
-        if "." not in entry.stage:
+        if entry.stage in CANONICAL_LETTER_SUFFIX_STAGES:
+            if entry.parent is not None:
+                errors.append(f"letter_suffix_stage_has_parent: {entry.stage}")
+        elif "." not in entry.stage:
             root = int(entry.stage)
             if root in top_level_roots:
                 errors.append(f"stage_root_duplicate: {root}")
@@ -182,7 +206,7 @@ def validate_repository(repository_root: Path = REPOSITORY_ROOT) -> list[str]:
         root_match = re.match(r"^[0-9]+", token)
         if not root_match or int(root_match.group()) < 40:
             continue
-        if not STAGE_PATTERN.fullmatch(token):
+        if not is_valid_stage_identifier(token):
             errors.append(f"release_stage_identifier_invalid: {release_path.name}={token}")
             continue
         if token in documented_stages:
@@ -193,8 +217,8 @@ def validate_repository(repository_root: Path = REPOSITORY_ROOT) -> list[str]:
         documented_stages[token] = release_path
 
     if set(documented_stages) != ledger_stages:
-        missing = sorted(ledger_stages - set(documented_stages), key=Decimal)
-        unindexed = sorted(set(documented_stages) - ledger_stages, key=Decimal)
+        missing = sorted(ledger_stages - set(documented_stages), key=stage_sort_key)
+        unindexed = sorted(set(documented_stages) - ledger_stages, key=stage_sort_key)
         if missing:
             errors.append(f"ledger_release_notes_missing: {', '.join(missing)}")
         if unindexed:

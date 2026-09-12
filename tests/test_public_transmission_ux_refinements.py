@@ -66,6 +66,10 @@ class PublicTransmissionUxRefinementTests(GovernedPublicTransmissionTests):
         readme = README.read_text(encoding="utf-8")
         release_note = RELEASE_NOTE.read_text(encoding="utf-8")
         self.assertIn(
+            "Current release: CDE Platform Stage 79 — Governed Machine-Readable Publication",
+            readme,
+        )
+        self.assertNotIn(
             "Current release: CDE Platform Stage 77 — Durable Governed Report Generation",
             readme,
         )
