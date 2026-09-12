@@ -92,6 +92,7 @@ from api import record_governed_pathway as rg72
 from api import record_governed_determination_publications as rg73
 from api import record_governed_characterisations as rg74
 from api import record_governed_reports as rg75
+from api import governed_report_publication_reviews as rg78e
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -54849,7 +54850,11 @@ def _stage75_html(*, session: dict[str, Any], reports: list[dict[str, Any]], can
         events = "".join(f'<li>{escape(event["occurred_at"])} — {escape(event["event_type"])} — {escape(event["resulting_status"])} — {escape(event["actor"])}</li>' for event in detail.get("events", [])) or "<li>No lifecycle events.</li>"
         artifacts = "".join(f'<li>{escape(item["format"])} — {escape(item["validation_state"])} — <a href="/admin/governed-reports/{int(detail["id"])}/artifacts/{int(item["id"])}">download</a></li>' for item in detail.get("artifacts", [])) or "<li>No generated artifacts.</li>"
         qualification_history = "".join(f'<li>{escape(str(item["id"]))} · {escape(str(item["completed_gate"]))} · {escape(str(item["review_mode"]))} · {escape(str(item["qualification_digest"]))}</li>' for item in detail.get("qualifications", [])) or "<li>No structured qualification recorded.</li>"
-        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul><div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
+        review_rows = "".join(f'<tr><td>{int(item["id"])}</td><td>{int(item["report_version_id"])}</td><td>{int(item["governed_job_id"])} / {int(item["governed_attempt_count"])}</td><td><code>{escape(str(item["artifact_set_digest"]))}</code></td><td>{escape(str(item["privacy_redaction_status"]))}</td><td>{escape(str(item["eligibility_outcome"] or item["lifecycle_status"]))}</td><td>{escape(str(item["created_by"]))} · {escape(str(item["created_at"]))}</td></tr>' for item in detail.get("publication_review_details", [])) or '<tr><td colspan="7">No publication review authority recorded.</td></tr>'
+        review_history = "".join(f'<li>Review {int(review["id"])} · {escape(str(event["event_type"]))} · {escape(str(event["actor"]))} · {escape(str(event["occurred_at"]))} · {escape(str(event["rationale"]))}</li>' for review in detail.get("publication_review_details", []) for event in review.get("events", [])) or '<li>No publication-review events.</li>'
+        review_artifacts = "".join(f'<li>Review {int(review["id"])}: ' + "; ".join(f'{escape(str(item["artifact_id"]))} · {escape(str(item["format"]))} · <code>{escape(str(item["sha256"]))}</code> · {int(item["size_bytes"])} bytes' for item in review.get("artifacts", [])) + '</li>' for review in detail.get("publication_review_details", [])) or '<li>No frozen artifact set.</li>'
+        review_html = f'<section class="panel"><h3>Publication eligibility review — internal only</h3><p><strong>Registered does not mean eligible for publication.</strong><br><strong>Eligible for publication does not mean published.</strong></p><div class="table-wrap"><table><thead><tr><th>Review</th><th>Version</th><th>Job / attempt</th><th>Frozen artifact-set digest</th><th>Privacy/redaction</th><th>Eligibility/current status</th><th>Actor / timestamp</th></tr></thead><tbody>{review_rows}</tbody></table></div><h4>Frozen registered artifacts</h4><ul>{review_artifacts}</ul><h4>Append-only review history</h4><ul>{review_history}</ul></section>'
+        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul>{review_html}<div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
     record_options = '<option value="" selected disabled>Choose a Canonical Record</option>' + records
     document_options = '<option value="" disabled>Choose Published Documents (optional)</option>' + documents
     association_options = '<option value="" disabled>Choose record–document associations (optional)</option>' + associations
@@ -55129,6 +55134,7 @@ def admin_governed_report_detail(report_id: str, request: Request):
     conn = get_db()
     try:
         detail = rg75.get_report(conn, numeric_id)
+        detail["publication_review_details"] = [rg78e.get_review(conn, int(item["id"])) for item in detail.get("publication_reviews", [])]
         reports = rg75.list_reports(conn)
         candidates = rg75.read_candidates(conn)
         diagnostic_retry = rg77.diagnostic_retry_candidate(conn, numeric_id, _admin_session_actor(session))
@@ -55139,6 +55145,95 @@ def admin_governed_report_detail(report_id: str, request: Request):
     finally:
         conn.close()
     return HTMLResponse(content=_stage75_html(session=session, reports=reports, candidates=candidates, detail=detail, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation))
+
+
+@router.get("/admin/governed-reports/{report_id}/publication-reviews", response_class=JSONResponse)
+def admin_governed_report_publication_reviews(report_id: str, request: Request):
+    """Authenticated inspection only; eligibility is never publication."""
+    require_admin_session(request)
+    try:
+        numeric_report = int(report_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    conn = get_db()
+    try:
+        rg78e.ensure_publication_review_tables(conn)
+        rows = conn.execute("SELECT id FROM record_governed_report_publication_reviews WHERE report_id=? ORDER BY id", (numeric_report,)).fetchall()
+        result = [rg78e.get_review(conn, int(row[0])) for row in rows]
+    except (ValueError, TypeError, sqlite3.Error):
+        raise HTTPException(status_code=404, detail="Not found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"report_id": numeric_report, "reviews": result, "public": False, "notice": "Registered does not mean eligible for publication. Eligible for publication does not mean published."})
+
+
+@router.post("/api/admin/session/governed-reports/{report_id}/publication-reviews", response_class=JSONResponse)
+def admin_open_governed_report_publication_review(report_id: str, request: Request, report_version_id: int = Form(...), artifact_ids: list[int] = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1":
+        raise HTTPException(status_code=409, detail="governed_report_publication_review_declaration_required")
+    conn = get_db()
+    try:
+        item = rg78e.open_review(conn, report_id=int(report_id), report_version_id=report_version_id, artifact_ids=artifact_ids, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "human_recorded": True}, idempotency_key=idempotency_key)
+        conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="governed_report_publication_review_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"review_id": item["id"], "state": item["lifecycle_status"], "public": False})
+
+
+@router.post("/api/admin/session/governed-reports/{report_id}/publication-reviews/{review_id}/privacy-redaction", response_class=JSONResponse)
+def admin_assess_governed_report_publication_review(report_id: str, review_id: str, request: Request, status: str = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1":
+        raise HTTPException(status_code=409, detail="governed_report_publication_review_declaration_required")
+    conn = get_db()
+    try:
+        item = rg78e.record_privacy_redaction(conn, review_id=int(review_id), status=status, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "human_recorded": True}, idempotency_key=idempotency_key)
+        if int(item["report_id"]) != int(report_id): raise ValueError("governed_report_publication_review_cross_report")
+        conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_review_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"review_id": item["id"], "state": item["lifecycle_status"], "public": False})
+
+
+@router.post("/api/admin/session/governed-reports/{report_id}/publication-reviews/{review_id}/eligibility", response_class=JSONResponse)
+def admin_determine_governed_report_publication_eligibility(report_id: str, review_id: str, request: Request, outcome: str = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1":
+        raise HTTPException(status_code=409, detail="governed_report_publication_review_declaration_required")
+    conn = get_db()
+    try:
+        item = rg78e.determine_eligibility(conn, review_id=int(review_id), outcome=outcome, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "human_recorded": True}, idempotency_key=idempotency_key)
+        if int(item["report_id"]) != int(report_id): raise ValueError("governed_report_publication_review_cross_report")
+        conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_review_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"review_id": item["id"], "outcome": item["eligibility_outcome"], "public": False})
+
+
+@router.post("/api/admin/session/governed-reports/{report_id}/publication-reviews/{review_id}/supersede", response_class=JSONResponse)
+def admin_supersede_governed_report_publication_review(report_id: str, review_id: str, request: Request, replacement_review_id: int = Form(...), rationale: str = Form(...), acknowledged: str | None = Form(None), idempotency_key: str = Form(...)):
+    session = require_admin_session(request)
+    if acknowledged != "1":
+        raise HTTPException(status_code=409, detail="governed_report_publication_review_declaration_required")
+    conn = get_db()
+    try:
+        item = rg78e.withdraw_review(conn, review_id=int(review_id), replacement_review_id=replacement_review_id, actor=_admin_session_actor(session), actor_role=_admin_session_role(session), rationale=rationale, declaration={"acknowledged": True, "human_recorded": True}, idempotency_key=idempotency_key)
+        if int(item["report_id"]) != int(report_id):
+            raise ValueError("governed_report_publication_review_cross_report")
+        conn.commit()
+    except (ValueError, TypeError, sqlite3.Error):
+        conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_review_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"review_id": item["id"], "state": item["lifecycle_status"], "public": False})
 
 
 @router.post("/api/admin/session/governed-reports", response_class=HTMLResponse)

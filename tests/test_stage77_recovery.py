@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import json
 import io
 import os
@@ -15,6 +16,7 @@ from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
 from api import governed_report_qualifications as qualifications
 from api import record_governed_reports as reports
+from api import governed_report_publication_reviews as publication_reviews
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "scripts" / "evidence_led_governance_pipeline"
@@ -23,6 +25,17 @@ import output_validation  # noqa: E402
 
 
 class Stage77RecoveryTests(unittest.TestCase):
+    def test_stage78e_review_history_verifier_is_recovery_bound_and_fail_closed(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
+            publication_reviews.ensure_publication_review_tables(conn)
+            self.assertIn("verify_preserved_review_history", inspect.getsource(recovery._verify_bundle))
+            conn.execute("INSERT INTO record_governed_report_publication_reviews (id,schema_version,report_id,report_version_id,governed_job_id,governed_attempt_count,artifact_set_digest,artifact_set_json,lifecycle_status,privacy_redaction_status,created_by,created_by_role,created_at,request_payload_json,idempotency_key) VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (publication_reviews.SCHEMA_VERSION, 1, 2, 3, 1, "bad", "[]", "eligible", "cleared", "admin", "admin", "now", "{}", "fixture"))
+            with self.assertRaisesRegex(ValueError, "history_invalid"):
+                publication_reviews.verify_preserved_review_history(conn)
+        finally:
+            conn.close()
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir="/private/tmp")
         self.root = Path(self.temp.name)
