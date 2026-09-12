@@ -140,10 +140,11 @@ class GovernedSuiteTests(unittest.TestCase):
             "tests.test_canonical_public_origin": ("real_asgi", "unittest", 19),
             "tests.test_run_governed_test_suite": ("neutral", "unittest", 77),
             "tests.test_stage78b_pathway_output_equivalence": ("neutral", "unittest", 128),
+            "tests.test_stage78e_governed_report_publication_review": ("neutral", "unittest", 131),
         }
         entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
-        self.assertEqual(len(entries), 133)
-        self.assertEqual(len({entry.module for entry in entries}), 133)
+        self.assertEqual(len(entries), 134)
+        self.assertEqual(len({entry.module for entry in entries}), 134)
         self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
         self.assertEqual(runner.EXCLUDED_UNTRACKED_MODULES, frozenset())
         self.assertNotIn(
@@ -162,13 +163,17 @@ class GovernedSuiteTests(unittest.TestCase):
             root,
             ["git", "ls-files", "--", "tests"],
         )
-        transitioned = "tests.test_stage78b_pathway_output_equivalence"
+        transitioned = {
+            "tests.test_stage78b_pathway_output_equivalence",
+            "tests.test_stage78e_governed_report_publication_review",
+        }
         self.assertEqual(
-            tracked | {transitioned},
+            tracked | transitioned,
             set(runner.GOVERNED_TRACKED_MODULES),
         )
-        self.assertIn(transitioned, runner.GOVERNED_TRACKED_MODULES)
-        self.assertNotIn(transitioned, runner.EXCLUDED_UNTRACKED_MODULES)
+        for module in transitioned:
+            self.assertIn(module, runner.GOVERNED_TRACKED_MODULES)
+            self.assertNotIn(module, runner.EXCLUDED_UNTRACKED_MODULES)
 
     def test_tracked_transition_mismatch_fails_closed(self):
         temp, root = self.make_root(("tests.test_alpha", "tests.test_transitioned"))

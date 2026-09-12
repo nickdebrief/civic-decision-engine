@@ -1892,6 +1892,9 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
                 raise ValueError("artifact_inventory_mismatch")
             if str(row["format"]) == "pdf" and conversion_columns.keys() <= artifact_columns.keys() and row["pdf_conversion_authority_json"] is not None:
                 _verify_registered_pdf_conversion_event(conn, bundle, by_id, rows, row)
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_publication_reviews'").fetchone():
+            from api import governed_report_publication_reviews as publication_reviews
+            publication_reviews.verify_preserved_review_history(conn)
         job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
         if {"state", "report_version_id", "requested_formats_json"}.issubset(job_columns):
             succeeded = conn.execute("SELECT id,report_version_id,requested_formats_json FROM stage77_report_jobs WHERE state='succeeded' ORDER BY id").fetchall()

@@ -83,6 +83,22 @@ def _detail(status="approved_for_generation"):
 
 
 class Stage75GovernedReportGenerationUITests(unittest.TestCase):
+    def test_publication_review_summary_is_internal_and_not_publication(self):
+        detail = _detail("generated")
+        detail["publication_review_details"] = [{
+            "id": 9, "report_version_id": 2, "governed_job_id": 7,
+            "governed_attempt_count": 1, "artifact_set_digest": "a" * 64,
+            "privacy_redaction_status": "cleared", "eligibility_outcome": "eligible",
+            "lifecycle_status": "eligible", "created_by": "reviewer", "created_at": "now",
+            "artifacts": [{"artifact_id": 3, "format": "pdf", "sha256": "b" * 64, "size_bytes": 12}],
+            "events": [{"event_type": "eligibility_determined", "actor": "reviewer", "occurred_at": "now", "rationale": "bounded"}],
+        }]
+        html = admin_session._stage75_html(session={"username": "nick", "role": "admin"}, reports=[], candidates={}, detail=detail)
+        self.assertIn("Registered does not mean eligible for publication.", html)
+        self.assertIn("Eligible for publication does not mean published.", html)
+        self.assertIn("Frozen artifact-set digest", html)
+        self.assertIn("eligibility_determined", html)
+        self.assertNotIn('href="/reports/9"', html)
     def test_generation_declaration_is_visible_and_associated(self):
         html = admin_session._stage75_transition_forms(
             _detail(), session={"username": "nick", "role": "admin"}

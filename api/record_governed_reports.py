@@ -171,7 +171,9 @@ def ensure_report_tables(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE record_governed_report_artifacts ADD COLUMN {name} {definition}")
     validate_report_tables(conn)
     from api import governed_report_qualifications as qualifications
+    from api import governed_report_publication_reviews as publication_reviews
     qualifications.ensure_qualification_tables(conn)
+    publication_reviews.ensure_publication_review_tables(conn)
 
 
 def validate_report_tables(conn: sqlite3.Connection) -> None:
@@ -891,6 +893,7 @@ def _row(conn: sqlite3.Connection, report_id: int | str) -> dict[str, Any]:
     for version in result["versions"]:
         result["artifacts"].extend(dict(item) for item in conn.execute("SELECT * FROM record_governed_report_artifacts WHERE version_id=? ORDER BY id", (version["id"],)).fetchall())
     result["qualifications"] = [dict(item) for item in conn.execute("SELECT * FROM record_governed_report_qualifications WHERE report_id=? ORDER BY revision_number", (int(report_id),)).fetchall()] if _table_exists(conn, "record_governed_report_qualifications") else []
+    result["publication_reviews"] = [dict(item) for item in conn.execute("SELECT id,report_version_id,artifact_set_digest,lifecycle_status,privacy_redaction_status,eligibility_outcome,created_at,withdrawn_at,superseded_by_review_id FROM record_governed_report_publication_reviews WHERE report_id=? ORDER BY id", (int(report_id),)).fetchall()] if _table_exists(conn, "record_governed_report_publication_reviews") else []
     return result
 
 

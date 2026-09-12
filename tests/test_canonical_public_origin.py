@@ -98,6 +98,19 @@ class CanonicalPublicOriginTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertFalse(public_origin.is_public_indexable_path(path))
 
+    def test_governed_report_review_and_artifact_paths_are_not_public_or_indexable(self):
+        for path in (
+            "/governed-reports/1",
+            "/governed-reports/1/artifacts/2",
+            "/admin/governed-reports/1/publication-reviews",
+            "/api/admin/session/governed-reports/1/publication-reviews",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(public_origin.is_public_indexable_path(path))
+        start, body = self.asgi_get("/governed-reports/1", "civicdecisionengine.ie")
+        self.assertEqual(start["status"], 404)
+        self.assertNotIn(b"governed", body.lower())
+
     def test_asgi_redirects_only_public_aliases_and_preserves_path_query(self):
         start, _ = self.asgi_get("/records", "www.civicdecisionengine.ie", b"page=2")
         headers = dict(start["headers"])
