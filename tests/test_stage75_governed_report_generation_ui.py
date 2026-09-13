@@ -100,6 +100,25 @@ class Stage75GovernedReportGenerationUITests(unittest.TestCase):
         self.assertIn("Frozen artifact-set digest", html)
         self.assertIn("eligibility_determined", html)
         self.assertNotIn('href="/reports/9"', html)
+
+    def test_generation_attempts_render_bounded_history_and_unavailable_diagnostics(self):
+        detail = _detail("validation_failed")
+        detail["job_attempts"] = [
+            {"job_id": 1, "report_id": 1, "report_version_id": 2, "attempt_count": 1, "predecessor_job_id": None, "successor_job_id": 2, "state": "failed_terminal", "failure_phase": "rendering", "failure_code": "adapter_input_invalid", "diagnostic_status": "available", "requested_at": "requested-1", "started_at": "started-1", "terminal_at": "terminal-1", "requested_formats": ["docx", "pdf"], "specification_digest": "a" * 64, "qualification_id": 7, "qualification_digest": "b" * 64, "rendering_profile": "internal", "template_version": "v1", "publication_engine_version": "2.0.0"},
+            {"job_id": 2, "report_id": 1, "report_version_id": 2, "attempt_count": 1, "predecessor_job_id": 1, "successor_job_id": None, "state": "failed_terminal", "failure_phase": None, "failure_code": None, "diagnostic_status": "unavailable", "requested_at": "requested-2", "started_at": None, "terminal_at": "terminal-2", "requested_formats": ["docx", "pdf"], "specification_digest": "a" * 64, "qualification_id": 7, "qualification_digest": "b" * 64, "rendering_profile": "internal", "template_version": "v1", "publication_engine_version": "2.0.0"},
+        ]
+        html = admin_session._stage75_html(session={"username": "nick", "role": "admin"}, reports=[], candidates={}, detail=detail)
+
+        self.assertIn("Generation attempts — internal only", html)
+        self.assertIn("1 / 1", html)
+        self.assertIn("2 / 1", html)
+        self.assertIn("adapter_input_invalid", html)
+        self.assertGreaterEqual(html.count("Unavailable"), 3)
+        self.assertIn("Attempts are preserved historical authority", html)
+        self.assertNotIn("traceback", html)
+        self.assertNotIn("/tmp/", html)
+        self.assertNotIn("secret-token", html)
+        self.assertNotIn("private-artifact-url", html)
     def test_generation_declaration_is_visible_and_associated(self):
         html = admin_session._stage75_transition_forms(
             _detail(), session={"username": "nick", "role": "admin"}

@@ -895,6 +895,53 @@ def _row(conn: sqlite3.Connection, report_id: int | str) -> dict[str, Any]:
     for version in result["versions"]:
         result["artifacts"].extend(dict(item) for item in conn.execute("SELECT * FROM record_governed_report_artifacts WHERE version_id=? ORDER BY id", (version["id"],)).fetchall())
     result["qualifications"] = [dict(item) for item in conn.execute("SELECT * FROM record_governed_report_qualifications WHERE report_id=? ORDER BY revision_number", (int(report_id),)).fetchall()] if _table_exists(conn, "record_governed_report_qualifications") else []
+    result["job_attempts"] = []
+    if _table_exists(conn, "stage77_report_jobs") and result["versions"]:
+        version_ids = [int(item["id"]) for item in result["versions"]]
+        placeholders = ",".join("?" for _item in version_ids)
+        query = f"""
+            SELECT j.id,j.report_id,j.report_version_id,j.attempt_count,j.retry_of_job_id,
+                   (SELECT successor.id FROM stage77_report_jobs successor
+                    WHERE successor.retry_of_job_id=j.id ORDER BY successor.id LIMIT 1) AS successor_job_id,
+                   j.state,j.failure_phase,j.failure_code,j.requested_at,j.lease_acquired_at,
+                   j.terminal_at,j.requested_formats_json,j.specification_digest,
+                   j.qualification_id,j.qualification_digest,j.rendering_profile,
+                   j.template_version,j.publication_engine_version
+            FROM stage77_report_jobs j
+            WHERE j.report_id=? AND j.report_version_id IN ({placeholders})
+            ORDER BY j.id
+        """
+        for row in conn.execute(query, (int(report_id), *version_ids)).fetchall():
+            try:
+                requested_formats = json.loads(row["requested_formats_json"])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                requested_formats = []
+            if not isinstance(requested_formats, list) or any(not isinstance(item, str) for item in requested_formats):
+                requested_formats = []
+            phase = row["failure_phase"] if isinstance(row["failure_phase"], str) and row["failure_phase"] else None
+            code = row["failure_code"] if isinstance(row["failure_code"], str) and row["failure_code"] else None
+            result["job_attempts"].append({
+                "job_id": int(row["id"]),
+                "report_id": int(row["report_id"]),
+                "report_version_id": int(row["report_version_id"]),
+                "attempt_count": int(row["attempt_count"]),
+                "predecessor_job_id": None if row["retry_of_job_id"] is None else int(row["retry_of_job_id"]),
+                "successor_job_id": None if row["successor_job_id"] is None else int(row["successor_job_id"]),
+                "state": str(row["state"]),
+                "failure_phase": phase,
+                "failure_code": code,
+                "diagnostic_status": "available" if phase is not None and code is not None else "unavailable",
+                "requested_at": row["requested_at"],
+                "started_at": row["lease_acquired_at"],
+                "terminal_at": row["terminal_at"],
+                "requested_formats": requested_formats,
+                "specification_digest": str(row["specification_digest"]),
+                "qualification_id": None if row["qualification_id"] is None else int(row["qualification_id"]),
+                "qualification_digest": row["qualification_digest"],
+                "rendering_profile": str(row["rendering_profile"]),
+                "template_version": str(row["template_version"]),
+                "publication_engine_version": str(row["publication_engine_version"]),
+            })
     result["publication_reviews"] = [dict(item) for item in conn.execute("SELECT id,report_version_id,artifact_set_digest,lifecycle_status,privacy_redaction_status,eligibility_outcome,created_at,withdrawn_at,superseded_by_review_id FROM record_governed_report_publication_reviews WHERE report_id=? ORDER BY id", (int(report_id),)).fetchall()] if _table_exists(conn, "record_governed_report_publication_reviews") else []
     return result
 

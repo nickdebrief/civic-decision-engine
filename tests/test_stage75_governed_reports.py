@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from api import record_governed_reports as reports
+from api import governed_report_jobs as jobs
 from api.report_rendering import render_frozen_report
 
 
@@ -86,6 +87,35 @@ class Stage75PersistenceTests(unittest.TestCase):
             self.create(actor="different-actor")
         with self.assertRaisesRegex(ValueError, "idempotency_conflict"):
             self.create(purpose="Different purpose")
+
+    @patch.object(reports.rda, "record_context")
+    def test_report_detail_projects_only_exact_version_job_attempts(self, record_context):
+        record_context.return_value = self.record
+        item = self.create()
+        version_id = item["versions"][0]["id"]
+        jobs.ensure_job_tables(self.conn)
+
+        def insert_job(report_id, report_version_id, key, *, retry_of=None, phase="rendering", code="adapter_input_invalid"):
+            self.conn.execute(
+                "INSERT INTO stage77_report_jobs (report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,attempt_count,max_attempts,next_eligible_at,terminal_at,terminal_outcome,failure_phase,failure_code,idempotency_key,retry_of_job_id,schema_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (report_id, report_version_id, item["versions"][0]["specification_digest"], '["docx","pdf"]', "internal", "template-v1", "2.0.0", "admin", "enqueue_generation", key, "failed_terminal", 1, 1, key, key, "validation_failed", phase, code, key, retry_of, jobs.JOB_SCHEMA_VERSION),
+            )
+            return self.conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        original = insert_job(item["id"], version_id, "2026-01-01T00:00:00Z")
+        successor = insert_job(item["id"], version_id, "2026-01-01T00:00:01Z", retry_of=original, phase=None, code=None)
+        other_report = insert_job(999, version_id, "2026-01-01T00:00:02Z")
+        other_version = insert_job(item["id"], 999, "2026-01-01T00:00:03Z")
+        detail = reports.get_report(self.conn, item["id"])
+
+        self.assertEqual([attempt["job_id"] for attempt in detail["job_attempts"]], [original, successor])
+        self.assertEqual(detail["job_attempts"][0]["successor_job_id"], successor)
+        self.assertEqual(detail["job_attempts"][1]["predecessor_job_id"], original)
+        self.assertEqual(detail["job_attempts"][0]["failure_phase"], "rendering")
+        self.assertEqual(detail["job_attempts"][0]["failure_code"], "adapter_input_invalid")
+        self.assertEqual(detail["job_attempts"][1]["diagnostic_status"], "unavailable")
+        self.assertNotIn(other_report, [attempt["job_id"] for attempt in detail["job_attempts"]])
+        self.assertNotIn(other_version, [attempt["job_id"] for attempt in detail["job_attempts"]])
 
     @patch.object(reports.rda, "record_context")
     def test_review_actor_separation_and_append_only_lifecycle(self, record_context):
@@ -444,6 +474,76 @@ class Stage75BoundaryTests(unittest.TestCase):
         self.assertEqual(diagnostics.status_code, 200)
         generate.assert_not_called()
         render.assert_not_called()
+
+    def test_report_and_job_diagnostic_views_require_admin_and_are_private_no_store(self):
+        from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
+        install_fastapi_stubs()
+        from api.routes import admin_session
+
+        with patch.object(admin_session, "require_admin_session", side_effect=FakeHTTPException(401, "admin_session_unauthorized")):
+            with self.assertRaises(FakeHTTPException) as report_error:
+                admin_session.admin_governed_reports(FakeRequest())
+            with self.assertRaises(FakeHTTPException) as job_error:
+                admin_session.admin_governed_report_job_detail("1", FakeRequest())
+        self.assertEqual(report_error.exception.status_code, 401)
+        self.assertEqual(job_error.exception.status_code, 401)
+
+        connection = Mock()
+        job = {
+            "id": 1, "report_id": 1, "report_version_id": 1,
+            "specification_digest": "a" * 64, "qualification_id": 1,
+            "qualification_digest": "b" * 64, "requested_formats": ["docx"],
+            "state": "failed_terminal", "attempt_count": 1, "max_attempts": 1,
+            "next_eligible_at": "now", "lease_owner": None,
+            "lease_acquired_at": None, "lease_expires_at": None,
+            "heartbeat_at": None, "cancellation_requested_at": None,
+            "terminal_at": "now", "terminal_outcome": "validation_failed",
+            "failure_phase": "rendering", "failure_code": "adapter_input_invalid",
+            "requesting_actor": "admin", "governed_action": "enqueue_generation",
+            "events": [],
+        }
+        with (
+            patch.object(admin_session, "require_admin_session", return_value={"username": "admin", "role": "admin"}),
+            patch.object(admin_session, "get_db", return_value=connection),
+            patch.object(admin_session.rg77, "get_job", return_value=job),
+        ):
+            response = admin_session.admin_governed_report_job_detail("1", FakeRequest())
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+
+        report_detail = {
+            "id": 1,
+            "lifecycle_status": "validation_failed",
+            "versions": [
+                {
+                    "requested_formats": ["docx", "pdf"],
+                    "specification_digest": "a" * 64,
+                }
+            ],
+            "events": [],
+            "artifacts": [],
+            "qualifications": [],
+            "publication_reviews": [],
+            "job_attempts": [],
+        }
+        report_connection = Mock()
+        report_connection.execute.return_value.fetchone.return_value = (0,)
+        with (
+            patch.object(admin_session, "require_admin_session", return_value={"username": "admin", "role": "admin"}),
+            patch.object(admin_session, "get_db", return_value=report_connection),
+            patch.object(admin_session.rg75, "get_report", return_value=report_detail),
+            patch.object(admin_session.rg75, "list_reports", return_value=[]),
+            patch.object(admin_session.rg75, "read_candidates", return_value={}),
+            patch.object(admin_session.rg77, "diagnostic_retry_candidate", return_value=None),
+        ):
+            detail_response = admin_session.admin_governed_report_detail("1", FakeRequest())
+        self.assertEqual(detail_response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(detail_response.headers["X-Content-Type-Options"], "nosniff")
+
+        with patch.object(admin_session, "require_admin_session", return_value={"actor": "admin"}):
+            with self.assertRaises(FakeHTTPException) as malformed:
+                admin_session.admin_governed_report_job_detail("../1", FakeRequest())
+        self.assertEqual(malformed.exception.status_code, 404)
 
     def test_frozen_specification_renders_docx_and_html_through_v2_adapter(self):
         specification = {"specification_schema_version": reports.SPECIFICATION_SCHEMA_VERSION, "report_type": "canonical_record_report", "title": "Internal report", "purpose": "Review", "intended_audience": "Administrators", "distribution_class": "internal_working", "primary_record": {"reference": "CR-1", "title": "Record", "description": "Original wording", "status": "recorded"}, "selected_documents": [], "selected_associations": [], "sections": [{"order": 0, "title": "Record", "blocks": [{"order": 0, "content_type": "verbatim_source", "text": "Original wording", "source_identity": {"object_kind": "canonical_record", "object_id": "CR-1"}, "attribution": "", "inclusion_rationale": "Deliberately selected."}]}], "exclusions": [], "qualifications": [reports.BOUNDARY], "requested_formats": ["docx", "html"], "publication_engine_version": "2.0.0", "rendering_profile": "internal", "template_version": "cde-internal-v1"}
