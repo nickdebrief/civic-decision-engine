@@ -54848,14 +54848,30 @@ def _stage75_html(*, session: dict[str, Any], reports: list[dict[str, Any]], can
     error_html = f'<p class="error" role="alert">{escape(error)}</p>' if error else ""
     detail_html = ""
     if detail is not None:
+        def attempt_value(value: Any) -> str:
+            return "Unavailable" if value is None or value == "" else escape(str(value))
+
         events = "".join(f'<li>{escape(event["occurred_at"])} — {escape(event["event_type"])} — {escape(event["resulting_status"])} — {escape(event["actor"])}</li>' for event in detail.get("events", [])) or "<li>No lifecycle events.</li>"
         artifacts = "".join(f'<li>{escape(item["format"])} — {escape(item["validation_state"])} — <a href="/admin/governed-reports/{int(detail["id"])}/artifacts/{int(item["id"])}">download</a></li>' for item in detail.get("artifacts", [])) or "<li>No generated artifacts.</li>"
         qualification_history = "".join(f'<li>{escape(str(item["id"]))} · {escape(str(item["completed_gate"]))} · {escape(str(item["review_mode"]))} · {escape(str(item["qualification_digest"]))}</li>' for item in detail.get("qualifications", [])) or "<li>No structured qualification recorded.</li>"
+        attempt_rows = "".join(
+            f'<tr><td>{int(item["job_id"])} / {int(item["attempt_count"])}</td>'
+            f'<td>{int(item["report_id"])} / {int(item["report_version_id"])}</td>'
+            f'<td>{attempt_value(item.get("predecessor_job_id"))} / {attempt_value(item.get("successor_job_id"))}</td>'
+            f'<td>{escape(str(item["state"]))}</td>'
+            f'<td>{escape(", ".join(item.get("requested_formats", []))) or "Unavailable"}</td>'
+            f'<td>{attempt_value(item.get("requested_at"))} / {attempt_value(item.get("started_at"))} / {attempt_value(item.get("terminal_at"))}</td>'
+            f'<td>{attempt_value(item.get("failure_phase"))}</td><td><code>{attempt_value(item.get("failure_code"))}</code></td>'
+            f'<td>{"Persisted bounded diagnostic" if item.get("diagnostic_status") == "available" else "Unavailable"}</td>'
+            f'<td><code>{attempt_value(item.get("specification_digest"))}</code><br>qualification: {attempt_value(item.get("qualification_id"))} / <code>{attempt_value(item.get("qualification_digest"))}</code><br>{attempt_value(item.get("rendering_profile"))} / {attempt_value(item.get("template_version"))} / {attempt_value(item.get("publication_engine_version"))}</td></tr>'
+            for item in detail.get("job_attempts", [])
+        ) or '<tr><td colspan="10">No governed job attempts recorded.</td></tr>'
+        attempts_html = f'<section class="panel"><h3>Generation attempts — internal only</h3><p>Attempts are preserved historical authority. A failed attempt is not erased or overwritten. Missing bounded diagnostic authority is shown as Unavailable.</p><div class="table-wrap"><table><thead><tr><th>Job / attempt</th><th>Report / version</th><th>Predecessor / successor</th><th>State</th><th>Requested formats</th><th>Requested / started / terminal</th><th>Failure phase</th><th>Failure code</th><th>Diagnostic authority</th><th>Frozen authority</th></tr></thead><tbody>{attempt_rows}</tbody></table></div></section>'
         review_rows = "".join(f'<tr><td>{int(item["id"])}</td><td>{int(item["report_version_id"])}</td><td>{int(item["governed_job_id"])} / {int(item["governed_attempt_count"])}</td><td><code>{escape(str(item["artifact_set_digest"]))}</code></td><td>{escape(str(item["privacy_redaction_status"]))}</td><td>{escape(str(item["eligibility_outcome"] or item["lifecycle_status"]))}</td><td>{escape(str(item["created_by"]))} · {escape(str(item["created_at"]))}</td></tr>' for item in detail.get("publication_review_details", [])) or '<tr><td colspan="7">No publication review authority recorded.</td></tr>'
         review_history = "".join(f'<li>Review {int(review["id"])} · {escape(str(event["event_type"]))} · {escape(str(event["actor"]))} · {escape(str(event["occurred_at"]))} · {escape(str(event["rationale"]))}</li>' for review in detail.get("publication_review_details", []) for event in review.get("events", [])) or '<li>No publication-review events.</li>'
         review_artifacts = "".join(f'<li>Review {int(review["id"])}: ' + "; ".join(f'{escape(str(item["artifact_id"]))} · {escape(str(item["format"]))} · <code>{escape(str(item["sha256"]))}</code> · {int(item["size_bytes"])} bytes' for item in review.get("artifacts", [])) + '</li>' for review in detail.get("publication_review_details", [])) or '<li>No frozen artifact set.</li>'
         review_html = f'<section class="panel"><h3>Publication eligibility review — internal only</h3><p><strong>Registered does not mean eligible for publication.</strong><br><strong>Eligible for publication does not mean published.</strong></p><div class="table-wrap"><table><thead><tr><th>Review</th><th>Version</th><th>Job / attempt</th><th>Frozen artifact-set digest</th><th>Privacy/redaction</th><th>Eligibility/current status</th><th>Actor / timestamp</th></tr></thead><tbody>{review_rows}</tbody></table></div><h4>Frozen registered artifacts</h4><ul>{review_artifacts}</ul><h4>Append-only review history</h4><ul>{review_history}</ul></section>'
-        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul>{review_html}<div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
+        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul>{attempts_html}{review_html}<div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
     record_options = '<option value="" selected disabled>Choose a Canonical Record</option>' + records
     document_options = '<option value="" disabled>Choose Published Documents (optional)</option>' + documents
     association_options = '<option value="" disabled>Choose record–document associations (optional)</option>' + associations
@@ -54909,7 +54925,7 @@ def admin_governed_reports(request: Request):
         candidates = rg75.read_candidates(conn)
     finally:
         conn.close()
-    return HTMLResponse(content=_stage75_html(session=session, reports=reports, candidates=candidates))
+    return HTMLResponse(content=_stage75_html(session=session, reports=reports, candidates=candidates), headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/admin/governed-reports/diagnostics", response_class=JSONResponse)
@@ -54943,7 +54959,7 @@ def admin_governed_report_job_detail(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Not found") from None
     finally:
         conn.close()
-    return JSONResponse({key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action", "events")})
+    return JSONResponse({key: item[key] for key in ("id", "report_id", "report_version_id", "specification_digest", "qualification_id", "qualification_digest", "requested_formats", "state", "attempt_count", "max_attempts", "next_eligible_at", "lease_owner", "lease_acquired_at", "lease_expires_at", "heartbeat_at", "cancellation_requested_at", "terminal_at", "terminal_outcome", "failure_phase", "failure_code", "requesting_actor", "governed_action", "events")}, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/admin/governed-report-jobs/{job_id}/cancel", response_class=JSONResponse)
@@ -55145,7 +55161,7 @@ def admin_governed_report_detail(report_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Not found") from None
     finally:
         conn.close()
-    return HTMLResponse(content=_stage75_html(session=session, reports=reports, candidates=candidates, detail=detail, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation))
+    return HTMLResponse(content=_stage75_html(session=session, reports=reports, candidates=candidates, detail=detail, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation), headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/admin/governed-reports/{report_id}/publication-reviews", response_class=JSONResponse)
