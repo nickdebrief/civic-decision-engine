@@ -13,6 +13,8 @@ import secrets
 import sqlite3
 import threading
 import time
+import base64
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -79,6 +81,147 @@ POST_CORRECTION_CUSTODY_DECLARATION = (
 )
 DIAGNOSTIC_RETRY_MAX_RATIONALE = 4000
 NON_ADMIN_IDENTITIES = {WORKER_IDENTITY, "automation", "codex", "system", "system_worker", "worker"}
+
+# V2 is deliberately separate from the fixed, closed v1 recovery tuple above.
+# It is disabled unless the controller explicitly configures both activation and
+# an independently owned verification keyring.
+CUSTODY_V2_SCHEMA = "cde-stage77-custody-envelope-v2"
+CUSTODY_V2_CANONICAL_PROFILE = "cde-stage77-custody-envelope-v2-canonical-json"
+CUSTODY_V2_DOMAIN = b"CDE\x00stage77\x00custody-authority\x00envelope-v2\x00production\x00"
+CUSTODY_V2_PURPOSE = "post_correction_generation"
+CUSTODY_V2_ENABLE_ENV = "CDE_STAGE77_CUSTODY_V2_ENABLED"
+CUSTODY_V2_KEYRING_ENV = "CDE_STAGE77_CUSTODY_V2_KEYRING"
+CUSTODY_V2_RUNTIME_ENV = {
+    "project_id": "RAILWAY_PROJECT_ID", "service_id": "RAILWAY_SERVICE_ID",
+    "environment_id": "RAILWAY_ENVIRONMENT_ID", "deployment_id": "RAILWAY_DEPLOYMENT_ID",
+    "git_commit_sha": "RAILWAY_GIT_COMMIT_SHA",
+}
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:~-]{0,127}\Z")
+_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
+_V2_PAYLOAD_FIELDS = {
+    "schema", "key_id", "mandate_id", "mandate_digest", "report_id", "report_version_id",
+    "predecessor_job_ids", "purpose", "runtime", "capture_started_at", "capture_completed_at",
+    "fence_result", "database", "checkpoint_result", "wal_result", "shm_result",
+    "open_handle_result", "artifact_inventory_digest", "points_1_5_digest", "archive",
+    "encryption_profile", "encrypted_export", "transport", "receipt", "recovery_verification",
+    "post_transport_verification", "created_at", "canonical_payload_digest", "evidence_set_id", "evidence_set_digest",
+}
+
+
+def _v2_disabled() -> bool:
+    value = os.environ.get(CUSTODY_V2_ENABLE_ENV, "")
+    if value in {"", "0"}:
+        return True
+    if value != "1":
+        raise ValueError("stage77_custody_v2_activation_invalid")
+    return False
+
+
+def _strict_json(text: str, code: str) -> Any:
+    def pairs(items):
+        output = {}
+        for key, value in items:
+            if key in output:
+                raise ValueError(code)
+            output[key] = value
+        return output
+    try:
+        value = json.loads(text, object_pairs_hook=pairs, parse_float=lambda _v: (_ for _ in ()).throw(ValueError(code)) )
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError(code) from None
+    return value
+
+
+def _canonical_v2(value: Any) -> bytes:
+    """Closed JSON profile: NFC strings, finite positive bounded integers, no null."""
+    def normalise(item: Any) -> Any:
+        if item is None or isinstance(item, float):
+            raise ValueError("stage77_custody_v2_canonical_invalid")
+        if isinstance(item, str):
+            if unicodedata.normalize("NFC", item) != item:
+                raise ValueError("stage77_custody_v2_canonical_invalid")
+            return item
+        if isinstance(item, bool):
+            return item
+        if isinstance(item, int):
+            if item < 0 or item > 9_007_199_254_740_991:
+                raise ValueError("stage77_custody_v2_canonical_invalid")
+            return item
+        if isinstance(item, list):
+            return [normalise(part) for part in item]
+        if isinstance(item, dict):
+            if any(not isinstance(key, str) for key in item):
+                raise ValueError("stage77_custody_v2_canonical_invalid")
+            return {key: normalise(item[key]) for key in sorted(item)}
+        raise ValueError("stage77_custody_v2_canonical_invalid")
+    return json.dumps(normalise(value), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _v2_sha(value: str, code: str) -> str:
+    if not isinstance(value, str) or not _SHA256.fullmatch(value):
+        raise ValueError(code)
+    return value
+
+
+def _v2_identifier(value: Any, code: str) -> str:
+    if not isinstance(value, str) or not _ID.fullmatch(value):
+        raise ValueError(code)
+    return value
+
+
+def _v2_timestamp(value: Any, code: str) -> str:
+    if not isinstance(value, str) or not _TIME.fullmatch(value):
+        raise ValueError(code)
+    return value
+
+
+def _v2_keyring() -> dict[str, dict[str, Any]]:
+    if _v2_disabled():
+        raise ValueError("stage77_custody_v2_disabled")
+    raw = os.environ.get(CUSTODY_V2_KEYRING_ENV, "")
+    value = _strict_json(raw, "stage77_custody_v2_keyring_invalid")
+    if not isinstance(value, dict) or set(value) != {"keys"} or not isinstance(value["keys"], list) or not value["keys"]:
+        raise ValueError("stage77_custody_v2_keyring_invalid")
+    if _canonical_v2(value).decode("utf-8") != raw:
+        raise ValueError("stage77_custody_v2_keyring_noncanonical")
+    result = {}
+    for item in value["keys"]:
+        if not isinstance(item, dict) or set(item) != {"id", "public_key_b64", "fingerprint", "state"}:
+            raise ValueError("stage77_custody_v2_keyring_invalid")
+        key_id = _v2_identifier(item["id"], "stage77_custody_v2_keyring_invalid")
+        if item["state"] not in {"active", "verification_only", "revoked"} or key_id in result:
+            raise ValueError("stage77_custody_v2_keyring_invalid")
+        try:
+            raw_key = base64.b64decode(item["public_key_b64"], validate=True)
+        except (TypeError, ValueError):
+            raise ValueError("stage77_custody_v2_keyring_invalid") from None
+        if len(raw_key) != 32 or hashlib.sha256(raw_key).hexdigest() != _v2_sha(item["fingerprint"], "stage77_custody_v2_keyring_invalid"):
+            raise ValueError("stage77_custody_v2_keyring_invalid")
+        result[key_id] = {**item, "raw": raw_key}
+    return result
+
+
+def custody_v2_runtime_authority() -> dict[str, str]:
+    if _v2_disabled():
+        raise ValueError("stage77_custody_v2_disabled")
+    result = {name: os.environ.get(env, "") for name, env in CUSTODY_V2_RUNTIME_ENV.items()}
+    if any(not _UUID.fullmatch(result[name]) for name in ("project_id", "service_id", "environment_id", "deployment_id")) or not re.fullmatch(r"[0-9a-f]{40}", result["git_commit_sha"]):
+        raise ValueError("stage77_custody_v2_runtime_authority_invalid")
+    return result
+
+
+def validate_custody_v2_runtime_start() -> None:
+    """Pre-activation is inert; activation makes controller authority mandatory."""
+    if _v2_disabled():
+        return
+    keyring = _v2_keyring()
+    if not any(item["state"] == "active" for item in keyring.values()):
+        raise ValueError("stage77_custody_v2_active_key_required")
+    custody_v2_runtime_authority()
+    from api.governed_custody_evidence import evidence_root
+    evidence_root()
 
 
 def _valid_governed_job_id(value: Any) -> bool:
@@ -295,6 +438,312 @@ def ensure_post_correction_tables(conn: sqlite3.Connection) -> None:
       BEFORE DELETE ON stage77_post_correction_custody_attestation_events
       BEGIN SELECT RAISE(ABORT, 'custody_attestation_event_immutable'); END;
     """)
+
+
+def ensure_custody_v2_tables(conn: sqlite3.Connection) -> None:
+    """Additive v2 authority ledger. Legacy v1 tables are intentionally untouched."""
+    ensure_job_tables(conn)
+    from api.governed_custody_evidence import ensure_custody_evidence_tables
+    ensure_custody_evidence_tables(conn)
+    # Additive migration precedes trigger creation: an earlier v2 table can
+    # exist without these bindings, but it must never bypass their guards.
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stage77_custody_v2_attestations'").fetchone():
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(stage77_custody_v2_attestations)")}
+        if "evidence_set_id" not in columns:
+            conn.execute("ALTER TABLE stage77_custody_v2_attestations ADD COLUMN evidence_set_id TEXT")
+        if "evidence_set_digest" not in columns:
+            conn.execute("ALTER TABLE stage77_custody_v2_attestations ADD COLUMN evidence_set_digest TEXT")
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS stage77_custody_v2_mandates (
+      id TEXT PRIMARY KEY, report_id INTEGER NOT NULL, report_version_id INTEGER NOT NULL,
+      predecessor_job_1_id INTEGER NOT NULL, predecessor_job_2_id INTEGER NOT NULL,
+      purpose TEXT NOT NULL CHECK(purpose='post_correction_generation'),
+      mandate_json TEXT NOT NULL, mandate_digest TEXT NOT NULL UNIQUE,
+      idempotency_key TEXT NOT NULL UNIQUE, state TEXT NOT NULL CHECK(state IN ('created','attested','consumed','invalidated')),
+      actor TEXT NOT NULL, declaration TEXT NOT NULL, rationale TEXT NOT NULL, created_at TEXT NOT NULL,
+      FOREIGN KEY(report_id) REFERENCES record_governed_reports(id),
+      FOREIGN KEY(report_version_id) REFERENCES record_governed_report_versions(id),
+      FOREIGN KEY(predecessor_job_1_id) REFERENCES stage77_report_jobs(id),
+      FOREIGN KEY(predecessor_job_2_id) REFERENCES stage77_report_jobs(id)
+    );
+    CREATE TABLE IF NOT EXISTS stage77_custody_v2_attestations (
+      id TEXT PRIMARY KEY, mandate_id TEXT NOT NULL UNIQUE, report_id INTEGER NOT NULL,
+      report_version_id INTEGER NOT NULL, envelope_json TEXT NOT NULL, envelope_digest TEXT NOT NULL UNIQUE,
+      signature_b64 TEXT NOT NULL, key_id TEXT NOT NULL, key_fingerprint TEXT NOT NULL,
+      evidence_set_id TEXT NOT NULL, evidence_set_digest TEXT NOT NULL,
+      state TEXT NOT NULL CHECK(state IN ('verified','consumed','invalidated','failed_terminal')),
+      consumed_job_id INTEGER UNIQUE, created_at TEXT NOT NULL, consumed_at TEXT,
+      FOREIGN KEY(mandate_id) REFERENCES stage77_custody_v2_mandates(id),
+      FOREIGN KEY(report_id) REFERENCES record_governed_reports(id),
+      FOREIGN KEY(report_version_id) REFERENCES record_governed_report_versions(id),
+      FOREIGN KEY(consumed_job_id) REFERENCES stage77_report_jobs(id)
+    );
+    CREATE TABLE IF NOT EXISTS stage77_custody_v2_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, mandate_id TEXT NOT NULL, attestation_id TEXT,
+      event_type TEXT NOT NULL CHECK(event_type IN ('mandate_created','attestation_verified','attestation_consumed','attestation_invalidated','attestation_failed_terminal')),
+      actor TEXT NOT NULL, occurred_at TEXT NOT NULL, payload_json TEXT NOT NULL,
+      FOREIGN KEY(mandate_id) REFERENCES stage77_custody_v2_mandates(id),
+      FOREIGN KEY(attestation_id) REFERENCES stage77_custody_v2_attestations(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_stage77_custody_v2_mandate_report ON stage77_custody_v2_mandates(report_id,report_version_id);
+    CREATE INDEX IF NOT EXISTS idx_stage77_custody_v2_attestation_report ON stage77_custody_v2_attestations(report_id,report_version_id);
+    CREATE INDEX IF NOT EXISTS idx_stage77_custody_v2_events_mandate ON stage77_custody_v2_events(mandate_id,id);
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_mandate_no_delete BEFORE DELETE ON stage77_custody_v2_mandates BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_attestation_no_delete BEFORE DELETE ON stage77_custody_v2_attestations BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_mandate_authority_immutable
+      BEFORE UPDATE OF id,report_id,report_version_id,predecessor_job_1_id,predecessor_job_2_id,purpose,mandate_json,mandate_digest,idempotency_key,actor,declaration,rationale,created_at
+      ON stage77_custody_v2_mandates BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_mandate_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_mandate_state_forward_only
+      BEFORE UPDATE OF state ON stage77_custody_v2_mandates
+      WHEN NOT ((OLD.state='created' AND NEW.state IN ('attested','invalidated')) OR (OLD.state='attested' AND NEW.state IN ('consumed','invalidated')))
+      BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_mandate_transition_invalid'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_attestation_authority_immutable
+      BEFORE UPDATE OF id,mandate_id,report_id,report_version_id,envelope_json,envelope_digest,signature_b64,key_id,key_fingerprint,evidence_set_id,evidence_set_digest,created_at
+      ON stage77_custody_v2_attestations BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_attestation_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_attestation_state_forward_only
+      BEFORE UPDATE OF state ON stage77_custody_v2_attestations
+      WHEN NOT ((OLD.state='verified' AND NEW.state IN ('consumed','invalidated','failed_terminal')))
+      BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_attestation_transition_invalid'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_attestation_consumption_guard
+      BEFORE UPDATE OF consumed_job_id,consumed_at ON stage77_custody_v2_attestations
+      WHEN NOT (OLD.state='verified' AND NEW.state='consumed' AND NEW.consumed_job_id IS NOT NULL AND NEW.consumed_at IS NOT NULL)
+      BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_attestation_transition_invalid'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_event_no_update BEFORE UPDATE ON stage77_custody_v2_events BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_event_immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS stage77_custody_v2_event_no_delete BEFORE DELETE ON stage77_custody_v2_events BEGIN SELECT RAISE(ABORT,'stage77_custody_v2_event_immutable'); END;
+    """)
+
+
+def _v2_event(conn: sqlite3.Connection, mandate_id: str, attestation_id: str | None, event_type: str, actor: str, payload: Mapping[str, Any]) -> None:
+    conn.execute("INSERT INTO stage77_custody_v2_events(mandate_id,attestation_id,event_type,actor,occurred_at,payload_json) VALUES(?,?,?,?,?,?)", (mandate_id, attestation_id, event_type, actor, utc_now(), _canonical_v2(dict(payload)).decode("utf-8")))
+
+
+def _v2_validate_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict) or set(payload) != _V2_PAYLOAD_FIELDS:
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    if payload["schema"] != CUSTODY_V2_SCHEMA or payload["purpose"] != CUSTODY_V2_PURPOSE:
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    for name in ("key_id", "mandate_id", "encryption_profile", "evidence_set_id"):
+        _v2_identifier(payload[name], "stage77_custody_v2_envelope_schema_invalid")
+    for name in ("mandate_digest", "artifact_inventory_digest", "points_1_5_digest", "canonical_payload_digest", "evidence_set_digest"):
+        _v2_sha(payload[name], "stage77_custody_v2_envelope_schema_invalid")
+    if not isinstance(payload["report_id"], int) or payload["report_id"] <= 0 or not isinstance(payload["report_version_id"], int) or payload["report_version_id"] <= 0:
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    if not isinstance(payload["predecessor_job_ids"], list) or len(payload["predecessor_job_ids"]) != 2 or any(not isinstance(item, int) or item <= 0 for item in payload["predecessor_job_ids"]):
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    runtime = payload["runtime"]
+    if not isinstance(runtime, dict) or set(runtime) != set(CUSTODY_V2_RUNTIME_ENV):
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    for name in ("project_id", "service_id", "environment_id", "deployment_id"):
+        if not _UUID.fullmatch(str(runtime[name])):
+            raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(runtime["git_commit_sha"])):
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    for name in ("capture_started_at", "capture_completed_at", "created_at"):
+        _v2_timestamp(payload[name], "stage77_custody_v2_envelope_schema_invalid")
+    for name in ("fence_result", "checkpoint_result", "wal_result", "shm_result", "open_handle_result", "transport", "post_transport_verification"):
+        if payload[name] not in {True, False}:
+            raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    database = payload["database"]
+    if not isinstance(database, dict) or set(database) != {"device","inode","size","mtime_ns","sha256"} or any(not isinstance(database[name], int) or database[name] < 0 for name in ("device","inode","size","mtime_ns")):
+        raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+    _v2_sha(database["sha256"], "stage77_custody_v2_envelope_schema_invalid")
+    for name in ("archive", "encrypted_export", "receipt", "recovery_verification"):
+        item = payload[name]
+        if not isinstance(item, dict) or set(item) != {"id", "sha256"}:
+            raise ValueError("stage77_custody_v2_envelope_schema_invalid")
+        _v2_identifier(item["id"], "stage77_custody_v2_envelope_schema_invalid")
+        _v2_sha(item["sha256"], "stage77_custody_v2_envelope_schema_invalid")
+    canonical_without_digest = dict(payload)
+    digest = canonical_without_digest.pop("canonical_payload_digest")
+    if hashlib.sha256(_canonical_v2(canonical_without_digest)).hexdigest() != digest:
+        raise ValueError("stage77_custody_v2_envelope_digest_invalid")
+    return payload
+
+
+def _v2_verify_envelope(envelope_text: str) -> tuple[dict[str, Any], str, str]:
+    if _v2_disabled():
+        raise ValueError("stage77_custody_v2_disabled")
+    envelope = _strict_json(envelope_text, "stage77_custody_v2_envelope_invalid")
+    if not isinstance(envelope, dict) or set(envelope) != {"payload", "signature"} or not isinstance(envelope["signature"], str):
+        raise ValueError("stage77_custody_v2_envelope_invalid")
+    if _canonical_v2(envelope).decode("utf-8") != envelope_text:
+        raise ValueError("stage77_custody_v2_envelope_noncanonical")
+    payload = _v2_validate_payload(envelope["payload"])
+    try:
+        signature = base64.b64decode(envelope["signature"], validate=True)
+    except (TypeError, ValueError):
+        raise ValueError("stage77_custody_v2_signature_invalid") from None
+    if len(signature) != 64:
+        raise ValueError("stage77_custody_v2_signature_invalid")
+    key = _v2_keyring().get(payload["key_id"])
+    if key is None or key["state"] != "active":
+        raise ValueError("stage77_custody_v2_key_not_active")
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        Ed25519PublicKey.from_public_bytes(key["raw"]).verify(signature, CUSTODY_V2_DOMAIN + _canonical_v2(payload))
+    except ImportError:
+        raise ValueError("stage77_custody_v2_crypto_unavailable") from None
+    except (InvalidSignature, ValueError):
+        raise ValueError("stage77_custody_v2_signature_invalid") from None
+    return payload, envelope["signature"], key["fingerprint"]
+
+
+def create_custody_v2_mandate(conn: sqlite3.Connection, *, report_id: int | str, actor: str, rationale: str, declaration: str, idempotency_key: str) -> dict[str, Any]:
+    """Create the controller-owned, immutable pre-capture v2 mandate."""
+    if _v2_disabled():
+        raise ValueError("stage77_custody_v2_disabled")
+    if not all(isinstance(value, str) and value.strip() for value in (actor, rationale, declaration, idempotency_key)):
+        raise ValueError("stage77_custody_v2_mandate_input_invalid")
+    reports.ensure_report_tables(conn); ensure_custody_v2_tables(conn)
+    runtime = custody_v2_runtime_authority()
+    report = reports.get_report(conn, report_id)
+    version = report["versions"][-1]
+    job1, job2, topology = _post_correction_topology(conn, int(report["id"]), int(version["id"]))
+    qualification = __import__("api.governed_report_qualifications", fromlist=["latest_final"]).latest_final(conn, int(report["id"]))
+    if qualification is None:
+        raise ValueError("stage77_custody_v2_qualification_required")
+    now = utc_now()
+    payload = {
+        "schema": "cde-stage77-custody-mandate-v2", "report_id": int(report["id"]), "report_version_id": int(version["id"]),
+        "predecessor_job_ids": [int(job1["id"]), int(job2["id"])], "purpose": CUSTODY_V2_PURPOSE,
+        "specification_digest": str(version["specification_digest"]), "qualification_id": int(qualification["id"]),
+        "qualification_digest": str(qualification["digest"]), "requested_formats": list(version["specification"]["requested_formats"]),
+        "rendering_profile": str(version["specification"]["rendering_profile"]), "template_version": str(version["specification"]["template_version"]),
+        "publication_engine_version": str(version["specification"]["publication_engine_version"]), "runtime": runtime,
+        "declaration": declaration, "rationale": rationale, "actor": actor, "created_at": now, "topology_digest": topology,
+    }
+    digest = hashlib.sha256(_canonical_v2(payload)).hexdigest()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        existing = conn.execute("SELECT * FROM stage77_custody_v2_mandates WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+        if existing:
+            if existing["mandate_digest"] != digest:
+                raise ValueError("stage77_custody_v2_mandate_idempotency_conflict")
+            conn.execute("COMMIT")
+            return dict(existing)
+        mandate_id = secrets.token_hex(16)
+        conn.execute("INSERT INTO stage77_custody_v2_mandates(id,report_id,report_version_id,predecessor_job_1_id,predecessor_job_2_id,purpose,mandate_json,mandate_digest,idempotency_key,state,actor,declaration,rationale,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (mandate_id, payload["report_id"], payload["report_version_id"], job1["id"], job2["id"], CUSTODY_V2_PURPOSE, _canonical_v2(payload).decode(), digest, idempotency_key, "created", actor, declaration, rationale, now))
+        _v2_event(conn, mandate_id, None, "mandate_created", actor, {"mandate_digest": digest})
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return dict(conn.execute("SELECT * FROM stage77_custody_v2_mandates WHERE id=?", (mandate_id,)).fetchone())
+
+
+def record_custody_v2_envelope(conn: sqlite3.Connection, *, envelope_json: str, actor: str) -> dict[str, Any]:
+    payload, signature, fingerprint = _v2_verify_envelope(envelope_json)
+    ensure_custody_v2_tables(conn)
+    runtime = custody_v2_runtime_authority()
+    if payload["runtime"] != runtime:
+        raise ValueError("stage77_custody_v2_runtime_authority_mismatch")
+    mandate = conn.execute("SELECT * FROM stage77_custody_v2_mandates WHERE id=?", (payload["mandate_id"],)).fetchone()
+    if mandate is None or mandate["mandate_digest"] != payload["mandate_digest"]:
+        raise ValueError("stage77_custody_v2_mandate_invalid")
+    mandate_payload = _strict_json(mandate["mandate_json"], "stage77_custody_v2_mandate_invalid")
+    for name in ("report_id", "report_version_id", "purpose", "predecessor_job_ids", "runtime"):
+        if payload[name] != mandate_payload[name]:
+            raise ValueError("stage77_custody_v2_mandate_mismatch")
+    # A signed envelope authenticates its sender, not its factual custody claims.
+    # The matching controller-owned registration is therefore mandatory.
+    evidence = conn.execute("SELECT * FROM stage77_custody_evidence_sets WHERE id=? AND payload_digest=? AND mandate_id=? AND report_id=? AND report_version_id=? AND state='registered'", (payload["evidence_set_id"], payload["evidence_set_digest"], mandate["id"], payload["report_id"], payload["report_version_id"])).fetchone()
+    if evidence is None or _strict_json(evidence["runtime_json"], "stage77_custody_evidence_invalid") != runtime:
+        raise ValueError("stage77_custody_evidence_unavailable")
+    digest = hashlib.sha256(_canonical_v2(payload)).hexdigest()
+    attestation_id = secrets.token_hex(16)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        existing = conn.execute("SELECT * FROM stage77_custody_v2_attestations WHERE mandate_id=?", (mandate["id"],)).fetchone()
+        if existing is not None:
+            expected = {
+                "mandate_id": mandate["id"], "report_id": payload["report_id"],
+                "report_version_id": payload["report_version_id"], "envelope_json": envelope_json,
+                "envelope_digest": digest, "signature_b64": signature,
+                "key_id": payload["key_id"], "key_fingerprint": fingerprint,
+                "evidence_set_id": payload["evidence_set_id"],
+                "evidence_set_digest": payload["evidence_set_digest"], "state": "verified",
+            }
+            if mandate["state"] != "attested" or any(existing[name] != value for name, value in expected.items()):
+                raise ValueError("stage77_custody_v2_attestation_exists")
+            conn.execute("COMMIT")
+            return dict(existing)
+        if mandate["state"] != "created":
+            raise ValueError("stage77_custody_v2_mandate_invalid")
+        conn.execute("INSERT INTO stage77_custody_v2_attestations(id,mandate_id,report_id,report_version_id,envelope_json,envelope_digest,signature_b64,key_id,key_fingerprint,evidence_set_id,evidence_set_digest,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (attestation_id, mandate["id"], payload["report_id"], payload["report_version_id"], envelope_json, digest, signature, payload["key_id"], fingerprint, payload["evidence_set_id"], payload["evidence_set_digest"], "verified", utc_now()))
+        conn.execute("UPDATE stage77_custody_v2_mandates SET state='attested' WHERE id=? AND state='created'", (mandate["id"],))
+        _v2_event(conn, mandate["id"], attestation_id, "attestation_verified", actor, {"envelope_digest": digest, "key_fingerprint": fingerprint})
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return dict(conn.execute("SELECT * FROM stage77_custody_v2_attestations WHERE id=?", (attestation_id,)).fetchone())
+
+
+def consume_custody_v2_attestation(
+    conn: sqlite3.Connection, *, attestation_id: str, actor: str, declaration: str,
+    rationale: str, idempotency_key: str,
+) -> dict[str, Any]:
+    """Atomically consume one verified v2 attestation and allocate one non-retry job.
+
+    This is intentionally not wired to an automatic worker action: a later,
+    separately authorised administrative operation must call it deliberately.
+    """
+    if _v2_disabled():
+        raise ValueError("stage77_custody_v2_disabled")
+    if not all(isinstance(value, str) and value.strip() for value in (attestation_id, actor, declaration, rationale, idempotency_key)):
+        raise ValueError("stage77_custody_v2_consumption_input_invalid")
+    ensure_custody_v2_tables(conn)
+    runtime = custody_v2_runtime_authority()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        existing = conn.execute("SELECT * FROM stage77_report_jobs WHERE idempotency_key=?", ("stage77-v2-" + idempotency_key,)).fetchone()
+        if existing is not None:
+            if existing["governed_action"] != POST_CORRECTION_ACTION or existing["post_correction_authorization_id"] != "v2:" + attestation_id:
+                raise ValueError("stage77_custody_v2_consumption_conflict")
+            conn.execute("COMMIT")
+            return _job(conn, int(existing["id"]))
+        attestation = conn.execute("SELECT * FROM stage77_custody_v2_attestations WHERE id=?", (attestation_id,)).fetchone()
+        if attestation is None or attestation["state"] != "verified":
+            raise ValueError("stage77_custody_v2_attestation_unavailable")
+        evidence = conn.execute("SELECT * FROM stage77_custody_evidence_sets WHERE id=? AND payload_digest=? AND state='registered'", (attestation["evidence_set_id"], attestation["evidence_set_digest"])).fetchone()
+        if evidence is None:
+            raise ValueError("stage77_custody_evidence_unavailable")
+        mandate = conn.execute("SELECT * FROM stage77_custody_v2_mandates WHERE id=?", (attestation["mandate_id"],)).fetchone()
+        if mandate is None or mandate["state"] != "attested":
+            raise ValueError("stage77_custody_v2_mandate_unavailable")
+        mandate_payload = _strict_json(mandate["mandate_json"], "stage77_custody_v2_mandate_invalid")
+        if mandate_payload.get("runtime") != runtime or mandate_payload.get("declaration") != declaration or mandate_payload.get("rationale") != rationale:
+            raise ValueError("stage77_custody_v2_consumption_binding_invalid")
+        report = reports.get_report(conn, int(mandate["report_id"]))
+        version = report["versions"][-1]
+        if int(version["id"]) != int(mandate["report_version_id"]) or report["lifecycle_status"] != "validation_failed":
+            raise ValueError("stage77_custody_v2_report_version_invalid")
+        job1, job2, topology = _post_correction_topology(conn, int(report["id"]), int(version["id"]))
+        if mandate_payload.get("predecessor_job_ids") != [int(job1["id"]), int(job2["id"])] or mandate_payload.get("topology_digest") != topology:
+            raise ValueError("stage77_custody_v2_predecessor_invalid")
+        from api import governed_report_qualifications as qualification_store
+        qualification = qualification_store.latest_final(conn, int(report["id"]))
+        if qualification is None or mandate_payload.get("qualification_id") != int(qualification["id"]) or mandate_payload.get("qualification_digest") != str(qualification["digest"]):
+            raise ValueError("stage77_custody_v2_qualification_invalid")
+        if reports.specification_digest(version["specification"]) != mandate_payload.get("specification_digest"):
+            raise ValueError("stage77_custody_v2_specification_invalid")
+        now = utc_now()
+        cursor = conn.execute("INSERT INTO stage77_report_jobs(report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,qualification_id,qualification_digest,requested_at,state,attempt_count,max_attempts,next_eligible_at,idempotency_key,retry_of_job_id,post_correction_authorization_id,maintenance_epoch,schema_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(report["id"]), int(version["id"]), mandate_payload["specification_digest"], reports.canonical_json(mandate_payload["requested_formats"]), mandate_payload["rendering_profile"], mandate_payload["template_version"], mandate_payload["publication_engine_version"], actor, POST_CORRECTION_ACTION, int(qualification["id"]), str(qualification["digest"]), now, "queued", 0, MAX_ATTEMPTS, now, "stage77-v2-" + idempotency_key, None, "v2:" + attestation_id, 0, JOB_SCHEMA_VERSION))
+        job_id = int(cursor.lastrowid)
+        if conn.execute("UPDATE stage77_custody_v2_attestations SET state='consumed',consumed_job_id=?,consumed_at=? WHERE id=? AND state='verified'", (job_id, now, attestation_id)).rowcount != 1:
+            raise ValueError("stage77_custody_v2_consumption_conflict")
+        if conn.execute("UPDATE stage77_custody_v2_mandates SET state='consumed' WHERE id=? AND state='attested'", (mandate["id"],)).rowcount != 1:
+            raise ValueError("stage77_custody_v2_consumption_conflict")
+        if conn.execute("UPDATE stage77_custody_evidence_sets SET state='consumed',consumed_job_id=?,consumed_at=? WHERE id=? AND state='registered'", (job_id, now, evidence["id"])).rowcount != 1:
+            raise ValueError("stage77_custody_v2_consumption_conflict")
+        _event(conn, job_id, POST_CORRECTION_EVENT, "queued", actor, {"v2_attestation_id": attestation_id, "predecessor_job_ids": [int(job1["id"]), int(job2["id"])]})
+        _v2_event(conn, mandate["id"], attestation_id, "attestation_consumed", actor, {"job_id": job_id, "idempotency_key": idempotency_key})
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return _job(conn, job_id)
 
 
 def _payload(report: Mapping[str, Any], actor: str, action: str) -> dict[str, Any]:
@@ -1283,6 +1732,7 @@ def worker_loop(db_path: str, stop_event, on_ready=None) -> int:
         for attempt in range(5):
             try:
                 startup_conn = _connect(db_path)
+                validate_custody_v2_runtime_start()
                 ensure_job_tables(startup_conn)
                 ensure_post_correction_tables(startup_conn)
                 reports.ensure_report_tables(startup_conn)

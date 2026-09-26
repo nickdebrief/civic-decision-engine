@@ -1,3 +1,6 @@
+import os
+import sqlite3
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +19,19 @@ app = FastAPI(
     description="Structured API for civic case analysis, timeline detection, and pattern classification.",
     version=PLATFORM_VERSION_LABEL,
 )
+
+
+@app.on_event("startup")
+def initialize_stage77_custody_authority() -> None:
+    """Idempotently create governed custody tables before administrative use."""
+    from api.governed_report_jobs import ensure_custody_v2_tables
+    conn = sqlite3.connect(os.environ.get("RECORDS_DB_PATH", "records.db"))
+    try:
+        conn.row_factory = sqlite3.Row
+        ensure_custody_v2_tables(conn)
+        conn.commit()
+    finally:
+        conn.close()
 
 app.mount("/static", StaticFiles(directory="api/static"), name="static")
 

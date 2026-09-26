@@ -1,9 +1,11 @@
 from html.parser import HTMLParser
+import asyncio
+import os
 import unittest
 from api import governed_report_publications as stage79_publications
 from unittest.mock import Mock, patch
 
-from tests.test_admin_session import install_fastapi_stubs
+from tests.test_admin_session import FakeHTTPException, FakeRequest, install_fastapi_stubs
 
 install_fastapi_stubs()
 
@@ -69,6 +71,25 @@ class _FormParser(HTMLParser):
             self.label["text"].append(data)
         if self.button is not None:
             self.button.append(data)
+
+
+class _RegistrarForm:
+    """Minimal duplicate-preserving form fixture for the private registrar."""
+
+    def __init__(self, items):
+        self._items = list(items)
+
+    def multi_items(self):
+        return list(self._items)
+
+
+class _RegistrarRequest(FakeRequest):
+    def __init__(self, items=()):
+        super().__init__()
+        self._form = _RegistrarForm(items)
+
+    async def form(self):
+        return self._form
 
 
 def _detail(status="approved_for_generation"):
@@ -235,6 +256,126 @@ class Stage75GovernedReportGenerationUITests(unittest.TestCase):
             governed_action="enqueue_generation",
             idempotency_key="ui-test",
         )
+
+
+class Stage77CustodyV2PresentationTests(unittest.TestCase):
+    def test_detail_template_marks_v2_as_private_and_pre_activation_safe(self):
+        source = admin_session._stage75_html.__code__.co_consts
+        text = " ".join(part for part in source if isinstance(part, str))
+        self.assertIn("V2 custody authority", text)
+        self.assertIn("closed historical authority", text)
+
+
+class Stage77CustodyEvidenceRegistrarUITests(unittest.TestCase):
+    """Route tests keep the controller-owned verifier behind the admin boundary."""
+
+    session = {"username": "custody-admin", "role": "admin"}
+    selection = {
+        "evidence_set_id": "evidence-set-1",
+        "mandate_id": "mandate-1",
+        "report_id": "7",
+        "report_version_id": "11",
+    }
+
+    def _items(self, *, csrf_token="valid", extra=()):
+        return [("csrf_token", csrf_token), *self.selection.items(), *extra]
+
+    def _receipt(self):
+        return {
+            "id": "evidence-set-1",
+            "payload_digest": "a" * 64,
+            "state": "registered",
+            "mandate_id": "mandate-1",
+            "report_id": 7,
+            "report_version_id": 11,
+            "created_at": "2026-09-20T00:00:00Z",
+            "private_path": "/controller/private/evidence-set-1",
+            "raw_evidence": "retained-content",
+            "signature": "secret-signature",
+        }
+
+    def test_registrar_get_and_post_reject_unauthenticated_or_non_admin_sessions(self):
+        with patch.object(admin_session, "require_admin_session", side_effect=FakeHTTPException(401, "unauthorized")):
+            get = admin_session.admin_custody_evidence_registrar_form(FakeRequest())
+            post = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest()))
+        self.assertEqual((get.status_code, post.status_code), (401, 401))
+        self.assertEqual(get.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(post.headers["Cache-Control"], "private, no-store")
+        with patch.object(admin_session, "require_admin_session", return_value={"username": "viewer", "role": "viewer"}):
+            response = admin_session.admin_custody_evidence_registrar_form(FakeRequest())
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+
+    def test_registrar_get_is_private_read_only_form_with_only_bounded_selection_inputs(self):
+        with patch.dict(os.environ, {"CDE_ADMIN_SESSION_SECRET": "test-session-secret"}, clear=False), patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session, "get_db") as database, patch.object(admin_session.custody_evidence, "register_from_store") as register:
+            response = admin_session.admin_custody_evidence_registrar_form(FakeRequest())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        parser = _FormParser(); parser.feed(response.content)
+        self.assertEqual(len(parser.forms), 1)
+        form = parser.forms[0]
+        self.assertEqual(form["attrs"]["method"], "post")
+        self.assertEqual(form["attrs"]["action"], admin_session._CUSTODY_REGISTRAR_API_PATH)
+        self.assertEqual({item.get("name") for item in form["inputs"]}, {"csrf_token", "evidence_set_id", "mandate_id", "report_id", "report_version_id"})
+        database.assert_not_called(); register.assert_not_called()
+        self.assertNotIn("/sitemap", response.content)
+        self.assertNotIn("public", form["attrs"]["action"])
+
+    def test_registrar_post_requires_exact_valid_csrf_and_strict_selection_schema(self):
+        with patch.dict(os.environ, {"CDE_ADMIN_SESSION_SECRET": "test-session-secret"}, clear=False):
+            valid = admin_session._custody_registrar_token(self.session)
+            expired = admin_session._custody_registrar_token(self.session, now=0)
+            other_actor = admin_session._custody_registrar_token({"username": "other", "role": "admin"})
+            for token in ("", "not-a-token", expired, other_actor):
+                with patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session.custody_evidence, "register_from_store") as register:
+                    response = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest(self._items(csrf_token=token))))
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+                register.assert_not_called()
+            for extra in (("payload", "caller-proof"), ("digest", "b" * 64), ("runtime", "claimed"), ("path", "/tmp/evidence"), ("role", "database_capture")):
+                with patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session.custody_evidence, "register_from_store") as register:
+                    response = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest(self._items(csrf_token=valid, extra=(extra,)))))
+                self.assertEqual(response.status_code, 400)
+                register.assert_not_called()
+
+    def test_registrar_post_delegates_only_to_store_boundary_and_renders_bounded_receipt(self):
+        connection = Mock()
+        with patch.dict(os.environ, {"CDE_ADMIN_SESSION_SECRET": "test-session-secret"}, clear=False):
+            token = admin_session._custody_registrar_token(self.session)
+            with patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session, "get_db", return_value=connection), patch.object(admin_session.custody_evidence, "register_from_store", return_value=self._receipt()) as register, patch.object(admin_session.custody_evidence, "_register_verified") as low_level, patch.object(admin_session.rg77, "enqueue_generation") as enqueue:
+                response = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest(self._items(csrf_token=token))))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        register.assert_called_once_with(connection, evidence_set_id="evidence-set-1", mandate_id="mandate-1", report_id=7, report_version_id=11, actor="custody-admin", occurred_at=unittest.mock.ANY)
+        low_level.assert_not_called(); enqueue.assert_not_called()
+        self.assertEqual(connection.execute.call_args_list[0].args, ("BEGIN IMMEDIATE",))
+        connection.commit.assert_called_once(); connection.close.assert_called_once()
+        for permitted in ("evidence-set-1", "a" * 64, "registered", "mandate-1", "2026-09-20T00:00:00Z"):
+            self.assertIn(permitted, response.content)
+        for forbidden in ("/controller/private", "retained-content", "secret-signature", "raw_evidence", "private_path", "database_capture"):
+            self.assertNotIn(forbidden, response.content)
+
+    def test_registrar_duplicate_replay_is_bounded_idempotently_and_conflicts_do_not_leak_inputs(self):
+        connection = Mock()
+        with patch.dict(os.environ, {"CDE_ADMIN_SESSION_SECRET": "test-session-secret"}, clear=False):
+            token = admin_session._custody_registrar_token(self.session)
+            request = _RegistrarRequest(self._items(csrf_token=token))
+            with patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session, "get_db", return_value=connection), patch.object(admin_session.custody_evidence, "register_from_store", return_value=self._receipt()) as register:
+                first = asyncio.run(admin_session.admin_custody_evidence_registrar_register(request))
+                second = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest(self._items(csrf_token=token))))
+            self.assertEqual((first.status_code, second.status_code), (200, 200))
+            self.assertEqual(first.content, second.content)
+            self.assertEqual(register.call_count, 2)
+            with patch.object(admin_session, "require_admin_session", return_value=self.session), patch.object(admin_session, "get_db", return_value=connection), patch.object(admin_session.custody_evidence, "register_from_store", side_effect=ValueError("prior private input: /controller/private")):
+                conflict = asyncio.run(admin_session.admin_custody_evidence_registrar_register(_RegistrarRequest(self._items(csrf_token=token))))
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.headers["Cache-Control"], "private, no-store")
+        self.assertIn("Controller-owned custody evidence registrar", conflict.content)
+        self.assertIn("The request could not be completed.", conflict.content)
+        for private_value in ("No authority was registered", "/controller/private", "evidence-set-1", "mandate-1", "secret-signature", "database_capture", "report content", "registered", "attestation"):
+            self.assertNotIn(private_value, conflict.content)
+        self.assertTrue(connection.execute.call_args_list)
+        self.assertTrue(all(call.args == ("BEGIN IMMEDIATE",) for call in connection.execute.call_args_list))
 
 
 if __name__ == "__main__":

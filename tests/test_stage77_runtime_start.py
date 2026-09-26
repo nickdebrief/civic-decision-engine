@@ -1,19 +1,104 @@
 import os
 import signal
+import sqlite3
 import subprocess
 import tempfile
 import unittest
 import importlib.util
+from api import governed_report_jobs as jobs
+from api import governed_custody_evidence as custody_evidence
+from api import main as application_main
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "scripts" / "start_cde_runtime.sh"
 
 
 class Stage77RuntimeStartTests(unittest.TestCase):
+    def test_application_startup_registers_and_reaches_the_custody_initializer_once(self):
+        self.assertIn(
+            application_main.initialize_stage77_custody_authority,
+            application_main.app.router.on_startup,
+        )
+        connection = Mock()
+        with patch.object(application_main.sqlite3, "connect", return_value=connection) as connect, patch.object(jobs, "ensure_custody_v2_tables") as ensure:
+            application_main.initialize_stage77_custody_authority()
+        connect.assert_called_once_with(os.environ.get("RECORDS_DB_PATH", "records.db"))
+        self.assertIs(connection.row_factory, sqlite3.Row)
+        ensure.assert_called_once_with(connection)
+        connection.commit.assert_called_once()
+        connection.close.assert_called_once()
+
+    def test_v2_initializer_reaches_registry_initializer_exactly_once(self):
+        connection = sqlite3.connect(":memory:")
+        try:
+            with patch.object(custody_evidence, "ensure_custody_evidence_tables", wraps=custody_evidence.ensure_custody_evidence_tables) as ensure:
+                jobs.ensure_custody_v2_tables(connection)
+            ensure.assert_called_once_with(connection)
+        finally:
+            connection.close()
+
+    def test_startup_initialization_is_idempotent_and_creates_registry_schema_indexes_and_guards(self):
+        with tempfile.TemporaryDirectory(prefix="stage77-startup-schema-") as temp:
+            database_path = Path(temp) / "isolated.sqlite3"
+            with patch.dict(os.environ, {"RECORDS_DB_PATH": str(database_path)}, clear=False):
+                application_main.initialize_stage77_custody_authority()
+                application_main.initialize_stage77_custody_authority()
+            connection = sqlite3.connect(database_path)
+            try:
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                indexes = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+                triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+                self.assertTrue({"stage77_custody_evidence_sets", "stage77_custody_evidence_objects", "stage77_custody_evidence_events", "stage77_custody_v2_mandates", "stage77_custody_v2_attestations", "stage77_custody_v2_events"} <= tables)
+                self.assertIn("idx_stage77_custody_v2_attestation_report", indexes)
+                self.assertIn("stage77_custody_evidence_set_no_delete", triggers)
+                self.assertIn("stage77_custody_v2_attestation_authority_immutable", triggers)
+                for table in ("stage77_custody_v2_mandates", "stage77_custody_evidence_sets", "stage77_custody_evidence_events", "stage77_custody_v2_attestations", "stage77_report_jobs"):
+                    self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
+            finally:
+                connection.close()
+
+    def test_startup_failure_propagates_and_closes_the_established_connection(self):
+        connection = Mock()
+        with patch.object(application_main.sqlite3, "connect", return_value=connection), patch.object(jobs, "ensure_custody_v2_tables", side_effect=sqlite3.DatabaseError("schema failure")):
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "schema failure"):
+                application_main.initialize_stage77_custody_authority()
+        connection.commit.assert_not_called()
+        connection.close.assert_called_once()
+
+    def test_initialization_does_not_add_routes_or_change_legacy_v1_schema(self):
+        routes_before = tuple((route.path, tuple(sorted(getattr(route, "methods", ())))) for route in application_main.app.routes)
+        with tempfile.TemporaryDirectory(prefix="stage77-startup-routes-") as temp:
+            database_path = Path(temp) / "isolated.sqlite3"
+            legacy = sqlite3.connect(database_path)
+            try:
+                legacy.execute("CREATE TABLE stage77_post_correction_custody_attestations (id TEXT PRIMARY KEY, legacy_marker TEXT NOT NULL)")
+                legacy.execute("INSERT INTO stage77_post_correction_custody_attestations VALUES ('legacy-1','preserved')")
+                legacy.commit()
+            finally:
+                legacy.close()
+            with patch.dict(os.environ, {"RECORDS_DB_PATH": str(database_path)}, clear=False):
+                application_main.initialize_stage77_custody_authority()
+            connection = sqlite3.connect(database_path)
+            try:
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                self.assertIn("stage77_post_correction_custody_attestations", tables)
+                self.assertEqual(connection.execute("SELECT legacy_marker FROM stage77_post_correction_custody_attestations WHERE id='legacy-1'").fetchone()[0], "preserved")
+                self.assertNotIn("stage77_custody_evidence_registrar", {path for path, _methods in routes_before})
+                self.assertEqual(routes_before, tuple((route.path, tuple(sorted(getattr(route, "methods", ())))) for route in application_main.app.routes))
+            finally:
+                connection.close()
+
+    def test_v2_runtime_start_is_inert_before_activation_and_closed_when_malformed(self):
+        with patch.dict(os.environ, {jobs.CUSTODY_V2_ENABLE_ENV: ""}, clear=False):
+            self.assertIsNone(jobs.validate_custody_v2_runtime_start())
+        with patch.dict(os.environ, {jobs.CUSTODY_V2_ENABLE_ENV: "unexpected"}, clear=False):
+            with self.assertRaisesRegex(ValueError, "activation_invalid"):
+                jobs.validate_custody_v2_runtime_start()
+
     def _run_wrapper(self, storage_status=0, port=None):
         with tempfile.TemporaryDirectory(prefix="stage77-wrapper-test-") as temp:
             directory = Path(temp)

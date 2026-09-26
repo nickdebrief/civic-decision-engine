@@ -258,3 +258,83 @@ the same database snapshot. A database digest cannot be stored in the final
 bytes it digests without a self-referential cycle. The finalized live evidence
 row is appended only after manifest validation; later snapshots carry prior
 finalized evidence rows.
+## V2 controller-owned custody evidence (unintegrated and pre-activation)
+
+The fixed Point 6 v1 tuple is closed, immutable historical evidence. It remains
+available only for legacy verification and cannot authorize a fresh capture,
+attestation, consumption, or generation. The controller-owned v2 registry is
+implemented as an unintegrated candidate and remains disabled pending focused
+validation, governed full-suite validation, canonical integration, separately
+authorized configuration, and separately authorized production operation.
+
+## Required controller sequence
+
+1. A controller custody capture creates the governed source package.
+   `scripts/capture_stage77_custody_evidence.py verify-source --evidence-set-id
+   <id>` is an offline, fail-closed source-layout verifier only; it does not
+   initiate capture, register authority, or open the application database.
+2. The offline controller runs `scripts/manage_stage77_recovery.py
+   prepare-evidence-store --evidence-set-id <id>`. The command copies and
+   re-verifies fixed retained objects into the private evidence store; it does
+   not register authority or contact the application database.
+3. An authenticated administrator submits only the evidence-set ID and the
+   persisted mandate, report, and report-version selectors to the private
+   registrar.
+4. `register_from_store(...)` independently resolves and re-hashes retained
+   bytes, verifies the persisted mandate/report/job authority, and resolves the
+   current runtime identity. An envelope, form field, or manifest claim never
+   supplies independent proof by itself.
+5. Only a complete matching package is immutably registered.
+6. A Role A signed custody envelope authenticates its controller origin and
+   binds the exact registered evidence-set ID and canonical digest. Role A
+   authenticates the envelope; it does not corroborate the custody facts.
+7. Consumption atomically binds the verified attestation and evidence set to
+   one new non-retry job. Jobs 1 and 2 remain immutable. Any governed
+   downstream worker, artifact, or registration failure leaves that authority
+   terminally consumed rather than reusable.
+8. Recovery inspection verifies the same immutable evidence-set identity,
+   digest, role inventory, authority bindings, and consumed-or-registered
+   lifecycle state. It never reactivates or consumes authority.
+9. Review, eligibility, publication, sitemap inclusion, and notification each
+   require separate authority. Generation is none of those actions.
+
+## Private retained-object package
+
+The fixed role inventory is: `database_capture`, `database_digest`,
+`checkpoint_wal_shm`, `custody_points_1_5`, `archive_export`, `receipt`,
+`recovery_verification`, `runtime_authority`, and `artifact_inventory`. Every
+role occurs exactly once as a canonical JSON retained object. Unknown,
+duplicate, missing, transformed, symlinked, non-regular, escaping, or
+non-canonical objects fail closed.
+
+`CDE_STAGE77_CUSTODY_CAPTURE_SOURCE_ROOT` identifies the private,
+controller-owned source-package root. `CDE_STAGE77_CUSTODY_EVIDENCE_V1_STORE_ROOT`
+identifies the private destination store. Both roots must be absolute,
+non-symlink directories with restrictive permissions. The preparation command
+accepts no destination, role mapping, digest, payload, or arbitrary source path.
+It creates a private temporary sibling, copies source bytes without
+transformation, measures destination sizes and SHA-256 digests, writes the
+canonical `manifest.json`, re-reads and re-hashes the completed package, then
+atomically renames it into place. An existing destination is accepted only when
+the complete retained package is byte-identical. Its output is bounded to the
+evidence-set ID, manifest digest, role count, and completion status; it never
+prints retained contents, storage paths, secrets, or key material.
+
+## Activation and cryptographic boundary
+
+V2 fails closed unless controller configuration supplies
+`CDE_STAGE77_CUSTODY_V2_ENABLED=1`, canonical
+`CDE_STAGE77_CUSTODY_V2_KEYRING`, the two private-store roots above, and all
+five Railway runtime values: `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE_ID`,
+`RAILWAY_ENVIRONMENT_ID`, `RAILWAY_DEPLOYMENT_ID`, and
+`RAILWAY_GIT_COMMIT_SHA`. Missing, malformed, revoked, stale, substituted, or
+mismatched configuration or authority rejects v2. There is no test-key,
+legacy-v1, or permissive configuration fallback.
+
+Role A uses the closed custody-envelope domain and controller keyring only for
+envelope authenticity. The unfinished separate Role B signer/keyring proposal
+is prospectively superseded by direct controller-owned retained-byte
+verification and immutable registration; it is not production authority and
+must not be reintroduced as a parallel route. No private signing key belongs in
+application configuration, evidence storage, browser data, command text, or
+logs.

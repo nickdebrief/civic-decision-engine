@@ -1,6 +1,8 @@
 import sqlite3
 import tempfile
 import unittest
+import os
+from pathlib import Path
 from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
@@ -112,6 +114,67 @@ class PostCorrectionGenerationContractTests(unittest.TestCase):
         self.assertIn("idx_stage77_jobs_post_correction_authorization", indexes)
         self.assertIn("stage77_post_correction_custody_attestations", tables)
         self.assertIn("stage77_post_correction_custody_attestation_events", tables)
+
+    def test_v2_is_explicitly_non_retry_and_v1_remains_historical(self):
+        self.assertEqual(jobs.CUSTODY_V2_PURPOSE, "post_correction_generation")
+        self.assertNotEqual(jobs.CUSTODY_V2_PURPOSE, jobs.DIAGNOSTIC_RETRY_KIND)
+        self.assertEqual(jobs.POST_CORRECTION_CUSTODY_ATTESTATION_CONTRACT, "stage77.post_correction_custody_attestation.v1")
+
+    def test_v2_consumption_allocates_one_non_retry_job_atomically(self):
+        self.conn.execute("INSERT INTO record_governed_reports(id,lifecycle_status) VALUES(1,'validation_failed')")
+        self.conn.execute("INSERT INTO record_governed_report_versions(id,report_id) VALUES(1,1)")
+        jobs.ensure_custody_v2_tables(self.conn)
+        runtime = {"project_id": "11111111-1111-1111-1111-111111111111", "service_id": "22222222-2222-2222-2222-222222222222", "environment_id": "33333333-3333-3333-3333-333333333333", "deployment_id": "44444444-4444-4444-4444-444444444444", "git_commit_sha": "b" * 40}
+        payload = {"runtime": runtime, "declaration": "declare", "rationale": "rationale", "predecessor_job_ids": [1, 2], "topology_digest": "t", "qualification_id": 3, "qualification_digest": "q" * 64, "specification_digest": "a" * 64, "requested_formats": ["docx", "html"], "rendering_profile": "internal", "template_version": "v1", "publication_engine_version": "v1"}
+        self.conn.execute("INSERT INTO stage77_custody_v2_mandates(id,report_id,report_version_id,predecessor_job_1_id,predecessor_job_2_id,purpose,mandate_json,mandate_digest,idempotency_key,state,actor,declaration,rationale,created_at) VALUES('m',1,1,1,2,? ,?,'d','k','attested','admin','declare','rationale','now')", (jobs.CUSTODY_V2_PURPOSE, jobs._canonical_v2(payload).decode()))
+        self.conn.execute("INSERT INTO stage77_custody_evidence_sets(id,mandate_id,report_id,report_version_id,job1_id,job2_id,runtime_json,payload_json,payload_digest,idempotency_key,state,created_at) VALUES('e','m',1,1,1,2,?,'{}',?,'evidence-key','registered','now')", (jobs._canonical_v2(runtime).decode(), "f" * 64))
+        self.conn.execute("INSERT INTO stage77_custody_v2_attestations(id,mandate_id,report_id,report_version_id,envelope_json,envelope_digest,signature_b64,key_id,key_fingerprint,evidence_set_id,evidence_set_digest,state,created_at) VALUES('a','m',1,1,'{}','e','s','key','f','e',?,'verified','now')", ("f" * 64,))
+        report = {"id": 1, "lifecycle_status": "validation_failed", "versions": [{"id": 1, "specification": {"requested_formats": ["docx", "html"]}}]}
+        environment = {jobs.CUSTODY_V2_ENABLE_ENV: "1", "RAILWAY_PROJECT_ID": runtime["project_id"], "RAILWAY_SERVICE_ID": runtime["service_id"], "RAILWAY_ENVIRONMENT_ID": runtime["environment_id"], "RAILWAY_DEPLOYMENT_ID": runtime["deployment_id"], "RAILWAY_GIT_COMMIT_SHA": runtime["git_commit_sha"]}
+        qualification = {"id": 3, "digest": "q" * 64}
+        with patch.dict(os.environ, environment, clear=False), patch.object(jobs.reports, "get_report", return_value=report), patch.object(jobs.reports, "specification_digest", return_value="a" * 64), patch.object(jobs, "_post_correction_topology", return_value=({"id": 1}, {"id": 2}, "t")), patch("api.governed_report_qualifications.latest_final", return_value=qualification):
+            item = jobs.consume_custody_v2_attestation(self.conn, attestation_id="a", actor="admin", declaration="declare", rationale="rationale", idempotency_key="once")
+            replay = jobs.consume_custody_v2_attestation(self.conn, attestation_id="a", actor="admin", declaration="declare", rationale="rationale", idempotency_key="once")
+        self.assertEqual(item["id"], replay["id"])
+        self.assertEqual(item["governed_action"], jobs.POST_CORRECTION_ACTION)
+        self.assertIsNone(item["retry_of_job_id"])
+        self.assertEqual(self.conn.execute("SELECT state,consumed_job_id FROM stage77_custody_v2_attestations WHERE id='a'").fetchone()[0], "consumed")
+        self.assertEqual(self.conn.execute("SELECT state,consumed_job_id FROM stage77_custody_evidence_sets WHERE id='e'").fetchone()[0], "consumed")
+
+    def test_v2_consumption_rejects_missing_invalidated_expired_substituted_or_consumed_evidence(self):
+        source = (Path(__file__).parents[1] / "api" / "governed_report_jobs.py").read_text(encoding="utf-8")
+        boundary = source[source.index("def consume_custody_v2_attestation"):source.index("def _post_correction_authorization_payload")]
+        self.assertIn("evidence_set_id", boundary)
+        self.assertIn("payload_digest", boundary)
+        self.assertIn("state='registered'", boundary)
+        self.assertIn("UPDATE stage77_custody_evidence_sets SET state='consumed'", boundary)
+        self.assertIn('"stage77-v2-" + idempotency_key, None, "v2:" + attestation_id', boundary)
+
+    def test_v2_terminal_failure_preserves_consumed_evidence_binding(self):
+        source = (Path(__file__).parents[1] / "api" / "governed_report_jobs.py").read_text(encoding="utf-8")
+        self.assertIn("evidence_set_id", source)
+        self.assertIn("evidence_set_digest", source)
+        self.assertIn("attestation_failed_terminal", source)
+        self.assertIn("stage77_custody_v2_attestation_authority_immutable", source)
+
+    def test_v2_authority_fields_and_terminal_states_are_database_guarded(self):
+        self.conn.execute("PRAGMA foreign_keys=ON")
+        jobs.ensure_custody_v2_tables(self.conn)
+        self.conn.execute("INSERT INTO record_governed_reports(id,lifecycle_status) VALUES(1,'validation_failed')")
+        self.conn.execute("INSERT INTO record_governed_report_versions(id,report_id) VALUES(1,1)")
+        self.conn.execute("INSERT INTO stage77_report_jobs(id,report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,max_attempts,next_eligible_at,idempotency_key,schema_version) VALUES(1,1,1,'a','[]','p','t','e','admin','failed','now','failed_terminal',1,'now','j1','v')")
+        self.conn.execute("INSERT INTO stage77_report_jobs(id,report_id,report_version_id,specification_digest,requested_formats_json,rendering_profile,template_version,publication_engine_version,requesting_actor,governed_action,requested_at,state,max_attempts,next_eligible_at,idempotency_key,schema_version) VALUES(2,1,1,'a','[]','p','t','e','admin','diagnostic_retry','now','failed_terminal',1,'now','j2','v')")
+        self.conn.execute("INSERT INTO stage77_custody_v2_mandates VALUES('m',1,1,1,2,'post_correction_generation','{}','d','k','created','a','d','r','n')")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, 'mandate_immutable'):
+            self.conn.execute("UPDATE stage77_custody_v2_mandates SET mandate_digest='changed' WHERE id='m'")
+        self.conn.execute("UPDATE stage77_custody_v2_mandates SET state='attested' WHERE id='m'")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, 'transition_invalid'):
+            self.conn.execute("UPDATE stage77_custody_v2_mandates SET state='created' WHERE id='m'")
+        self.conn.execute("INSERT INTO stage77_custody_v2_attestations(id,mandate_id,report_id,report_version_id,envelope_json,envelope_digest,signature_b64,key_id,key_fingerprint,evidence_set_id,evidence_set_digest,state,created_at) VALUES('a','m',1,1,'{}','e','s','key','f','e','f','verified','n')")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, 'attestation_immutable'):
+            self.conn.execute("UPDATE stage77_custody_v2_attestations SET signature_b64='other' WHERE id='a'")
+        with self.assertRaisesRegex(sqlite3.IntegrityError, 'transition_invalid'):
+            self.conn.execute("UPDATE stage77_custody_v2_attestations SET state='verified' WHERE id='a'")
 
     def test_custody_attestation_contract_is_distinct_and_finalized(self):
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(stage77_post_correction_custody_attestations)")}

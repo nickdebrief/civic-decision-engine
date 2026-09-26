@@ -3,6 +3,9 @@ import tempfile
 import threading
 import time
 import unittest
+import os
+import base64
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -347,6 +350,115 @@ class Stage77SupervisorContractTests(unittest.TestCase):
         self.assertIn("SIGTERM", supervisor)
         self.assertIn("stage77_supervisor=drain_start", supervisor)
         self.assertIn("governed_report_worker", supervisor)
+
+
+class Stage77CustodyV2ContractTests(unittest.TestCase):
+    # TEST ONLY — NOT PRODUCTION AUTHORITY (RFC 8032 test key one).
+    _SEED = bytes.fromhex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+
+    def _payload(self):
+        value = {"schema": jobs.CUSTODY_V2_SCHEMA, "key_id": "test-ed25519-rfc8032-1", "mandate_id": "mandate-1", "mandate_digest": "a" * 64, "report_id": 1, "report_version_id": 1, "predecessor_job_ids": [1, 2], "purpose": jobs.CUSTODY_V2_PURPOSE, "runtime": {"project_id": "11111111-1111-1111-1111-111111111111", "service_id": "22222222-2222-2222-2222-222222222222", "environment_id": "33333333-3333-3333-3333-333333333333", "deployment_id": "44444444-4444-4444-4444-444444444444", "git_commit_sha": "b" * 40}, "capture_started_at": "2026-09-13T00:00:00Z", "capture_completed_at": "2026-09-13T00:00:01Z", "fence_result": True, "database": {"device": 1, "inode": 2, "size": 3, "mtime_ns": 4, "sha256": "c" * 64}, "checkpoint_result": True, "wal_result": True, "shm_result": True, "open_handle_result": True, "artifact_inventory_digest": "d" * 64, "points_1_5_digest": "e" * 64, "archive": {"id": "archive-1", "sha256": "f" * 64}, "encryption_profile": "aes256-gcm-v1", "encrypted_export": {"id": "export-1", "sha256": "1" * 64}, "transport": True, "receipt": {"id": "receipt-1", "sha256": "2" * 64}, "recovery_verification": {"id": "recovery-1", "sha256": "3" * 64}, "post_transport_verification": True, "created_at": "2026-09-13T00:00:02Z", "evidence_set_id": "evidence-1", "evidence_set_digest": "4" * 64}
+        value["canonical_payload_digest"] = hashlib.sha256(jobs._canonical_v2(value)).hexdigest()
+        return value
+
+    def _recording_fixture(self):
+        conn = sqlite3.connect(":memory:"); conn.row_factory = sqlite3.Row
+        jobs.ensure_custody_v2_tables(conn)
+        payload = self._payload()
+        mandate = {"report_id": 1, "report_version_id": 1, "purpose": jobs.CUSTODY_V2_PURPOSE, "predecessor_job_ids": [1, 2], "runtime": payload["runtime"]}
+        conn.execute("INSERT INTO stage77_custody_v2_mandates(id,report_id,report_version_id,predecessor_job_1_id,predecessor_job_2_id,purpose,mandate_json,mandate_digest,idempotency_key,state,actor,declaration,rationale,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ("mandate-1", 1, 1, 1, 2, jobs.CUSTODY_V2_PURPOSE, jobs._canonical_v2(mandate).decode(), "a" * 64, "mandate-key", "created", "admin", "d", "r", "now"))
+        conn.execute("INSERT INTO stage77_custody_evidence_sets(id,mandate_id,report_id,report_version_id,job1_id,job2_id,runtime_json,payload_json,payload_digest,idempotency_key,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", ("evidence-1", "mandate-1", 1, 1, 1, 2, jobs._canonical_v2(payload["runtime"]).decode(), "{}", "4" * 64, "evidence-key", "registered", "now"))
+        return conn, payload
+
+    def test_evidence_binding_is_required_and_covered_by_the_role_a_signature(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        payload = self._payload()
+        private = Ed25519PrivateKey.from_private_bytes(self._SEED)
+        signature = private.sign(jobs.CUSTODY_V2_DOMAIN + jobs._canonical_v2(payload))
+        for field, value in (("evidence_set_id", None), ("evidence_set_digest", None), ("evidence_set_id", "bad/path"), ("evidence_set_digest", "0" * 63)):
+            with self.subTest(field=field, value=value):
+                mutated = dict(payload); mutated[field] = value
+                if value is not None:
+                    mutated["canonical_payload_digest"] = hashlib.sha256(jobs._canonical_v2({key: item for key, item in mutated.items() if key != "canonical_payload_digest"})).hexdigest()
+                with self.assertRaises(ValueError): jobs._v2_validate_payload(mutated)
+        changed = dict(payload); changed["evidence_set_digest"] = "0" * 64
+        with self.assertRaises(Exception): private.public_key().verify(signature, jobs.CUSTODY_V2_DOMAIN + jobs._canonical_v2(changed))
+
+    def test_record_v2_attestation_requires_matching_registered_evidence_and_persists_it_immutably(self):
+        conn, payload = self._recording_fixture()
+        try:
+            raw = jobs._canonical_v2({"payload": payload, "signature": "test"}).decode()
+            with patch.object(jobs, "_v2_verify_envelope", return_value=(payload, "test", "fingerprint")), patch.object(jobs, "custody_v2_runtime_authority", return_value=payload["runtime"]):
+                row = jobs.record_custody_v2_envelope(conn, envelope_json=raw, actor="admin")
+            self.assertEqual((row["evidence_set_id"], row["evidence_set_digest"]), ("evidence-1", "4" * 64))
+            with self.assertRaises(sqlite3.DatabaseError): conn.execute("UPDATE stage77_custody_v2_attestations SET evidence_set_id='other' WHERE id=?", (row["id"],))
+            with self.assertRaises(sqlite3.DatabaseError): conn.execute("UPDATE stage77_custody_v2_attestations SET evidence_set_digest=? WHERE id=?", ("0" * 64, row["id"]))
+        finally:
+            conn.close()
+
+    def test_missing_substituted_or_nonregistered_evidence_cannot_be_replaced_by_an_envelope_claim(self):
+        for state in ("missing", "invalidated", "expired", "consumed"):
+            with self.subTest(state=state):
+                conn, payload = self._recording_fixture()
+                try:
+                    if state == "missing": payload = {**payload, "evidence_set_id": "missing-evidence"}
+                    else: conn.execute("UPDATE stage77_custody_evidence_sets SET state=?", (state,))
+                    raw = jobs._canonical_v2({"payload": payload, "signature": "test"}).decode()
+                    with patch.object(jobs, "_v2_verify_envelope", return_value=(payload, "test", "fingerprint")), patch.object(jobs, "custody_v2_runtime_authority", return_value=payload["runtime"]):
+                        with self.assertRaisesRegex(ValueError, "custody_evidence_unavailable"):
+                            jobs.record_custody_v2_envelope(conn, envelope_json=raw, actor="admin")
+                finally:
+                    conn.close()
+
+    def test_v2_attestation_binding_replay_requires_identical_authority_and_conflicts_fail(self):
+        conn, payload = self._recording_fixture()
+        try:
+            raw = jobs._canonical_v2({"payload": payload, "signature": "test"}).decode()
+            with patch.object(jobs, "_v2_verify_envelope", return_value=(payload, "test", "fingerprint")), patch.object(jobs, "custody_v2_runtime_authority", return_value=payload["runtime"]):
+                first = jobs.record_custody_v2_envelope(conn, envelope_json=raw, actor="admin")
+                replay = jobs.record_custody_v2_envelope(conn, envelope_json=raw, actor="admin")
+                self.assertEqual(replay["id"], first["id"])
+                changed = dict(payload); changed["evidence_set_digest"] = "0" * 64
+                with patch.object(jobs, "_v2_verify_envelope", return_value=(changed, "test", "fingerprint")):
+                    with self.assertRaises(ValueError): jobs.record_custody_v2_envelope(conn, envelope_json=raw, actor="admin")
+            self.assertEqual(first["state"], "verified")
+        finally:
+            conn.close()
+
+    def test_full_public_vector_verifies_and_mutations_fail_closed(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        private = Ed25519PrivateKey.from_private_bytes(self._SEED)
+        public = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        self.assertEqual(hashlib.sha256(public).hexdigest(), "21fe31dfa154a261626bf854046fd2271b7bed4b6abe45aa58877ef47f9721b9")
+        payload = self._payload()
+        signature = private.sign(jobs.CUSTODY_V2_DOMAIN + jobs._canonical_v2(payload))
+        envelope = {"payload": payload, "signature": base64.b64encode(signature).decode("ascii")}
+        raw = jobs._canonical_v2(envelope).decode("utf-8")
+        keyring = {"keys": [{"id": payload["key_id"], "public_key_b64": base64.b64encode(public).decode("ascii"), "fingerprint": hashlib.sha256(public).hexdigest(), "state": "active"}]}
+        environment = {jobs.CUSTODY_V2_ENABLE_ENV: "1", jobs.CUSTODY_V2_KEYRING_ENV: jobs._canonical_v2(keyring).decode("utf-8")}
+        with patch.dict(os.environ, environment, clear=False):
+            verified, _, _ = jobs._v2_verify_envelope(raw)
+            self.assertEqual(verified, payload)
+            envelope["payload"]["archive"]["sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                jobs._v2_verify_envelope(jobs._canonical_v2(envelope).decode("utf-8"))
+
+    def test_disabled_pre_activation_fails_closed_without_a_keyring(self):
+        with patch.dict(os.environ, {jobs.CUSTODY_V2_ENABLE_ENV: ""}, clear=False):
+            with self.assertRaisesRegex(ValueError, "stage77_custody_v2_disabled"):
+                jobs.custody_v2_runtime_authority()
+
+    def test_additive_v2_ledger_has_single_use_authority_boundary(self):
+        conn = sqlite3.connect(":memory:")
+        try:
+            jobs.ensure_custody_v2_tables(conn)
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertTrue({"stage77_custody_v2_mandates", "stage77_custody_v2_attestations", "stage77_custody_v2_events"} <= tables)
+            states = {row[1] for row in conn.execute("PRAGMA table_info(stage77_custody_v2_attestations)")}
+            self.assertIn("consumed_job_id", states)
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

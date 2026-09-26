@@ -141,6 +141,67 @@ def digest_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def verify_v2_custody_authority_snapshot(snapshot: Mapping[str, Any]) -> None:
+    """Fail closed recovery check for persisted v2 authority references.
+
+    Recovery deliberately does not convert the historical v1 tuple into v2.
+    The job module performs signature verification; this boundary checks that a
+    recovered snapshot has the paired immutable authority and one exact binding.
+    """
+    required = {"mandate", "attestation", "evidence_set", "evidence_objects", "events", "post_correction_job_id"}
+    if not isinstance(snapshot, Mapping) or set(snapshot) != required:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    mandate, attestation, evidence = snapshot["mandate"], snapshot["attestation"], snapshot["evidence_set"]
+    if not isinstance(mandate, Mapping) or not isinstance(attestation, Mapping) or not isinstance(evidence, Mapping) or not isinstance(snapshot["events"], list) or not isinstance(snapshot["evidence_objects"], list):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if mandate.get("state") not in {"attested", "consumed"} or attestation.get("state") not in {"verified", "consumed"}:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if mandate.get("id") != attestation.get("mandate_id") or mandate.get("report_id") != attestation.get("report_id") or mandate.get("report_version_id") != attestation.get("report_version_id"):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if evidence.get("id") != attestation.get("evidence_set_id") or evidence.get("payload_digest") != attestation.get("evidence_set_digest"):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if evidence.get("mandate_id") != mandate.get("id") or evidence.get("report_id") != mandate.get("report_id") or evidence.get("report_version_id") != mandate.get("report_version_id"):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    from api.governed_custody_evidence import ROLES, canonical, digest, strict_json
+    payload = strict_json(str(evidence.get("payload_json", "")))
+    if payload.get("payload_digest") != evidence.get("payload_digest") or digest(payload) != evidence.get("payload_digest"):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    required_payload = {"id", "mandate_id", "report_id", "report_version_id", "job1_id", "job2_id", "runtime", "authority", "facts", "objects", "idempotency_key", "payload_digest"}
+    if set(payload) != required_payload:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if (payload["id"], payload["mandate_id"], payload["report_id"], payload["report_version_id"], payload["job1_id"], payload["job2_id"]) != (evidence.get("id"), mandate.get("id"), mandate.get("report_id"), mandate.get("report_version_id"), mandate.get("predecessor_job_1_id"), mandate.get("predecessor_job_2_id")):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if (evidence.get("job1_id"), evidence.get("job2_id")) != (payload["job1_id"], payload["job2_id"]):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    try:
+        runtime = strict_json(str(evidence.get("runtime_json", "")))
+    except ValueError:
+        raise ValueError("stage77_custody_v2_recovery_invalid") from None
+    if payload["runtime"] != runtime or mandate.get("runtime") != runtime:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    object_fields = {"role", "object_id", "sha256", "size_bytes", "media_type"}
+    objects = snapshot["evidence_objects"]
+    if any(not isinstance(item, Mapping) or not object_fields <= set(item) for item in objects):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    projected_objects = [{field: item[field] for field in sorted(object_fields)} for item in objects]
+    if {item["role"] for item in projected_objects} != set(ROLES) or len(projected_objects) != len(ROLES):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if canonical(sorted(projected_objects, key=lambda item: item["role"])) != canonical(sorted(payload["objects"], key=lambda item: item["role"])):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if not isinstance(payload["facts"], Mapping) or set(payload["facts"]) != {"database", "checkpoint_wal_shm", "points_1_5", "archive_export", "receipt", "recovery_verification", "artifact_inventory"}:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if evidence.get("state") not in {"registered", "consumed"}:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    consumed = evidence.get("state") == "consumed"
+    if consumed != (attestation.get("state") == "consumed") or consumed != (mandate.get("state") == "consumed"):
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+    if consumed:
+        if snapshot["post_correction_job_id"] is None or attestation.get("consumed_job_id") != snapshot["post_correction_job_id"] or evidence.get("consumed_job_id") != snapshot["post_correction_job_id"]:
+            raise ValueError("stage77_custody_v2_recovery_invalid")
+    elif snapshot["post_correction_job_id"] is not None or attestation.get("consumed_job_id") is not None or evidence.get("consumed_job_id") is not None:
+        raise ValueError("stage77_custody_v2_recovery_invalid")
+
+
 def _code(exc: BaseException) -> str:
     text = str(exc).lower()
     if text in BOUNDED_FAILURE_CODES:

@@ -273,3 +273,56 @@ appended after the validated snapshot and is not required inside its own
 snapshot. This avoids the impossible cycle of storing a database digest inside
 the final bytes used to compute that digest; later snapshots preserve prior
 finalized evidence rows.
+## V2 controller-owned custody-evidence registry (unintegrated)
+
+The historical Stage 77 v1 custody tuple remains immutable legacy evidence and
+cannot authorize a fresh operation. The v2 candidate introduces a separate
+controller-owned evidence registry: an offline controller capture produces the
+governed source package; `prepare-evidence-store --evidence-set-id <id>` copies
+the fixed verified role inventory into restrictive private storage; and an
+authenticated administrator requests registration using only the evidence-set
+ID and persisted mandate/report/version selectors.
+
+`scripts/capture_stage77_custody_evidence.py verify-source --evidence-set-id
+<id>` verifies that fixed private source layout before preparation. It is
+offline-only and cannot initiate capture, registration, attestation, or jobs.
+
+The registrar independently reads and re-hashes retained bytes, checks the
+closed role inventory, validates database capture and checkpoint/WAL/SHM facts,
+archive/export, receipt, recovery-verification, Points 1–5, artifact inventory,
+preserved Jobs 1→2 topology, mandate/report/version/qualification authority,
+and the current Railway project, service, environment, deployment, and Git
+revision. It then records an immutable canonical evidence-set digest. A signed
+Role A envelope is necessary to authenticate the controller envelope, but is
+not factual corroboration: it must bind the exact registered evidence-set ID
+and digest. The earlier separate Role B signing proposal is prospectively
+superseded by this direct retained-byte and immutable-registration boundary.
+
+The fixed retained roles are `database_capture`, `database_digest`,
+`checkpoint_wal_shm`, `custody_points_1_5`, `archive_export`, `receipt`,
+`recovery_verification`, `runtime_authority`, and `artifact_inventory`. Source
+and store roots are controller configuration only:
+`CDE_STAGE77_CUSTODY_CAPTURE_SOURCE_ROOT` and
+`CDE_STAGE77_CUSTODY_EVIDENCE_V1_STORE_ROOT`. They must be private absolute
+non-symlink directories. The preparation tool rejects arbitrary paths, role
+mappings, missing/duplicate/unsafe objects, and non-byte-identical existing
+destinations; it publishes only after private temporary-directory verification
+and atomic rename. Its output is bounded to identity, manifest digest, role
+count, and completion status.
+
+V2 remains disabled unless `CDE_STAGE77_CUSTODY_V2_ENABLED=1`, a canonical
+`CDE_STAGE77_CUSTODY_V2_KEYRING`, both controller store roots, and all five
+runtime values (`RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE_ID`,
+`RAILWAY_ENVIRONMENT_ID`, `RAILWAY_DEPLOYMENT_ID`, and
+`RAILWAY_GIT_COMMIT_SHA`) are complete and valid. There is no v1 or test-key
+fallback. A matching verified attestation, its evidence set, and one newly
+allocated non-retry job are consumed atomically; downstream failure does not
+restore the authority. Jobs 1 and 2 remain unchanged. Recovery verifies the
+same immutable chain without reactivation. Generation creates no Stage 78E
+review or eligibility, Stage 79 publication, sitemap, or notification
+authority.
+
+This candidate is not integrated or deployed. Focused validation, governed
+full-suite validation, canonical integration, controller configuration, and
+separately authorized production operation remain required. This release note
+does not claim that behavioral validation or deployment has occurred.
