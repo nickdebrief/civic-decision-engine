@@ -78,6 +78,7 @@ from api import record_document_association_corrections as rdc
 from api import record_pattern_observations as rpo
 from api import governed_report_jobs as rg77
 from api import governed_report_recovery as rg77r
+from api import governed_custody_evidence as custody_evidence
 from api import governed_report_qualifications as rg75q
 from api import record_governed_inferences as rgi
 from api import record_governed_allegations as rga
@@ -54867,11 +54868,14 @@ def _stage75_html(*, session: dict[str, Any], reports: list[dict[str, Any]], can
             for item in detail.get("job_attempts", [])
         ) or '<tr><td colspan="10">No governed job attempts recorded.</td></tr>'
         attempts_html = f'<section class="panel"><h3>Generation attempts — internal only</h3><p>Attempts are preserved historical authority. A failed attempt is not erased or overwritten. Missing bounded diagnostic authority is shown as Unavailable.</p><div class="table-wrap"><table><thead><tr><th>Job / attempt</th><th>Report / version</th><th>Predecessor / successor</th><th>State</th><th>Requested formats</th><th>Requested / started / terminal</th><th>Failure phase</th><th>Failure code</th><th>Diagnostic authority</th><th>Frozen authority</th></tr></thead><tbody>{attempt_rows}</tbody></table></div></section>'
+        v2_enabled = os.environ.get(rg77.CUSTODY_V2_ENABLE_ENV, "") == "1"
+        v2_status = "enabled; controller keyring and Railway runtime authority are required" if v2_enabled else "disabled pending separately authorized controller configuration"
+        custody_v2_html = f'<section class="panel"><h3>V2 custody authority — internal only</h3><p><strong>State:</strong> {escape(v2_status)}.</p><p>V1 custody evidence is closed historical authority and cannot authorize new work. V2 mandates, signed envelopes, attestations and consumption remain private, deliberate, and are not publication authority.</p></section>'
         review_rows = "".join(f'<tr><td>{int(item["id"])}</td><td>{int(item["report_version_id"])}</td><td>{int(item["governed_job_id"])} / {int(item["governed_attempt_count"])}</td><td><code>{escape(str(item["artifact_set_digest"]))}</code></td><td>{escape(str(item["privacy_redaction_status"]))}</td><td>{escape(str(item["eligibility_outcome"] or item["lifecycle_status"]))}</td><td>{escape(str(item["created_by"]))} · {escape(str(item["created_at"]))}</td></tr>' for item in detail.get("publication_review_details", [])) or '<tr><td colspan="7">No publication review authority recorded.</td></tr>'
         review_history = "".join(f'<li>Review {int(review["id"])} · {escape(str(event["event_type"]))} · {escape(str(event["actor"]))} · {escape(str(event["occurred_at"]))} · {escape(str(event["rationale"]))}</li>' for review in detail.get("publication_review_details", []) for event in review.get("events", [])) or '<li>No publication-review events.</li>'
         review_artifacts = "".join(f'<li>Review {int(review["id"])}: ' + "; ".join(f'{escape(str(item["artifact_id"]))} · {escape(str(item["format"]))} · <code>{escape(str(item["sha256"]))}</code> · {int(item["size_bytes"])} bytes' for item in review.get("artifacts", [])) + '</li>' for review in detail.get("publication_review_details", [])) or '<li>No frozen artifact set.</li>'
         review_html = f'<section class="panel"><h3>Publication eligibility review — internal only</h3><p><strong>Registered does not mean eligible for publication.</strong><br><strong>Eligible for publication does not mean published.</strong></p><div class="table-wrap"><table><thead><tr><th>Review</th><th>Version</th><th>Job / attempt</th><th>Frozen artifact-set digest</th><th>Privacy/redaction</th><th>Eligibility/current status</th><th>Actor / timestamp</th></tr></thead><tbody>{review_rows}</tbody></table></div><h4>Frozen registered artifacts</h4><ul>{review_artifacts}</ul><h4>Append-only review history</h4><ul>{review_history}</ul></section>'
-        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul>{attempts_html}{review_html}<div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
+        detail_html = f'<section class="panel"><h2>Report {int(detail["id"])}</h2><p><strong>Lifecycle:</strong> {escape(detail["lifecycle_status"])}. A report presents the record; it does not replace it.</p><p><strong>Specification digest:</strong> <code>{escape(detail["versions"][-1]["specification_digest"])}</code></p><h3>Recorded sequence</h3><ol>{events}</ol><h3>Qualification history</h3><ul>{qualification_history}</ul><h3>Artifacts</h3><ul>{artifacts}</ul>{attempts_html}{custody_v2_html}{review_html}<div class="actions">{_stage75_transition_forms(detail, session=session, diagnostic_retry=diagnostic_retry, post_correction=post_correction, custody_attestation=custody_attestation)}</div></section>'
     record_options = '<option value="" selected disabled>Choose a Canonical Record</option>' + records
     document_options = '<option value="" disabled>Choose Published Documents (optional)</option>' + documents
     association_options = '<option value="" disabled>Choose record–document associations (optional)</option>' + associations
@@ -55050,6 +55054,113 @@ async def admin_governed_report_job_diagnostic_retry(job_id: str, request: Reque
         if conn is not None:
             conn.close()
     return admin_governed_report_detail(str(item["report_id"]), request)
+
+
+_CUSTODY_REGISTRAR_FORM_PURPOSE = "stage77_custody_evidence_registration_v1"
+_CUSTODY_REGISTRAR_FORM_MAX_AGE_SECONDS = 900
+_CUSTODY_REGISTRAR_PATH = "/admin/governed-reports/custody-evidence/register"
+_CUSTODY_REGISTRAR_API_PATH = "/api/admin/session/governed-reports/custody-evidence/register"
+
+
+def _custody_registrar_headers() -> dict[str, str]:
+    return {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+
+
+def _custody_registrar_token(session: Mapping[str, Any], *, now: int | None = None) -> str:
+    secret = _session_secret()
+    if not secret:
+        raise _http_error(401, "admin_session_unauthorized")
+    issued_at = int(now if now is not None else time.time())
+    payload = {
+        "purpose": _CUSTODY_REGISTRAR_FORM_PURPOSE, "version": 1,
+        "actor": _admin_session_actor(dict(session)), "issued_at": issued_at,
+        "expires_at": issued_at + _CUSTODY_REGISTRAR_FORM_MAX_AGE_SECONDS,
+    }
+    encoded = _b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    return f"{encoded}.{_sign(encoded, secret)}"
+
+
+def _verify_custody_registrar_token(token: str, session: Mapping[str, Any], *, now: int | None = None) -> None:
+    secret = _session_secret()
+    if not secret:
+        raise ValueError("stage77_custody_evidence_registrar_csrf_invalid")
+    try:
+        encoded, signature = str(token or "").split(".", 1)
+        raw = _b64decode(encoded).decode("utf-8")
+        payload = json.loads(raw)
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("stage77_custody_evidence_registrar_csrf_invalid") from None
+    allowed = {"purpose", "version", "actor", "issued_at", "expires_at"}
+    if (not hmac.compare_digest(_sign(encoded, secret), signature) or not isinstance(payload, dict)
+            or set(payload) != allowed or payload.get("purpose") != _CUSTODY_REGISTRAR_FORM_PURPOSE
+            or payload.get("version") != 1 or payload.get("actor") != _admin_session_actor(dict(session))
+            or not isinstance(payload.get("issued_at"), int) or not isinstance(payload.get("expires_at"), int)):
+        raise ValueError("stage77_custody_evidence_registrar_csrf_invalid")
+    current = int(now if now is not None else time.time())
+    if payload["expires_at"] <= current or payload["expires_at"] - payload["issued_at"] != _CUSTODY_REGISTRAR_FORM_MAX_AGE_SECONDS:
+        raise ValueError("stage77_custody_evidence_registrar_csrf_invalid")
+
+
+def _custody_registrar_page(session: Mapping[str, Any], *, receipt: Mapping[str, Any] | None = None, error: bool = False) -> str:
+    if error:
+        body = '<p class="error">The request could not be completed.</p><p><a href="/admin/governed-reports/custody-evidence/register">Return to the private registrar form</a></p>'
+    elif receipt is None:
+        body = f'''<p>This private operation verifies only controller-owned retained evidence. It does not attest, consume authority, allocate a job, generate a report, or change publication status.</p><form method="post" action="{_CUSTODY_REGISTRAR_API_PATH}"><input type="hidden" name="csrf_token" value="{escape(_custody_registrar_token(session))}"><label>Evidence-set ID<input name="evidence_set_id" required maxlength="256" autocomplete="off"></label><label>Mandate ID<input name="mandate_id" required maxlength="256" autocomplete="off"></label><label>Report ID<input name="report_id" required inputmode="numeric"></label><label>Report-version ID<input name="report_version_id" required inputmode="numeric"></label><button type="submit">Verify and register controller evidence</button></form>'''
+    else:
+        allowed = ("id", "payload_digest", "state", "mandate_id", "report_id", "report_version_id", "created_at")
+        labels = {"id": "Evidence-set ID", "payload_digest": "Canonical digest", "state": "Lifecycle state", "mandate_id": "Mandate ID", "report_id": "Report ID", "report_version_id": "Report-version ID", "created_at": "Registered at"}
+        rows = "".join(f"<tr><th>{labels[key]}</th><td><code>{escape(str(receipt.get(key, '')))}</code></td></tr>" for key in allowed)
+        body = f"<p>Controller-owned evidence was registered. This does not create an attestation, consume authority, allocate a job, or authorize review or publication.</p><table><tbody>{rows}</tbody></table>"
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Private custody evidence registrar</title><style>body{{font-family:system-ui,sans-serif;background:#f4f3ef;color:#222}}main{{max-width:760px;margin:32px auto;background:#fff;padding:24px}}form{{display:grid;gap:12px}}label{{display:grid;gap:5px}}input{{padding:9px}}button{{width:max-content;padding:10px 14px}}table{{border-collapse:collapse;width:100%}}th,td{{padding:9px;border:1px solid #ddd;text-align:left;overflow-wrap:anywhere}}th{{width:35%;background:#faf9f5}}.error{{padding:12px;background:#fee2e2;color:#991b1b}}code{{overflow-wrap:anywhere}}</style></head><body><main>{_render_admin_console_navigation(admin_session=dict(session))}<h1>Controller-owned custody evidence registrar</h1>{body}</main></body></html>'''
+
+
+@router.get(_CUSTODY_REGISTRAR_PATH, response_class=HTMLResponse)
+def admin_custody_evidence_registrar_form(request: Request):
+    try:
+        session = require_admin_session(request)
+        _admin_session_role(session)
+    except HTTPException:
+        return HTMLResponse("<p>Authentication is required.</p>", status_code=401, headers=_custody_registrar_headers())
+    return HTMLResponse(content=_custody_registrar_page(session), headers=_custody_registrar_headers())
+
+
+@router.post(_CUSTODY_REGISTRAR_API_PATH, response_class=HTMLResponse)
+async def admin_custody_evidence_registrar_register(request: Request):
+    try:
+        session = require_admin_session(request)
+        _admin_session_role(session)
+    except HTTPException:
+        return HTMLResponse("<p>Authentication is required.</p>", status_code=401, headers=_custody_registrar_headers())
+    form = await request.form()
+    items = list(form.multi_items())
+    allowed = {"csrf_token", "evidence_set_id", "mandate_id", "report_id", "report_version_id"}
+    names = [str(name) for name, _value in items]
+    if set(names) != allowed or len(names) != len(set(names)):
+        return HTMLResponse(_custody_registrar_page(session, error=True), status_code=400, headers=_custody_registrar_headers())
+    values = {str(name): str(value) for name, value in items}
+    try:
+        _verify_custody_registrar_token(values["csrf_token"], session)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", values["evidence_set_id"]) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}", values["mandate_id"]):
+            raise ValueError("stage77_custody_evidence_input_invalid")
+        if not all(re.fullmatch(r"[1-9][0-9]{0,18}", values[name]) for name in ("report_id", "report_version_id")):
+            raise ValueError("stage77_custody_evidence_input_invalid")
+        conn = get_db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            receipt = custody_evidence.register_from_store(
+                conn, evidence_set_id=values["evidence_set_id"], mandate_id=values["mandate_id"],
+                report_id=int(values["report_id"]), report_version_id=int(values["report_version_id"]),
+                actor=_admin_session_actor(session), occurred_at=rg77.utc_now(),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    except (ValueError, TypeError, sqlite3.Error):
+        return HTMLResponse(_custody_registrar_page(session, error=True), status_code=409, headers=_custody_registrar_headers())
+    return HTMLResponse(_custody_registrar_page(session, receipt=receipt), headers=_custody_registrar_headers())
 
 
 @router.post("/api/admin/session/governed-reports/{report_id}/custody-attestation", response_class=HTMLResponse)

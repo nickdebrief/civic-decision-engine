@@ -139,13 +139,19 @@ class GovernedSuiteTests(unittest.TestCase):
         transitioned = {
             "tests.test_canonical_public_origin": ("real_asgi", "unittest", 19),
             "tests.test_run_governed_test_suite": ("neutral", "unittest", 77),
-            "tests.test_stage78b_pathway_output_equivalence": ("neutral", "unittest", 128),
-            "tests.test_stage78e_governed_report_publication_review": ("neutral", "unittest", 131),
-            "tests.test_stage79_governed_report_publication": ("neutral", "unittest", 132),
+            "tests.test_stage77_custody_evidence": ("neutral", "unittest", 121),
+            "tests.test_stage78b_pathway_output_equivalence": ("neutral", "unittest", 129),
+            "tests.test_stage78e_governed_report_publication_review": ("neutral", "unittest", 132),
+            "tests.test_stage79_governed_report_publication": ("neutral", "unittest", 133),
         }
         entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
-        self.assertEqual(len(entries), 135)
-        self.assertEqual(len({entry.module for entry in entries}), 135)
+        self.assertEqual(len(entries), 136)
+        self.assertEqual(len({entry.module for entry in entries}), 136)
+        self.assertEqual(
+            {classification: sum(entry.classification == classification for entry in entries)
+             for classification in ("real_asgi", "legacy_fastapi_stub", "neutral")},
+            {"real_asgi": 1, "legacy_fastapi_stub": 78, "neutral": 57},
+        )
         self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
         self.assertEqual(runner.EXCLUDED_UNTRACKED_MODULES, frozenset())
         self.assertNotIn(
@@ -165,6 +171,7 @@ class GovernedSuiteTests(unittest.TestCase):
             ["git", "ls-files", "--", "tests"],
         )
         transitioned = {
+            "tests.test_stage77_custody_evidence",
             "tests.test_stage78b_pathway_output_equivalence",
             "tests.test_stage78e_governed_report_publication_review",
         }

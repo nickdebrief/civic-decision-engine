@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from api import governed_report_jobs as jobs
 from api import governed_report_recovery as recovery
+from api import governed_custody_evidence as custody_evidence
 from api import governed_report_qualifications as qualifications
 from api import record_governed_reports as reports
 from api import governed_report_publication_reviews as publication_reviews
@@ -26,6 +27,94 @@ import output_validation  # noqa: E402
 
 
 class Stage77RecoveryTests(unittest.TestCase):
+    def test_v2_recovery_contract_preserves_legacy_v1_without_backfill(self):
+        source = inspect.getsource(jobs.ensure_custody_v2_tables)
+        self.assertIn("stage77_custody_v2_mandates", source)
+        self.assertIn("stage77_custody_v2_attestations", source)
+        self.assertNotIn("ALTER TABLE stage77_post_correction_custody_attestations", source)
+
+    def test_v2_recovery_snapshot_rejects_cross_bound_authority(self):
+        with self.assertRaisesRegex(ValueError, "stage77_custody_v2_recovery_invalid"):
+            recovery.verify_v2_custody_authority_snapshot({"mandate": {"id": "m", "state": "attested", "report_id": 1, "report_version_id": 1}, "attestation": {"mandate_id": "other", "state": "verified", "report_id": 1, "report_version_id": 1}, "events": [], "post_correction_job_id": None})
+
+    def _v2_registry_snapshot(self, *, consumed=False):
+        runtime = {"project_id": "11111111-1111-1111-1111-111111111111", "service_id": "22222222-2222-2222-2222-222222222222", "environment_id": "33333333-3333-3333-3333-333333333333", "deployment_id": "44444444-4444-4444-4444-444444444444", "git_commit_sha": "a" * 40}
+        facts = {
+            "database": {"database_id": "database-1", "capture_digest": "1" * 64, "capture_completed_at": "2026-09-20T00:00:00Z"},
+            "checkpoint_wal_shm": {"database_id": "database-1", "checkpoint": "complete", "wal": "absent", "shm": "absent"},
+            "points_1_5": {"points_1_5_id": "points-1-5", "points_1_5_digest": "2" * 64},
+            "archive_export": {"archive_id": "archive-1", "archive_digest": "3" * 64, "export_id": "export-1", "export_digest": "4" * 64},
+            "receipt": {"receipt_id": "receipt-1", "receipt_digest": "5" * 64, "archive_digest": "3" * 64, "export_digest": "4" * 64},
+            "recovery_verification": {"recovery_verification_id": "recovery-1", "recovery_verification_digest": "6" * 64, "database_id": "database-1", "capture_digest": "1" * 64},
+            "artifact_inventory": {"artifact_inventory_id": "inventory-1", "artifact_inventory_digest": "7" * 64},
+        }
+        payload = {"id": "evidence-1", "mandate_id": "mandate-1", "report_id": 7, "report_version_id": 11, "job1_id": 41, "job2_id": 42, "runtime": runtime, "authority": {"specification_digest": "b" * 64, "qualification_id": 71, "qualification_digest": "c" * 64}, "facts": facts, "objects": [{"role": role, "object_id": "evidence-1:" + role, "sha256": hashlib.sha256(role.encode()).hexdigest(), "size_bytes": len(role), "media_type": "application/json"} for role in custody_evidence.ROLES], "idempotency_key": "registry-1"}
+        payload["payload_digest"] = custody_evidence.digest(payload)
+        job_id = 99 if consumed else None
+        return {
+            "mandate": {"id": "mandate-1", "state": "consumed" if consumed else "attested", "report_id": 7, "report_version_id": 11, "predecessor_job_1_id": 41, "predecessor_job_2_id": 42, "runtime": runtime},
+            "attestation": {"id": "attestation-1", "mandate_id": "mandate-1", "report_id": 7, "report_version_id": 11, "evidence_set_id": "evidence-1", "evidence_set_digest": payload["payload_digest"], "state": "consumed" if consumed else "verified", "consumed_job_id": job_id},
+            "evidence_set": {"id": "evidence-1", "mandate_id": "mandate-1", "report_id": 7, "report_version_id": 11, "job1_id": 41, "job2_id": 42, "runtime_json": custody_evidence.canonical(runtime).decode(), "payload_json": custody_evidence.canonical(payload).decode(), "payload_digest": payload["payload_digest"], "state": "consumed" if consumed else "registered", "consumed_job_id": job_id},
+            "evidence_objects": list(payload["objects"]), "events": [], "post_correction_job_id": job_id,
+        }
+
+    def test_v2_recovery_accepts_registered_and_lawfully_consumed_registry_chains(self):
+        self.assertIsNone(recovery.verify_v2_custody_authority_snapshot(self._v2_registry_snapshot()))
+        self.assertIsNone(recovery.verify_v2_custody_authority_snapshot(self._v2_registry_snapshot(consumed=True)))
+
+    def test_v2_recovery_requires_exact_evidence_identity_digest_roles_and_canonical_payload(self):
+        cases = (
+            ("missing-id", lambda s: s["attestation"].pop("evidence_set_id")),
+            ("substituted-id", lambda s: s["attestation"].update(evidence_set_id="other")),
+            ("digest", lambda s: s["attestation"].update(evidence_set_digest="0" * 64)),
+            ("role", lambda s: s.update(evidence_objects=s["evidence_objects"][:-1])),
+            ("payload", lambda s: s["evidence_set"].update(payload_json='{"payload_digest":"0"}')),
+            ("invalidated", lambda s: s["evidence_set"].update(state="invalidated")),
+            ("expired", lambda s: s["evidence_set"].update(state="expired")),
+        )
+        for name, mutate in cases:
+            with self.subTest(case=name):
+                snapshot = self._v2_registry_snapshot(); mutate(snapshot)
+                with self.assertRaisesRegex(ValueError, "stage77_custody_v2_recovery_invalid"):
+                    recovery.verify_v2_custody_authority_snapshot(snapshot)
+
+    def test_v2_recovery_rejects_cross_bound_mandate_report_version_jobs_and_runtime(self):
+        cases = (
+            ("mandate", lambda s: s["evidence_set"].update(mandate_id="other")),
+            ("report", lambda s: s["attestation"].update(report_id=8)),
+            ("version", lambda s: s["evidence_set"].update(report_version_id=12)),
+            ("job1", lambda s: s["evidence_set"].update(job1_id=99)),
+            ("runtime", lambda s: s["evidence_set"].update(runtime_json=custody_evidence.canonical({"deployment_id": "other"}).decode())),
+        )
+        for name, mutate in cases:
+            with self.subTest(case=name):
+                snapshot = self._v2_registry_snapshot(); mutate(snapshot)
+                with self.assertRaises(ValueError): recovery.verify_v2_custody_authority_snapshot(snapshot)
+
+    def test_v2_recovery_rejects_consumed_job_mismatch_and_cannot_reactivate_authority(self):
+        snapshot = self._v2_registry_snapshot(consumed=True); snapshot["evidence_set"]["consumed_job_id"] = 100
+        with self.assertRaisesRegex(ValueError, "stage77_custody_v2_recovery_invalid"):
+            recovery.verify_v2_custody_authority_snapshot(snapshot)
+        snapshot = self._v2_registry_snapshot(consumed=True); before = json.dumps(snapshot, sort_keys=True)
+        self.assertIsNone(recovery.verify_v2_custody_authority_snapshot(snapshot))
+        self.assertEqual(json.dumps(snapshot, sort_keys=True), before)
+        self.assertEqual(snapshot["evidence_set"]["state"], "consumed")
+
+    def test_v2_recovery_facts_cover_database_points_archive_receipt_recovery_and_inventory(self):
+        for name in ("database", "points_1_5", "archive_export", "receipt", "recovery_verification", "artifact_inventory"):
+            with self.subTest(binding=name):
+                snapshot = self._v2_registry_snapshot()
+                snapshot["evidence_set"]["payload_json"] = custody_evidence.canonical({"payload_digest": snapshot["evidence_set"]["payload_digest"], "facts": {name: {"substituted": True}}}).decode()
+                with self.assertRaisesRegex(ValueError, "stage77_custody_v2_recovery_invalid"):
+                    recovery.verify_v2_custody_authority_snapshot(snapshot)
+
+    def test_v2_recovery_returns_no_raw_evidence_paths_or_secrets(self):
+        snapshot = self._v2_registry_snapshot()
+        result = recovery.verify_v2_custody_authority_snapshot(snapshot)
+        self.assertIsNone(result)
+        self.assertNotIn("storage_reference", json.dumps(snapshot["attestation"], sort_keys=True))
+        self.assertNotIn("/", json.dumps(snapshot["attestation"], sort_keys=True))
+
     def test_stage78e_review_history_verifier_is_recovery_bound_and_fail_closed(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
