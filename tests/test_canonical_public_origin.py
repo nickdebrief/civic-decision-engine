@@ -158,6 +158,14 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                 self.assertEqual(body.count(b'rel="canonical"'), 1)
                 self.assertIn(b'https://civicdecisionengine.ie/"', body)
 
+    def test_root_has_no_historical_unconditional_google_analytics_loader(self):
+        start, body = self.asgi_get("/", "civicdecisionengine.ie")
+
+        self.assertEqual(start["status"], 200)
+        self.assertNotIn(b"googletagmanager.com/gtag/js", body)
+        self.assertNotIn(b'gtag("config"', body)
+        self.assertNotIn(b"G-8405RVT76Q", body)
+
     def test_indexnow_ownership_key_is_fixed_text_and_respects_host_policy(self):
         key = "199f69ef74214688b3aff215441ae226"
         path = f"/{key}.txt"
