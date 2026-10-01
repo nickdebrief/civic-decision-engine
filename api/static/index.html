@@ -1484,6 +1484,8 @@ button.record-btn.copy-ok {
         btn.classList.toggle("active", btn.dataset.lang === currentLang);
       });
 
+      document.dispatchEvent(new CustomEvent("cde-i18n-applied"));
+
       trackEvent("cde_language_change", { language: currentLang });
     }
 

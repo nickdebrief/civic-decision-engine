@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from api.public_origin import (
     inject_canonical_link,
+    inject_public_html_head,
+    is_clarity_eligible_public_path,
     is_public_indexable_path,
     public_alias_redirect_location,
 )
@@ -53,7 +55,13 @@ async def canonical_public_origin_middleware(request, call_next):
     ):
         return response
     body = b"".join([chunk async for chunk in response.body_iterator])
-    body = inject_canonical_link(body, request.url.path)
+    # Query-bearing pages are excluded so their parameters cannot be exposed
+    # to optional third-party analytics.
+    body = (
+        inject_public_html_head(body, request.url.path)
+        if not request.url.query and is_clarity_eligible_public_path(request.url.path)
+        else inject_canonical_link(body, request.url.path)
+    )
     headers = dict(response.headers)
     headers["content-length"] = str(len(body))
     return Response(content=body, status_code=response.status_code, headers=headers, media_type="text/html")
