@@ -167,6 +167,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Traffic measurement (Google Analytics)",
       analytics_clarity_choice: "Usability observation (Microsoft Clarity)",
       analytics_save_choices:  "Save analytics choices",
+      analytics_privacy_notice: "Read the privacy notice",
+      privacy_notice:          "Privacy notice",
     },
 
     ga: {
@@ -311,6 +313,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Tomhas tráchta (Google Analytics)",
       analytics_clarity_choice: "Breathnú ar inúsáidteacht (Microsoft Clarity)",
       analytics_save_choices:  "Sábháil roghanna anailíse",
+      analytics_privacy_notice: "Léigh an fógra príobháideachais",
+      privacy_notice:          "Fógra príobháideachais",
     },
 
     fr: {
@@ -455,6 +459,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Mesure d’audience (Google Analytics)",
       analytics_clarity_choice: "Observation de l’utilisabilité (Microsoft Clarity)",
       analytics_save_choices:  "Enregistrer les choix d’analyse",
+      analytics_privacy_notice: "Lire l’avis de confidentialité",
+      privacy_notice:          "Avis de confidentialité",
     },
 
     de: {
@@ -599,6 +605,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Besuchsmessung (Google Analytics)",
       analytics_clarity_choice: "Beobachtung der Nutzbarkeit (Microsoft Clarity)",
       analytics_save_choices:  "Analyseauswahl speichern",
+      analytics_privacy_notice: "Datenschutzhinweis lesen",
+      privacy_notice:          "Datenschutzhinweis",
     },
 
     es: {
@@ -743,6 +751,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Medición de tráfico (Google Analytics)",
       analytics_clarity_choice: "Observación de usabilidad (Microsoft Clarity)",
       analytics_save_choices:  "Guardar opciones de analítica",
+      analytics_privacy_notice: "Leer el aviso de privacidad",
+      privacy_notice:          "Aviso de privacidad",
     },
 
     pl: {
@@ -887,6 +897,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Pomiar ruchu (Google Analytics)",
       analytics_clarity_choice: "Obserwacja użyteczności (Microsoft Clarity)",
       analytics_save_choices:  "Zapisz wybory analityki",
+      analytics_privacy_notice: "Przeczytaj informację o prywatności",
+      privacy_notice:          "Informacja o prywatności",
     },
 
     ro: {
@@ -1031,6 +1043,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Măsurarea traficului (Google Analytics)",
       analytics_clarity_choice: "Observarea utilizabilității (Microsoft Clarity)",
       analytics_save_choices:  "Salvează alegerile de analiză",
+      analytics_privacy_notice: "Citește notificarea de confidențialitate",
+      privacy_notice:          "Notificare de confidențialitate",
     },
 
     uk: {
@@ -1175,6 +1189,8 @@ window.CDE_I18N = {
       analytics_ga_choice:     "Вимірювання трафіку (Google Analytics)",
       analytics_clarity_choice: "Спостереження за зручністю (Microsoft Clarity)",
       analytics_save_choices:  "Зберегти вибір аналітики",
+      analytics_privacy_notice: "Прочитати повідомлення про конфіденційність",
+      privacy_notice:          "Повідомлення про конфіденційність",
     },
   }, // end TRANSLATIONS
 
