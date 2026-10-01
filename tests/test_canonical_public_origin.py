@@ -445,10 +445,12 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                     "analytics_ga_choice",
                     "analytics_clarity_choice",
                     "analytics_save_choices",
+                    "analytics_privacy_notice",
+                    "privacy_notice",
                 ):
                     self.assertIn(f"{key}:", block)
 
-    def test_optional_analytics_ui_has_equal_choice_actions_and_no_notice_link(self):
+    def test_optional_analytics_ui_has_equal_choice_actions_and_privacy_notice_link(self):
         with patch.dict(
             os.environ,
             {
@@ -467,7 +469,35 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         )
         self.assertIn(b"banner.querySelector(\"[data-cde-analytics-accept]\")", result)
         self.assertIn(b"banner.querySelector(\"[data-cde-analytics-choose]\")", result)
-        self.assertNotIn(b"privacy-policy", result.lower())
+        self.assertIn(b'href=\\"/privacy\\"', result)
+        self.assertIn(b"analytics_privacy_notice", result)
+
+    def test_privacy_notice_is_public_but_outside_analytics_eligibility(self):
+        with patch.dict(
+            os.environ,
+            {
+                public_origin.CLARITY_ENABLED_ENV: "1",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            },
+            clear=False,
+        ):
+            start, body = self.asgi_get("/privacy", "civicdecisionengine.ie")
+
+        self.assertEqual(start["status"], 200)
+        self.assertIn(b"Optional analytics status", body)
+        self.assertIn(b"both its separate Civic Decision Engine operational switch", body)
+        self.assertIn(b"separate, valid affirmative choice", body)
+        self.assertIn(b"Controller: Nick Moloney", body)
+        self.assertIn(b"nickdebrief@gmail.com", body)
+        self.assertIn(b"cde_optional_analytics_preferences_v2", body)
+        self.assertNotIn(b"data-cde-clarity-consent", body)
+        self.assertNotIn(b"googletagmanager.com/gtag/js", body)
+        self.assertNotIn(b"clarity.ms/tag/", body)
+        self.assertFalse(public_origin.is_clarity_eligible_public_path("/privacy"))
+
+    def test_privacy_notice_link_is_present_in_the_public_footer(self):
+        source = Path("api/static/index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/privacy" data-i18n="privacy_notice"', source)
 
     def test_root_has_no_historical_unconditional_google_analytics_loader(self):
         start, body = self.asgi_get("/", "civicdecisionengine.ie")

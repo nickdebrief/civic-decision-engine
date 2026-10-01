@@ -72,6 +72,12 @@ def root():
     return FileResponse("api/static/index.html")
 
 
+@app.get("/privacy", include_in_schema=False)
+def privacy_notice():
+    """Serve the public privacy and optional-analytics notice without tracking."""
+    return FileResponse("api/static/privacy.html")
+
+
 @app.api_route(
     f"/{INDEXNOW_OWNERSHIP_KEY}.txt",
     methods=["GET", "HEAD"],
