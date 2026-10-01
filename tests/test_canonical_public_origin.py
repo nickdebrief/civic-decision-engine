@@ -477,6 +477,24 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertNotIn(b'gtag("config"', body)
         self.assertNotIn(b"G-8405RVT76Q", body)
 
+    def test_public_export_and_qr_dependencies_are_local_versioned_assets(self):
+        source = Path("api/static/index.html").read_text(encoding="utf-8")
+        assets = {
+            "/static/vendor/html2canvas-1.4.1.min.js": "html2canvas-1.4.1.min.js",
+            "/static/vendor/jspdf-2.5.1.umd.min.js": "jspdf-2.5.1.umd.min.js",
+            "/static/vendor/qrcodejs-1.0.0.min.js": "qrcodejs-1.0.0.min.js",
+        }
+        self.assertNotIn("cdnjs.cloudflare.com", source)
+        for url, filename in assets.items():
+            with self.subTest(url=url):
+                self.assertIn(f'src="{url}"', source)
+                self.assertTrue((Path("api/static/vendor") / filename).is_file())
+
+        start, body = self.asgi_get("/", "civicdecisionengine.ie")
+        self.assertEqual(start["status"], 200)
+        for url in assets:
+            self.assertIn(url.encode(), body)
+
     def test_indexnow_ownership_key_is_fixed_text_and_respects_host_policy(self):
         key = "199f69ef74214688b3aff215441ae226"
         path = f"/{key}.txt"
