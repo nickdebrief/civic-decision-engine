@@ -485,7 +485,7 @@ class CanonicalPublicOriginTests(unittest.TestCase):
 
         self.assertEqual(start["status"], 200)
         self.assertIn(b"Optional analytics status", body)
-        self.assertIn(b"both its separate Civic Decision Engine operational switch", body)
+        self.assertIn(b"both its operational switch and your affirmative choice are valid", body)
         self.assertIn(b"separate, valid affirmative choice", body)
         self.assertIn(b"Controller: Nick Moloney", body)
         self.assertIn(b"nickdebrief@gmail.com", body)
