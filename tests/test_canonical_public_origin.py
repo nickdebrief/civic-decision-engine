@@ -294,6 +294,36 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         )
         self.assertIn(b"if(current){load(current);hide()}else{banner.hidden=false}", result)
 
+    def test_google_withdrawal_erases_observed_domain_scoped_cookie_variants_before_reload(self):
+        """GA withdrawal must expire host and domain cookie scopes, not just host scope.
+
+        The isolated-provider test observed ``_ga`` cookies scoped to the
+        leading-dot test hostname and ``/``.  This verifies the actual ASGI
+        response carries deletion attempts for that scope as well as host-only
+        cookies and that the GA-only branch is ordered before the clean reload.
+        """
+        with patch.dict(
+            os.environ,
+            {
+                public_origin.CLARITY_ENABLED_ENV: "1",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            },
+            clear=False,
+        ):
+            start, result = self.asgi_get("/", "civicdecisionengine.ie")
+
+        self.assertEqual(start["status"], 200)
+        self.assertIn(b'var labels=location.hostname.split("."),scopes=[""]', result)
+        self.assertIn(b'scopes.push(";domain="+d,";domain=."+d)', result)
+        self.assertIn(b'Max-Age=0;path=/"+scope+";SameSite=Lax', result)
+        self.assertIn(b'function eraseGoogle(){erase(/^_ga(?:_|$)/)}', result)
+        self.assertIn(b'if(!next.ga){eraseGoogle();if(typeof window.gtag==="function")', result)
+        self.assertIn(b'if(!next.clarity){if(typeof window.clarity==="function")', result)
+        self.assertLess(
+            result.index(b'if(!next.ga){eraseGoogle()'),
+            result.index(b'window.location.reload()'),
+        )
+
     def test_ga_can_be_consent_gated_while_clarity_remains_disabled(self):
         with patch.dict(
             os.environ,
