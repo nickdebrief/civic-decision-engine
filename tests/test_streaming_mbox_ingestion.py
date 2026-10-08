@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from api.document_intake import (
     intake_document_file,
+    load_pending_document,
     store_streaming_mbox_pending_document,
     update_intake_status,
     validate_document_file,
@@ -71,6 +72,21 @@ class StreamingMBOXIngestionTests(unittest.TestCase):
             for index in range(1, 4)
         ]
         return mbox(*messages)
+
+    def _numbered_mbox(self, count: int, *, escaped_from: bool = False) -> bytes:
+        messages = [
+            message(
+                subject=f"Streaming mailbox message {index}",
+                message_id=f"<stream-{index}@example.test>",
+                body=("First body line\n>From escaped body line\n" if escaped_from and index == 1 else "Streaming body."),
+            )
+            for index in range(1, count + 1)
+        ]
+        separators = [
+            f"From stream-{index}@example.test Tue Jul 21 10:{index % 60:02d}:00 2026\n".encode()
+            for index in range(1, count + 1)
+        ]
+        return mbox(*messages, separators=separators)
 
     def _store(self, data: bytes | None = None, **overrides):
         values = {
@@ -146,6 +162,51 @@ class StreamingMBOXIngestionTests(unittest.TestCase):
         self.assertEqual(leftovers, [])
         governed_dirs = [path for path in self.root.iterdir() if path.is_dir() and path.name != "_streaming_mbox_tmp"]
         self.assertEqual(governed_dirs, [])
+
+    def test_streaming_route_accepts_521_messages_and_cleans_up_522_rejection(self):
+        request = FakeRequest(
+            cookies={
+                admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session("stream-admin")
+            }
+        )
+        accepted = self._numbered_mbox(521, escaped_from=True)
+        response = admin_session.admin_streaming_mbox_intake_upload(
+            request,
+            title="521 Message Streaming Mailbox",
+            institution_source="Test Mailbox",
+            document_date="2026-07-27",
+            category="Mailbox Archive",
+            description="Streaming route boundary fixture.",
+            visibility="private",
+            notes="Boundary test.",
+            file=FakeUploadFile(accepted, filename="521.mbox", content_type="application/mbox"),
+        )
+        self.assertEqual(response.status_code, 201)
+        intake_id = hashlib.sha256(accepted).hexdigest()
+        stored = load_pending_document(intake_id, root=self.root)
+        self.assertEqual(stored["email_metadata"]["message_count"], 521)
+
+        rejected_root = self.root.parent / "rejected"
+        with patch.dict(os.environ, {"CDE_DOCUMENT_INTAKE_ROOT": str(rejected_root)}):
+            with self.assertRaisesRegex(Exception, "document_intake_mbox_too_many_messages"):
+                admin_session.admin_streaming_mbox_intake_upload(
+                    request,
+                    title="522 Message Streaming Mailbox",
+                    institution_source="Test Mailbox",
+                    document_date="2026-07-27",
+                    category="Mailbox Archive",
+                    description="Streaming route rejection fixture.",
+                    visibility="private",
+                    notes="Boundary test.",
+                    file=FakeUploadFile(
+                        self._numbered_mbox(522),
+                        filename="522.mbox",
+                        content_type="application/mbox",
+                    ),
+                )
+        temp_root = rejected_root / "_streaming_mbox_tmp"
+        self.assertEqual(list(temp_root.glob("*.upload")), [])
+        self.assertEqual([path for path in rejected_root.iterdir() if path.is_dir() and path != temp_root], [])
 
     def test_streaming_rejects_invalid_extension_fake_content_and_duplicates(self):
         data = self._large_mbox()

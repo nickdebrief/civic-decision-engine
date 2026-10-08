@@ -18,7 +18,7 @@ from api.document_intake import (
     validate_document_file,
 )
 from api.email_documents import parse_mbox_archive_metadata
-from tests.test_admin_session import FakeRequest, install_fastapi_stubs
+from tests.test_admin_session import FakeRequest, FakeUploadFile, install_fastapi_stubs
 
 install_fastapi_stubs()
 
@@ -286,6 +286,51 @@ class MBOXArchiveSupportTests(unittest.TestCase):
         with patch("api.email_documents.MAX_MBOX_LINE_BYTES", 20):
             with self.assertRaisesRegex(ValueError, "document_intake_mbox_line_too_large"):
                 validate_document_file(valid, "line-too-large.mbox", "application/mbox")
+
+    def test_synchronous_route_accepts_521_messages_and_rejects_522(self):
+        request = FakeRequest(
+            cookies={
+                admin_session.SESSION_COOKIE_NAME: admin_session.create_admin_session("mbox-admin")
+            }
+        )
+        accepted = self._numbered_mbox(521)
+        escaped_from = b">From escaped-body-line that is not an MBOX separator\n"
+        accepted = accepted.replace(b"Synthetic mailbox body 001.\n", b"Synthetic mailbox body 001.\n" + escaped_from, 1)
+        rejected = self._numbered_mbox(522)
+
+        with patch.dict(os.environ, {"CDE_DOCUMENT_INTAKE_MAX_BYTES": str(1024 * 1024)}):
+            response = admin_session.admin_document_intake_upload(
+                request,
+                title="521 Message Synchronous Mailbox",
+                institution_source="Test Mailbox",
+                document_date="2026-07-27",
+                category="Mailbox Archive",
+                description="Synchronous route boundary fixture.",
+                visibility="private",
+                notes="Boundary test.",
+                file=FakeUploadFile(accepted, filename="521.mbox", content_type="application/mbox"),
+            )
+            self.assertEqual(response.status_code, 201)
+            intake_id = hashlib.sha256(accepted).hexdigest()
+            stored = load_pending_document(intake_id, root=self.root)
+            self.assertEqual(stored["email_metadata"]["message_count"], 521)
+            self.assertEqual(stored["email_metadata"]["messages"][0]["message_index"], 1)
+
+            before = {path.name for path in self.root.iterdir() if path.is_dir()}
+            with self.assertRaisesRegex(Exception, "document_intake_mbox_too_many_messages"):
+                admin_session.admin_document_intake_upload(
+                    request,
+                    title="522 Message Synchronous Mailbox",
+                    institution_source="Test Mailbox",
+                    document_date="2026-07-27",
+                    category="Mailbox Archive",
+                    description="Synchronous route rejection fixture.",
+                    visibility="private",
+                    notes="Boundary test.",
+                    file=FakeUploadFile(rejected, filename="522.mbox", content_type="application/mbox"),
+                )
+            after = {path.name for path in self.root.iterdir() if path.is_dir()}
+        self.assertEqual(after, before)
 
     def test_document_intake_accept_configuration_supports_apple_mail_mbox_exports(self):
         request = FakeRequest(
