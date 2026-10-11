@@ -95,6 +95,7 @@ from api import record_governed_characterisations as rg74
 from api import record_governed_reports as rg75
 from api import governed_report_publication_reviews as rg78e
 from api import governed_report_publications as rg79
+from api import source_media_transcripts as smt
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -55590,3 +55591,56 @@ def admin_supersede_governed_report_publication(publication_id: int, request: Re
         conn.rollback(); raise HTTPException(status_code=409, detail="governed_report_publication_rejected") from None
     finally: conn.close()
     return JSONResponse({"publication_id": item["id"], "state": item["lifecycle_status"], "public": False})
+
+
+_PRIVATE_TRANSCRIPT_HEADERS = {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+async def _private_transcript_payload(request: Request) -> Mapping[str, Any]:
+    """Accept only bounded structured JSON; transcript import never fetches remotely."""
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise _http_error(400, "transcript_payload_invalid") from exc
+    if not isinstance(payload, Mapping):
+        raise _http_error(400, "transcript_payload_invalid")
+    return payload
+
+
+@router.get("/api/admin/session/private-source-media/{source_intake_id}/transcripts/{version}", response_class=JSONResponse)
+def admin_private_source_transcript(source_intake_id: str, version: int, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        item = smt.get_transcript(conn, source_intake_id=source_intake_id, version=version)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "private_transcript_not_found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"transcript": item, "public": False}, headers=_PRIVATE_TRANSCRIPT_HEADERS)
+
+
+@router.post("/api/admin/session/private-source-media/{source_intake_id}/transcripts", response_class=JSONResponse)
+async def admin_create_private_source_transcript(source_intake_id: str, request: Request):
+    session = require_admin_session(request)
+    payload = await _private_transcript_payload(request)
+    expected_version = payload.get("expected_version", 0)
+    if isinstance(expected_version, bool):
+        raise _http_error(409, "private_transcript_version_conflict")
+    conn = get_db()
+    try:
+        item = smt.create_transcript_version(
+            conn,
+            source_intake_id=source_intake_id,
+            payload=payload,
+            actor=_admin_session_actor(session),
+            expected_version=int(expected_version),
+        )
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _http_error(409, str(exc) or "private_transcript_rejected") from None
+    finally:
+        conn.close()
+    return JSONResponse({"transcript": item, "public": False}, status_code=201, headers=_PRIVATE_TRANSCRIPT_HEADERS)
