@@ -145,6 +145,7 @@ from api.document_intake import (
     is_gmail_takeout_document,
     is_imap_acquisition_document,
     is_outlook_archive_document,
+    is_private_original_source_media,
     list_intake_documents,
     list_intake_documents_read_only,
     list_published_documents,
@@ -156,6 +157,7 @@ from api.document_intake import (
     resolve_document_identifier_read_only,
     store_streaming_mbox_pending_document,
     store_pending_document,
+    store_private_original_source_media,
     streaming_mbox_chunk_bytes,
     streaming_mbox_max_bytes,
     update_intake_notes,
@@ -47724,6 +47726,10 @@ def _render_document_intake_preview(
         "published": (("archived", "Archive"),),
         "archived": (),
     }.get(item["status"], ())
+    if is_private_original_source_media(item):
+        transitions = tuple(
+            (status, label) for status, label in transitions if status != "published"
+        )
     action_forms = "".join(
         f"""<form class="lifecycle-action lifecycle-action--{escape(status)}" method="post" action="/api/admin/session/document-intake/{escape(item['intake_id'])}/status">
           <input type="hidden" name="new_status" value="{escape(status)}">
@@ -51366,6 +51372,67 @@ def admin_document_intake_upload(
                 content_type=getattr(file, "content_type", None),
             )
         raise _http_error(status_code, response_detail) from exc
+    return HTMLResponse(
+        content=_render_document_intake_preview(item, admin_session=session),
+        status_code=201,
+    )
+
+
+@router.post("/api/admin/session/private-original-source-media", response_class=HTMLResponse)
+def admin_private_original_source_media_upload(
+    request: Request,
+    title: str = Form(...),
+    institution_source: str = Form(...),
+    document_date: str = Form(...),
+    category: str = Form(...),
+    description: str = Form(...),
+    notes: str = Form(...),
+    source_platform: str | None = Form(None),
+    source_account: str | None = Form(None),
+    source_url: str | None = Form(None),
+    source_publication_date: str | None = Form(None),
+    source_publication_date_precision: str = Form("unknown"),
+    operator_capture_date: str | None = Form(None),
+    operator_capture_date_precision: str = Form("unknown"),
+    source_completeness: str = Form("unknown"),
+    reference_identifier: str | None = Form(None),
+    keywords: str | None = Form(None),
+    file: UploadFile = File(...),
+):
+    """Authenticated intake for media originals that are never public documents."""
+
+    session = require_admin_session(request)
+    data = _read_uploaded_file(file)
+    try:
+        item = store_private_original_source_media(
+            data=data,
+            original_filename=getattr(file, "filename", None) or "source.mp4",
+            content_type=getattr(file, "content_type", None),
+            title=title,
+            institution_source=institution_source,
+            document_date=document_date,
+            category=category,
+            description=description,
+            notes=notes,
+            source_platform=source_platform,
+            source_account=source_account,
+            source_url=source_url,
+            source_publication_date=source_publication_date,
+            source_publication_date_precision=source_publication_date_precision,
+            operator_capture_date=operator_capture_date,
+            operator_capture_date_precision=operator_capture_date_precision,
+            source_completeness=source_completeness,
+            reference_identifier=reference_identifier,
+            keywords=keywords,
+            actor=_admin_session_actor(session),
+            root=intake_root(),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = 413 if detail == "document_intake_file_too_large" else 400
+        if detail == "document_intake_file_type_not_allowed":
+            status_code = 415
+        raise _http_error(status_code, detail) from exc
     return HTMLResponse(
         content=_render_document_intake_preview(item, admin_session=session),
         status_code=201,

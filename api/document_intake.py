@@ -13,7 +13,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path, PurePath
-from typing import Any
+from typing import Any, Mapping
 from xml.etree import ElementTree
 
 from api.email_documents import (
@@ -59,6 +59,9 @@ DEFAULT_STREAMING_MBOX_CHUNK_BYTES = 1024 * 1024
 DEFAULT_STREAMING_MBOX_MIN_FREE_BYTES = 128 * 1024 * 1024
 DEFAULT_STREAMING_MBOX_MAX_CONCURRENT_JOBS = 1
 VALID_VISIBILITY = {"private", "restricted"}
+PRIVATE_ORIGINAL_SOURCE_MEDIA_SUBTYPE = "private_original_source_media"
+PRIVATE_SOURCE_COMPLETENESS = {"complete", "excerpt", "unknown"}
+PRIVATE_SOURCE_DATE_PRECISIONS = {"unknown", "year", "month", "day", "timestamp"}
 DOCUMENT_TYPE_EXTENSIONS = {
     "pdf": ".pdf",
     "jpeg": ".jpg",
@@ -66,6 +69,7 @@ DOCUMENT_TYPE_EXTENSIONS = {
     "m4a": ".m4a",
     "mp3": ".mp3",
     "wav": ".wav",
+    "mp4": ".mp4",
     "xls": ".xls",
     "xlsx": ".xlsx",
     "rtf": ".rtf",
@@ -86,6 +90,7 @@ DOCUMENT_TYPE_MEDIA_TYPES = {
     "m4a": "audio/mp4",
     "mp3": "audio/mpeg",
     "wav": "audio/wav",
+    "mp4": "video/mp4",
     "xls": "application/vnd.ms-excel",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "rtf": "application/rtf",
@@ -106,6 +111,7 @@ DOCUMENT_TYPE_LABELS = {
     "m4a": "M4A",
     "mp3": "MP3",
     "wav": "WAV",
+    "mp4": "MP4 Video",
     "xls": "XLS",
     "xlsx": "XLSX",
     "rtf": "RTF",
@@ -126,6 +132,7 @@ DOCUMENT_TYPE_MEDIA_FAMILIES = {
     "m4a": "audio",
     "mp3": "audio",
     "wav": "audio",
+    "mp4": "video",
     "xls": "spreadsheet",
     "xlsx": "spreadsheet",
     "rtf": "rich_text",
@@ -147,6 +154,7 @@ EXTENSION_DOCUMENT_TYPES = {
     ".m4a": "m4a",
     ".mp3": "mp3",
     ".wav": "wav",
+    ".mp4": "mp4",
     ".xls": "xls",
     ".xlsx": "xlsx",
     ".rtf": "rtf",
@@ -569,10 +577,19 @@ def find_document_by_reference(
             document = load_pending_document(normalized, root=root)
         except ValueError:
             document = None
-        if document and (not published_only or document.get("status") == "published"):
+        if document and (
+            not published_only
+            or (
+                document.get("status") == "published"
+                and not is_private_original_source_media(document)
+            )
+        ):
             return document
     for document in list_intake_documents(root=root):
-        if published_only and document.get("status") != "published":
+        if published_only and (
+            document.get("status") != "published"
+            or is_private_original_source_media(document)
+        ):
             continue
         if document_reference_matches(
             document,
@@ -988,6 +1005,21 @@ def _is_supported_rtf(data: bytes) -> bool:
     return b"}" in candidate[6:]
 
 
+def _is_supported_mp4_container_signature(data: bytes) -> bool:
+    """Recognise the narrowly supported MP4 ``ftyp`` container signature.
+
+    This deliberately checks only the leading ISO base-media container brand. It
+    is not a complete media parser, malware scan, authenticity check, or proof
+    that the supplied bytes are a playable or complete video.
+    """
+
+    return (
+        len(data) >= 12
+        and data[4:8] == b"ftyp"
+        and data[8:12] in {b"isom", b"iso2", b"mp41", b"mp42", b"avc1", b"dash"}
+    )
+
+
 def _detected_document_type(data: bytes) -> str:
     if not data:
         raise ValueError("document_intake_file_required")
@@ -1001,6 +1033,8 @@ def _detected_document_type(data: bytes) -> str:
         return "png"
     if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] == b"M4A ":
         return "m4a"
+    if _is_supported_mp4_container_signature(data):
+        return "mp4"
     if data.startswith(b"ID3") or (
         len(data) >= 2 and data[0] == 0xFF and data[1] & 0xE0 == 0xE0
     ):
@@ -1123,6 +1157,11 @@ def validate_document_file(
         )
         raise
     if detected_type != expected_type:
+        if detected_type == "mp4" and expected_type != "mp4":
+            # Preserve the prior audio-type boundary: a generic ISO media
+            # container renamed as M4A remains unsupported rather than becoming
+            # an accepted audio mismatch solely because Stage 80 recognises MP4.
+            raise ValueError("document_intake_file_type_not_allowed")
         LOGGER.warning(
             "Document intake file type mismatch: filename=%s extension=%s declared_content_type=%s expected_format=%s detected_format=%s detected_mime_type=%s leading_signature_hex=%s",
             filename,
@@ -1164,6 +1203,8 @@ def normalized_document_type(metadata: dict[str, Any]) -> str:
         return "mp3"
     if content_type in {"audio/wav", "audio/x-wav", "audio/wave"}:
         return "wav"
+    if content_type == "video/mp4":
+        return "mp4"
     if content_type == "application/vnd.ms-excel":
         return "xls"
     if content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
@@ -1212,6 +1253,79 @@ def is_image_document(metadata: dict[str, Any]) -> bool:
 
 def is_audio_document(metadata: dict[str, Any]) -> bool:
     return normalized_document_type(metadata) in {"m4a", "mp3", "wav"}
+
+
+def is_private_original_source_media(metadata: Mapping[str, Any]) -> bool:
+    details = metadata.get("private_original_source_media")
+    return isinstance(details, Mapping) and details.get("subtype") == PRIVATE_ORIGINAL_SOURCE_MEDIA_SUBTYPE
+
+
+def _private_source_value(value: Any, *, field: str) -> dict[str, Any]:
+    if value is None or not str(value).strip():
+        return {"known": False, "value": None}
+    text = str(value).strip()
+    if len(text) > 2000:
+        raise ValueError(f"private_source_media_{field}_invalid")
+    return {"known": True, "value": text}
+
+
+def _private_source_date(value: Any, precision: str | None, *, field: str) -> dict[str, Any]:
+    normalized_precision = str(precision or "unknown").strip().lower()
+    if normalized_precision not in PRIVATE_SOURCE_DATE_PRECISIONS:
+        raise ValueError(f"private_source_media_{field}_precision_invalid")
+    text = str(value or "").strip() or None
+    if normalized_precision == "unknown":
+        if text is not None:
+            raise ValueError(f"private_source_media_{field}_invalid")
+        return {"precision": "unknown", "value": None}
+    if text is None:
+        raise ValueError(f"private_source_media_{field}_invalid")
+    formats = {
+        "year": "%Y",
+        "month": "%Y-%m",
+        "day": "%Y-%m-%d",
+        "timestamp": "%Y-%m-%dT%H:%M:%SZ",
+    }
+    try:
+        datetime.strptime(text, formats[normalized_precision])
+    except ValueError as exc:
+        raise ValueError(f"private_source_media_{field}_invalid") from exc
+    return {"precision": normalized_precision, "value": text}
+
+
+def _private_original_source_metadata(
+    *,
+    source_platform: Any,
+    source_account: Any,
+    source_url: Any,
+    source_publication_date: Any,
+    source_publication_date_precision: str | None,
+    operator_capture_date: Any,
+    operator_capture_date_precision: str | None,
+    source_completeness: str | None,
+) -> dict[str, Any]:
+    completeness = str(source_completeness or "unknown").strip().lower()
+    if completeness not in PRIVATE_SOURCE_COMPLETENESS:
+        raise ValueError("private_source_media_completeness_invalid")
+    return {
+        "subtype": PRIVATE_ORIGINAL_SOURCE_MEDIA_SUBTYPE,
+        "original_source_identity": None,
+        "derivative_of_original_source_identity": None,
+        "source_platform": _private_source_value(source_platform, field="source_platform"),
+        "source_account": _private_source_value(source_account, field="source_account"),
+        "source_url": _private_source_value(source_url, field="source_url"),
+        "source_publication_date": _private_source_date(
+            source_publication_date,
+            source_publication_date_precision,
+            field="source_publication_date",
+        ),
+        "operator_capture_date": _private_source_date(
+            operator_capture_date,
+            operator_capture_date_precision,
+            field="operator_capture_date",
+        ),
+        "source_completeness": completeness,
+    }
 
 
 def is_spreadsheet_document(metadata: dict[str, Any]) -> bool:
@@ -1608,10 +1722,16 @@ def store_pending_document(
     actor: str = "admin",
     uploaded_at: str | None = None,
     root: Path | None = None,
+    private_original_source_media: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     document_type, normalized_type, filename = validate_document_file(
         data, original_filename, content_type
     )
+    if (
+        private_original_source_media is not None
+        and document_type not in {"m4a", "mp3", "wav", "mp4"}
+    ):
+        raise ValueError("private_source_media_type_not_allowed")
 
     required = {
         "title": title,
@@ -1627,6 +1747,8 @@ def store_pending_document(
         raise ValueError("document_intake_metadata_required")
     if normalized["visibility"] not in VALID_VISIBILITY:
         raise ValueError("document_intake_visibility_invalid")
+    if private_original_source_media is not None and normalized["visibility"] != "private":
+        raise ValueError("private_source_media_visibility_must_be_private")
     try:
         datetime.strptime(normalized["document_date"], "%Y-%m-%d")
     except ValueError as exc:
@@ -1703,6 +1825,13 @@ def store_pending_document(
             }
         ],
     }
+    if private_original_source_media is not None:
+        source_metadata = dict(private_original_source_media)
+        if source_metadata.get("subtype") != PRIVATE_ORIGINAL_SOURCE_MEDIA_SUBTYPE:
+            raise ValueError("private_source_media_metadata_invalid")
+        source_metadata["original_source_identity"] = f"source-sha256:{digest}"
+        source_metadata["derivative_of_original_source_identity"] = None
+        metadata["private_original_source_media"] = source_metadata
     if workbook_metadata:
         metadata["workbook_metadata"] = workbook_metadata
     if email_metadata:
@@ -1886,6 +2015,68 @@ def store_pending_document(
         item_dir.rmdir()
         raise
     return metadata
+
+
+def store_private_original_source_media(
+    *,
+    data: bytes,
+    original_filename: str,
+    content_type: str | None,
+    title: str,
+    institution_source: str,
+    document_date: str,
+    category: str,
+    description: str,
+    notes: str,
+    source_platform: Any = None,
+    source_account: Any = None,
+    source_url: Any = None,
+    source_publication_date: Any = None,
+    source_publication_date_precision: str | None = "unknown",
+    operator_capture_date: Any = None,
+    operator_capture_date_precision: str | None = "unknown",
+    source_completeness: str | None = "unknown",
+    reference_identifier: str | None = None,
+    keywords: Any = None,
+    actor: str = "admin",
+    uploaded_at: str | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Store an original-source media object that is permanently private.
+
+    The saved SHA-256 identifies the supplied original bytes.  The generated
+    ``original_source_identity`` is for that original object only; it is not a
+    claim about authorship, authenticity, source-platform identity, or any
+    future derivative.
+    """
+
+    return store_pending_document(
+        data=data,
+        original_filename=original_filename,
+        content_type=content_type,
+        title=title,
+        institution_source=institution_source,
+        document_date=document_date,
+        category=category,
+        description=description,
+        visibility="private",
+        notes=notes,
+        reference_identifier=reference_identifier,
+        keywords=keywords,
+        actor=actor,
+        uploaded_at=uploaded_at,
+        root=root,
+        private_original_source_media=_private_original_source_metadata(
+            source_platform=source_platform,
+            source_account=source_account,
+            source_url=source_url,
+            source_publication_date=source_publication_date,
+            source_publication_date_precision=source_publication_date_precision,
+            operator_capture_date=operator_capture_date,
+            operator_capture_date_precision=operator_capture_date_precision,
+            source_completeness=source_completeness,
+        ),
+    )
 
 
 def store_email_attachment_document(
@@ -2148,6 +2339,8 @@ def _prepare_loaded_intake_status_transition(
         raise ValueError("document_intake_status_invalid")
     if normalized_status not in INTAKE_STATUSES:
         raise ValueError("document_intake_status_invalid")
+    if is_private_original_source_media(metadata) and normalized_status == "published":
+        raise ValueError("private_source_media_publication_forbidden")
     if normalized_status not in VALID_STATUS_TRANSITIONS[current_status]:
         raise ValueError("document_intake_transition_invalid")
     if rationale is not None and len(rationale) > 500:
@@ -2559,6 +2752,8 @@ def document_matches_search(document: dict[str, Any], query: str | None) -> bool
 def document_search_index_failures(*, root: Path | None = None) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
     for item in list_intake_documents_read_only(root=root):
+        if is_private_original_source_media(item):
+            continue
         if item.get("status") != "published":
             continue
         try:
@@ -2664,6 +2859,8 @@ def list_published_documents(
 ) -> list[dict[str, Any]]:
     documents = []
     for item in list_intake_documents_read_only(root=root):
+        if is_private_original_source_media(item):
+            continue
         lifecycle_db_path = (
             Path(root).resolve(strict=False).parent / "records.db" if root else None
         )
@@ -2742,6 +2939,8 @@ def load_published_document(
         )
         if metadata is None:
             raise ValueError("public_document_not_found") from None
+    if is_private_original_source_media(metadata):
+        raise ValueError("public_document_not_found")
     episodes = list_lifecycle_episodes(
         intake_id=str(metadata.get("intake_id") or document_id),
         db_path=Path(root).resolve(strict=False).parent / "records.db" if root else None,
