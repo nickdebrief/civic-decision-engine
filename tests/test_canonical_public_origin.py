@@ -1,11 +1,84 @@
 import os
 import asyncio
+import json
+import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from api import governed_report_publications as stage79_publications
 from unittest.mock import patch
 
 from api import public_origin
+
+
+def _javascript_core() -> str | None:
+    """Find the local JavaScriptCore shell used by the DOM-controller test."""
+    for candidate in (
+        shutil.which("jsc"),
+        "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc",
+    ):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def _run_generated_consent_controller(*, control: str, storage: dict | None, action: str) -> dict:
+    """Execute the generated controller in a synthetic DOM with no network API.
+
+    ``appendChild`` records attempted provider-loader insertion but never fetches
+    a URL.  This is DOM behavior coverage, not provider-network evidence.
+    """
+    shell = _javascript_core()
+    if shell is None:
+        raise unittest.SkipTest("JavaScriptCore shell unavailable")
+    source = re.search(
+        r'<script data-cde-(?:clarity-consent|analytics-preferences-clear)="1"[^>]*>(.*?)</script>',
+        control,
+        re.DOTALL,
+    ).group(1)
+    harness = r'''
+var initialStorage = __STORAGE__;
+var action = __ACTION__;
+function Element(tag) { this.tagName=tag; this.attrs={}; this.children=[]; this.handlers={}; this.hidden=false; this.removed=false; this.onload=null; this.checked=false; }
+Element.prototype.setAttribute=function(k,v){this.attrs[k]=String(v)};
+Element.prototype.getAttribute=function(k){return Object.prototype.hasOwnProperty.call(this.attrs,k)?this.attrs[k]:null};
+Element.prototype.addEventListener=function(type,fn){(this.handlers[type]=this.handlers[type]||[]).push(fn)};
+Element.prototype.dispatch=function(type){(this.handlers[type]||[]).slice().forEach(function(fn){fn({target:this})},this)};
+Element.prototype.remove=function(){this.removed=true};
+Element.prototype.focus=function(){};
+Element.prototype.appendChild=function(node){this.children.push(node); return node};
+function descendants(root){var found=[]; (root.children||[]).forEach(function(child){found.push(child); found=found.concat(descendants(child))}); return found}
+function matches(node, selector) { var match=/^([a-z]+)?(?:\[([^=\]]+)(?:="([^"]*)")?\])?$/.exec(selector); if(!match){return false}; return (!match[1]||node.tagName===match[1]) && (!match[2]||node.getAttribute(match[2])!==null) && (!match[3]||node.getAttribute(match[2])===match[3]) && !node.removed }
+function find(root, selector, all){var nodes=descendants(root).filter(function(node){return matches(node,selector)}); return all?nodes:(nodes[0]||null)}
+Element.prototype.querySelector=function(selector){return find(this,selector,false)};
+Element.prototype.querySelectorAll=function(selector){return find(this,selector,true)};
+Object.defineProperty(Element.prototype,"innerHTML",{set:function(markup){var tags=markup.match(/<[^>]+>/g)||[]; for(var i=0;i<tags.length;i++){var tag=/^<([a-z]+)/.exec(tags[i]); if(!tag){continue}; var child=new Element(tag[1]); var attrs=tags[i].match(/[^\s=>]+(?:="[^"]*")?/g)||[]; for(var j=1;j<attrs.length;j++){var parts=attrs[j].split("="); child.setAttribute(parts[0],parts.length>1?parts.slice(1).join("=").replace(/^"|"$/g,""):"")} this.children.push(child)}}});
+var document={readyState:action==="dispatch-ready-twice"?"loading":"complete",handlers:{},body:new Element("body"),head:new Element("head"),documentElement:{lang:"en"},createElement:function(tag){return new Element(tag)},addEventListener:function(type,fn){(this.handlers[type]=this.handlers[type]||[]).push(fn)},querySelector:function(selector){return find({children:[this.head,this.body]},selector,false)},querySelectorAll:function(selector){return find({children:[this.head,this.body]},selector,true)}};
+document.head.appendChild=function(node){this.children.push(node); if(node.src){attempts.push(node.src)} return node};
+document.body.appendChild=function(node){this.children.push(node); return node};
+var cookieWrites=[], cookies=["_ga=test","_clck=test"]; Object.defineProperty(document,"cookie",{get:function(){return cookies.join("; ")},set:function(value){cookieWrites.push(value)}});
+var values=initialStorage||{}; var localStorage={getItem:function(k){return Object.prototype.hasOwnProperty.call(values,k)?values[k]:null},setItem:function(k,v){values[k]=String(v)},removeItem:function(k){delete values[k]}};
+var attempts=[]; var reloads=0; var i18n=action==="without-i18n"?null:{TRANSLATIONS:{en:{analytics_preferences:"Privacy preferences",analytics_title:"Optional analytics",analytics_description:"desc",analytics_accept_both:"Accept both",analytics_decline_both:"Decline both",analytics_choose_separately:"Choose separately",analytics_preferences_label:"Preferences",analytics_ga_choice:"GA",analytics_clarity_choice:"Clarity",analytics_save_choices:"Save",analytics_privacy_notice:"Privacy",analytics_clear_preferences:"Clear analytics preferences",analytics_providers_disabled:"Disabled",analytics_provider_disabled:"Currently disabled"}}}; var window={document:document,localStorage:localStorage,location:{hostname:"consent.local",reload:function(){reloads+=1}},dataLayer:[],CDE_I18N:i18n};
+var location=window.location;
+__SOURCE__
+function click(selector){var node=document.querySelector(selector); if(!node){throw new Error("missing "+selector)} node.dispatch("click"); return node}
+if(action==="ga-only"){document.querySelector("[data-cde-ga-choice]").checked=true; document.querySelector("[data-cde-clarity-choice]").checked=false; click("[data-cde-analytics-save]")}
+if(action==="clarity-only"){document.querySelector("[data-cde-ga-choice]").checked=false; document.querySelector("[data-cde-clarity-choice]").checked=true; click("[data-cde-analytics-save]")}
+if(action==="decline"){click("[data-cde-analytics-decline]")}
+if(action==="dispatch-ready-twice"){(document.handlers.DOMContentLoaded||[]).forEach(function(fn){fn()});(document.handlers.DOMContentLoaded||[]).forEach(function(fn){fn()})}
+if(action==="withdraw-ga"){click("[data-cde-clarity-preferences]"); document.querySelector("[data-cde-ga-choice]").checked=false; document.querySelector("[data-cde-clarity-choice]").checked=false; click("[data-cde-analytics-save]"); var pending=document.querySelector("script[data-cde-google-loader=\"1\"]"); if(pending&&pending.onload){pending.onload()}}
+if(action==="clear"){click("[data-cde-analytics-preferences]"); click("[data-cde-analytics-clear-preferences]")}
+print(JSON.stringify({attempts:attempts,reloads:reloads,storage:values,google:document.querySelectorAll("script[data-cde-google-loader=\"1\"]").length,clarity:document.querySelectorAll("script[data-cde-clarity-loader=\"1\"]").length,removedGoogle:document.head.children.filter(function(node){return node.getAttribute("data-cde-google-loader")==="1"&&node.removed}).length,removedClarity:document.head.children.filter(function(node){return node.getAttribute("data-cde-clarity-loader")==="1"&&node.removed}).length,cookieWrites:cookieWrites.length,clear:!!document.querySelector("[data-cde-analytics-clear-preferences]"),panelHidden:(document.querySelector("[data-cde-clarity-dialog]")||document.querySelector("[data-cde-analytics-disabled-panel]")).hidden,gaChoiceCount:document.querySelectorAll("[data-cde-ga-choice]").length,clarityChoiceCount:document.querySelectorAll("[data-cde-clarity-choice]").length,preferencesText:(document.querySelector("[data-cde-analytics-preferences]")||{}).textContent||""}));
+'''.replace("__STORAGE__", json.dumps(storage or {})).replace("__ACTION__", json.dumps(action)).replace("__SOURCE__", source)
+    with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8") as script:
+        script.write(harness)
+        script.flush()
+        completed = subprocess.run([shell, script.name], check=False, capture_output=True, text=True)
+    if completed.returncode:
+        raise AssertionError(completed.stderr or completed.stdout)
+    return json.loads(completed.stdout)
 
 
 class CanonicalPublicOriginTests(unittest.TestCase):
@@ -97,9 +170,16 @@ class CanonicalPublicOriginTests(unittest.TestCase):
             b'<html><head><script async src="https://www.googletagmanager.com/gtag/js?id=G-8405RVT76Q"></script>'
             b'</head><body>public content</body></html>'
         )
+        disabled = public_origin.inject_public_html_head(html, "/")
+        self.assertNotIn(b"data-cde-clarity-consent", disabled)
+        self.assertIn(b"data-cde-analytics-preferences-clear", disabled)
         self.assertNotIn(
-            b"data-cde-clarity-consent",
-            public_origin.inject_public_html_head(html, "/"),
+            public_origin.GOOGLE_ANALYTICS_MEASUREMENT_ID,
+            public_origin._ANALYTICS_PREFERENCES_CLEAR_CONTROL,
+        )
+        self.assertNotIn(
+            public_origin.CLARITY_PROJECT_ID,
+            public_origin._ANALYTICS_PREFERENCES_CLEAR_CONTROL,
         )
         with patch.dict(
             os.environ,
@@ -141,17 +221,194 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertIn(b"maxAge=7776000000", first)
         self.assertIn(b"data-cde-ga-choice", first)
         self.assertIn(b"data-cde-clarity-choice", first)
-        self.assertIn(b"data-cde-analytics-banner", first)
-        self.assertIn(b"data-cde-analytics-accept", first)
         self.assertIn(b"data-cde-analytics-decline", first)
-        self.assertIn(b"data-cde-analytics-choose", first)
-        self.assertIn(b"data-cde-analytics-text=\\\"analytics_title\\\"", first)
+        self.assertIn(b"data-cde-analytics-text=\\\"analytics_description\\\"", first)
         self.assertIn(b"data-cde-ga-choice", first)
         self.assertIn(b"data-cde-clarity-choice", first)
         self.assertIn(b"data-cde-analytics-i18n", first)
         self.assertIn(b"cde-i18n-applied", first)
         self.assertIn(b"ga:!!v.ga,clarity:!!v.clarity", first)
         self.assertNotIn(b"Accept optional analytics", first)
+
+    def _controller(self, *, clarity=True, google=True) -> str:
+        environment = {
+            public_origin.CLARITY_ENABLED_ENV: "1" if clarity else "0",
+            public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1" if google else "0",
+        }
+        with patch.dict(os.environ, environment, clear=False):
+            html = public_origin.inject_public_html_head(
+                b"<html><head></head><body>public content</body></html>", "/"
+            )
+        return html.decode("utf-8")
+
+    def test_generated_controller_executes_separate_choices_refusal_and_duplicate_prevention_without_network(self):
+        controller = self._controller()
+        no_choice = _run_generated_consent_controller(
+            control=controller, storage=None, action="none"
+        )
+        self.assertEqual(no_choice["attempts"], [])
+        self.assertEqual((no_choice["google"], no_choice["clarity"]), (0, 0))
+
+        ga_choice = _run_generated_consent_controller(
+            control=controller, storage=None, action="ga-only"
+        )
+        preference = json.loads(
+            ga_choice["storage"]["cde_optional_analytics_preferences_v2"]
+        )
+        self.assertEqual((preference["ga"], preference["clarity"]), (True, False))
+        self.assertEqual(ga_choice["attempts"], [])
+        self.assertEqual(ga_choice["reloads"], 1)
+
+        revisited = _run_generated_consent_controller(
+            control=controller, storage=ga_choice["storage"], action="none"
+        )
+        self.assertEqual(len(revisited["attempts"]), 1)
+        self.assertIn("googletagmanager.com/gtag/js", revisited["attempts"][0])
+        self.assertEqual((revisited["google"], revisited["clarity"]), (1, 0))
+
+        clarity_choice = _run_generated_consent_controller(
+            control=controller, storage=None, action="clarity-only"
+        )
+        clarity_revisited = _run_generated_consent_controller(
+            control=controller, storage=clarity_choice["storage"], action="none"
+        )
+        self.assertEqual(len(clarity_revisited["attempts"]), 1)
+        self.assertIn("clarity.ms/tag", clarity_revisited["attempts"][0])
+        self.assertEqual((clarity_revisited["google"], clarity_revisited["clarity"]), (0, 1))
+
+        duplicate_guard = _run_generated_consent_controller(
+            control=controller, storage=ga_choice["storage"], action="dispatch-ready-twice"
+        )
+        self.assertEqual(len(duplicate_guard["attempts"]), 1)
+
+        declined = _run_generated_consent_controller(
+            control=controller, storage=None, action="decline"
+        )
+        self.assertEqual(declined["attempts"], [])
+        self.assertEqual(declined["reloads"], 1)
+        self.assertEqual(
+            json.loads(declined["storage"]["cde_optional_analytics_preferences_v2"]),
+            {"v": 1, "ga": False, "clarity": False, "expires": unittest.mock.ANY},
+        )
+
+    def test_generated_controller_removes_pending_loader_and_invalidates_stale_callback_on_withdrawal(self):
+        controller = self._controller()
+        stored = {
+            "cde_optional_analytics_preferences_v2": json.dumps(
+                {"v": 1, "expires": 4102444800000, "ga": True, "clarity": True}
+            )
+        }
+        result = _run_generated_consent_controller(
+            control=controller, storage=stored, action="withdraw-ga"
+        )
+        self.assertEqual(len(result["attempts"]), 2)
+        self.assertEqual((result["google"], result["clarity"]), (0, 0))
+        self.assertEqual(result["removedGoogle"], 1)
+        self.assertEqual(result["removedClarity"], 1)
+        self.assertEqual(result["reloads"], 1)
+        self.assertGreater(result["cookieWrites"], 0)
+        self.assertEqual(
+            json.loads(result["storage"]["cde_optional_analytics_preferences_v2"])["ga"],
+            False,
+        )
+
+    def test_generated_controller_fails_closed_for_malformed_or_expired_preference(self):
+        controller = self._controller()
+        for value in (
+            "not-json",
+            json.dumps({"v": 1, "expires": 1, "ga": True, "clarity": False}),
+            json.dumps({"v": 1, "expires": 4102444800000, "ga": "yes", "clarity": False}),
+        ):
+            with self.subTest(value=value):
+                result = _run_generated_consent_controller(
+                    control=controller,
+                    storage={"cde_optional_analytics_preferences_v2": value},
+                    action="none",
+                )
+                self.assertEqual(result["attempts"], [])
+                self.assertEqual((result["google"], result["clarity"]), (0, 0))
+
+    def test_identifier_free_clear_preferences_control_is_available_only_on_eligible_routes_when_disabled(self):
+        with patch.dict(os.environ, {}, clear=True):
+            control = public_origin.inject_public_html_head(
+                b"<html><head></head><body>public content</body></html>", "/"
+            ).decode("utf-8")
+            excluded = public_origin.inject_public_html_head(
+                b"<html><head></head><body>private</body></html>", "/records/R-1"
+            )
+        self.assertIn("data-cde-analytics-preferences-clear", control)
+        self.assertNotIn(public_origin.GOOGLE_ANALYTICS_MEASUREMENT_ID, control)
+        self.assertNotIn(public_origin.CLARITY_PROJECT_ID, control)
+        self.assertNotIn("googletagmanager.com", control)
+        self.assertNotIn("clarity.ms/tag", control)
+        self.assertNotIn(b"data-cde-analytics-preferences-clear", excluded)
+        cleared = _run_generated_consent_controller(
+            control=control,
+            storage={"cde_optional_analytics_preferences_v2": "valid-but-unneeded"},
+            action="clear",
+        )
+        self.assertTrue(cleared["clear"])
+        self.assertNotIn("cde_optional_analytics_preferences_v2", cleared["storage"])
+        self.assertEqual(cleared["attempts"], [])
+        self.assertEqual(cleared["reloads"], 1)
+
+    def test_disabled_privacy_entry_is_visible_accessibly_styled_and_distinguishes_saved_preferences(self):
+        with patch.dict(os.environ, {}, clear=True):
+            control = public_origin.inject_public_html_head(
+                b"<html><head></head><body>public content</body></html>", "/"
+            ).decode("utf-8")
+        self.assertIn('data-cde-analytics-style="1"', control)
+        self.assertIn('entry.className="cde-analytics-entry"', control)
+        self.assertIn('href=\\"/privacy\\"', control)
+        self.assertIn("analytics_providers_disabled", control)
+        self.assertIn("analytics_clear_preferences", control)
+        self.assertIn("max-width:calc(100vw - 2rem)", control)
+        self.assertIn(":focus-visible", control)
+        self.assertNotIn("gtag/js", control)
+        self.assertNotIn("clarity.ms/tag", control)
+
+    def test_active_preferences_keep_unavailable_provider_distinct_from_saved_choice(self):
+        controller = self._controller(clarity=False, google=True)
+        self.assertIn('choices.innerHTML=(googleEnabled?', controller)
+        self.assertIn("analytics_provider_disabled", controller)
+        self.assertNotIn("data-cde-clarity-choice-row", controller)
+
+    def test_unsaved_enabled_provider_opens_separate_choices_without_loading(self):
+        result = _run_generated_consent_controller(
+            control=self._controller(clarity=False, google=True), storage=None, action="none"
+        )
+        self.assertFalse(result["panelHidden"])
+        self.assertEqual(result["gaChoiceCount"], 1)
+        self.assertEqual(result["clarityChoiceCount"], 0)
+        self.assertEqual(result["attempts"], [])
+
+    def test_disabled_provider_panel_opens_from_persistent_preferences_control(self):
+        with patch.dict(os.environ, {}, clear=True):
+            control = public_origin.inject_public_html_head(
+                b"<html><head></head><body>public content</body></html>", "/"
+            ).decode("utf-8")
+        result = _run_generated_consent_controller(control=control, storage=None, action="none")
+        self.assertTrue(result["panelHidden"])
+        self.assertTrue(result["clear"])
+        self.assertIn('setAttribute("data-cde-analytics-disabled-panel","1")', control)
+        self.assertIn('setAttribute("data-cde-analytics-preferences","1")', control)
+
+    def test_disabled_preferences_control_has_visible_english_fallback_without_i18n(self):
+        with patch.dict(os.environ, {}, clear=True):
+            control = public_origin.inject_public_html_head(
+                b"<html><head></head><body>public content</body></html>", "/"
+            ).decode("utf-8")
+        result = _run_generated_consent_controller(
+            control=control, storage=None, action="without-i18n"
+        )
+        self.assertEqual(result["preferencesText"], "Privacy preferences")
+
+    def test_disabled_provider_has_status_but_no_consent_input(self):
+        result = _run_generated_consent_controller(
+            control=self._controller(clarity=False, google=True), storage=None, action="none"
+        )
+        self.assertEqual(result["gaChoiceCount"], 1)
+        self.assertEqual(result["clarityChoiceCount"], 0)
 
     def test_explicit_test_mode_uses_only_valid_nonproduction_identifiers(self):
         test_origin = "https://analytics-test.example.test"
@@ -292,7 +549,7 @@ class CanonicalPublicOriginTests(unittest.TestCase):
             result.index(b"q(\"consentv2\",{ad_Storage:\"denied\",analytics_Storage:\"granted\"})"),
             result.index(b"https://www.clarity.ms/tag/"),
         )
-        self.assertIn(b"if(current){load(current);hide()}else{banner.hidden=false}", result)
+        self.assertIn(b"if(current){load(current);hide()}else if(googleEnabled||clarityEnabled){showChoices()}else{hide()}", result)
 
     def test_google_withdrawal_erases_observed_domain_scoped_cookie_variants_before_reload(self):
         """GA withdrawal must expire host and domain cookie scopes, not just host scope.
@@ -317,10 +574,12 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertIn(b'scopes.push(";domain="+d,";domain=."+d)', result)
         self.assertIn(b'Max-Age=0;path=/"+scope+";SameSite=Lax', result)
         self.assertIn(b'function eraseGoogle(){erase(/^_ga(?:_|$)/)}', result)
-        self.assertIn(b'if(!next.ga){eraseGoogle();if(typeof window.gtag==="function")', result)
-        self.assertIn(b'if(!next.clarity){if(typeof window.clarity==="function")', result)
+        self.assertIn(b'if(!next.ga){removeLoaders("script[data-cde-google-loader=', result)
+        self.assertIn(b'eraseGoogle();if(typeof window.gtag==="function")', result)
+        self.assertIn(b'if(!next.clarity){removeLoaders("script[data-cde-clarity-loader=', result)
+        self.assertIn(b'if(typeof window.clarity==="function")', result)
         self.assertLess(
-            result.index(b'if(!next.ga){eraseGoogle()'),
+            result.index(b'if(!next.ga){removeLoaders("script[data-cde-google-loader='),
             result.index(b'window.location.reload()'),
         )
 
@@ -448,10 +707,7 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertEqual(start["status"], 200)
         self.assertEqual(body.count(b'data-cde-clarity-consent="1"'), 1)
         self.assertNotIn(b'<script src="https://www.clarity.ms/tag/', body)
-        self.assertIn(b"data-cde-analytics-banner", body)
-        self.assertIn(b"analytics_accept_both", body)
         self.assertIn(b"analytics_decline_both", body)
-        self.assertIn(b"analytics_choose_separately", body)
         self.assertIn(b"analytics_preferences", body)
         self.assertIn(b"aria-labelledby", body)
         self.assertNotIn(b'<script async src="https://www.googletagmanager.com/', body)
@@ -465,13 +721,13 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                 next_start = source.find("\n    },\n\n    ", block_start)
                 block = source[block_start : next_start if next_start != -1 else None]
                 for key in (
-                    "analytics_title",
                     "analytics_description",
-                    "analytics_accept_both",
                     "analytics_decline_both",
-                    "analytics_choose_separately",
                     "analytics_preferences",
                     "analytics_preferences_label",
+                    "analytics_clear_preferences",
+                    "analytics_providers_disabled",
+                    "analytics_provider_disabled",
                     "analytics_ga_choice",
                     "analytics_clarity_choice",
                     "analytics_save_choices",
@@ -479,6 +735,20 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                     "privacy_notice",
                 ):
                     self.assertIn(f"{key}:", block)
+
+    def test_analytics_banner_text_requires_operational_enablement_and_choice_in_every_language(self):
+        source = Path("api/static/translations.js").read_text(encoding="utf-8")
+        self.assertNotIn("Both are off unless you choose them.", source)
+        for language in ("en", "ga", "fr", "de", "es", "pl", "ro", "uk"):
+            with self.subTest(language=language):
+                block_start = source.index(f"    {language}: {{")
+                next_start = source.find("\n    },\n\n    ", block_start)
+                block = source[block_start : next_start if next_start != -1 else None]
+                description = re.search(
+                    r'analytics_description:\s+"([^"]+)"', block
+                )
+                self.assertIsNotNone(description)
+                self.assertIn("CDE", description.group(1))
 
     def test_optional_analytics_ui_has_equal_choice_actions_and_privacy_notice_link(self):
         with patch.dict(
@@ -492,13 +762,11 @@ class CanonicalPublicOriginTests(unittest.TestCase):
             result = public_origin.inject_public_html_head(
                 b"<html><head></head><body>ok</body></html>", "/"
             )
-        self.assertEqual(result.count(b'class=\\"cde-analytics-action\\"'), 5)
-        self.assertEqual(
-            result.count(b"data-cde-analytics-decline data-cde-analytics-text"),
-            2,
-        )
-        self.assertIn(b"banner.querySelector(\"[data-cde-analytics-accept]\")", result)
-        self.assertIn(b"banner.querySelector(\"[data-cde-analytics-choose]\")", result)
+        self.assertEqual(result.count(b'class=\\"cde-analytics-action\\"'), 2)
+        self.assertEqual(result.count(b"data-cde-analytics-decline data-cde-analytics-text"), 1)
+        self.assertIn(b"else if(googleEnabled||clarityEnabled){showChoices()}", result)
+        self.assertIn(b"data-cde-analytics-choice-list", result)
+        self.assertIn(b"choices.innerHTML=(googleEnabled?", result)
         self.assertIn(b'href=\\"/privacy\\"', result)
         self.assertIn(b"analytics_privacy_notice", result)
 
@@ -515,8 +783,17 @@ class CanonicalPublicOriginTests(unittest.TestCase):
 
         self.assertEqual(start["status"], 200)
         self.assertIn(b"Optional analytics status", body)
-        self.assertIn(b"both its operational switch and your affirmative choice are valid", body)
-        self.assertIn(b"separate, valid affirmative choice", body)
+        self.assertIn(b"Privacy and user choice", body)
+        self.assertIn(
+            b"does not depend on tracking or on your analytics choices", body
+        )
+        self.assertIn(
+            b"does not undo information already collected by a provider", body
+        )
+        self.assertIn(b"separate operational enablement", body)
+        self.assertIn(b"Microsoft Clarity \xe2\x80\x94 disabled", body)
+        self.assertIn(b"treated as expired when CDE reads it", body)
+        self.assertNotIn(b"temporary validation", body)
         self.assertIn(b"Controller: Nick Moloney", body)
         self.assertIn(b"nickdebrief@gmail.com", body)
         self.assertIn(b"cde_optional_analytics_preferences_v2", body)

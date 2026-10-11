@@ -6,34 +6,37 @@
   <title>Privacy notice — Civic Decision Engine</title>
   <meta name="description" content="Privacy notice for Civic Decision Engine optional analytics.">
   <style>
-    :root { color-scheme: dark; --bg:#07111f; --panel:#0d1c2d; --line:#254260; --text:#e6eef8; --muted:#a9b9cb; --accent:#8fd3ff; }
+    :root { color-scheme: dark; --bg:#07111f; --panel:#0d1c2d; --line:#254260; --text:#f4f8ff; --muted:#c2cfdf; --accent:#b9e4ff; }
     * { box-sizing:border-box; }
     body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     main { width:min(900px,calc(100% - 32px)); margin:48px auto; padding:32px; background:var(--panel); border:1px solid var(--line); border-radius:14px; }
     h1,h2 { line-height:1.25; } h1 { margin-top:0; } h2 { margin-top:2rem; }
-    a { color:var(--accent); } a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    a { color:var(--accent); text-decoration-thickness:2px; text-underline-offset:.16em; } a:hover { color:#fff; } a:focus-visible { outline:3px solid #fff; outline-offset:3px; }
     .status { border-left:4px solid var(--accent); padding:12px 16px; background:#0a1828; }
-    .meta { color:var(--muted); } li { margin-bottom:.5rem; }
+    .meta { color:var(--muted); } li { margin-bottom:.5rem; } code { overflow-wrap:anywhere; } @media (max-width:600px) { main { width:calc(100% - 24px); margin:24px auto; padding:20px; } }
   </style>
 </head>
 <body>
   <main>
     <p><a href="/">Return to Civic Decision Engine</a></p>
     <h1>Privacy notice</h1>
-    <p class="status"><strong>Optional analytics status:</strong> Google Analytics loading is currently disabled. It may be enabled only for one approved temporary validation and only after your separate, valid affirmative choice. After that validation is shut down, Google Analytics loading returns to disabled for fresh page loads. Microsoft Clarity is disabled.</p>
+    <p class="status"><strong>Optional analytics status:</strong> Google Analytics loading is currently disabled. A saved browser preference does not itself enable Google Analytics; loading requires both a valid affirmative choice and a separate operational enablement. Microsoft Clarity is disabled.</p>
+
+    <h2>Privacy and user choice</h2>
+    <p>Access to public civic records and public processes on Civic Decision Engine does not depend on tracking or on your analytics choices. Optional analytics are disabled by default. If CDE enables an optional analytics provider, it will load only after your valid affirmative choice and only on the eligible public pages listed below. You can decline or withdraw your choice without losing public access. Withdrawing stops future loading through CDE’s consent controls; it does not undo information already collected by a provider.</p>
 
     <h2>Optional purposes and choices</h2>
     <p>Civic Decision Engine may use Google Analytics only on these query-free public pages: <code>/</code>, <code>/archive</code>, <code>/associations</code>, <code>/collections</code>, <code>/conditions</code>, <code>/conditions/map</code>, <code>/determinations</code>, <code>/stats</code>, <code>/stats/timeline</code>, <code>/traceability</code>, and <code>/transmissions</code>. Query-bearing pages and protected, administrative, API, record/detail, document, artefact, verification, and authentication pages are excluded.</p>
     <ul>
       <li><strong>Traffic measurement — Google Analytics:</strong> measures visits to eligible public pages.</li>
     </ul>
-    <p>Google Analytics is not used for individual inference, CDE evidence, or a governed determination. It remains off unless both its operational switch and your affirmative choice are valid. You may decline without losing public access. On an eligible page, use <strong>Privacy preferences</strong> to change or withdraw your choice.</p>
+    <p>Google Analytics is not used for individual inference, CDE evidence, or a governed determination. You may decline without losing public access. When optional controls are available on an eligible page, use <strong>Privacy preferences</strong> to choose separately, change, or withdraw a choice. When providers are operationally disabled, the same entry point lets you read this notice and clear a saved local preference; it does not enable a provider.</p>
 
     <h2>Local preference</h2>
-    <p>CDE stores your local analytics choice in browser storage under <code>cde_optional_analytics_preferences_v2</code> for up to 90 days. Expiry, withdrawal, malformed data, or a superseded local value clears the locally controllable analytics state and requires a fresh choice. Withdrawing a choice does not delete data already held by a provider.</p>
+    <p>CDE stores your local analytics choice in browser storage under <code>cde_optional_analytics_preferences_v2</code>. A choice is valid for up to 90 days and is treated as expired when CDE reads it; expiry is not a claim that browser storage is automatically deleted at that moment. Withdrawal, malformed data, or a superseded local value clears the locally controllable analytics state and requires a fresh choice. Withdrawing a choice does not delete data already held by a provider.</p>
 
     <h2>Provider cookies and storage</h2>
-    <p>After an affirmative Google Analytics choice and while Google Analytics is operationally enabled, Google Analytics may use browser storage. A controlled production-origin observation will record the exact cookie names, purposes, domains, paths, Secure/SameSite attributes, and lifetimes for this site. Those production attributes are not stated here before they have been observed.</p>
+    <p>If Google Analytics is both selected and operationally enabled, it may use browser storage. Google Analytics is currently disabled, so this notice does not state production cookie names, purposes, domains, paths, Secure/SameSite attributes, or lifetimes that have not been observed for this site.</p>
 
     <h2>Retention, access, and deletion</h2>
     <p>The controller-confirmed Google Analytics user and event retention setting is two months, with reset on new activity off. Provider-held data is subject to the applicable provider process and retention rules; local withdrawal does not retrospectively delete it.</p>
@@ -42,7 +45,10 @@
     <h2>Providers and transfers</h2>
     <p>Google Analytics is provided under Google's applicable service terms. Google may process personal data in countries where Google or its subprocessors maintain facilities. For eligible direct Google Analytics customers established in the EEA, UK, or Switzerland, Google's published guidance says that the <a href="https://business.safety.google/adsprocessorterms/">Google Ads Data Processing Terms</a> are incorporated into the applicable terms. Those terms provide conditional safeguards for applicable European restricted transfers, including an alternative transfer solution adopted by Google or, where applicable, Standard Contractual Clauses. This notice does not state the destination, data centre, subprocessor, transfer safeguard, or Standard Contractual Clauses module for any particular visit.</p>
 
-    <p class="meta">This notice describes default-off Google Analytics controls and one possible temporary validation. It does not activate Google Analytics or Microsoft Clarity.</p>
+    <h2>Microsoft Clarity — disabled</h2>
+    <p>Microsoft Clarity is currently disabled and CDE does not currently load it. Before any future enablement, CDE must verify and publish the applicable purposes, collection and storage details, retention, international-processing information, withdrawal behaviour, and the provider terms relevant to the proposed configuration. This notice does not infer those facts while Clarity is disabled.</p>
+
+    <p class="meta">This notice describes default-off optional analytics controls. It does not activate Google Analytics or Microsoft Clarity.</p>
   </main>
 </body>
 </html>
