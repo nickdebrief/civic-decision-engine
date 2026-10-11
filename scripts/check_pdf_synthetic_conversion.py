@@ -88,16 +88,23 @@ def _create_docx(path: Path) -> None:
     document.save(path)
 
 
+def _marker_pattern(marker: str) -> str:
+    """Allow layout whitespace only at an expected marker's whitespace boundaries."""
+    return "".join(r"\s+" if piece.isspace() else re.escape(piece) for piece in re.split(r"(\s+)", marker) if piece)
+
+
 def validate_extracted_text(text: str) -> None:
+    """Require the exact markers once and in order, allowing only layout whitespace within them."""
     positions: list[int] = []
     for marker in EXPECTED_MARKERS:
-        if text.count(marker) != 1:
+        matches = list(re.finditer(_marker_pattern(marker), text))
+        if len(matches) != 1:
             raise SyntheticCheckError("ordered_content_mismatch")
-        positions.append(text.index(marker))
+        positions.append(matches[0].start())
     if positions != sorted(positions):
         raise SyntheticCheckError("ordered_content_mismatch")
-    nonempty_lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if nonempty_lines != list(EXPECTED_MARKERS):
+    document_pattern = r"\A\s*" + r"\s+".join(_marker_pattern(marker) for marker in EXPECTED_MARKERS) + r"\s*\Z"
+    if not re.fullmatch(document_pattern, text):
         raise SyntheticCheckError("unexpected_text")
 
 

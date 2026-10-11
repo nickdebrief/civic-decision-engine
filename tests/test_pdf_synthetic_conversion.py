@@ -38,12 +38,22 @@ class PdfSyntheticConversionTests(unittest.TestCase):
         self.assertLess(synthetic, adapter)
         self.assertNotIn("|| true", wrapper)
 
-    def test_marker_validation_rejects_omission_reordering_relabeling_and_extra_text(self):
+    def test_marker_validation_allows_layout_whitespace_only_at_marker_boundaries(self):
+        checker = load_checker()
+        valid = "\n".join(checker.EXPECTED_MARKERS)
+        wrapped = valid.replace(
+            "ADMINISTRATIVE_SUMMARY: This summary is synthetic and separately labelled.",
+            "ADMINISTRATIVE_SUMMARY: This summary is synthetic and separately\nlabelled.",
+        )
+        checker.validate_extracted_text(wrapped)
+
+    def test_marker_validation_rejects_omission_duplication_reordering_relabeling_and_extra_text(self):
         checker = load_checker()
         valid = "\n".join(checker.EXPECTED_MARKERS)
         checker.validate_extracted_text(valid)
         cases = {
             "omitted": valid.replace(checker.EXPECTED_MARKERS[2], ""),
+            "duplicated": valid + "\n" + checker.EXPECTED_MARKERS[2],
             "reordered": "\n".join(reversed(checker.EXPECTED_MARKERS)),
             "changed_original_label": valid.replace("ORIGINAL_LANGUAGE:", "SOURCE_LANGUAGE:"),
             "changed_summary_label": valid.replace("ADMINISTRATIVE_SUMMARY:", "SUMMARY:"),
@@ -54,6 +64,16 @@ class PdfSyntheticConversionTests(unittest.TestCase):
             with self.subTest(case=name):
                 with self.assertRaises(checker.SyntheticCheckError):
                     checker.validate_extracted_text(text)
+
+    def test_marker_validation_does_not_join_separate_content_into_a_marker(self):
+        checker = load_checker()
+        valid = "\n".join(checker.EXPECTED_MARKERS)
+        separated = valid.replace(
+            "ADMINISTRATIVE_SUMMARY: This summary is synthetic and separately labelled.",
+            "ADMINISTRATIVE_SUMMARY: This summary is synthetic and separately\nUNRELATED_BOUNDARY\nlabelled.",
+        )
+        with self.assertRaises(checker.SyntheticCheckError):
+            checker.validate_extracted_text(separated)
 
     def test_structure_rejects_missing_and_corrupt_pdf(self):
         checker = load_checker()
