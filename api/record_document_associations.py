@@ -1153,6 +1153,7 @@ def enrich_association(
     row = dict(association)
     record = record_context(conn, row.get("record_reference"))
     document = document_context(row.get("document_id"), root=root)
+    public_document = published_document_context(row.get("document_id"), root=root)
     row["record_title"] = (record or {}).get("finding") or row.get("record_reference")
     row["record_generated_at"] = (record or {}).get("generated_at")
     row["record_exported_at"] = (record or {}).get("exported_at")
@@ -1173,7 +1174,7 @@ def enrich_association(
     row["document_date"] = (document or {}).get("document_date")
     row["document_publication_date"] = (document or {}).get("publication_date")
     row["document_status"] = (document or {}).get("status")
-    row["document_publicly_eligible"] = bool(document and document.get("status") == "published")
+    row["document_publicly_eligible"] = public_document is not None
     return row
 
 

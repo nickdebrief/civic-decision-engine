@@ -33,6 +33,7 @@ tests.test_admin_audit_traceability tests.test_admin_console_navigation_and_tabl
     "tests.test_stage78b_pathway_output_equivalence",
     "tests.test_stage78e_governed_report_publication_review",
     "tests.test_stage79_governed_report_publication",
+    "tests.test_stage80_private_original_source_media",
 })
 REAL_ASGI_MODULES = frozenset({"tests.test_canonical_public_origin"})
 LEGACY_FASTAPI_STUB_MODULES = frozenset(
