@@ -1490,10 +1490,10 @@ button.record-btn.copy-ok {
       trackEvent("cde_language_change", { language: currentLang });
     }
 
-    function trackEvent(eventName, params = {}) {
-      if (typeof gtag === "function") {
-        gtag("event", eventName, { ...params, language: currentLang });
-      }
+    function trackEvent(_eventName, _params = {}) {
+      // Optional analytics is limited to the consent-gated, fixed-metadata
+      // home-page visit event injected by the trusted public-origin policy.
+      // Do not emit language, analysis, history, or export metadata here.
     }
 
     const describeTabBtn      = document.getElementById("describeTabBtn");

@@ -20,23 +20,24 @@
   <main>
     <p><a href="/">Return to Civic Decision Engine</a></p>
     <h1>Privacy notice</h1>
-    <p class="status"><strong>Optional analytics status:</strong> Google Analytics loading is currently disabled. A saved browser preference does not itself enable Google Analytics; loading requires both a valid affirmative choice and a separate operational enablement. Microsoft Clarity is disabled.</p>
+    <p class="status"><strong>Optional analytics status:</strong> <!-- CDE_ANALYTICS_STATUS --> Microsoft Clarity is disabled.</p>
 
     <h2>Privacy and user choice</h2>
     <p>Access to public civic records and public processes on Civic Decision Engine does not depend on tracking or on your analytics choices. Optional analytics are disabled by default. If CDE enables an optional analytics provider, it will load only after your valid affirmative choice and only on the eligible public pages listed below. You can decline or withdraw your choice without losing public access. Withdrawing stops future loading through CDE’s consent controls; it does not undo information already collected by a provider.</p>
 
     <h2>Optional purposes and choices</h2>
-    <p>Civic Decision Engine may use Google Analytics only on these query-free public pages: <code>/</code>, <code>/archive</code>, <code>/associations</code>, <code>/collections</code>, <code>/conditions</code>, <code>/conditions/map</code>, <code>/determinations</code>, <code>/stats</code>, <code>/stats/timeline</code>, <code>/traceability</code>, and <code>/transmissions</code>. Query-bearing pages and protected, administrative, API, record/detail, document, artefact, verification, and authentication pages are excluded.</p>
+    <p>Civic Decision Engine may use Google Analytics only on the query-free home page: <code>/</code>. All other pages, query-bearing URLs, and protected, administrative, API, record/detail, document, artefact, verification, and authentication pages are excluded.</p>
     <ul>
-      <li><strong>Traffic measurement — Google Analytics:</strong> measures visits to eligible public pages.</li>
+      <li><strong>Traffic measurement — Google Analytics:</strong> measures visits to the query-free home page.</li>
     </ul>
+    <p>Before CDE enables Google Analytics operationally, it must disable and verify the stream’s top-level Enhanced Measurement control. With that prerequisite met, CDE sends one manual page-view event after consent with a fixed page title, the canonical home-page URL, and an empty referrer. It does not itself emit scroll, outbound-click, site-search, form-interaction, video-engagement, or file-download events. Google Analytics may still generate documented automatic events and process visit and session statistics, browser/device information, approximate location, and a pseudonymous client identifier as described in Google’s documentation.</p>
     <p>Google Analytics is not used for individual inference, CDE evidence, or a governed determination. You may decline without losing public access. When optional controls are available on an eligible page, use <strong>Privacy preferences</strong> to choose separately, change, or withdraw a choice. When providers are operationally disabled, the same entry point lets you read this notice and clear a saved local preference; it does not enable a provider.</p>
 
     <h2>Local preference</h2>
     <p>CDE stores your local analytics choice in browser storage under <code>cde_optional_analytics_preferences_v2</code>. A choice is valid for up to 90 days and is treated as expired when CDE reads it; expiry is not a claim that browser storage is automatically deleted at that moment. Withdrawal, malformed data, or a superseded local value clears the locally controllable analytics state and requires a fresh choice. Withdrawing a choice does not delete data already held by a provider.</p>
 
     <h2>Provider cookies and storage</h2>
-    <p>If Google Analytics is both selected and operationally enabled, it may use browser storage. Google Analytics is currently disabled, so this notice does not state production cookie names, purposes, domains, paths, Secure/SameSite attributes, or lifetimes that have not been observed for this site.</p>
+    <p>If Google Analytics is both selected and operationally enabled, it may use browser storage. Production cookie names, purposes, domains, paths, Secure/SameSite attributes, and lifetimes remain an observation target; this notice does not invent attributes that have not been captured in a controlled browser check.</p>
 
     <h2>Retention, access, and deletion</h2>
     <p>The controller-confirmed Google Analytics user and event retention setting is two months, with reset on new activity off. Provider-held data is subject to the applicable provider process and retention rules; local withdrawal does not retrospectively delete it.</p>
