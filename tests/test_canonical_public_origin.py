@@ -410,6 +410,84 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertEqual(result["gaChoiceCount"], 1)
         self.assertEqual(result["clarityChoiceCount"], 0)
 
+    def test_google_is_limited_to_the_query_free_home_page(self):
+        html = b"<html><head></head><body>public content</body></html>"
+        with patch.dict(
+            os.environ,
+            {
+                public_origin.CLARITY_ENABLED_ENV: "1",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            },
+            clear=False,
+        ):
+            root = public_origin.inject_public_html_head(html, "/")
+            archive = public_origin.inject_public_html_head(html, "/archive")
+        root_result = _run_generated_consent_controller(
+            control=root.decode(), storage=None, action="none"
+        )
+        archive_result = _run_generated_consent_controller(
+            control=archive.decode(), storage=None, action="none"
+        )
+        self.assertEqual((root_result["gaChoiceCount"], root_result["clarityChoiceCount"]), (1, 1))
+        self.assertEqual(
+            (archive_result["gaChoiceCount"], archive_result["clarityChoiceCount"]),
+            (0, 1),
+        )
+        self.assertNotIn(public_origin.GOOGLE_ANALYTICS_MEASUREMENT_ID.encode(), archive)
+        self.assertIn(public_origin.CLARITY_PROJECT_ID.encode(), archive)
+
+    def test_google_pageview_payload_uses_only_fixed_home_metadata(self):
+        control = self._controller(clarity=False, google=True)
+        self.assertIn(
+            'var pageLocation="https://civicdecisionengine.ie/",'
+            'pageTitle="Civic Decision Engine";',
+            control,
+        )
+        self.assertIn("send_page_view:false", control)
+        self.assertIn('page_referrer:"",ignore_referrer:true', control)
+        self.assertIn(
+            'window.gtag("event","page_view",{page_location:pageLocation,'
+            'page_title:pageTitle,page_referrer:"",ignore_referrer:true})',
+            control,
+        )
+        self.assertNotIn("document.location", control)
+        self.assertNotIn("document.referrer", control)
+        self.assertNotIn("document.title", control)
+
+    def test_home_page_does_not_emit_custom_analytics_event_metadata(self):
+        source = Path("api/static/index.html").read_text(encoding="utf-8")
+        self.assertIn("function trackEvent(_eventName, _params = {})", source)
+        self.assertNotIn('gtag("event", eventName', source)
+
+    def test_privacy_notice_status_is_configuration_aware_without_identifiers(self):
+        with patch.dict(os.environ, {}, clear=True):
+            disabled = public_origin.privacy_notice_google_analytics_status()
+        with patch.dict(
+            os.environ,
+            {
+                public_origin.CLARITY_ENABLED_ENV: "1",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            },
+            clear=False,
+        ):
+            enabled = public_origin.privacy_notice_google_analytics_status()
+        self.assertIn("Google Analytics loading is currently disabled", disabled)
+        self.assertIn("Google Analytics loading is enabled only", enabled)
+        self.assertNotIn(public_origin.GOOGLE_ANALYTICS_MEASUREMENT_ID, enabled)
+        self.assertNotIn(public_origin.CLARITY_PROJECT_ID, enabled)
+
+    def test_privacy_notice_status_fails_closed_for_incomplete_test_identifiers(self):
+        environment = {
+            public_origin.CANONICAL_PUBLIC_ORIGIN_ENV: "https://analytics-test.example.test",
+            public_origin.ANALYTICS_TEST_MODE_ENV: "1",
+            public_origin.ANALYTICS_TEST_ORIGIN_ENV: "https://analytics-test.example.test",
+            public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            public_origin.CLARITY_ENABLED_ENV: "1",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            status = public_origin.privacy_notice_google_analytics_status()
+        self.assertIn("Google Analytics loading is currently disabled", status)
+
     def test_explicit_test_mode_uses_only_valid_nonproduction_identifiers(self):
         test_origin = "https://analytics-test.example.test"
         google_id = "G-TEST1234"
@@ -774,8 +852,8 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                public_origin.CLARITY_ENABLED_ENV: "1",
-                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+                public_origin.CLARITY_ENABLED_ENV: "0",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "0",
             },
             clear=False,
         ):
@@ -801,6 +879,28 @@ class CanonicalPublicOriginTests(unittest.TestCase):
         self.assertNotIn(b"googletagmanager.com/gtag/js", body)
         self.assertNotIn(b"clarity.ms/tag/", body)
         self.assertFalse(public_origin.is_clarity_eligible_public_path("/privacy"))
+        self.assertIn((b"cache-control", b"no-store"), start["headers"])
+
+    def test_privacy_notice_enabled_google_status_retains_disabled_clarity_notice(self):
+        with patch.dict(
+            os.environ,
+            {
+                public_origin.CLARITY_ENABLED_ENV: "1",
+                public_origin.GOOGLE_ANALYTICS_ENABLED_ENV: "1",
+            },
+            clear=False,
+        ):
+            start, body = self.asgi_get("/privacy", "civicdecisionengine.ie")
+        self.assertEqual(start["status"], 200)
+        self.assertIn(b"Google Analytics loading is enabled only", body)
+        self.assertIn(b"Microsoft Clarity is disabled", body)
+        self.assertIn(b"Microsoft Clarity \xe2\x80\x94 disabled", body)
+        self.assertIn(b"Microsoft Clarity is currently disabled", body)
+        self.assertNotIn(b"Google Analytics is currently disabled", body)
+        self.assertIn(b"must disable and verify the stream\xe2\x80\x99s top-level Enhanced Measurement control", body)
+        self.assertIn(b"does not itself emit scroll, outbound-click, site-search, form-interaction, video-engagement, or file-download events", body)
+        self.assertIn(b"may still generate documented automatic events", body)
+        self.assertNotIn(b"CDE does not enable enhanced measurement", body)
 
     def test_privacy_notice_link_is_present_in_the_public_footer(self):
         source = Path("api/static/index.html").read_text(encoding="utf-8")

@@ -1,6 +1,7 @@
 """Trusted public-origin policy for discovery metadata and public aliases."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from urllib.parse import urlsplit
@@ -30,6 +31,7 @@ _GOOGLE_ANALYTICS_MEASUREMENT_ID = re.compile(r"G-[A-Z0-9]{6,32}\Z")
 _CLARITY_PROJECT_ID = re.compile(r"[a-z0-9]{10}\Z")
 # Analytics is deliberately narrower than indexability.  In particular, it
 # excludes APIs, governed artefacts, verification, and record/detail pages.
+_GOOGLE_ANALYTICS_ELIGIBLE_PUBLIC_PATHS = frozenset({"/"})
 _CLARITY_ELIGIBLE_PUBLIC_PATHS = frozenset(
     {
         "/",
@@ -58,7 +60,10 @@ _ANALYTICS_CONSENT_CONTROL = (
     'function removeLoaders(selector){document.querySelectorAll(selector).forEach(function(node){node.remove()})}function current(token,name){var value=stored();return token===generation&&!!(value&&value[name])}'
     'function loadGoogle(token){if(!googleEnabled||!current(token,"ga")||document.querySelector("script[data-cde-google-loader=\\"1\\"]")){return};'
     'window.dataLayer=window.dataLayer||[];window.gtag=window.gtag||function(){window.dataLayer.push(arguments)};'
-    'window.gtag("consent","default",{analytics_storage:"granted",ad_storage:"denied",ad_user_data:"denied",ad_personalization:"denied"});window.gtag("js",new Date());window.gtag("config","__GOOGLE_MEASUREMENT_ID__",{anonymize_ip:true});'
+    'var pageLocation=__GOOGLE_PAGE_LOCATION__,pageTitle="Civic Decision Engine";'
+    'window.gtag("consent","default",{analytics_storage:"granted",ad_storage:"denied",ad_user_data:"denied",ad_personalization:"denied"});window.gtag("js",new Date());'
+    'window.gtag("config","__GOOGLE_MEASUREMENT_ID__",{anonymize_ip:true,send_page_view:false,page_location:pageLocation,page_title:pageTitle,page_referrer:"",ignore_referrer:true});'
+    'window.gtag("event","page_view",{page_location:pageLocation,page_title:pageTitle,page_referrer:"",ignore_referrer:true});'
     'var g=document.createElement("script");g.async=true;g.src="https://www.googletagmanager.com/gtag/js?id=__GOOGLE_MEASUREMENT_ID__";g.setAttribute("data-cde-google-loader","1");g.onload=function(){if(!current(token,"ga")){removeLoaders("script[data-cde-google-loader=\\"1\\"]")}};if(current(token,"ga")){document.head.appendChild(g)}}'
     'function loadClarity(token){if(!clarityEnabled||!current(token,"clarity")||document.querySelector("script[data-cde-clarity-loader=\\"1\\"]")){return};'
     'var q=window.clarity||function(){(q.q=q.q||[]).push(arguments)};window.clarity=q;'
@@ -239,6 +244,45 @@ def is_clarity_eligible_public_path(path: str) -> bool:
     return path in _CLARITY_ELIGIBLE_PUBLIC_PATHS
 
 
+def is_google_analytics_eligible_public_path(path: str) -> bool:
+    """Return whether a reviewed query-free public page may offer GA."""
+    return path in _GOOGLE_ANALYTICS_ELIGIBLE_PUBLIC_PATHS
+
+
+def is_analytics_eligible_public_path(path: str) -> bool:
+    """Return whether any optional provider may offer local controls here."""
+    return (
+        is_google_analytics_eligible_public_path(path)
+        or is_clarity_eligible_public_path(path)
+    )
+
+
+def google_analytics_effectively_enabled() -> bool:
+    """Return GA enablement after trusted measurement-ID validation.
+
+    A switch alone never makes GA available in test mode; incomplete or
+    mismatched trusted configuration must fail closed.
+    """
+    google_id, _ = analytics_identifier_configuration()
+    return google_analytics_is_enabled() and google_id is not None
+
+
+def privacy_notice_google_analytics_status() -> str:
+    """Return a trusted configuration-aware GA status for the privacy notice.
+
+    This contains no identifiers and deliberately describes loading conditions,
+    not provider cookies or a particular visitor's processing destination.
+    """
+    return (
+        "Google Analytics loading is enabled only on the query-free home page after "
+        "a valid affirmative choice. A saved refusal or no choice keeps it off."
+        if google_analytics_effectively_enabled()
+        else "Google Analytics loading is currently disabled. A saved browser "
+        "preference does not itself enable Google Analytics; loading requires both "
+        "a valid affirmative choice and a separate operational enablement."
+    )
+
+
 def public_alias_redirect_location(host: str, path: str, query: bytes) -> str | None:
     """Return a fixed-origin redirect location for approved public aliases only."""
     normalized_host = host.lower().split(":", 1)[0]
@@ -272,7 +316,7 @@ def inject_public_html_head(html: bytes, path: str) -> bytes:
     available on the same eligible routes.
     """
     canonicalized = inject_canonical_link(html, path)
-    if not is_clarity_eligible_public_path(path):
+    if not is_analytics_eligible_public_path(path):
         return canonicalized
     text = canonicalized.decode("utf-8")
     if (
@@ -296,7 +340,10 @@ def inject_public_html_head(html: bytes, path: str) -> bytes:
 
     google_id, clarity_id = analytics_identifier_configuration()
     clarity_enabled = clarity_is_enabled() and clarity_id is not None
-    google_enabled = google_analytics_is_enabled() and google_id is not None
+    google_enabled = (
+        google_analytics_effectively_enabled()
+        and is_google_analytics_eligible_public_path(path)
+    )
     if not (clarity_enabled or google_enabled):
         return (
             text[: canonical_tag.end()]
@@ -308,8 +355,11 @@ def inject_public_html_head(html: bytes, path: str) -> bytes:
     control = _ANALYTICS_CONSENT_CONTROL.replace(
         "__CLARITY_ENABLED__", str(clarity_enabled).lower()
     ).replace("__GOOGLE_ENABLED__", str(google_enabled).lower()).replace(
-        "__GOOGLE_MEASUREMENT_ID__", google_id or ""
-    ).replace("__CLARITY_PROJECT_ID__", clarity_id or "")
+        "__GOOGLE_MEASUREMENT_ID__", google_id if google_enabled else ""
+    ).replace("__CLARITY_PROJECT_ID__", clarity_id if clarity_enabled else "").replace(
+        "__GOOGLE_PAGE_LOCATION__",
+        json.dumps(canonical_url(path)) if google_enabled else "null",
+    )
     return (
         text[: canonical_tag.end()]
         + translation

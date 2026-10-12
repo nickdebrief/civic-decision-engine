@@ -1,14 +1,16 @@
 import os
 import sqlite3
+from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from api.public_origin import (
     inject_canonical_link,
     inject_public_html_head,
-    is_clarity_eligible_public_path,
+    is_analytics_eligible_public_path,
     is_public_indexable_path,
+    privacy_notice_google_analytics_status,
     public_alias_redirect_location,
 )
 from api.platform_identity import PLATFORM_NAME, PLATFORM_VERSION_LABEL
@@ -59,7 +61,7 @@ async def canonical_public_origin_middleware(request, call_next):
     # to optional third-party analytics.
     body = (
         inject_public_html_head(body, request.url.path)
-        if not request.url.query and is_clarity_eligible_public_path(request.url.path)
+        if not request.url.query and is_analytics_eligible_public_path(request.url.path)
         else inject_canonical_link(body, request.url.path)
     )
     headers = dict(response.headers)
@@ -75,7 +77,14 @@ def root():
 @app.get("/privacy", include_in_schema=False)
 def privacy_notice():
     """Serve the public privacy and optional-analytics notice without tracking."""
-    return FileResponse("api/static/privacy.html")
+    content = Path("api/static/privacy.html").read_text(encoding="utf-8")
+    status_marker = "<!-- CDE_ANALYTICS_STATUS -->"
+    if status_marker not in content:
+        raise RuntimeError("privacy_notice_status_marker_missing")
+    return HTMLResponse(
+        content=content.replace(status_marker, privacy_notice_google_analytics_status()),
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.api_route(
