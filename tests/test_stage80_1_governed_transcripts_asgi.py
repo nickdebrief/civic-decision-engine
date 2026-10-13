@@ -128,3 +128,26 @@ class GovernedTranscriptAsgiTests(unittest.TestCase):
         for forbidden in (b"Synthetic", b"utterances", b"translations", b"speaker"):
             self.assertNotIn(forbidden, body)
         self.assertEqual(self._transcript_state(), before)
+
+    def test_real_asgi_identity_mismatch_retrieval_does_not_leak_transcript_content(self):
+        path, cookie = self._create_then_read()
+        before = self._transcript_state()
+        metadata_path = self.root / self.source["intake_id"] / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["private_original_source_media"]["original_source_identity"] = "source-sha256:wrong"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        start, body = self.asgi_request("GET", f"{path}/1", cookie=cookie)
+        self.assertEqual(start["status"], 404)
+        for forbidden in (b"Synthetic", b"utterances", b"translations", b"speaker"):
+            self.assertNotIn(forbidden, body)
+        self.assertEqual(self._transcript_state(), before)
+
+    def test_real_asgi_digest_mismatch_retrieval_does_not_leak_transcript_content(self):
+        path, cookie = self._create_then_read()
+        before = self._transcript_state()
+        Path(self.source["proposed_storage_location"]).write_bytes(b"changed synthetic bytes")
+        start, body = self.asgi_request("GET", f"{path}/1", cookie=cookie)
+        self.assertEqual(start["status"], 404)
+        for forbidden in (b"Synthetic", b"utterances", b"translations", b"speaker"):
+            self.assertNotIn(forbidden, body)
+        self.assertEqual(self._transcript_state(), before)

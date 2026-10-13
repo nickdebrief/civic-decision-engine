@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 import tempfile
@@ -64,6 +65,61 @@ class GovernedTranscriptTests(unittest.TestCase):
         self.assertEqual(transcripts.get_transcript(self.conn, source_intake_id=self.source["intake_id"], version=1, root=self.root)["utterances"][0]["text"], "[inaudible] opening")
         with self.assertRaisesRegex(ValueError, "transcript_version_conflict"):
             transcripts.create_transcript_version(self.conn, source_intake_id=self.source["intake_id"], payload=corrected, actor="admin", root=self.root, expected_version=1)
+
+    def test_correction_audit_and_rejections_preserve_existing_versions(self):
+        first = transcripts.create_transcript_version(
+            self.conn, source_intake_id=self.source["intake_id"], payload=self._payload(),
+            actor="authenticated-admin", root=self.root,
+        )
+        first_before = transcripts.get_transcript(
+            self.conn, source_intake_id=self.source["intake_id"], version=1, root=self.root,
+        )
+        corrected = self._payload(
+            correction_reason="Corrected synthetic wording",
+            utterances=[{"start_ms": 0, "end_ms": 100, "text": "Corrected", "speaker_state": "unknown"}],
+            translations=[{
+                "target_language": "ga", "translation_text": "Aistriúchán ceartaithe",
+                "translation_method": "manual_translation", "translation_authority": "operator translation",
+            }],
+        )
+        second = transcripts.create_transcript_version(
+            self.conn, source_intake_id=self.source["intake_id"], payload=corrected,
+            actor="authenticated-admin", root=self.root, expected_version=1,
+        )
+        self.assertEqual(second["version_number"], 2)
+        first_after = transcripts.get_transcript(
+            self.conn, source_intake_id=self.source["intake_id"], version=1, root=self.root,
+        )
+        self.assertEqual(first_after["utterances"], first_before["utterances"])
+        self.assertEqual(first_after["translations"], first_before["translations"])
+        audit = self.conn.execute(
+            "SELECT event_type,actor,event_at,detail_json FROM source_media_transcript_audit_events "
+            "WHERE transcript_id=?", (second["id"],)
+        ).fetchone()
+        self.assertEqual(audit["event_type"], "corrected")
+        self.assertEqual(audit["actor"], "authenticated-admin")
+        self.assertRegex(audit["event_at"], r"^\d{4}-\d{2}-\d{2}T.*Z$")
+        self.assertEqual(json.loads(audit["detail_json"]), {"operator_claims": True, "version": 2})
+        counts_before = tuple(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in (
+            "source_media_transcripts", "source_media_transcript_utterances",
+            "source_media_transcript_translations", "source_media_transcript_audit_events",
+        ))
+        with self.assertRaisesRegex(ValueError, "transcript_correction_reason_required"):
+            transcripts.create_transcript_version(
+                self.conn, source_intake_id=self.source["intake_id"],
+                payload=self._payload(correction_reason=None), actor="authenticated-admin",
+                root=self.root, expected_version=2,
+            )
+        with self.assertRaisesRegex(ValueError, "transcript_version_conflict"):
+            transcripts.create_transcript_version(
+                self.conn, source_intake_id=self.source["intake_id"], payload=corrected,
+                actor="authenticated-admin", root=self.root, expected_version=1,
+            )
+        counts_after = tuple(self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in (
+            "source_media_transcripts", "source_media_transcript_utterances",
+            "source_media_transcript_translations", "source_media_transcript_audit_events",
+        ))
+        self.assertEqual(counts_after, counts_before)
 
     def test_competing_connection_with_same_expected_version_is_rejected(self):
         db_path = Path(self.temp.name) / "competing.sqlite"
