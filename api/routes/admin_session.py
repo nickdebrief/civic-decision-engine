@@ -96,6 +96,7 @@ from api import record_governed_reports as rg75
 from api import governed_report_publication_reviews as rg78e
 from api import governed_report_publications as rg79
 from api import source_media_transcripts as smt
+from api import governed_defect_register as gdr81
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -45095,6 +45096,7 @@ def _render_admin_console_navigation(
         ("/admin/governed-determination-publications", "Determination Publications"),
         ("/admin/governed-characterisations", "Governed Terminology"),
         ("/admin/governed-reports", "Governed Reports"),
+        ("/admin/governed-defects", "Defect & Correction Register"),
         ("/admin/collections", "Archive Collections"),
         (record_evidence_href, "Record Evidence"),
         ("/archive", "Public Archive Explorer"),
@@ -55644,3 +55646,140 @@ async def admin_create_private_source_transcript(source_intake_id: str, request:
     finally:
         conn.close()
     return JSONResponse({"transcript": item, "public": False}, status_code=201, headers=_PRIVATE_TRANSCRIPT_HEADERS)
+
+
+# Stage 81 is deliberately private and passive: these handlers record register
+# history only.  They never invoke a correction, publication, deployment, or
+# provider workflow named by a link.
+_PRIVATE_DEFECT_REGISTER_HEADERS = {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+}
+
+
+async def _private_defect_register_payload(request: Request) -> Mapping[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise _http_error(400, "defect_register_payload_invalid") from exc
+    if not isinstance(payload, Mapping):
+        raise _http_error(400, "defect_register_payload_invalid")
+    return payload
+
+
+def _private_defect_register_error(exc: Exception) -> HTTPException:
+    # Deliberately neutral: the register must not disclose private text through
+    # error detail.  The bounded code remains useful to an authenticated UI.
+    error = _http_error(409, str(exc) or "defect_register_rejected")
+    setattr(error, "headers", dict(_PRIVATE_DEFECT_REGISTER_HEADERS))
+    return error
+
+
+def _private_defect_register_rejection(status_code: int, detail: str) -> HTTPException:
+    error = _http_error(status_code, detail)
+    setattr(error, "headers", dict(_PRIVATE_DEFECT_REGISTER_HEADERS))
+    return error
+
+
+@router.get("/admin/governed-defects", response_class=HTMLResponse)
+def admin_governed_defect_register(request: Request):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        entries = gdr81.list_entries(conn)
+    finally:
+        conn.close()
+    rows = "".join(
+        f'<li><a href="/admin/governed-defects/{escape(str(item["entry_identifier"]))}">{escape(str(item["entry_identifier"]))}</a> '
+        f'— {escape(str(item["lifecycle_state"]))}; {escape(str(item["assessment_classification"]))}</li>'
+        for item in entries
+    ) or "<li>No synthetic entries recorded.</li>"
+    html = (
+        "<!doctype html><html><head><title>Governed Defect &amp; Correction Register</title></head><body>"
+        + _render_admin_console_navigation(admin_session=session)
+        + "<main><h1>Governed Defect &amp; Correction Register</h1>"
+        "<p>Private restricted register foundation. Linked workflows are not executed here.</p>"
+        "<p>General report intake is disabled pending the approved sensitive-admission safeguards; this page exposes preserved entry history.</p>"
+        f"<ul>{rows}</ul></main></body></html>"
+    )
+    return HTMLResponse(html, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.get("/admin/governed-defects/{entry_identifier}", response_class=HTMLResponse)
+def admin_governed_defect_register_entry(entry_identifier: str, request: Request):
+    session = require_admin_session(request)
+    conn = get_db()
+    try:
+        item = gdr81.get_entry(conn, entry_identifier)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "defect_register_entry_not_found") from None
+    finally:
+        conn.close()
+    history = "".join(
+        f'<li>{escape(str(event["occurred_at"]))}: {escape(str(event["event_type"]))} by {escape(str(event["actor"]))}</li>'
+        for event in item["history"]
+    )
+    html = (
+        "<!doctype html><html><head><title>Governed Defect Register Entry</title></head><body>"
+        + _render_admin_console_navigation(admin_session=session)
+        + f"<main><h1>{escape(str(item['entry_identifier']))}</h1><p>{escape(str(item['title']))}</p>"
+        f"<p>State: {escape(str(item['lifecycle_state']))}; classification: {escape(str(item['assessment_classification']))}</p>"
+        f"<h2>Preserved history</h2><ul>{history}</ul></main></body></html>"
+    )
+    return HTMLResponse(html, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.get("/api/admin/session/governed-defects/{entry_identifier}", response_class=JSONResponse)
+def admin_get_governed_defect_register_entry(entry_identifier: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        item = gdr81.get_entry(conn, entry_identifier)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "defect_register_entry_not_found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"entry": item, "public": False}, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.post("/api/admin/session/governed-defects", response_class=JSONResponse)
+async def admin_create_governed_defect_register_entry(request: Request):
+    require_admin_session(request)
+    # No request body is parsed or retained: operational report admission is
+    # deliberately unavailable until the approved sensitive-content controls.
+    raise _private_defect_register_rejection(409, "defect_register_report_admission_disabled")
+
+
+@router.post("/api/admin/session/governed-defects/{entry_identifier}/operations", response_class=JSONResponse)
+async def admin_mutate_governed_defect_register_entry(entry_identifier: str, request: Request):
+    session = require_admin_session(request)
+    payload = await _private_defect_register_payload(request)
+    operation = str(payload.get("operation") or "")
+    common = {"entry_identifier": entry_identifier, "actor": _admin_session_actor(session),
+              "expected_version": payload.get("expected_version"), "idempotency_key": payload.get("idempotency_key"),
+              "reason": payload.get("reason")}
+    conn = get_db()
+    try:
+        if operation == "assess":
+            receipt = gdr81.assess(conn, classification=payload.get("classification"), assessment_reason=payload.get("reason"), checked_scope=payload.get("checked_scope"), limitations=payload.get("limitations"), **{key: common[key] for key in ("entry_identifier", "actor", "expected_version", "idempotency_key")})
+        elif operation == "transition":
+            receipt = gdr81.transition(conn, new_state=payload.get("new_state"), action_scope=payload.get("action_scope"), acceptance_criteria=payload.get("acceptance_criteria"), action_reference_id=payload.get("action_reference_id"), execution_status=payload.get("execution_status"), execution_reference_id=payload.get("execution_reference_id"), verification=payload.get("verification"), closure_outcome=payload.get("closure_outcome"), **common)
+        elif operation == "ownership_priority_deferral":
+            receipt = gdr81.set_owner_priority_deferral(conn, owner_reference=payload.get("owner_reference"), priority=payload.get("priority"), deferral=payload.get("deferral"), clear_deferral=bool(payload.get("clear_deferral")), **common)
+        elif operation == "reference":
+            receipt = gdr81.add_reference(conn, reference_type=payload.get("reference_type"), reference_value=payload.get("reference_value"), relation=payload.get("relation"), neutral_label=payload.get("neutral_label"), supplier_identity=payload.get("supplier_identity"), validation_steps=payload.get("validation_steps"), **common)
+        elif operation == "impact":
+            receipt = gdr81.add_impact(conn, target_reference=payload.get("target_reference"), status=payload.get("status"), assessment_basis=payload.get("assessment_basis"), assessment_limits=payload.get("assessment_limits"), follow_up_action=payload.get("follow_up_action"), owner_reference=payload.get("owner_reference"), review_trigger=payload.get("review_trigger"), **common)
+        elif operation == "impact_status":
+            receipt = gdr81.set_impact_assessment_status(conn, status=payload.get("status"), assessment_basis=payload.get("assessment_basis"), assessment_limits=payload.get("assessment_limits"), **common)
+        elif operation == "hold":
+            receipt = gdr81.set_hold(conn, active=bool(payload.get("active")), scope=payload.get("scope"), review_date=payload.get("review_date"), **common)
+        elif operation == "retention_review":
+            receipt = gdr81.record_retention_review(conn, what_remains_necessary=payload.get("what_remains_necessary"), **common)
+        else:
+            raise ValueError("defect_register_operation_invalid")
+    except (ValueError, TypeError, sqlite3.Error) as exc:
+        raise _private_defect_register_error(exc) from None
+    finally:
+        conn.close()
+    return JSONResponse({"receipt": receipt, "public": False}, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
