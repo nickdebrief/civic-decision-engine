@@ -145,17 +145,18 @@ class GovernedSuiteTests(unittest.TestCase):
             "tests.test_stage79_governed_report_publication": ("neutral", "unittest", 133),
             "tests.test_stage80_1_governed_transcripts": ("neutral", "unittest", 134),
             "tests.test_stage80_1_governed_transcripts_asgi": ("real_asgi", "unittest", 135),
-            "tests.test_stage81_governed_defect_register": ("neutral", "unittest", 137),
-            "tests.test_stage81_governed_defect_register_admin": ("legacy_fastapi_stub", "unittest", 138),
-            "tests.test_stage81_governed_defect_register_asgi": ("real_asgi", "unittest", 139),
+            "tests.test_stage81_1_governed_impact_revalidation": ("neutral", "unittest", 137),
+            "tests.test_stage81_governed_defect_register": ("neutral", "unittest", 138),
+            "tests.test_stage81_governed_defect_register_admin": ("legacy_fastapi_stub", "unittest", 139),
+            "tests.test_stage81_governed_defect_register_asgi": ("real_asgi", "unittest", 140),
         }
         entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
-        self.assertEqual(len(entries), 142)
-        self.assertEqual(len({entry.module for entry in entries}), 142)
+        self.assertEqual(len(entries), 143)
+        self.assertEqual(len({entry.module for entry in entries}), 143)
         self.assertEqual(
             {classification: sum(entry.classification == classification for entry in entries)
              for classification in ("real_asgi", "legacy_fastapi_stub", "neutral")},
-            {"real_asgi": 3, "legacy_fastapi_stub": 79, "neutral": 60},
+            {"real_asgi": 3, "legacy_fastapi_stub": 79, "neutral": 61},
         )
         self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
         self.assertEqual(runner.EXCLUDED_UNTRACKED_MODULES, frozenset())

@@ -39,6 +39,7 @@ tests.test_admin_audit_traceability tests.test_admin_console_navigation_and_tabl
     "tests.test_stage81_governed_defect_register",
     "tests.test_stage81_governed_defect_register_admin",
     "tests.test_stage81_governed_defect_register_asgi",
+    "tests.test_stage81_1_governed_impact_revalidation",
 })
 REAL_ASGI_MODULES = frozenset({
     "tests.test_canonical_public_origin",
