@@ -55719,12 +55719,24 @@ def admin_governed_defect_register_entry(entry_identifier: str, request: Request
         f'<li>{escape(str(event["occurred_at"]))}: {escape(str(event["event_type"]))} by {escape(str(event["actor"]))}</li>'
         for event in item["history"]
     )
+    outstanding = (
+        (item.get("closure") or {}).get("outcome") == "correction_verified"
+        and any(gdr81.revalidation_has_outstanding_obligation(revalidation)
+                for revalidation in item.get("revalidations", []))
+    )
+    downstream_notice = "<p><strong>Original correction verified — downstream work outstanding.</strong></p>" if outstanding else ""
+    revalidations = "".join(
+        f'<li>{escape(str(revalidation["requirement_identifier"]))}: '
+        f'{escape(str(revalidation["outcome"]))}; owner {escape(str(revalidation["owner_reference"]))}</li>'
+        for revalidation in item.get("revalidations", [])
+    ) or "<li>No downstream revalidation requirements recorded.</li>"
     html = (
         "<!doctype html><html><head><title>Governed Defect Register Entry</title></head><body>"
         + _render_admin_console_navigation(admin_session=session)
         + f"<main><h1>{escape(str(item['entry_identifier']))}</h1><p>{escape(str(item['title']))}</p>"
         f"<p>State: {escape(str(item['lifecycle_state']))}; classification: {escape(str(item['assessment_classification']))}</p>"
-        f"<h2>Preserved history</h2><ul>{history}</ul></main></body></html>"
+        + downstream_notice
+        + f"<h2>Downstream revalidation</h2><ul>{revalidations}</ul><h2>Preserved history</h2><ul>{history}</ul></main></body></html>"
     )
     return HTMLResponse(html, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
 
@@ -55767,7 +55779,7 @@ async def admin_mutate_governed_defect_register_entry(entry_identifier: str, req
         elif operation == "ownership_priority_deferral":
             receipt = gdr81.set_owner_priority_deferral(conn, owner_reference=payload.get("owner_reference"), priority=payload.get("priority"), deferral=payload.get("deferral"), clear_deferral=bool(payload.get("clear_deferral")), **common)
         elif operation == "reference":
-            receipt = gdr81.add_reference(conn, reference_type=payload.get("reference_type"), reference_value=payload.get("reference_value"), relation=payload.get("relation"), neutral_label=payload.get("neutral_label"), supplier_identity=payload.get("supplier_identity"), validation_steps=payload.get("validation_steps"), **common)
+            receipt = gdr81.add_reference(conn, reference_type=payload.get("reference_type"), reference_value=payload.get("reference_value"), relation=payload.get("relation"), neutral_label=payload.get("neutral_label"), supplier_identity=payload.get("supplier_identity"), validation_steps=payload.get("validation_steps"), verification_binding=payload.get("verification_binding"), revalidation_binding=payload.get("revalidation_binding"), target_binding=payload.get("target_binding"), supersession_binding=payload.get("supersession_binding"), **common)
         elif operation == "impact":
             receipt = gdr81.add_impact(conn, target_reference=payload.get("target_reference"), status=payload.get("status"), assessment_basis=payload.get("assessment_basis"), assessment_limits=payload.get("assessment_limits"), follow_up_action=payload.get("follow_up_action"), owner_reference=payload.get("owner_reference"), review_trigger=payload.get("review_trigger"), **common)
         elif operation == "impact_status":
@@ -55776,6 +55788,10 @@ async def admin_mutate_governed_defect_register_entry(entry_identifier: str, req
             receipt = gdr81.set_hold(conn, active=bool(payload.get("active")), scope=payload.get("scope"), review_date=payload.get("review_date"), **common)
         elif operation == "retention_review":
             receipt = gdr81.record_retention_review(conn, what_remains_necessary=payload.get("what_remains_necessary"), **common)
+        elif operation == "revalidation_create":
+            receipt = gdr81.create_revalidation_requirement(conn, impact_id=payload.get("impact_id"), target_reference_id=payload.get("target_reference_id"), target_identity_kind=payload.get("target_identity_kind"), target_identity=payload.get("target_identity"), observed_at=payload.get("observed_at"), assessment_scope=payload.get("assessment_scope"), assessment_basis=payload.get("assessment_basis"), assessment_limits=payload.get("assessment_limits"), acceptance_criteria=payload.get("acceptance_criteria"), owner_reference=payload.get("owner_reference"), due_at=payload.get("due_at"), review_trigger=payload.get("review_trigger"), linked_workflow_requires_approval=payload.get("linked_workflow_requires_approval", False), authority_reference_id=payload.get("authority_reference_id"), predecessor_requirement_identifier=payload.get("predecessor_requirement_identifier"), supersession_reference_id=payload.get("supersession_reference_id"), **common)
+        elif operation == "revalidation_transition":
+            receipt = gdr81.transition_revalidation(conn, requirement_identifier=payload.get("requirement_identifier"), outcome=payload.get("outcome"), verification=payload.get("verification"), conclusion=payload.get("conclusion"), due_at=payload.get("due_at"), review_trigger=payload.get("review_trigger"), **common)
         else:
             raise ValueError("defect_register_operation_invalid")
     except (ValueError, TypeError, sqlite3.Error) as exc:

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 from api import governed_defect_register as register
 
@@ -64,3 +65,29 @@ class GovernedDefectRegisterAdminTests(unittest.TestCase):
         self.assertIn("report intake is disabled", response.content)
         with self.assertRaises(_Exception) as raised:
             self.module.require_admin_session(_Request("invalid"))
+
+    def test_verified_original_with_downstream_work_has_private_prominent_notice(self):
+        item = {
+            "entry_identifier": "CDE-DEF-SYNTHETIC-001", "title": "Synthetic", "lifecycle_state": "closed",
+            "assessment_classification": "confirmed_defect", "closure": {"outcome": "correction_verified"},
+            "revalidations": [{"requirement_identifier": "CDE-DEF-SYNTHETIC-001:RV-001", "outcome": "open", "owner_reference": "admin-b"}],
+            "history": [],
+        }
+        with patch.object(self.module.gdr81, "get_entry", return_value=item):
+            response = self.module.admin_governed_defect_register_entry(item["entry_identifier"], _Request(self.token))
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertIn("Original correction verified — downstream work outstanding.", response.content)
+
+    def test_historical_or_not_required_rows_do_not_inflate_downstream_notice(self):
+        item = {
+            "entry_identifier": "CDE-DEF-SYNTHETIC-002", "title": "Synthetic", "lifecycle_state": "closed",
+            "assessment_classification": "confirmed_defect", "closure": {"outcome": "correction_verified"},
+            "revalidations": [
+                {"requirement_identifier": "CDE-DEF-SYNTHETIC-002:RV-001", "outcome": "superseded", "owner_reference": "admin-b"},
+                {"requirement_identifier": "CDE-DEF-SYNTHETIC-002:RV-002", "outcome": "not_required", "owner_reference": "admin-b"},
+            ],
+            "history": [],
+        }
+        with patch.object(self.module.gdr81, "get_entry", return_value=item):
+            response = self.module.admin_governed_defect_register_entry(item["entry_identifier"], _Request(self.token))
+        self.assertNotIn("Original correction verified — downstream work outstanding.", response.content)

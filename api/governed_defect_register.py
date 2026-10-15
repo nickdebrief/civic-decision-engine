@@ -25,8 +25,11 @@ PRIORITIES = frozenset({"P0_urgent_integrity_or_security_risk", "P1_high_materia
 IMPACT_STATUSES = frozenset({"not_performed", "no_affected_items_identified_within_stated_assessment", "items_recorded"})
 IMPACT_ITEM_STATUSES = frozenset({"potentially_affected", "assessed_affected", "assessed_unaffected", "not_yet_assessed"})
 REFERENCE_TYPES = frozenset({"canonical_record", "record_version", "document", "document_version", "source_intake", "transcript_version", "correction", "patch", "git_commit", "pull_request", "deployment", "validation_artifact", "release_record"})
-REFERENCE_RELATIONS = frozenset({"reported_evidence", "assessment_evidence", "authority", "action_target", "execution_claim", "execution_evidence", "verification_evidence", "impact_target", "supersedes"})
+REFERENCE_RELATIONS = frozenset({"reported_evidence", "assessment_evidence", "authority", "action_target", "execution_claim", "execution_evidence", "verification_evidence", "impact_target", "supersedes", "revalidation_evidence"})
 VALIDATION_STEPS = frozenset({"syntax_validated", "target_existence_checked", "target_identity_or_content_verified", "relationship_substantiated"})
+REVALIDATION_OUTCOMES = frozenset({"not_required", "open", "deferred", "awaiting_revalidation", "revalidation_passed", "revalidation_failed", "concluded_without_passing", "superseded", "reopened"})
+REVALIDATION_ACTIVE_OUTCOMES = frozenset({"open", "deferred", "awaiting_revalidation", "revalidation_failed", "reopened"})
+TARGET_IDENTITY_KINDS = frozenset({"exact_reference", "snapshot_digest"})
 OWNER_USERNAME_ENV = "CDE_DEFECT_REGISTER_OWNER_USERNAME"
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,255}$")
 _KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -190,6 +193,9 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
             validator_identity TEXT,
             validation_steps_json TEXT NOT NULL,
             verification_binding_json TEXT,
+            revalidation_binding_json TEXT,
+            target_binding_json TEXT,
+            supersession_binding_json TEXT,
             created_at TEXT NOT NULL,
             created_by TEXT NOT NULL,
             FOREIGN KEY(entry_id) REFERENCES governed_defect_register_entries(id)
@@ -198,6 +204,12 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
     reference_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(governed_defect_register_references)")}
     if "verification_binding_json" not in reference_columns:
         conn.execute("ALTER TABLE governed_defect_register_references ADD COLUMN verification_binding_json TEXT")
+    if "revalidation_binding_json" not in reference_columns:
+        conn.execute("ALTER TABLE governed_defect_register_references ADD COLUMN revalidation_binding_json TEXT")
+    if "target_binding_json" not in reference_columns:
+        conn.execute("ALTER TABLE governed_defect_register_references ADD COLUMN target_binding_json TEXT")
+    if "supersession_binding_json" not in reference_columns:
+        conn.execute("ALTER TABLE governed_defect_register_references ADD COLUMN supersession_binding_json TEXT")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS governed_defect_register_impacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,12 +238,74 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL
         )
     """)
-    for table in ("governed_defect_register_events", "governed_defect_register_references", "governed_defect_register_impacts"):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS governed_defect_register_revalidations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entry_id INTEGER NOT NULL,
+            entry_identifier TEXT NOT NULL,
+            requirement_identifier TEXT NOT NULL UNIQUE,
+            predecessor_requirement_id INTEGER,
+            supersession_reference_id INTEGER,
+            impact_id INTEGER NOT NULL,
+            origin_action_json TEXT NOT NULL,
+            execution_reference_id INTEGER NOT NULL,
+            target_reference_id INTEGER NOT NULL,
+            target_identity_kind TEXT NOT NULL,
+            target_identity TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            assessment_scope TEXT NOT NULL,
+            assessment_basis TEXT NOT NULL,
+            assessment_limits TEXT NOT NULL,
+            criteria_json TEXT NOT NULL,
+            criteria_identity TEXT NOT NULL,
+            linked_workflow_requires_approval INTEGER NOT NULL,
+            authority_reference_id INTEGER,
+            owner_reference TEXT NOT NULL,
+            due_at TEXT,
+            review_trigger TEXT,
+            outcome TEXT NOT NULL,
+            conclusion_json TEXT,
+            outcome_details_json TEXT,
+            superseded_by_requirement_id INTEGER,
+            version INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            created_by TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT NOT NULL,
+            FOREIGN KEY(entry_id) REFERENCES governed_defect_register_entries(id),
+            FOREIGN KEY(impact_id) REFERENCES governed_defect_register_impacts(id)
+        )
+    """)
+    revalidation_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(governed_defect_register_revalidations)")}
+    if "outcome_details_json" not in revalidation_columns:
+        conn.execute("ALTER TABLE governed_defect_register_revalidations ADD COLUMN outcome_details_json TEXT")
+    if "supersession_reference_id" not in revalidation_columns:
+        conn.execute("ALTER TABLE governed_defect_register_revalidations ADD COLUMN supersession_reference_id INTEGER")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS governed_defect_register_revalidation_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            revalidation_id INTEGER NOT NULL,
+            entry_id INTEGER NOT NULL,
+            entry_identifier TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            occurred_at TEXT NOT NULL,
+            prior_version INTEGER NOT NULL,
+            resulting_version INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            details_json TEXT NOT NULL,
+            FOREIGN KEY(revalidation_id) REFERENCES governed_defect_register_revalidations(id),
+            FOREIGN KEY(entry_id) REFERENCES governed_defect_register_entries(id)
+        )
+    """)
+    for table in ("governed_defect_register_events", "governed_defect_register_references", "governed_defect_register_impacts", "governed_defect_register_revalidation_events"):
         conn.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_no_update BEFORE UPDATE ON {table} BEGIN SELECT RAISE(ABORT, 'defect_register_history_immutable'); END")
         conn.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_no_delete BEFORE DELETE ON {table} BEGIN SELECT RAISE(ABORT, 'defect_register_history_immutable'); END")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_register_events_entry ON governed_defect_register_events(entry_id, id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_register_refs_entry ON governed_defect_register_references(entry_id, id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_register_impacts_entry ON governed_defect_register_impacts(entry_id, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_register_revalidations_entry ON governed_defect_register_revalidations(entry_id, id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_defect_register_revalidation_events_requirement ON governed_defect_register_revalidation_events(revalidation_id, id)")
 
 
 def _next_identifier(conn: sqlite3.Connection, now: str) -> str:
@@ -261,6 +335,7 @@ def get_entry(conn: sqlite3.Connection, entry_identifier: str) -> dict[str, Any]
     item["history"] = history(conn, item["entry_identifier"])
     item["references"] = references(conn, item["entry_identifier"])
     item["impacts"] = impacts(conn, item["entry_identifier"])
+    item["revalidations"] = revalidations(conn, item["entry_identifier"])
     return item
 
 
@@ -286,6 +361,9 @@ def references(conn: sqlite3.Connection, entry_identifier: str) -> list[dict[str
         item = dict(row)
         item["validation_steps"] = _loads(item.pop("validation_steps_json"), [])
         item["verification_binding"] = _loads(item.pop("verification_binding_json", None), None)
+        item["revalidation_binding"] = _loads(item.pop("revalidation_binding_json", None), None)
+        item["target_binding"] = _loads(item.pop("target_binding_json", None), None)
+        item["supersession_binding"] = _loads(item.pop("supersession_binding_json", None), None)
         result.append(item)
     return result
 
@@ -304,6 +382,28 @@ def _reference_for_entry(conn: sqlite3.Connection, item: Mapping[str, Any], refe
     result = dict(row)
     result["validation_steps"] = _loads(result.pop("validation_steps_json"), [])
     result["verification_binding"] = _loads(result.pop("verification_binding_json", None), None)
+    result["revalidation_binding"] = _loads(result.pop("revalidation_binding_json", None), None)
+    result["target_binding"] = _loads(result.pop("target_binding_json", None), None)
+    result["supersession_binding"] = _loads(result.pop("supersession_binding_json", None), None)
+    return result
+
+
+def _references_for_entry(conn: sqlite3.Connection, item: Mapping[str, Any], reference_ids: Any) -> list[int]:
+    if not isinstance(reference_ids, list) or not reference_ids or len(reference_ids) > 32:
+        raise ValueError("defect_register_revalidation_evidence_required")
+    result: list[int] = []
+    for raw in reference_ids:
+        try:
+            reference_id = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("defect_register_revalidation_evidence_required") from exc
+        row = conn.execute(
+            "SELECT 1 FROM governed_defect_register_references WHERE id=? AND entry_id=?",
+            (reference_id, int(item["id"])),
+        ).fetchone()
+        if row is None or reference_id in result:
+            raise ValueError("defect_register_revalidation_evidence_required")
+        result.append(reference_id)
     return result
 
 
@@ -354,8 +454,105 @@ def _verification_binding(value: Any, *, action: Mapping[str, Any] | None,
     return binding
 
 
+def _target_binding(value: Any, *, reference_type: str, reference_value: str) -> dict[str, Any]:
+    """Normalize immutable target-observation evidence carried by an impact target.
+
+    A digest is only useful here when the retained bounded reference explicitly
+    identifies both its target and the observed content identity.  This function
+    deliberately does not fetch content or copy it into the register.
+    """
+    if not isinstance(value, Mapping):
+        raise ValueError("defect_register_revalidation_target_binding_invalid")
+    identity_kind = _enum(value.get("identity_kind"), TARGET_IDENTITY_KINDS,
+                          "defect_register_revalidation_target_binding_invalid")
+    identity = _identifier(value.get("identity"), "defect_register_revalidation_target_binding_invalid")
+    if identity_kind == "exact_reference" and identity != reference_value:
+        raise ValueError("defect_register_revalidation_target_binding_mismatch")
+    if identity_kind == "snapshot_digest" and not re.fullmatch(r"[0-9a-f]{64}", identity):
+        raise ValueError("defect_register_revalidation_target_binding_invalid")
+    if (_enum(value.get("target_reference_type"), REFERENCE_TYPES,
+              "defect_register_revalidation_target_binding_invalid") != reference_type
+            or _identifier(value.get("target_reference_value"),
+                           "defect_register_revalidation_target_binding_invalid") != reference_value):
+        raise ValueError("defect_register_revalidation_target_binding_mismatch")
+    return {
+        "target_reference_type": reference_type,
+        "target_reference_value": reference_value,
+        "identity_kind": identity_kind,
+        "identity": identity,
+        "observed_at": _timestamp_text(_timestamp(
+            value.get("observed_at"), "defect_register_revalidation_observation_time_invalid")),
+    }
+
+
+def _supersession_binding(conn: sqlite3.Connection, item: Mapping[str, Any], value: Any,
+                          *, reference_type: str, reference_value: str) -> dict[str, Any]:
+    """Bind a passive later-correction reference to one exact predecessor."""
+    if not isinstance(value, Mapping):
+        raise ValueError("defect_register_revalidation_supersession_binding_invalid")
+    predecessor = _revalidation_for_entry(conn, item, value.get("predecessor_requirement_identifier"))
+    origin = predecessor["origin_action"]
+    successor_origin = _origin_action(item)
+    binding = {
+        "predecessor_requirement_identifier": predecessor["requirement_identifier"],
+        "predecessor_origin_action_id": _required(
+            value.get("predecessor_origin_action_id"),
+            "defect_register_revalidation_supersession_binding_invalid", maximum=128),
+        "successor_origin_action_id": _required(
+            value.get("successor_origin_action_id"),
+            "defect_register_revalidation_supersession_binding_invalid", maximum=128),
+        "later_correction_reference_type": _enum(
+            value.get("later_correction_reference_type"), REFERENCE_TYPES,
+            "defect_register_revalidation_supersession_binding_invalid"),
+        "later_correction_reference_value": _identifier(
+            value.get("later_correction_reference_value"),
+            "defect_register_revalidation_supersession_binding_invalid"),
+    }
+    if (binding["predecessor_origin_action_id"] != origin.get("action_id")
+            or binding["successor_origin_action_id"] != successor_origin.get("action_id")
+            or binding["later_correction_reference_type"] != reference_type
+            or binding["later_correction_reference_value"] != reference_value
+            or binding["later_correction_reference_value"] == origin.get("action_id")):
+        raise ValueError("defect_register_revalidation_supersession_binding_mismatch")
+    return binding
+
+
 def impacts(conn: sqlite3.Connection, entry_identifier: str) -> list[dict[str, Any]]:
     return [dict(row) for row in conn.execute("SELECT * FROM governed_defect_register_impacts WHERE entry_identifier=? ORDER BY id", (_identifier(entry_identifier, "defect_register_identifier_invalid"),)).fetchall()]
+
+
+def _revalidation_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["origin_action"] = _loads(item.pop("origin_action_json"), {})
+    item["criteria"] = _loads(item.pop("criteria_json"), [])
+    item["conclusion"] = _loads(item.pop("conclusion_json", None), None)
+    item["outcome_details"] = _loads(item.pop("outcome_details_json", None), None)
+    item["linked_workflow_requires_approval"] = bool(item["linked_workflow_requires_approval"])
+    return item
+
+
+def revalidations(conn: sqlite3.Connection, entry_identifier: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM governed_defect_register_revalidations WHERE entry_identifier=? ORDER BY id",
+        (_identifier(entry_identifier, "defect_register_identifier_invalid"),),
+    ).fetchall()
+    return [_revalidation_row(row) or {} for row in rows]
+
+
+def revalidation_history(conn: sqlite3.Connection, requirement_identifier: Any) -> list[dict[str, Any]]:
+    identifier = _identifier(requirement_identifier, "defect_register_revalidation_identifier_invalid")
+    rows = conn.execute(
+        "SELECT * FROM governed_defect_register_revalidation_events WHERE revalidation_id=(SELECT id FROM governed_defect_register_revalidations WHERE requirement_identifier=?) ORDER BY id",
+        (identifier,),
+    ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        item["details"] = _loads(item.pop("details_json"), {})
+        result.append(item)
+    return result
 
 
 def _receipt(conn: sqlite3.Connection, key: str, canonical: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -541,7 +738,7 @@ def transition(conn: sqlite3.Connection, *, entry_identifier: Any, new_state: An
     return _mutate(conn, entry_identifier=entry_identifier, actor=actor, expected_version=expected_version, idempotency_key=idempotency_key, operation="lifecycle_transition", reason=reason, payload={"new_state": target, "action_scope": action_scope_value, "acceptance_criteria": criteria, "action_reference_id": action_reference_id, "execution_status": execution, "execution_reference_id": execution_reference_id, "verification": verified, "closure_outcome": outcome}, apply=apply)
 
 
-def add_reference(conn: sqlite3.Connection, *, entry_identifier: Any, reference_type: Any, reference_value: Any, relation: Any, neutral_label: Any, supplier_identity: Any, validation_steps: Any, actor: Any, expected_version: Any, idempotency_key: Any, reason: Any, verification_binding: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def add_reference(conn: sqlite3.Connection, *, entry_identifier: Any, reference_type: Any, reference_value: Any, relation: Any, neutral_label: Any, supplier_identity: Any, validation_steps: Any, actor: Any, expected_version: Any, idempotency_key: Any, reason: Any, verification_binding: Mapping[str, Any] | None = None, revalidation_binding: Mapping[str, Any] | None = None, target_binding: Mapping[str, Any] | None = None, supersession_binding: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ref_type = _enum(reference_type, REFERENCE_TYPES, "defect_register_reference_type_invalid")
     relation_value = _enum(relation, REFERENCE_RELATIONS, "defect_register_reference_relation_invalid")
     value = _identifier(reference_value, "defect_register_reference_value_invalid")
@@ -551,6 +748,18 @@ def add_reference(conn: sqlite3.Connection, *, entry_identifier: Any, reference_
         raise ValueError("defect_register_verification_binding_invalid")
     if relation_value == "verification_evidence" and not isinstance(verification_binding, Mapping):
         raise ValueError("defect_register_verification_binding_invalid")
+    if relation_value != "revalidation_evidence" and revalidation_binding is not None:
+        raise ValueError("defect_register_revalidation_binding_invalid")
+    if relation_value == "revalidation_evidence" and not isinstance(revalidation_binding, Mapping):
+        raise ValueError("defect_register_revalidation_binding_invalid")
+    if relation_value != "impact_target" and target_binding is not None:
+        raise ValueError("defect_register_revalidation_target_binding_invalid")
+    if relation_value == "impact_target" and not isinstance(target_binding, Mapping):
+        raise ValueError("defect_register_revalidation_target_binding_invalid")
+    if relation_value != "supersedes" and supersession_binding is not None:
+        raise ValueError("defect_register_revalidation_supersession_binding_invalid")
+    if relation_value == "supersedes" and not isinstance(supersession_binding, Mapping):
+        raise ValueError("defect_register_revalidation_supersession_binding_invalid")
     if not isinstance(validation_steps, list): raise ValueError("defect_register_validation_steps_invalid")
     steps = []
     for raw in validation_steps:
@@ -564,7 +773,7 @@ def add_reference(conn: sqlite3.Connection, *, entry_identifier: Any, reference_
                       "validated_at": _timestamp_text(_timestamp(raw.get("validated_at"), "defect_register_validation_time_required")),
                       "limits": _optional(raw.get("limits"))})
     # References are children but still need an attributable parent version/event.
-    return _mutate_reference(conn, entry_identifier=entry_identifier, actor=actor, expected_version=expected_version, idempotency_key=idempotency_key, reason=reason, payload={"reference_type": ref_type, "reference_value": value, "relation": relation_value, "neutral_label": label, "supplier_identity": supplied, "validation_steps": steps, "verification_binding": dict(verification_binding) if verification_binding is not None else None})
+    return _mutate_reference(conn, entry_identifier=entry_identifier, actor=actor, expected_version=expected_version, idempotency_key=idempotency_key, reason=reason, payload={"reference_type": ref_type, "reference_value": value, "relation": relation_value, "neutral_label": label, "supplier_identity": supplied, "validation_steps": steps, "verification_binding": dict(verification_binding) if verification_binding is not None else None, "revalidation_binding": dict(revalidation_binding) if revalidation_binding is not None else None, "target_binding": dict(target_binding) if target_binding is not None else None, "supersession_binding": dict(supersession_binding) if supersession_binding is not None else None})
 
 
 def _mutate_reference(conn: sqlite3.Connection, *, entry_identifier: Any, actor: Any, expected_version: Any, idempotency_key: Any, reason: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -583,9 +792,18 @@ def _mutate_reference(conn: sqlite3.Connection, *, entry_identifier: Any, actor:
             binding = _verification_binding(payload["verification_binding"], action=item.get("active_action"),
                                             reference_type=payload["reference_type"], reference_value=payload["reference_value"],
                                             lifecycle_state=item["lifecycle_state"])
-        cursor = conn.execute("INSERT INTO governed_defect_register_references (entry_id,entry_identifier,reference_type,reference_value,relation,neutral_label,supplier_identity,validator_identity,validation_steps_json,verification_binding_json,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (int(item["id"]), identifier, payload["reference_type"], payload["reference_value"], payload["relation"], payload["neutral_label"], payload["supplier_identity"], None, _json(steps), _json(binding) if binding is not None else None, utc_now(), actor_value))
+        revalidation_binding = None
+        if payload["relation"] == "revalidation_evidence":
+            revalidation_binding = _revalidation_binding(conn, item, payload["revalidation_binding"], payload["reference_type"], payload["reference_value"])
+        target_binding = None
+        if payload["relation"] == "impact_target":
+            target_binding = _target_binding(payload["target_binding"], reference_type=payload["reference_type"], reference_value=payload["reference_value"])
+        supersession_binding = None
+        if payload["relation"] == "supersedes":
+            supersession_binding = _supersession_binding(conn, item, payload["supersession_binding"], reference_type=payload["reference_type"], reference_value=payload["reference_value"])
+        cursor = conn.execute("INSERT INTO governed_defect_register_references (entry_id,entry_identifier,reference_type,reference_value,relation,neutral_label,supplier_identity,validator_identity,validation_steps_json,verification_binding_json,revalidation_binding_json,target_binding_json,supersession_binding_json,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(item["id"]), identifier, payload["reference_type"], payload["reference_value"], payload["relation"], payload["neutral_label"], payload["supplier_identity"], None, _json(steps), _json(binding) if binding is not None else None, _json(revalidation_binding) if revalidation_binding is not None else None, _json(target_binding) if target_binding is not None else None, _json(supersession_binding) if supersession_binding is not None else None, utc_now(), actor_value))
         conn.execute("UPDATE governed_defect_register_entries SET version=?,updated_at=?,updated_by=? WHERE id=?", (expected + 1, utc_now(), actor_value, int(item["id"])))
-        event_id = _event(conn, item, event_type="reference_added", actor=actor_value, reason=canonical["reason"], prior_version=expected, resulting_version=expected + 1, details={"reference_id": int(cursor.lastrowid), "relation": payload["relation"], "validation_steps": steps, "verification_binding": binding})
+        event_id = _event(conn, item, event_type="reference_added", actor=actor_value, reason=canonical["reason"], prior_version=expected, resulting_version=expected + 1, details={"reference_id": int(cursor.lastrowid), "relation": payload["relation"], "validation_steps": steps, "verification_binding": binding, "revalidation_binding": revalidation_binding, "target_binding": target_binding, "supersession_binding": supersession_binding})
         receipt = {"entry_identifier": identifier, "operation": "reference_added", "event_id": event_id, "resulting_version": expected + 1, "historical_receipt": False}
         conn.execute("INSERT INTO governed_defect_register_receipts (idempotency_key,entry_identifier,canonical_payload_json,receipt_json,created_at) VALUES (?,?,?,?,?)", (key, identifier, _json(canonical), _json(receipt), utc_now()))
         conn.commit(); return receipt
@@ -693,3 +911,355 @@ def record_retention_review(conn: sqlite3.Connection, *, entry_identifier: Any, 
     return _mutate(conn, entry_identifier=entry_identifier, actor=actor, expected_version=expected_version,
                    idempotency_key=idempotency_key, operation="retention_review_recorded", reason=reason,
                    payload={"what_remains_necessary": necessary}, apply=apply)
+
+
+# Stage 81.1: private, passive downstream impact/revalidation tracking.  These
+# records are not a workflow executor; all cited material remains a bounded
+# reference and all current-state changes are accompanied by immutable events.
+def _revalidation_for_entry(conn: sqlite3.Connection, item: Mapping[str, Any], requirement_identifier: Any) -> dict[str, Any]:
+    identifier = _identifier(requirement_identifier, "defect_register_revalidation_identifier_invalid")
+    row = conn.execute(
+        "SELECT * FROM governed_defect_register_revalidations WHERE requirement_identifier=? AND entry_id=?",
+        (identifier, int(item["id"])),
+    ).fetchone()
+    result = _revalidation_row(row)
+    if result is None:
+        raise ValueError("defect_register_revalidation_not_found")
+    return result
+
+
+def _revalidation_event(conn: sqlite3.Connection, requirement: Mapping[str, Any], item: Mapping[str, Any], *, event_type: str, actor: str, reason: str, prior_version: int, resulting_version: int, details: Mapping[str, Any]) -> int:
+    cursor = conn.execute(
+        "INSERT INTO governed_defect_register_revalidation_events (revalidation_id,entry_id,entry_identifier,event_type,actor,occurred_at,prior_version,resulting_version,reason,details_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (int(requirement["id"]), int(item["id"]), item["entry_identifier"], event_type, actor, utc_now(), prior_version, resulting_version, reason, _json(details)),
+    )
+    return int(cursor.lastrowid)
+
+
+def _next_revalidation_identifier(conn: sqlite3.Connection, entry_identifier: str) -> str:
+    count = conn.execute(
+        "SELECT count(*) FROM governed_defect_register_revalidations WHERE entry_identifier=?",
+        (entry_identifier,),
+    ).fetchone()[0]
+    return f"{entry_identifier}:RV-{int(count) + 1:03d}"
+
+
+def _bound_reference(conn: sqlite3.Connection, item: Mapping[str, Any], reference_id: Any, relation: str, *, checks: tuple[str, ...] = ()) -> dict[str, Any]:
+    reference = _reference_for_entry(conn, item, reference_id, relation=relation)
+    if any(not _reference_has_check(reference, check) for check in checks):
+        raise ValueError("defect_register_revalidation_reference_unsubstantiated")
+    return reference
+
+
+def _target_identity(kind: Any, value: Any, reference: Mapping[str, Any], observed_at: str) -> tuple[str, str]:
+    identity_kind = _enum(kind, TARGET_IDENTITY_KINDS, "defect_register_revalidation_target_identity_invalid")
+    identity = _identifier(value, "defect_register_revalidation_target_identity_invalid")
+    binding = reference.get("target_binding")
+    if not isinstance(binding, Mapping):
+        raise ValueError("defect_register_revalidation_target_binding_invalid")
+    if (binding.get("identity_kind") != identity_kind
+            or binding.get("identity") != identity
+            or binding.get("observed_at") != observed_at
+            or binding.get("target_reference_type") != reference.get("reference_type")
+            or binding.get("target_reference_value") != reference.get("reference_value")):
+        raise ValueError("defect_register_revalidation_target_binding_mismatch")
+    return identity_kind, identity
+
+
+def _bound_supersession_reference(conn: sqlite3.Connection, item: Mapping[str, Any],
+                                  predecessor: Mapping[str, Any], reference_id: Any) -> dict[str, Any]:
+    reference = _bound_reference(conn, item, reference_id, "supersedes",
+                                 checks=("relationship_substantiated",))
+    binding = reference.get("supersession_binding")
+    origin = predecessor["origin_action"]
+    successor_origin = _origin_action(item)
+    if (not isinstance(binding, Mapping)
+            or binding.get("predecessor_requirement_identifier") != predecessor["requirement_identifier"]
+            or binding.get("predecessor_origin_action_id") != origin.get("action_id")
+            or binding.get("successor_origin_action_id") != successor_origin.get("action_id")
+            or binding.get("later_correction_reference_type") != reference.get("reference_type")
+            or binding.get("later_correction_reference_value") != reference.get("reference_value")):
+        raise ValueError("defect_register_revalidation_supersession_binding_mismatch")
+    already_used = conn.execute(
+        "SELECT 1 FROM governed_defect_register_revalidations WHERE supersession_reference_id=?",
+        (int(reference["id"]),),
+    ).fetchone()
+    if already_used is not None:
+        raise ValueError("defect_register_revalidation_supersession_reused")
+    return reference
+
+
+def _require_timing(due_at: Any, review_trigger: Any) -> tuple[str | None, str | None]:
+    due = _optional(due_at, maximum=64)
+    trigger = _optional(review_trigger, maximum=512)
+    if not due and not trigger:
+        raise ValueError("defect_register_revalidation_timing_required")
+    if due:
+        due = _timestamp_text(_timestamp(due, "defect_register_revalidation_due_invalid"))
+    return due, trigger
+
+
+def _origin_action(item: Mapping[str, Any]) -> dict[str, Any]:
+    action = item.get("active_action")
+    if not isinstance(action, Mapping) or action.get("execution_status") != "execution_substantiated":
+        raise ValueError("defect_register_revalidation_origin_action_invalid")
+    required = ("action_id", "agreed_version", "acceptance_criteria_identity", "execution_reference_id")
+    if any(action.get(name) in (None, "") for name in required):
+        raise ValueError("defect_register_revalidation_origin_action_invalid")
+    return {
+        "action_id": str(action["action_id"]),
+        "agreed_version": int(action["agreed_version"]),
+        "acceptance_criteria_identity": str(action["acceptance_criteria_identity"]),
+        "execution_reference_id": int(action["execution_reference_id"]),
+    }
+
+
+def _revalidation_binding(conn: sqlite3.Connection, item: Mapping[str, Any], value: Any, reference_type: str, reference_value: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("defect_register_revalidation_binding_invalid")
+    requirement = _revalidation_for_entry(conn, item, value.get("requirement_identifier"))
+    if requirement["outcome"] not in {"awaiting_revalidation", "revalidation_failed"}:
+        raise ValueError("defect_register_revalidation_binding_invalid")
+    origin = requirement["origin_action"]
+    try:
+        execution_id = int(value.get("execution_reference_id"))
+        target_id = int(value.get("target_reference_id"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("defect_register_revalidation_binding_invalid") from exc
+    binding = {
+        "requirement_identifier": requirement["requirement_identifier"],
+        "origin_action_id": _required(value.get("origin_action_id"), "defect_register_revalidation_binding_invalid", maximum=128),
+        "origin_action_agreed_version": int(value.get("origin_action_agreed_version")),
+        "origin_acceptance_criteria_identity": _required(value.get("origin_acceptance_criteria_identity"), "defect_register_revalidation_binding_invalid", maximum=128),
+        "execution_reference_id": execution_id,
+        "target_reference_id": target_id,
+        "target_identity": _identifier(value.get("target_identity"), "defect_register_revalidation_binding_invalid"),
+        "criteria_identity": _required(value.get("criteria_identity"), "defect_register_revalidation_binding_invalid", maximum=128),
+        "artifact_reference_type": reference_type,
+        "artifact_reference_value": reference_value,
+    }
+    if (binding["origin_action_id"] != origin["action_id"]
+            or binding["origin_action_agreed_version"] != origin["agreed_version"]
+            or binding["origin_acceptance_criteria_identity"] != origin["acceptance_criteria_identity"]
+            or binding["execution_reference_id"] != requirement["execution_reference_id"]
+            or binding["target_reference_id"] != requirement["target_reference_id"]
+            or binding["target_identity"] != requirement["target_identity"]
+            or binding["criteria_identity"] != requirement["criteria_identity"]):
+        raise ValueError("defect_register_revalidation_binding_mismatch")
+    return binding
+
+
+def _bound_revalidation_artifact(conn: sqlite3.Connection, item: Mapping[str, Any], requirement: Mapping[str, Any], verification: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
+    artifact = _reference_for_entry(conn, item, verification.get("artifact_reference_id"), relation="revalidation_evidence")
+    origin = requirement["origin_action"]
+    expected_binding = {"requirement_identifier": requirement["requirement_identifier"], "origin_action_id": origin["action_id"], "origin_action_agreed_version": origin["agreed_version"], "origin_acceptance_criteria_identity": origin["acceptance_criteria_identity"], "execution_reference_id": requirement["execution_reference_id"], "target_reference_id": requirement["target_reference_id"], "target_identity": requirement["target_identity"], "criteria_identity": requirement["criteria_identity"], "artifact_reference_type": artifact["reference_type"], "artifact_reference_value": artifact["reference_value"]}
+    if artifact.get("revalidation_binding") != expected_binding:
+        raise ValueError("defect_register_revalidation_binding_mismatch")
+    if (not _reference_has_check(artifact, "relationship_substantiated")
+            or not _reference_has_check(artifact, "target_identity_or_content_verified")):
+        raise ValueError("defect_register_revalidation_verification_unsubstantiated")
+    results = verification.get("criteria_results")
+    if not isinstance(results, Mapping) or set(results) != set(requirement["criteria"]):
+        raise ValueError("defect_register_revalidation_criteria_incomplete")
+    return artifact, {str(key): str(value) for key, value in results.items()}
+
+
+def _mutate_revalidation(conn: sqlite3.Connection, *, entry_identifier: Any, requirement_identifier: Any, actor: Any, expected_version: Any, idempotency_key: Any, operation: str, reason: Any, payload: Mapping[str, Any], apply: Callable[[dict[str, Any], dict[str, Any], int], tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, Any]:
+    ensure_tables(conn)
+    identifier = _identifier(entry_identifier, "defect_register_identifier_invalid")
+    requirement_id = _identifier(requirement_identifier, "defect_register_revalidation_identifier_invalid")
+    actor_value, expected, key = _actor(actor), _expected_version(expected_version), _key(idempotency_key)
+    canonical = {"operation": operation, "entry_identifier": identifier, "requirement_identifier": requirement_id, "actor": actor_value, "expected_version": expected, "reason": _required(reason, "defect_register_reason_required"), **payload}
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        replay = _receipt(conn, key, canonical)
+        if replay is not None:
+            conn.rollback()
+            return replay
+        item = _entry(conn, identifier)
+        if int(item["version"]) != expected:
+            raise ValueError("defect_register_version_conflict")
+        requirement = _revalidation_for_entry(conn, item, requirement_id)
+        updates, details = apply(item, requirement, expected + 1)
+        if not updates:
+            raise ValueError("defect_register_revalidation_mutation_invalid")
+        columns = list(updates) + ["version", "updated_at", "updated_by"]
+        values = [updates[name] for name in updates] + [int(requirement["version"]) + 1, utc_now(), actor_value, int(requirement["id"])]
+        conn.execute(f"UPDATE governed_defect_register_revalidations SET {','.join(f'{name}=?' for name in columns)} WHERE id=?", values)
+        conn.execute("UPDATE governed_defect_register_entries SET version=?,updated_at=?,updated_by=? WHERE id=?", (expected + 1, utc_now(), actor_value, int(item["id"])))
+        event_id = _revalidation_event(conn, requirement, item, event_type=operation, actor=actor_value, reason=canonical["reason"], prior_version=int(requirement["version"]), resulting_version=int(requirement["version"]) + 1, details=details)
+        _event(conn, item, event_type=operation, actor=actor_value, reason=canonical["reason"], prior_version=expected, resulting_version=expected + 1, details={"requirement_identifier": requirement_id, **details})
+        receipt = {"entry_identifier": identifier, "requirement_identifier": requirement_id, "operation": operation, "event_id": event_id, "resulting_version": expected + 1, "historical_receipt": False}
+        conn.execute("INSERT INTO governed_defect_register_receipts (idempotency_key,entry_identifier,canonical_payload_json,receipt_json,created_at) VALUES (?,?,?,?,?)", (key, identifier, _json(canonical), _json(receipt), utc_now()))
+        conn.commit()
+        return receipt
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def create_revalidation_requirement(conn: sqlite3.Connection, *, entry_identifier: Any, impact_id: Any, target_reference_id: Any, target_identity_kind: Any, target_identity: Any, observed_at: Any, assessment_scope: Any, assessment_basis: Any, assessment_limits: Any, acceptance_criteria: Any, owner_reference: Any, due_at: Any = None, review_trigger: Any = None, linked_workflow_requires_approval: bool = False, authority_reference_id: Any = None, predecessor_requirement_identifier: Any = None, supersession_reference_id: Any = None, actor: Any, expected_version: Any, idempotency_key: Any, reason: Any) -> dict[str, Any]:
+    criteria = _criteria(acceptance_criteria)
+    owner = _required(owner_reference, "defect_register_revalidation_owner_required", maximum=256)
+    due, trigger = _require_timing(due_at, review_trigger)
+    scope = _required(assessment_scope, "defect_register_revalidation_scope_required")
+    basis = _required(assessment_basis, "defect_register_revalidation_basis_required")
+    limits = _required(assessment_limits, "defect_register_revalidation_limits_required")
+    if not isinstance(linked_workflow_requires_approval, bool):
+        raise ValueError("defect_register_revalidation_authority_requirement_invalid")
+    requires_approval = linked_workflow_requires_approval
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        identifier = _identifier(entry_identifier, "defect_register_identifier_invalid")
+        actor_value, expected, key = _actor(actor), _expected_version(expected_version), _key(idempotency_key)
+        payload = {"impact_id": impact_id, "target_reference_id": target_reference_id, "target_identity_kind": target_identity_kind, "target_identity": target_identity, "observed_at": observed_at, "assessment_scope": scope, "assessment_basis": basis, "assessment_limits": limits, "acceptance_criteria": criteria, "owner_reference": owner, "due_at": due, "review_trigger": trigger, "linked_workflow_requires_approval": requires_approval, "authority_reference_id": authority_reference_id, "predecessor_requirement_identifier": predecessor_requirement_identifier, "supersession_reference_id": supersession_reference_id}
+        canonical = {"operation": "revalidation_requirement_created", "entry_identifier": identifier, "actor": actor_value, "expected_version": expected, "reason": _required(reason, "defect_register_reason_required"), **payload}
+        replay = _receipt(conn, key, canonical)
+        if replay is not None:
+            conn.rollback()
+            return replay
+        item = _entry(conn, identifier)
+        if int(item["version"]) != expected:
+            raise ValueError("defect_register_version_conflict")
+        action = _origin_action(item)
+        execution_ref = _bound_reference(conn, item, action["execution_reference_id"], "execution_evidence", checks=("relationship_substantiated",))
+        del execution_ref
+        try:
+            impact_numeric = int(impact_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("defect_register_revalidation_impact_invalid") from exc
+        impact = conn.execute("SELECT * FROM governed_defect_register_impacts WHERE id=? AND entry_id=?", (impact_numeric, int(item["id"]))).fetchone()
+        if impact is None or str(impact["status"]) not in {"potentially_affected", "assessed_affected"}:
+            raise ValueError("defect_register_revalidation_impact_invalid")
+        observed = _timestamp_text(_timestamp(observed_at, "defect_register_revalidation_observation_time_invalid"))
+        target_ref = _bound_reference(conn, item, target_reference_id, "impact_target", checks=("relationship_substantiated", "target_identity_or_content_verified"))
+        identity_kind, identity = _target_identity(target_identity_kind, target_identity, target_ref, observed)
+        authority_id = None
+        if requires_approval:
+            authority_ref = _bound_reference(conn, item, authority_reference_id, "authority", checks=("relationship_substantiated",))
+            authority_id = int(authority_ref["id"])
+        elif authority_reference_id is not None:
+            raise ValueError("defect_register_revalidation_authority_unexpected")
+        predecessor = None
+        supersession = None
+        if predecessor_requirement_identifier is not None:
+            predecessor = _revalidation_for_entry(conn, item, predecessor_requirement_identifier)
+            supersession = _bound_supersession_reference(conn, item, predecessor, supersession_reference_id)
+            unchanged_target_and_criteria = (predecessor["target_identity"] == identity
+                                             and predecessor["criteria_identity"] == _criteria_identity(criteria))
+            if unchanged_target_and_criteria and predecessor["origin_action"] == action:
+                raise ValueError("defect_register_revalidation_successor_unchanged")
+        requirement_identifier = _next_revalidation_identifier(conn, identifier)
+        now = utc_now()
+        cursor = conn.execute("INSERT INTO governed_defect_register_revalidations (entry_id,entry_identifier,requirement_identifier,predecessor_requirement_id,supersession_reference_id,impact_id,origin_action_json,execution_reference_id,target_reference_id,target_identity_kind,target_identity,observed_at,assessment_scope,assessment_basis,assessment_limits,criteria_json,criteria_identity,linked_workflow_requires_approval,authority_reference_id,owner_reference,due_at,review_trigger,outcome,conclusion_json,outcome_details_json,superseded_by_requirement_id,version,created_at,created_by,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (int(item["id"]), identifier, requirement_identifier, int(predecessor["id"]) if predecessor else None, int(supersession["id"]) if supersession else None, impact_numeric, _json(action), action["execution_reference_id"], int(target_ref["id"]), identity_kind, identity, observed, scope, basis, limits, _json(criteria), _criteria_identity(criteria), 1 if requires_approval else 0, authority_id, owner, due, trigger, "open", None, None, None, 1, now, actor_value, now, actor_value))
+        requirement = {"id": int(cursor.lastrowid), "requirement_identifier": requirement_identifier, "version": 1}
+        if predecessor:
+            conn.execute("UPDATE governed_defect_register_revalidations SET outcome=?,superseded_by_requirement_id=?,version=?,updated_at=?,updated_by=? WHERE id=?", ("superseded", int(requirement["id"]), int(predecessor["version"]) + 1, now, actor_value, int(predecessor["id"])))
+            _revalidation_event(conn, predecessor, item, event_type="revalidation_superseded", actor=actor_value, reason=canonical["reason"], prior_version=int(predecessor["version"]), resulting_version=int(predecessor["version"]) + 1, details={"successor_requirement_identifier": requirement_identifier, "supersession_reference_id": int(supersession["id"])})
+        conn.execute("UPDATE governed_defect_register_entries SET version=?,impact_status=?,updated_at=?,updated_by=? WHERE id=?", (expected + 1, "items_recorded", now, actor_value, int(item["id"])))
+        event_id = _revalidation_event(conn, requirement, item, event_type="revalidation_requirement_created", actor=actor_value, reason=canonical["reason"], prior_version=0, resulting_version=1, details={"target_reference_id": int(target_ref["id"]), "target_identity": identity, "criteria_identity": _criteria_identity(criteria), "predecessor_requirement_identifier": predecessor_requirement_identifier, "supersession_reference_id": int(supersession["id"]) if supersession else None})
+        _event(conn, item, event_type="revalidation_requirement_created", actor=actor_value, reason=canonical["reason"], prior_version=expected, resulting_version=expected + 1, details={"requirement_identifier": requirement_identifier, "event_id": event_id})
+        receipt = {"entry_identifier": identifier, "requirement_identifier": requirement_identifier, "operation": "revalidation_requirement_created", "event_id": event_id, "resulting_version": expected + 1, "historical_receipt": False}
+        conn.execute("INSERT INTO governed_defect_register_receipts (idempotency_key,entry_identifier,canonical_payload_json,receipt_json,created_at) VALUES (?,?,?,?,?)", (key, identifier, _json(canonical), _json(receipt), now))
+        conn.commit()
+        return receipt
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def transition_revalidation(conn: sqlite3.Connection, *, entry_identifier: Any, requirement_identifier: Any, outcome: Any, actor: Any, expected_version: Any, idempotency_key: Any, reason: Any, verification: Mapping[str, Any] | None = None, conclusion: Mapping[str, Any] | None = None, due_at: Any = None, review_trigger: Any = None) -> dict[str, Any]:
+    target = _enum(outcome, REVALIDATION_OUTCOMES, "defect_register_revalidation_outcome_invalid")
+    timing = (None, None) if due_at is None and review_trigger is None else _require_timing(due_at, review_trigger)
+    if verification is not None and not isinstance(verification, Mapping):
+        raise ValueError("defect_register_revalidation_verification_invalid")
+    if conclusion is not None and not isinstance(conclusion, Mapping):
+        raise ValueError("defect_register_revalidation_conclusion_invalid")
+
+    def apply(item: dict[str, Any], requirement: dict[str, Any], _next: int):
+        current = requirement["outcome"]
+        allowed = {
+            "open": {"deferred", "awaiting_revalidation", "concluded_without_passing", "not_required"},
+            "deferred": {"open", "awaiting_revalidation", "concluded_without_passing"},
+            "awaiting_revalidation": {"revalidation_passed", "revalidation_failed", "concluded_without_passing"},
+            "revalidation_failed": {"awaiting_revalidation", "concluded_without_passing"},
+            "not_required": {"reopened"}, "revalidation_passed": {"reopened"}, "concluded_without_passing": {"reopened"}, "superseded": {"reopened"}, "reopened": {"open", "awaiting_revalidation", "concluded_without_passing"},
+        }
+        if target not in allowed.get(current, set()):
+            raise ValueError("defect_register_revalidation_transition_invalid")
+        updates: dict[str, Any] = {"outcome": target}
+        details: dict[str, Any] = {"prior_outcome": current, "new_outcome": target}
+        if timing != (None, None):
+            updates["due_at"], updates["review_trigger"] = timing
+            details["due_at"], details["review_trigger"] = timing
+        if target in {"revalidation_passed", "revalidation_failed"}:
+            if not verification:
+                raise ValueError("defect_register_revalidation_verification_required")
+            artifact, results = _bound_revalidation_artifact(conn, item, requirement, verification)
+            if target == "revalidation_passed" and any(value != "passed" for value in results.values()):
+                raise ValueError("defect_register_revalidation_criteria_incomplete")
+            if target == "revalidation_failed" and all(value == "passed" for value in results.values()):
+                raise ValueError("defect_register_revalidation_criteria_incomplete")
+            details["verification"] = {"artifact_reference_id": int(artifact["id"]), "criteria_results": results}
+            if target == "revalidation_failed":
+                if not conclusion:
+                    raise ValueError("defect_register_revalidation_failure_details_required")
+                limits = _required(conclusion.get("assessment_limitations"), "defect_register_revalidation_conclusion_limits_required")
+                consequences = _required(conclusion.get("unresolved_consequences"), "defect_register_revalidation_conclusion_consequences_required")
+                disposition = conclusion.get("follow_up_disposition")
+                if not isinstance(disposition, Mapping) or disposition.get("work_remains") is not True:
+                    raise ValueError("defect_register_revalidation_follow_up_required")
+                owner = _required(disposition.get("owner_reference"), "defect_register_revalidation_follow_up_required", maximum=256)
+                due, trigger = _require_timing(disposition.get("due_at"), disposition.get("review_trigger"))
+                record = {"assessment_limitations": limits, "unresolved_consequences": consequences, "follow_up_disposition": {"work_remains": True, "description": _required(disposition.get("description"), "defect_register_revalidation_follow_up_required"), "owner_reference": owner, "due_at": due, "review_trigger": trigger}, "artifact_reference_id": int(artifact["id"]), "recorded_at": utc_now()}
+                updates["outcome_details_json"] = _json(record)
+                details["failure"] = record
+        if target == "concluded_without_passing":
+            if bool(requirement["linked_workflow_requires_approval"]):
+                raise ValueError("defect_register_revalidation_linked_approval_required")
+            if not conclusion:
+                raise ValueError("defect_register_revalidation_conclusion_required")
+            limits = _required(conclusion.get("assessment_limitations"), "defect_register_revalidation_conclusion_limits_required")
+            consequences = _required(conclusion.get("unresolved_consequences"), "defect_register_revalidation_conclusion_consequences_required")
+            evidence_ids = _references_for_entry(conn, item, conclusion.get("evidence_reference_ids"))
+            disposition = conclusion.get("follow_up_disposition")
+            if not isinstance(disposition, Mapping):
+                raise ValueError("defect_register_revalidation_follow_up_required")
+            work_remains = disposition.get("work_remains")
+            if not isinstance(work_remains, bool):
+                raise ValueError("defect_register_revalidation_follow_up_required")
+            stored_disposition = {"work_remains": work_remains, "description": _required(disposition.get("description"), "defect_register_revalidation_follow_up_required")}
+            if work_remains:
+                stored_disposition["owner_reference"] = _required(disposition.get("owner_reference"), "defect_register_revalidation_follow_up_required", maximum=256)
+                stored_disposition["due_at"], stored_disposition["review_trigger"] = _require_timing(disposition.get("due_at"), disposition.get("review_trigger"))
+            else:
+                stored_disposition["reason_no_work_remains"] = _required(disposition.get("reason_no_work_remains"), "defect_register_revalidation_follow_up_required")
+            record = {"assessment_limitations": limits, "unresolved_consequences": consequences, "evidence_reference_ids": evidence_ids, "follow_up_disposition": stored_disposition, "recorded_at": utc_now()}
+            updates["conclusion_json"] = _json(record)
+            details["conclusion"] = record
+        if target in {"deferred", "open", "awaiting_revalidation", "reopened"} and timing == (None, None) and not (requirement.get("due_at") or requirement.get("review_trigger")):
+            raise ValueError("defect_register_revalidation_timing_required")
+        return updates, details
+
+    return _mutate_revalidation(conn, entry_identifier=entry_identifier, requirement_identifier=requirement_identifier, actor=actor, expected_version=expected_version, idempotency_key=idempotency_key, operation="revalidation_transition", reason=reason, payload={"outcome": target, "verification": dict(verification) if verification else None, "conclusion": dict(conclusion) if conclusion else None, "due_at": timing[0], "review_trigger": timing[1]}, apply=apply)
+
+
+def revalidation_has_outstanding_obligation(requirement: Mapping[str, Any]) -> bool:
+    """Return whether the current row carries active downstream work.
+
+    Superseded rows and an assessed ``not_required`` result remain preserved
+    history, but are not current obligations.  A non-passing conclusion only
+    remains outstanding when its recorded disposition says work remains.
+    """
+    outcome = requirement.get("outcome")
+    if outcome in REVALIDATION_ACTIVE_OUTCOMES:
+        return True
+    if outcome == "concluded_without_passing":
+        disposition = (requirement.get("conclusion") or {}).get("follow_up_disposition")
+        return isinstance(disposition, Mapping) and disposition.get("work_remains") is True
+    return False
+
+
+def downstream_work_outstanding(conn: sqlite3.Connection, entry_identifier: Any) -> bool:
+    rows = revalidations(conn, _identifier(entry_identifier, "defect_register_identifier_invalid"))
+    return any(revalidation_has_outstanding_obligation(row) for row in rows)
