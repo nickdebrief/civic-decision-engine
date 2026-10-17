@@ -97,6 +97,8 @@ from api import governed_report_publication_reviews as rg78e
 from api import governed_report_publications as rg79
 from api import source_media_transcripts as smt
 from api import governed_defect_register as gdr81
+from api import governed_challenge_register as gcr82
+from api.admin_session_verification import AdminSessionVerificationError, verify_signed_admin_session
 
 
 GOVERNED_DECLARATION_CONTROL_CSS = """
@@ -453,41 +455,10 @@ def create_admin_session(username: str, now: int | None = None) -> str:
 
 
 def verify_admin_session(session: str, now: int | None = None) -> dict[str, Any]:
-    secret = _session_secret()
-    if not secret:
-        raise _http_error(401, "admin_session_unauthorized")
-
     try:
-        payload_b64, signature = session.split(".", 1)
-    except ValueError as exc:
+        return verify_signed_admin_session(session, now=now)
+    except AdminSessionVerificationError as exc:
         raise _http_error(401, "admin_session_unauthorized") from exc
-
-    expected_signature = _sign(payload_b64, secret)
-    if not hmac.compare_digest(signature, expected_signature):
-        raise _http_error(401, "admin_session_unauthorized")
-
-    try:
-        payload = json.loads(_b64decode(payload_b64).decode("utf-8"))
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise _http_error(401, "admin_session_unauthorized") from exc
-
-    allowed_keys = {"role", "username", "issued_at", "expires_at"}
-    if set(payload.keys()) != allowed_keys or payload.get("role") != "admin":
-        raise _http_error(401, "admin_session_unauthorized")
-
-    username = payload.get("username")
-    if not isinstance(username, str) or not username.strip():
-        raise _http_error(401, "admin_session_unauthorized")
-
-    expires_at = payload.get("expires_at")
-    if not isinstance(expires_at, int):
-        raise _http_error(401, "admin_session_unauthorized")
-
-    current_time = int(now if now is not None else time.time())
-    if expires_at <= current_time:
-        raise _http_error(401, "admin_session_unauthorized")
-
-    return payload
 
 
 def _create_lifecycle_confirmation_token(
@@ -55760,6 +55731,40 @@ async def admin_create_governed_defect_register_entry(request: Request):
     # No request body is parsed or retained: operational report admission is
     # deliberately unavailable until the approved sensitive-content controls.
     raise _private_defect_register_rejection(409, "defect_register_report_admission_disabled")
+
+
+# Stage 82 remains a private restricted foundation.  The handlers deliberately
+# expose inspection only: operational challenge admission is unavailable.
+@router.get("/admin/governed-correction-challenge-register", response_class=HTMLResponse)
+def admin_governed_challenge_register(request: Request):
+    require_admin_session(request)
+    html = (
+        "<!doctype html><html><head><title>Governed Challenge Register</title></head><body>"
+        "<main><h1>Governed Challenge &amp; Correction Request Register</h1>"
+        "<p>Private restricted foundation. Challenge admission is disabled; linked workflows are not executed here.</p>"
+        "</main></body></html>"
+    )
+    return HTMLResponse(html, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.get("/api/admin/session/governed-correction-challenge-register/{challenge_identifier}", response_class=JSONResponse)
+def admin_get_governed_challenge(challenge_identifier: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        item = gcr82.get_challenge(conn, challenge_identifier)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "challenge_register_not_found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"challenge": item, "private_status": gcr82.render_private_status(item), "public": False}, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.post("/api/admin/session/governed-correction-challenge-register", response_class=JSONResponse)
+async def admin_create_governed_challenge(request: Request):
+    require_admin_session(request)
+    # Do not parse or retain the body: real challenge admission is unavailable.
+    raise _private_defect_register_rejection(409, "challenge_register_admission_disabled")
 
 
 @router.post("/api/admin/session/governed-defects/{entry_identifier}/operations", response_class=JSONResponse)
