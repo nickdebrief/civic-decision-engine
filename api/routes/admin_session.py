@@ -98,6 +98,7 @@ from api import governed_report_publications as rg79
 from api import source_media_transcripts as smt
 from api import governed_defect_register as gdr81
 from api import governed_challenge_register as gcr82
+from api import governed_disclosure_register as gdr83
 from api.admin_session_verification import AdminSessionVerificationError, verify_signed_admin_session
 
 
@@ -55765,6 +55766,40 @@ async def admin_create_governed_challenge(request: Request):
     require_admin_session(request)
     # Do not parse or retain the body: real challenge admission is unavailable.
     raise _private_defect_register_rejection(409, "challenge_register_admission_disabled")
+
+
+# Stage 83 is inspection-only.  It intentionally has no route that can admit
+# a request, prepare material, or cause a disclosure/execution side effect.
+@router.get("/admin/governed-disclosure-access-register", response_class=HTMLResponse)
+def admin_governed_disclosure_register(request: Request):
+    require_admin_session(request)
+    html = (
+        "<!doctype html><html><head><title>Governed Disclosure Register</title></head><body>"
+        "<main><h1>Governed Disclosure &amp; Access Decision Register</h1>"
+        "<p>Private synthetic-only foundation. Request admission and disclosure execution are disabled.</p>"
+        "</main></body></html>"
+    )
+    return HTMLResponse(html, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.get("/api/admin/session/governed-disclosure-access-register/{request_identifier}", response_class=JSONResponse)
+def admin_get_governed_disclosure(request_identifier: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        item = gdr83.get_request(conn, request_identifier)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "disclosure_register_request_not_found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"request": item, "private_status": gdr83.render_private_status(item), "public": False}, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.post("/api/admin/session/governed-disclosure-access-register", response_class=JSONResponse)
+async def admin_create_governed_disclosure(request: Request):
+    require_admin_session(request)
+    # Do not parse or retain request material: real admission is unavailable.
+    raise _private_defect_register_rejection(409, "disclosure_register_admission_disabled")
 
 
 @router.post("/api/admin/session/governed-defects/{entry_identifier}/operations", response_class=JSONResponse)
