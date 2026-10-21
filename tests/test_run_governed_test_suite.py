@@ -151,14 +151,16 @@ class GovernedSuiteTests(unittest.TestCase):
             "tests.test_stage81_governed_defect_register_asgi": ("real_asgi", "unittest", 140),
             "tests.test_stage83_governed_disclosure_register": ("neutral", "unittest", 144),
             "tests.test_stage83_governed_disclosure_register_asgi": ("real_asgi", "unittest", 145),
+            "tests.test_stage84_governed_retention_register": ("neutral", "unittest", 146),
+            "tests.test_stage84_governed_retention_register_asgi": ("real_asgi", "unittest", 147),
         }
         entries = runner.manifest_entries(runner.GOVERNED_TRACKED_MODULES)
-        self.assertEqual(len(entries), 148)
-        self.assertEqual(len({entry.module for entry in entries}), 148)
+        self.assertEqual(len(entries), 150)
+        self.assertEqual(len({entry.module for entry in entries}), 150)
         self.assertEqual(
             {classification: sum(entry.classification == classification for entry in entries)
              for classification in ("real_asgi", "legacy_fastapi_stub", "neutral")},
-            {"real_asgi": 5, "legacy_fastapi_stub": 80, "neutral": 63},
+            {"real_asgi": 6, "legacy_fastapi_stub": 80, "neutral": 64},
         )
         self.assertFalse(hasattr(runner, "CANDIDATE_GOVERNED_MODULES"))
         self.assertEqual(runner.EXCLUDED_UNTRACKED_MODULES, frozenset())
