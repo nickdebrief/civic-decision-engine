@@ -99,6 +99,7 @@ from api import source_media_transcripts as smt
 from api import governed_defect_register as gdr81
 from api import governed_challenge_register as gcr82
 from api import governed_disclosure_register as gdr83
+from api import governed_retention_register as grr84
 from api.admin_session_verification import AdminSessionVerificationError, verify_signed_admin_session
 
 
@@ -55800,6 +55801,37 @@ async def admin_create_governed_disclosure(request: Request):
     require_admin_session(request)
     # Do not parse or retain request material: real admission is unavailable.
     raise _private_defect_register_rejection(409, "disclosure_register_admission_disabled")
+
+
+# Stage 84 remains private inspection only.  In particular, this route does
+# not parse a body or admit material, synthetic fixtures, or operational holds.
+@router.get("/admin/governed-retention-register", response_class=HTMLResponse)
+def admin_governed_retention_register(request: Request):
+    require_admin_session(request)
+    return HTMLResponse(
+        "<!doctype html><html><head><title>Governed Retention Register</title></head><body>"
+        "<main><h1>Governed Retention, Hold and Disposal Register</h1>"
+        "<p>Private synthetic-only decision-record foundation. Admission and operational actions are disabled.</p>"
+        "</main></body></html>", headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.get("/api/admin/session/governed-retention-register/{subject_identifier}", response_class=JSONResponse)
+def admin_get_governed_retention(subject_identifier: str, request: Request):
+    require_admin_session(request)
+    conn = get_db()
+    try:
+        subject = grr84.get_subject(conn, subject_identifier)
+    except (ValueError, sqlite3.Error):
+        raise _http_error(404, "retention_register_subject_not_found") from None
+    finally:
+        conn.close()
+    return JSONResponse({"subject": subject, "private_status": grr84.render_private_status(subject), "public": False}, headers=_PRIVATE_DEFECT_REGISTER_HEADERS)
+
+
+@router.post("/api/admin/session/governed-retention-register", response_class=JSONResponse)
+async def admin_create_governed_retention(request: Request):
+    require_admin_session(request)
+    raise _private_defect_register_rejection(409, "retention_register_admission_disabled")
 
 
 @router.post("/api/admin/session/governed-defects/{entry_identifier}/operations", response_class=JSONResponse)

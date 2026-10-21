@@ -45,6 +45,8 @@ tests.test_admin_audit_traceability tests.test_admin_console_navigation_and_tabl
     "tests.test_stage82_governed_challenge_register_asgi",
     "tests.test_stage83_governed_disclosure_register",
     "tests.test_stage83_governed_disclosure_register_asgi",
+    "tests.test_stage84_governed_retention_register",
+    "tests.test_stage84_governed_retention_register_asgi",
 })
 REAL_ASGI_MODULES = frozenset({
     "tests.test_canonical_public_origin",
@@ -52,6 +54,7 @@ REAL_ASGI_MODULES = frozenset({
     "tests.test_stage81_governed_defect_register_asgi",
     "tests.test_stage82_governed_challenge_register_asgi",
     "tests.test_stage83_governed_disclosure_register_asgi",
+    "tests.test_stage84_governed_retention_register_asgi",
 })
 LEGACY_FASTAPI_STUB_MODULES = frozenset(
     """
