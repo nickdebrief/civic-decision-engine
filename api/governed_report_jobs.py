@@ -24,6 +24,7 @@ from api.governed_report_diagnostics import (
     bounded_code,
     make_diagnostic,
     select_diagnostic_contract,
+    with_persisted_at,
     validate_diagnostic,
 )
 
@@ -1203,7 +1204,7 @@ def _validate_diagnostic_retry_payload(payload: Mapping[str, Any]) -> dict[str, 
         if not isinstance(payload[name], str) or not payload[name].strip():
             raise ValueError("governed_report_diagnostic_retry_contract_invalid")
     if payload["diagnostic_contract_id"] not in {
-        "current_diagnostic_contract_v1",
+        "current_diagnostic_contract_v1", "structured_failure_diagnostic_contract_v2",
         "legacy_pre_propagation_diagnostic_contract_v1",
     }:
         raise ValueError("governed_report_diagnostic_retry_contract_invalid")
@@ -1260,7 +1261,7 @@ def _validate_diagnostic_retry_predecessor_evidence(conn: sqlite3.Connection, pr
         )
     except (TypeError, ValueError, json.JSONDecodeError):
         raise ValueError("governed_report_diagnostic_retry_diagnostic_invalid") from None
-    if contract["contract_id"] == "current_diagnostic_contract_v1":
+    if contract["contract_id"] in {"current_diagnostic_contract_v1", "structured_failure_diagnostic_contract_v2"}:
         terminal_payload = json.loads(terminal["payload_json"])
         if terminal_payload.get("phase") != "rendering" or terminal_payload.get("code") != DIAGNOSTIC_RETRY_FAILURE_CODE:
             raise ValueError("governed_report_diagnostic_retry_diagnostic_mismatch")
@@ -1575,17 +1576,35 @@ def _terminal_payload(*, phase: str | None, code: str | None, diagnostic: Mappin
     return payload
 
 
-def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: str | None = None, code: str | None = None, diagnostic: Mapping[str, Any] | None = None) -> bool:
+def _terminal(conn, job_id: int, token: str, state: str, actor: str, *, phase: str | None = None, code: str | None = None, diagnostic: Mapping[str, Any] | None = None, commit: bool = True) -> bool:
     allowed_states = "'cancel_requested'" if state == "cancelled" else "'leased','running'"
-    cur = conn.execute(f"UPDATE stage77_report_jobs SET state=?,terminal_at=?,terminal_outcome=?,failure_phase=?,failure_code=? WHERE id=? AND lease_token=? AND state IN ({allowed_states})", (state, utc_now(), code or state, phase, code, job_id, token))
-    if cur.rowcount != 1:
-        conn.commit(); return False
-    payload = _terminal_payload(phase=phase, code=code, diagnostic=diagnostic)
-    _event(conn, job_id, "terminal", state, actor, payload)
-    auth = conn.execute("SELECT post_correction_authorization_id FROM stage77_report_jobs WHERE id=?", (job_id,)).fetchone()
-    if auth and auth[0]:
-        conn.execute("UPDATE stage77_post_correction_authorizations SET state='consumed',consumed_at=? WHERE id=? AND state='authorized'", (utc_now(), auth[0]))
-    conn.commit(); return True
+    if not isinstance(commit, bool): raise ValueError("stage77_terminal_commit_ownership_invalid")
+    if not commit and not conn.in_transaction: raise ValueError("stage77_terminal_caller_transaction_required")
+    if commit and not conn.in_transaction: conn.execute("BEGIN")
+    conn.execute("SAVEPOINT stage77_terminal_event")
+    try:
+        write_time = utc_now()
+        cur = conn.execute(f"UPDATE stage77_report_jobs SET state=?,terminal_at=?,terminal_outcome=?,failure_phase=?,failure_code=? WHERE id=? AND lease_token=? AND state IN ({allowed_states})", (state, write_time, code or state, phase, code, job_id, token))
+        if cur.rowcount != 1:
+            conn.execute("RELEASE SAVEPOINT stage77_terminal_event")
+            if commit: conn.commit()
+            return False
+        persisted = with_persisted_at(diagnostic, persisted_at=write_time) if diagnostic is not None else None
+        _event(conn, job_id, "terminal", state, actor, _terminal_payload(phase=phase, code=code, diagnostic=persisted))
+        auth = conn.execute("SELECT post_correction_authorization_id FROM stage77_report_jobs WHERE id=?", (job_id,)).fetchone()
+        if auth and auth[0]:
+            consumed = conn.execute("UPDATE stage77_post_correction_authorizations SET state='consumed',consumed_at=? WHERE id=? AND state='authorized'", (utc_now(), auth[0]))
+            if consumed.rowcount != 1: raise ValueError("stage77_post_correction_authorization_consumption_invalid")
+        conn.execute("RELEASE SAVEPOINT stage77_terminal_event")
+    except Exception as error:
+        try:
+            conn.execute("ROLLBACK TO SAVEPOINT stage77_terminal_event")
+            conn.execute("RELEASE SAVEPOINT stage77_terminal_event")
+        except Exception as cleanup:
+            raise error.with_traceback(error.__traceback__) from cleanup
+        raise
+    if commit: conn.commit()
+    return True
 
 
 def execute_job(db_path: str, job: Mapping[str, Any]) -> None:

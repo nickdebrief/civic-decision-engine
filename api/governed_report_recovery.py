@@ -29,6 +29,9 @@ RECOVERY_SCHEMA_VERSION = "stage77.recovery.v1"
 RECOVERY_EVIDENCE_CONTRACT = "stage77.recovery_point_evidence.v1"
 REPORT_EVENT_BOUND_STATUSES = {"bound", "not_bound_by_source_contract"}
 MANIFEST_SCHEMA_VERSION = "stage77.recovery_manifest.v1"
+MANIFEST_SCHEMA_VERSION_V2 = "stage77.recovery_manifest.v2"
+DIAGNOSTIC_ARTIFACT_CONTRACT_V1 = "stage77.diagnostic_aware.v1"
+DIAGNOSTIC_ARTIFACT_CONTRACT_V2 = "stage77.diagnostic_aware.v2"
 RECOVERY_STATES = {
     "requested", "draining", "quiesced", "capturing", "validating",
     "completed", "failed", "restore_validating", "restore_ready", "restore_failed",
@@ -63,6 +66,7 @@ MAX_MANIFEST_ARTIFACTS = 10000
 MAX_MANIFEST_TEXT = 256
 BACKUP_DEADLINE_SECONDS = 30.0
 EXPORT_RECEIPT_SCHEMA_VERSION = "stage77.recovery_receipt.v1"
+EXPORT_RECEIPT_SCHEMA_VERSION_V2 = "stage77.recovery_receipt.v2"
 ALLOWED_RECEIPT_KEYS = {
     "receipt_schema_version", "recovery_point_id", "created_at", "recovery_reason",
     "manifest_digest", "database_digest", "archive_digest", "artifact_count", "qualification_count", "qualification_event_bound", "qualification_state_digest",
@@ -605,7 +609,7 @@ def _recovery_evidence_payload(manifest: Mapping[str, Any], *, source_mode: str,
                                contract_name: str | None = None) -> dict[str, Any]:
     """Project already-validated bundle evidence into the durable evidence contract."""
     contract = contract_name or _manifest_contract(manifest)
-    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         raise ValueError("recovery_evidence_contract_invalid")
     counts = manifest.get("counts")
     if not isinstance(counts, ABCMapping):
@@ -625,7 +629,7 @@ def _recovery_evidence_payload(manifest: Mapping[str, Any], *, source_mode: str,
         "evidence_contract": RECOVERY_EVIDENCE_CONTRACT,
         "evidence_source_mode": source_mode,
         "recovery_point_id": str(manifest["recovery_point_id"]),
-        "recovery_contract": {"legacy": "stage77.recovery.v1", "current": "stage77.recovery.v1", "diagnostic_aware": "stage77.diagnostic_aware.v1", "post_correction_aware": "stage77.post_correction_aware.v1"}[contract],
+        "recovery_contract": {"legacy": "stage77.recovery.v1", "current": "stage77.recovery.v1", "diagnostic_aware": DIAGNOSTIC_ARTIFACT_CONTRACT_V1, "post_correction_aware": "stage77.post_correction_aware.v1", "diagnostic_aware_v2": DIAGNOSTIC_ARTIFACT_CONTRACT_V2, "post_correction_aware_v2": "stage77.post_correction_aware.v1"}[contract],
         "maintenance_epoch": int(manifest["maintenance_epoch"]),
         "database_digest": str(manifest["database"]["sha256"]),
         "diagnostic_count": int(manifest.get("diagnostic_evidence_count", 0)),
@@ -1492,6 +1496,8 @@ def _diagnostic_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[s
             continue
         try:
             selected = diagnostics.select_diagnostic_contract(attempt_raw=attempt_raw, terminal_raw=terminal_raw)
+            diagnostic = diagnostics.validate_diagnostic(attempt_value[0])
+            record = diagnostics.decode_failure_record(diagnostic["failure_record"])
         except (TypeError, ValueError, json.JSONDecodeError):
             raise ValueError("diagnostic_evidence_invalid") from None
         inventory.append({
@@ -1501,6 +1507,7 @@ def _diagnostic_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[s
             "diagnostic_contract_version": str(selected["contract_id"]),
             "attempt_diagnostic_sha256": str(selected["attempt_sha256"]),
             "terminal_diagnostic_sha256": str(selected["terminal_sha256"]),
+            "diagnostic_attribution_projection": {"projection_version": diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2, "source_failure_record_schema_version": record["schema_version"], "affected_target_state": record["affected_target_state"], "affected_target_class": record["affected_target_class"], "cleanup_relationship": record["cleanup_relationship"]},
         })
     raw = canonical_json(inventory).encode("utf-8")
     return inventory, digest_bytes(raw)
@@ -1655,9 +1662,9 @@ def _manifest_contract(manifest: Mapping[str, Any]) -> str:
     if fields == CURRENT_MANIFEST_KEYS:
         return "current"
     if fields == DIAGNOSTIC_MANIFEST_KEYS:
-        return "diagnostic_aware"
+        return "diagnostic_aware_v2" if manifest.get("manifest_schema_version") == MANIFEST_SCHEMA_VERSION_V2 else "diagnostic_aware"
     if fields == POST_CORRECTION_MANIFEST_KEYS:
-        return "post_correction_aware"
+        return "post_correction_aware_v2" if manifest.get("manifest_schema_version") == MANIFEST_SCHEMA_VERSION_V2 else "post_correction_aware"
     raise ValueError("manifest_invalid")
 
 
@@ -1670,15 +1677,16 @@ def _receipt_contract(receipt: Mapping[str, Any]) -> str:
     if fields == CURRENT_RECEIPT_KEYS:
         return "current"
     if fields == DIAGNOSTIC_RECEIPT_KEYS:
-        return "diagnostic_aware"
+        return "diagnostic_aware_v2" if receipt.get("receipt_schema_version") == EXPORT_RECEIPT_SCHEMA_VERSION_V2 else "diagnostic_aware"
     if fields == POST_CORRECTION_RECEIPT_KEYS:
-        return "post_correction_aware"
+        return "post_correction_aware_v2" if receipt.get("receipt_schema_version") == EXPORT_RECEIPT_SCHEMA_VERSION_V2 else "post_correction_aware"
     raise ValueError("export_receipt_invalid")
 
 
 def _validate_manifest(manifest: Mapping[str, Any]) -> None:
     contract = _manifest_contract(manifest)
-    if manifest.get("manifest_schema_version") != MANIFEST_SCHEMA_VERSION:
+    is_v2 = contract in {"diagnostic_aware_v2", "post_correction_aware_v2"}
+    if manifest.get("manifest_schema_version") != (MANIFEST_SCHEMA_VERSION_V2 if is_v2 else MANIFEST_SCHEMA_VERSION):
         raise ValueError("manifest_invalid")
     if not isinstance(manifest, ABCMapping) or not isinstance(manifest.get("artifacts"), list) or not isinstance(manifest.get("limitations"), list):
         raise ValueError("manifest_invalid")
@@ -1701,28 +1709,36 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
         raise ValueError("manifest_invalid")
     if isinstance(manifest["recovery_event_bound"], bool) or not isinstance(manifest["recovery_event_bound"], int) or manifest["recovery_event_bound"] < 0:
         raise ValueError("manifest_invalid")
-    if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         if isinstance(manifest["qualification_event_bound"], bool) or not isinstance(manifest["qualification_event_bound"], int) or manifest["qualification_event_bound"] < 0:
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["qualification_state_digest"], str) or len(manifest["qualification_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["qualification_state_digest"]):
             raise ValueError("manifest_invalid")
-    if contract in {"diagnostic_aware", "post_correction_aware"}:
-        if manifest["diagnostic_contract_version"] != "stage77.diagnostic_aware.v1":
+    if contract in {"diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
+        if manifest["diagnostic_contract_version"] != (DIAGNOSTIC_ARTIFACT_CONTRACT_V2 if is_v2 else DIAGNOSTIC_ARTIFACT_CONTRACT_V1):
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["diagnostic_evidence"], list) or len(manifest["diagnostic_evidence"]) > MAX_MANIFEST_ARTIFACTS:
             raise ValueError("manifest_invalid")
         expected_evidence_keys = {"job_id", "attempt_id", "terminal_event_id", "diagnostic_contract_version", "attempt_diagnostic_sha256", "terminal_diagnostic_sha256"}
+        if is_v2: expected_evidence_keys.add("diagnostic_attribution_projection")
         previous = None
         for item in manifest["diagnostic_evidence"]:
             if not isinstance(item, ABCMapping) or set(item) != expected_evidence_keys:
                 raise ValueError("manifest_invalid")
             if any(isinstance(item[name], bool) or not isinstance(item[name], int) or item[name] < 0 for name in ("job_id", "attempt_id", "terminal_event_id")):
                 raise ValueError("manifest_invalid")
-            if item["diagnostic_contract_version"] not in {diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT, diagnostics.LEGACY_DIAGNOSTIC_CONTRACT}:
+            if item["diagnostic_contract_version"] not in {diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT, diagnostics.LEGACY_DIAGNOSTIC_CONTRACT}:
                 raise ValueError("manifest_invalid")
             for name in ("attempt_diagnostic_sha256", "terminal_diagnostic_sha256"):
                 if not isinstance(item[name], str) or len(item[name]) != 64 or any(c not in "0123456789abcdef" for c in item[name]):
                     raise ValueError("manifest_invalid")
+            if is_v2:
+                projection = item["diagnostic_attribution_projection"]
+                if not isinstance(projection, ABCMapping) or set(projection) != {"projection_version", "source_failure_record_schema_version", "affected_target_state", "affected_target_class", "cleanup_relationship"}: raise ValueError("manifest_invalid")
+                if projection["projection_version"] != diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2 or projection["source_failure_record_schema_version"] not in {diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION, diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2}: raise ValueError("manifest_invalid")
+                if projection["source_failure_record_schema_version"] == diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION:
+                    if projection["affected_target_state"] != diagnostics.LEGACY_UNSPECIFIED or projection["affected_target_class"] is not None or projection["cleanup_relationship"] != diagnostics.LEGACY_UNSPECIFIED: raise ValueError("manifest_invalid")
+                elif projection["affected_target_state"] not in diagnostics.AFFECTED_TARGET_STATES_V2 or projection["cleanup_relationship"] not in diagnostics.CLEANUP_RELATIONSHIPS_V2 or (projection["affected_target_state"] == "known" and projection["affected_target_class"] not in diagnostics.AFFECTED_TARGET_CLASSES_V2) or (projection["affected_target_state"] != "known" and projection["affected_target_class"] is not None): raise ValueError("manifest_invalid")
             if previous is not None and int(item["job_id"]) <= previous:
                 raise ValueError("manifest_invalid")
             previous = int(item["job_id"])
@@ -1737,7 +1753,7 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
             raise ValueError("manifest_invalid")
         if not isinstance(manifest["retry_link_state_digest"], str) or len(manifest["retry_link_state_digest"]) != 64 or any(c not in "0123456789abcdef" for c in manifest["retry_link_state_digest"]):
             raise ValueError("manifest_invalid")
-        if contract == "post_correction_aware":
+        if contract in {"post_correction_aware", "post_correction_aware_v2"}:
             current_evidence = manifest.get("current_recovery_manifest_evidence")
             if not isinstance(current_evidence, ABCMapping) or manifest.get("current_recovery_manifest_evidence_digest") != digest_bytes(canonical_json(dict(current_evidence)).encode("utf-8")):
                 raise ValueError("manifest_invalid")
@@ -1757,7 +1773,7 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
     if not isinstance(manifest.get("integrity"), ABCMapping) or set(manifest["integrity"]) != {"integrity_check", "foreign_key_check"} or manifest["integrity"] != {"integrity_check": "ok", "foreign_key_check": "ok"}:
         raise ValueError("manifest_invalid")
     expected_counts = {"jobs", "reports", "versions", "artifacts"}
-    if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         expected_counts.add("qualifications")
     if not isinstance(manifest.get("counts"), ABCMapping) or not isinstance(manifest.get("job_state_counts"), ABCMapping) or set(manifest["counts"]) != expected_counts or set(manifest["job_state_counts"]) != {"queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled"}:
         raise ValueError("manifest_invalid")
@@ -1856,9 +1872,15 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         if conversion_columns.keys() & artifact_columns.keys() and any(artifact_columns.get(name) != expected_type for name, expected_type in conversion_columns.items()):
             raise ValueError("schema_incompatible")
         database_contract, evidence, evidence_digest, retry_links, retry_links_digest = _database_contract(conn)
-        if database_contract != contract:
+        if contract in {"diagnostic_aware", "post_correction_aware"}:
+            evidence = [{key: value for key, value in item.items() if key != "diagnostic_attribution_projection"} for item in evidence]
+            evidence_digest = digest_bytes(canonical_json(evidence).encode("utf-8"))
+        expected_contract = database_contract if contract in {"legacy", "current", "diagnostic_aware", "post_correction_aware"} else {
+            "diagnostic_aware": "diagnostic_aware_v2", "post_correction_aware": "post_correction_aware_v2",
+        }.get(database_contract, database_contract)
+        if expected_contract != contract:
             raise ValueError("schema_incompatible")
-        if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
+        if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
             from api import governed_report_qualifications as qualifications
             try:
                 qualifications.validate_qualification_tables(conn)
@@ -1871,7 +1893,7 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM stage77_recovery_events").fetchone()[0])
         if event_bound != int(manifest["recovery_event_bound"]):
             raise ValueError("recovery_event_bound_mismatch")
-        if contract in {"current", "diagnostic_aware", "post_correction_aware"}:
+        if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
             qualification_state = qualifications.state_snapshot(conn)
             if qualification_state["count"] != int(manifest["counts"].get("qualifications", 0)):
                 raise ValueError("qualification_count_mismatch")
@@ -1880,12 +1902,12 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
                 qualifications.validate_complete_chain(conn, version_id)
             if contract == "current" and (qualification_state["event_bound"] != int(manifest["qualification_event_bound"]) or qualification_state["digest"] != manifest["qualification_state_digest"]):
                 raise ValueError("qualification_state_mismatch")
-        if contract in {"diagnostic_aware", "post_correction_aware"}:
+        if contract in {"diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
             if evidence != manifest["diagnostic_evidence"] or evidence_digest != manifest["diagnostic_evidence_state_digest"] or int(manifest["diagnostic_evidence_count"]) != len(evidence):
                 raise ValueError("diagnostic_evidence_mismatch")
             if retry_links_digest != manifest["retry_link_state_digest"] or int(manifest["retry_link_count"]) != len(retry_links):
                 raise ValueError("retry_topology_mismatch")
-        if contract == "post_correction_aware":
+        if contract in {"post_correction_aware", "post_correction_aware_v2"}:
             base_manifest = {key: manifest[key] for key in DIAGNOSTIC_MANIFEST_KEYS}
             report_event_bound = int(conn.execute("SELECT COALESCE(MAX(id),0) FROM record_governed_report_events").fetchone()[0]) if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='record_governed_report_events'").fetchone() else 0
             expected_current = _recovery_evidence_payload(base_manifest, source_mode="native_capture", actor="", rationale="", declaration={}, idempotency_key="", created_at="", report_event_bound=report_event_bound, contract_name="post_correction_aware")
@@ -1904,15 +1926,15 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
         actual_job_states = {state: int(conn.execute("SELECT COUNT(*) FROM stage77_report_jobs WHERE state=?", (state,)).fetchone()[0]) for state in ("queued", "leased", "running", "retry_wait", "cancel_requested", "succeeded", "failed_terminal", "cancelled")}
         if actual_job_states != manifest["job_state_counts"] or sum(actual_job_states.values()) != int(manifest["counts"]["jobs"]):
             raise ValueError("job_state_count_mismatch")
-        _validate_archived_job_runtime_metadata(conn, contract=contract)
-        _validate_archived_job_cancellation(conn, contract=contract)
-        _validate_archived_job_terminal_evidence(conn, contract=contract)
-        _validate_archived_job_generation_configuration(conn, contract=contract)
-        _validate_archived_job_qualification_binding(conn, contract=contract)
+        _validate_archived_job_runtime_metadata(conn, contract=database_contract)
+        _validate_archived_job_cancellation(conn, contract=database_contract)
+        _validate_archived_job_terminal_evidence(conn, contract=database_contract)
+        _validate_archived_job_generation_configuration(conn, contract=database_contract)
+        _validate_archived_job_qualification_binding(conn, contract=database_contract)
         total_jobs = sum(actual_job_states.values())
-        if contract == "diagnostic_aware" and int(manifest["retry_link_count"]) == 1 and total_jobs != 2:
+        if contract in {"diagnostic_aware", "diagnostic_aware_v2"} and int(manifest["retry_link_count"]) == 1 and total_jobs != 2:
             raise ValueError("job_state_count_mismatch")
-        if contract == "post_correction_aware":
+        if contract in {"post_correction_aware", "post_correction_aware_v2"}:
             authorization_count = int(conn.execute("SELECT COUNT(*) FROM stage77_post_correction_authorizations").fetchone()[0])
             if authorization_count == 0 and total_jobs != 0:
                 raise ValueError("job_state_count_mismatch")
@@ -1922,13 +1944,13 @@ def _verify_bundle(bundle: Path, manifest: Mapping[str, Any]) -> None:
             raise ValueError("record_count_mismatch")
         if int(conn.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0]) != int(manifest["counts"]["versions"]):
             raise ValueError("version_count_mismatch")
-        if contract == "post_correction_aware":
+        if contract in {"post_correction_aware", "post_correction_aware_v2"}:
             _validate_post_correction_recovery_eligibility(
                 conn,
                 report_count=int(conn.execute("SELECT COUNT(*) FROM record_governed_reports").fetchone()[0]),
                 version_count=int(conn.execute("SELECT COUNT(*) FROM record_governed_report_versions").fetchone()[0]),
             )
-        if contract == "diagnostic_aware":
+        if contract in {"diagnostic_aware", "diagnostic_aware_v2"}:
             if int(manifest["counts"]["reports"]) != 1:
                 raise ValueError("record_count_mismatch")
             if int(manifest["counts"]["versions"]) != 1:
@@ -2122,10 +2144,10 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     _validate_post_correction_recovery_eligibility(backup_check, report_count=report_count, version_count=version_count)
                 qualification_state = qualifications.state_snapshot(backup_check)
                 phase, operation, checkpoint = "validation", "manifest_database_reads", "starting"
-                manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "qualification_event_bound": qualification_state["event_bound"], "qualification_state_digest": qualification_state["digest"], "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count, "qualifications": qualification_state["count"]}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
+                manifest = {"manifest_schema_version": MANIFEST_SCHEMA_VERSION_V2 if database_contract in {"diagnostic_aware", "post_correction_aware"} else MANIFEST_SCHEMA_VERSION, "recovery_point_id": control["recovery_point_id"], "maintenance_epoch": int(control["maintenance_epoch"]), "created_at": utc_now(), "source_database_identity": _database_identity(database, backup_data), "sqlite_version": sqlite3.sqlite_version, "application_version": application_version, "publication_engine_version": publication_engine_version, "stage77_schema_version": "stage77.governed_report_job.v1", "database": {"filename": "database.sqlite3", "size_bytes": len(backup_data), "sha256": digest_bytes(backup_data)}, "integrity": {"integrity_check": "ok", "foreign_key_check": "ok"}, "job_event_bound": max_event, "recovery_event_bound": recovery_event_bound, "qualification_event_bound": qualification_state["event_bound"], "qualification_state_digest": qualification_state["digest"], "job_state_counts": job_counts, "counts": {"jobs": job_count, "reports": report_count, "versions": version_count, "artifacts": artifact_count, "qualifications": qualification_state["count"]}, "artifacts": inventory, "limitations": ["integrity evidence is not proof of authorship", "restoration requires isolated target paths and validation", "completion event is recorded after the backup event bound"]}
                 if database_contract == "diagnostic_aware":
                     manifest.update({
-                        "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
+                        "diagnostic_contract_version": DIAGNOSTIC_ARTIFACT_CONTRACT_V2,
                         "diagnostic_evidence": diagnostic_evidence,
                         "diagnostic_evidence_count": len(diagnostic_evidence),
                         "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
@@ -2137,7 +2159,7 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     custody_snapshot, custody_digest, custody_event_bound = _post_correction_custody_snapshot(backup_check)
                     evidence_snapshot, evidence_digest, evidence_event_bound = _recovery_evidence_snapshot(backup_check)
                     manifest.update({
-                        "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
+                        "diagnostic_contract_version": DIAGNOSTIC_ARTIFACT_CONTRACT_V2,
                         "diagnostic_evidence": diagnostic_evidence,
                         "diagnostic_evidence_count": len(diagnostic_evidence),
                         "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
@@ -2150,7 +2172,7 @@ def capture_recovery_point(*, database_path: str | os.PathLike[str], artifact_ro
                     if fault_injector is not None:
                         fault_injector.checkpoint("after_current_evidence_before_manifest")
                     manifest.update({
-                        "diagnostic_contract_version": "stage77.diagnostic_aware.v1",
+                        "diagnostic_contract_version": DIAGNOSTIC_ARTIFACT_CONTRACT_V2,
                         "diagnostic_evidence": diagnostic_evidence,
                         "diagnostic_evidence_count": len(diagnostic_evidence),
                         "diagnostic_evidence_state_digest": diagnostic_evidence_digest,
@@ -2314,7 +2336,7 @@ def restore_recovery_point(*, bundle_path: str | os.PathLike[str], restore_root:
                     _event(conn, row, "job_recovered_retryable", "restore_validating", actor, {"job_id": int(job["id"])})
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
                 raise ValueError("restore_integrity_failed")
-            if _manifest_contract(manifest) == "post_correction_aware":
+            if _manifest_contract(manifest) in {"post_correction_aware", "post_correction_aware_v2"}:
                 _insert_recovery_evidence(
                     conn, manifest, source_mode="native_capture", actor=actor,
                     rationale="restored from validated recovery manifest",
@@ -2499,7 +2521,7 @@ def _receipt_from_manifest(manifest: Mapping[str, Any], *, archive_digest: str, 
     if not isinstance(reason, str) or not reason or len(reason) > MAX_EXPORT_REASON or any(ord(char) < 0x20 for char in reason):
         raise ValueError("export_reason_invalid")
     receipt = {
-        "receipt_schema_version": EXPORT_RECEIPT_SCHEMA_VERSION,
+        "receipt_schema_version": EXPORT_RECEIPT_SCHEMA_VERSION_V2 if manifest.get("manifest_schema_version") == MANIFEST_SCHEMA_VERSION_V2 else EXPORT_RECEIPT_SCHEMA_VERSION,
         "recovery_point_id": str(manifest["recovery_point_id"]),
         "created_at": utc_now(),
         "recovery_reason": reason,
@@ -2516,7 +2538,7 @@ def _receipt_from_manifest(manifest: Mapping[str, Any], *, archive_digest: str, 
         "publication_engine_version": str(manifest["publication_engine_version"]),
         "stage77_schema_version": str(manifest["stage77_schema_version"]),
     }
-    if manifest.get("diagnostic_contract_version") == "stage77.diagnostic_aware.v1":
+    if manifest.get("diagnostic_contract_version") in {DIAGNOSTIC_ARTIFACT_CONTRACT_V1, DIAGNOSTIC_ARTIFACT_CONTRACT_V2}:
         receipt.update({
             "diagnostic_contract_version": str(manifest["diagnostic_contract_version"]),
             "diagnostic_evidence_count": int(manifest["diagnostic_evidence_count"]),
@@ -2561,8 +2583,8 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
         raise ValueError("export_receipt_invalid") from exc
     if not isinstance(receipt, dict) or raw != canonical_json(receipt).encode("utf-8"):
         raise ValueError("export_receipt_invalid")
-    _receipt_contract(receipt)
-    if receipt["receipt_schema_version"] != EXPORT_RECEIPT_SCHEMA_VERSION:
+    contract = _receipt_contract(receipt)
+    if receipt["receipt_schema_version"] != (EXPORT_RECEIPT_SCHEMA_VERSION_V2 if contract in {"diagnostic_aware_v2", "post_correction_aware_v2"} else EXPORT_RECEIPT_SCHEMA_VERSION):
         raise ValueError("export_receipt_invalid")
     for key in ("recovery_point_id", "created_at", "recovery_reason", "manifest_digest", "database_digest", "archive_digest", "application_version", "publication_engine_version", "stage77_schema_version"):
         if not isinstance(receipt[key], str) or not receipt[key] or len(receipt[key]) > MAX_MANIFEST_TEXT:
@@ -2578,19 +2600,19 @@ def _strict_receipt(raw: bytes) -> dict[str, Any]:
     for key in ("manifest_digest", "database_digest", "archive_digest"):
         if len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
             raise ValueError("export_receipt_invalid")
-    if _receipt_contract(receipt) in {"current", "diagnostic_aware", "post_correction_aware"} and (len(receipt["qualification_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["qualification_state_digest"])):
+    if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"} and (len(receipt["qualification_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["qualification_state_digest"])):
         raise ValueError("export_receipt_invalid")
     numeric_fields = ["artifact_count", "recovery_event_bound", "job_event_bound"]
-    if _receipt_contract(receipt) in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         numeric_fields.extend(("qualification_count", "qualification_event_bound"))
-    if _receipt_contract(receipt) in {"diagnostic_aware", "post_correction_aware"}:
-        if receipt["diagnostic_contract_version"] != "stage77.diagnostic_aware.v1":
+    if contract in {"diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
+        if receipt["diagnostic_contract_version"] != (DIAGNOSTIC_ARTIFACT_CONTRACT_V2 if contract in {"diagnostic_aware_v2", "post_correction_aware_v2"} else DIAGNOSTIC_ARTIFACT_CONTRACT_V1):
             raise ValueError("export_receipt_invalid")
         for key in ("diagnostic_evidence_state_digest", "retry_link_state_digest"):
             if not isinstance(receipt[key], str) or len(receipt[key]) != 64 or any(char not in "0123456789abcdef" for char in receipt[key]):
                 raise ValueError("export_receipt_invalid")
         numeric_fields.extend(("diagnostic_evidence_count", "retry_link_count"))
-    if _receipt_contract(receipt) == "post_correction_aware":
+    if contract in {"post_correction_aware", "post_correction_aware_v2"}:
         if len(receipt["post_correction_authorization_state_digest"]) != 64 or any(char not in "0123456789abcdef" for char in receipt["post_correction_authorization_state_digest"]):
             raise ValueError("export_receipt_invalid")
         if isinstance(receipt["post_correction_authorization_event_bound"], bool) or not isinstance(receipt["post_correction_authorization_event_bound"], int) or receipt["post_correction_authorization_event_bound"] < 0:
@@ -2723,7 +2745,7 @@ def export_recovery_bundle(*, bundle_path: str | os.PathLike[str], output_archiv
     bundle_result = validate_recovery_bundle(bundle)
     before_snapshot = _bundle_snapshot(bundle)
     manifest, manifest_digest = _manifest_and_digest(bundle)
-    if _manifest_contract(manifest) not in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if _manifest_contract(manifest) not in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         raise ValueError("export_source_contract_unsupported")
     manifest = dict(manifest)
     manifest["_manifest_digest"] = manifest_digest

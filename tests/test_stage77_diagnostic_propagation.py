@@ -307,5 +307,79 @@ class Stage75ToStage77PropagationTests(unittest.TestCase):
         self.assertNotIn("raw_error", payload)
 
 
+class E2V2DiagnosticContractTests(Stage75ToStage77PropagationTests):
+    def _v2(self, *, state="known", target_class="governed_report", status="passed", relationship="completed_after_primary"):
+        return diagnostics.make_diagnostic(phase="rendering", operation="renderer_invocation", checkpoint="entered", code="governed_report_renderer_failed", cleanup_status=status, failure_context={"schema_version": diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2, "affected_target_state": state, "affected_target_class": target_class, "cleanup_relationship": relationship})
+
+    def test_v2_selection_is_explicit_and_unsupported_version_is_rejected(self):
+        value = self._v2()
+        terminal = {"phase": value["failure_phase"], "operation": value["failure_operation"], "checkpoint": value["failure_checkpoint"], "code": value["failure_code"], "diagnostic": value, **value}
+        self.assertEqual(diagnostics.select_diagnostic_contract(attempt_raw=reports.canonical_json([value]), terminal_raw=reports.canonical_json(terminal))["contract_id"], diagnostics.STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT)
+        future = {**value["failure_record"], "schema_version": "structured_failure_attribution.v3"}
+        rejected = {**value, "failure_record": future}
+        with self.assertRaisesRegex(ValueError, "bounded_failure_record_invalid"):
+            diagnostics.select_diagnostic_contract(attempt_raw=reports.canonical_json([rejected]), terminal_raw=reports.canonical_json({"phase": rejected["failure_phase"], "operation": rejected["failure_operation"], "checkpoint": rejected["failure_checkpoint"], "code": rejected["failure_code"], "diagnostic": rejected, **rejected}))
+
+    def test_v2_terminal_event_persists_and_fresh_readback_preserves_primary(self):
+        jobs.ensure_job_tables(self.conn)
+        job = jobs.enqueue_generation(self.conn, report_id=self.report["id"], actor="generator", governed_action="enqueue_generation", idempotency_key="e2-v2-terminal")
+        claimed = jobs.claim_one(self.conn)
+        value = self._v2(status="failed", relationship="failed_after_primary")
+        self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="rendering", code="governed_report_renderer_failed", diagnostic=value, commit=True))
+        payload = json.loads(self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal'", (job["id"],)).fetchone()[0])
+        self.assertEqual(payload["code"], "governed_report_renderer_failed")
+        self.assertEqual(payload["diagnostic"]["failure_record"]["cleanup_relationship"], "failed_after_primary")
+        self.assertIsNotNone(payload["diagnostic"]["failure_record"]["persisted_at"])
+
+    def _authorised_job(self, key):
+        jobs.ensure_job_tables(self.conn); jobs.ensure_post_correction_tables(self.conn)
+        job = jobs.enqueue_generation(self.conn, report_id=self.report["id"], actor="generator", governed_action="enqueue_generation", idempotency_key=key)
+        claimed = jobs.claim_one(self.conn)
+        version = self.report["versions"][0]
+        auth = f"auth-{job['id']}"
+        self.conn.execute("INSERT INTO stage77_post_correction_authorizations(id,report_id,report_version_id,qualification_id,job1_id,job2_id,state,idempotency_key,payload_json,authorization_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (auth, self.report["id"], version["id"], 1, job["id"], job["id"], "authorized", f"key-{job['id']}", "{}", "0" * 64, "2026-01-01T00:00:00Z"))
+        self.conn.execute("UPDATE stage77_report_jobs SET post_correction_authorization_id=? WHERE id=?", (auth, job["id"])); self.conn.commit()
+        return job, claimed, auth
+
+    def test_terminal_consumes_exactly_one_authorization_with_outer_commit(self):
+        job, claimed, auth = self._authorised_job("outer-commit")
+        self.conn.execute("BEGIN")
+        self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="validation", code="artifact_integrity_failed", commit=False))
+        self.conn.commit()
+        self.assertEqual(self.conn.execute("SELECT state FROM stage77_post_correction_authorizations WHERE id=?", (auth,)).fetchone()[0], "consumed")
+
+    def test_terminal_stages_success_for_outer_rollback(self):
+        job, claimed, auth = self._authorised_job("outer-rollback")
+        self.conn.execute("BEGIN")
+        self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="validation", code="artifact_integrity_failed", commit=False))
+        self.conn.rollback()
+        self.assertEqual(self.conn.execute("SELECT state FROM stage77_report_jobs WHERE id=?", (job["id"],)).fetchone()[0], "leased")
+        self.assertEqual(self.conn.execute("SELECT state FROM stage77_post_correction_authorizations WHERE id=?", (auth,)).fetchone()[0], "authorized")
+
+    def test_terminal_explicit_helper_commit_persists_complete_transition(self):
+        jobs.ensure_job_tables(self.conn)
+        job = jobs.enqueue_generation(self.conn, report_id=self.report["id"], actor="generator", governed_action="enqueue_generation", idempotency_key="helper-commit")
+        claimed = jobs.claim_one(self.conn)
+        self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="validation", code="artifact_integrity_failed", commit=True))
+        self.assertFalse(self.conn.in_transaction)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal'", (job["id"],)).fetchone()[0], 1)
+
+    def test_terminal_release_failure_rolls_back_group_and_preserves_outer_ownership(self):
+        job, claimed, auth = self._authorised_job("release-failure")
+        class Failing:
+            def __init__(self, conn): self.conn, self.failed = conn, False
+            def execute(self, sql, values=()):
+                if sql == "RELEASE SAVEPOINT stage77_terminal_event" and not self.failed: self.failed = True; raise sqlite3.OperationalError("forced release failure")
+                return self.conn.execute(sql, values)
+            @property
+            def in_transaction(self): return self.conn.in_transaction
+            def commit(self): return self.conn.commit()
+        self.conn.execute("BEGIN")
+        with self.assertRaisesRegex(sqlite3.OperationalError, "forced release failure"):
+            jobs._terminal(Failing(self.conn), job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="validation", code="artifact_integrity_failed", commit=False)
+        self.assertTrue(self.conn.in_transaction); self.conn.commit()
+        self.assertEqual(self.conn.execute("SELECT state FROM stage77_report_jobs WHERE id=?", (job["id"],)).fetchone()[0], "leased")
+        self.assertEqual(self.conn.execute("SELECT state FROM stage77_post_correction_authorizations WHERE id=?", (auth,)).fetchone()[0], "authorized")
+
 if __name__ == "__main__":
     unittest.main()

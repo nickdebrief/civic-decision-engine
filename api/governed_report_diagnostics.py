@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import errno as errno_module
 import sqlite3
 from typing import Any, Mapping
 
 
-DIAGNOSTIC_FIELDS = {
+DIAGNOSTIC_FIELDS_V1 = {
     "failure_phase",
     "failure_operation",
     "failure_checkpoint",
@@ -20,6 +21,9 @@ DIAGNOSTIC_FIELDS = {
     "adapter_result_received",
     "format_category",
 }
+FAILURE_RECORD_FIELDS = {"schema_version", "failure_event_id", "run_identifier", "attempt_identifier", "process_identifier", "supervisor_identifier", "operation_identifier", "native_errno", "native_errno_name", "exception_type", "diagnostic_message", "observed_at", "persisted_at", "lifecycle_event", "reconciliation_status"}
+FAILURE_RECORD_FIELDS_V2 = FAILURE_RECORD_FIELDS | {"affected_target_state", "affected_target_class", "cleanup_relationship"}
+DIAGNOSTIC_FIELDS = DIAGNOSTIC_FIELDS_V1 | {"failure_record"}
 
 FAILURE_PHASES = {
     "revalidation",
@@ -87,6 +91,13 @@ CLEANUP_STATUSES = {"passed", "failed", "unknown", "not_required"}
 FORMAT_CATEGORIES = {"docx", "html", "pdf", "multiple", "none", "unknown"}
 
 CURRENT_DIAGNOSTIC_CONTRACT = "current_diagnostic_contract_v1"
+STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT = "structured_failure_diagnostic_contract_v2"
+STRUCTURED_FAILURE_SCHEMA_VERSION = "structured_failure_attribution.v1"
+STRUCTURED_FAILURE_SCHEMA_VERSION_V2 = "structured_failure_attribution.v2"
+AFFECTED_TARGET_STATES_V2 = {"known", "absent", "unknown"}
+AFFECTED_TARGET_CLASSES_V2 = {"governed_report", "report_artifact", "document_association"}
+LEGACY_UNSPECIFIED = "legacy_unspecified"
+CLEANUP_RELATIONSHIPS_V2 = {"not_required_after_primary": "not_required", "completed_after_primary": "passed", "failed_after_primary": "failed", "unknown_after_primary": "unknown"}
 LEGACY_DIAGNOSTIC_CONTRACT = "legacy_pre_propagation_diagnostic_contract_v1"
 TRANSITIONAL_DIAGNOSTIC_CONTRACT = "current_pre_terminal_projection_fix_diagnostic_contract_v1"
 LEGACY_ATTEMPT_DIAGNOSTICS = (
@@ -202,6 +213,40 @@ def exception_category(exc: BaseException | None) -> str:
         return "sqlite_error"
     return "unexpected_error"
 
+def _identifier(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+def make_failure_record(*, operation: str, exc: BaseException | None = None, failure_event_id: str | None = None, run_identifier: str | None = None, attempt_identifier: str | None = None, process_identifier: str | None = None, supervisor_identifier: str | None = None, observed_at: str | None = None, lifecycle_event: str | None = None, reconciliation_status: str = "recorded", schema_version: str = STRUCTURED_FAILURE_SCHEMA_VERSION, affected_target_state: str | None = None, affected_target_class: str | None = None, cleanup_relationship: str | None = None, cleanup_status: str = "unknown") -> dict[str, Any]:
+    native_errno = exc.errno if isinstance(exc, OSError) and isinstance(exc.errno, int) else None
+    if schema_version not in {STRUCTURED_FAILURE_SCHEMA_VERSION, STRUCTURED_FAILURE_SCHEMA_VERSION_V2}: raise ValueError("bounded_failure_record_invalid")
+    record = {"schema_version": schema_version, "failure_event_id": _identifier(failure_event_id), "run_identifier": _identifier(run_identifier), "attempt_identifier": _identifier(attempt_identifier), "process_identifier": _identifier(process_identifier), "supervisor_identifier": _identifier(supervisor_identifier), "operation_identifier": operation if operation in FAILURE_OPERATIONS else "unknown", "native_errno": native_errno, "native_errno_name": errno_module.errorcode.get(native_errno) if native_errno is not None else None, "exception_type": exc.__class__.__name__ if exc is not None else None, "diagnostic_message": "native_os_error" if native_errno is not None else None, "observed_at": _identifier(observed_at), "persisted_at": None, "lifecycle_event": _identifier(lifecycle_event), "reconciliation_status": reconciliation_status}
+    if schema_version == STRUCTURED_FAILURE_SCHEMA_VERSION_V2:
+        state = affected_target_state if affected_target_state is not None else "unknown"
+        relationship = cleanup_relationship or next((name for name, status in CLEANUP_RELATIONSHIPS_V2.items() if status == cleanup_status), None)
+        if relationship not in CLEANUP_RELATIONSHIPS_V2 or CLEANUP_RELATIONSHIPS_V2[relationship] != cleanup_status: raise ValueError("bounded_failure_record_invalid")
+        record.update({"affected_target_state": state, "affected_target_class": affected_target_class, "cleanup_relationship": relationship})
+    return validate_failure_record(record)
+
+def validate_failure_record(value: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, Mapping): raise ValueError("bounded_failure_record_invalid")
+    schema_version = value.get("schema_version")
+    expected = FAILURE_RECORD_FIELDS_V2 if schema_version == STRUCTURED_FAILURE_SCHEMA_VERSION_V2 else FAILURE_RECORD_FIELDS
+    if set(value) != expected or schema_version not in {STRUCTURED_FAILURE_SCHEMA_VERSION, STRUCTURED_FAILURE_SCHEMA_VERSION_V2}: raise ValueError("bounded_failure_record_invalid")
+    if value.get("reconciliation_status") not in {"recorded", "reconciliation_required"}: raise ValueError("bounded_failure_record_invalid")
+    for name in ("failure_event_id", "run_identifier", "attempt_identifier", "process_identifier", "supervisor_identifier", "exception_type", "diagnostic_message", "observed_at", "persisted_at", "lifecycle_event"):
+        if value[name] is not None and (not isinstance(value[name], str) or not value[name]): raise ValueError("bounded_failure_record_invalid")
+    native_errno = value["native_errno"]
+    if native_errno is not None and (isinstance(native_errno, bool) or not isinstance(native_errno, int)): raise ValueError("bounded_failure_record_invalid")
+    if value["native_errno_name"] != (errno_module.errorcode.get(native_errno) if native_errno is not None else None) or value["operation_identifier"] not in FAILURE_OPERATIONS: raise ValueError("bounded_failure_record_invalid")
+    if schema_version == STRUCTURED_FAILURE_SCHEMA_VERSION_V2:
+        state, target_class, relationship = value["affected_target_state"], value["affected_target_class"], value["cleanup_relationship"]
+        if state not in AFFECTED_TARGET_STATES_V2 or relationship not in CLEANUP_RELATIONSHIPS_V2 or (state == "known" and target_class not in AFFECTED_TARGET_CLASSES_V2) or (state != "known" and target_class is not None): raise ValueError("bounded_failure_record_invalid")
+    return dict(value)
+
+def decode_failure_record(value: Mapping[str, Any]) -> dict[str, Any]:
+    record = validate_failure_record(value)
+    return {**record, "affected_target_state": LEGACY_UNSPECIFIED, "affected_target_class": None, "cleanup_relationship": LEGACY_UNSPECIFIED} if record["schema_version"] == STRUCTURED_FAILURE_SCHEMA_VERSION else record
+
 
 def bounded_code(value: Any) -> str:
     return value if isinstance(value, str) and value in FAILURE_CODES else "unknown"
@@ -219,7 +264,7 @@ def make_diagnostic(
     adapter_invocation_entered: bool = False,
     adapter_process_started: bool = False,
     adapter_result_received: bool = False,
-    format_category: str = "unknown",
+    format_category: str = "unknown", failure_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     value = {
         "failure_phase": phase if phase in FAILURE_PHASES else "unknown",
@@ -233,11 +278,14 @@ def make_diagnostic(
         "adapter_result_received": bool(adapter_result_received),
         "format_category": format_category if format_category in FORMAT_CATEGORIES else "unknown",
     }
+    context = dict(failure_context or {})
+    if context.get("schema_version") == STRUCTURED_FAILURE_SCHEMA_VERSION_V2: context.setdefault("cleanup_status", value["cleanup_status"])
+    value["failure_record"] = make_failure_record(operation=value["failure_operation"], exc=exc, **context)
     return validate_diagnostic(value)
 
 
 def validate_diagnostic(value: Mapping[str, Any]) -> dict[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != DIAGNOSTIC_FIELDS:
+    if not isinstance(value, Mapping) or set(value) not in {frozenset(DIAGNOSTIC_FIELDS_V1), frozenset(DIAGNOSTIC_FIELDS)}:
         raise ValueError("bounded_diagnostic_contract_invalid")
     if any(not isinstance(value[name], str) for name in ("failure_phase", "failure_operation", "failure_checkpoint", "failure_code", "failure_exception_category", "cleanup_status", "format_category")):
         raise ValueError("bounded_diagnostic_contract_invalid")
@@ -253,7 +301,19 @@ def validate_diagnostic(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("bounded_diagnostic_contract_invalid")
     if value["failure_checkpoint"] == "result_received" and not value["adapter_result_received"]:
         raise ValueError("bounded_diagnostic_contract_invalid")
+    if "failure_record" in value:
+        record = validate_failure_record(value["failure_record"])
+        if record["schema_version"] == STRUCTURED_FAILURE_SCHEMA_VERSION_V2 and CLEANUP_RELATIONSHIPS_V2[record["cleanup_relationship"]] != value["cleanup_status"]: raise ValueError("bounded_diagnostic_contract_invalid")
     return dict(value)
+
+def with_persisted_at(value: Mapping[str, Any], *, persisted_at: str) -> dict[str, Any]:
+    diagnostic = validate_diagnostic(value)
+    if "failure_record" not in diagnostic: return diagnostic
+    if not isinstance(persisted_at, str) or not persisted_at: raise ValueError("bounded_failure_record_invalid")
+    record = dict(diagnostic["failure_record"])
+    if record["persisted_at"] is not None: raise ValueError("bounded_failure_record_already_persisted")
+    record["persisted_at"] = persisted_at
+    return validate_diagnostic({**diagnostic, "failure_record": validate_failure_record(record)})
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -292,7 +352,7 @@ def select_diagnostic_contract(*, attempt_raw: str, terminal_raw: str) -> dict[s
                 "terminal_sha256": hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest(),
             }
     attempt_diagnostic = attempt[0] if isinstance(attempt, list) and len(attempt) == 1 and isinstance(attempt[0], Mapping) else None
-    transitional_terminal_keys = {"phase", "code", "diagnostic"} | DIAGNOSTIC_FIELDS
+    transitional_terminal_keys = {"phase", "code", "diagnostic"} | DIAGNOSTIC_FIELDS_V1
     if (
         isinstance(attempt_diagnostic, Mapping)
         and dict(attempt_diagnostic) == TRANSITIONAL_DIAGNOSTIC
@@ -301,7 +361,7 @@ def select_diagnostic_contract(*, attempt_raw: str, terminal_raw: str) -> dict[s
         and terminal["phase"] == "rendering"
         and terminal["code"] == "governed_report_renderer_failed"
         and terminal["diagnostic"] == TRANSITIONAL_DIAGNOSTIC
-        and all(terminal[name] == TRANSITIONAL_DIAGNOSTIC[name] for name in DIAGNOSTIC_FIELDS)
+        and all(terminal[name] == TRANSITIONAL_DIAGNOSTIC[name] for name in DIAGNOSTIC_FIELDS_V1)
         and hashlib.sha256(attempt_raw.encode("utf-8")).hexdigest() == TRANSITIONAL_ATTEMPT_SHA256
         and hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest() == TRANSITIONAL_TERMINAL_SHA256
     ):
@@ -313,7 +373,7 @@ def select_diagnostic_contract(*, attempt_raw: str, terminal_raw: str) -> dict[s
     if not isinstance(attempt, list) or len(attempt) != 1 or not isinstance(attempt[0], Mapping):
         raise ValueError("bounded_diagnostic_contract_invalid")
     diagnostic = validate_diagnostic(attempt[0])
-    expected_terminal_keys = {"phase", "operation", "checkpoint", "code", "diagnostic"} | DIAGNOSTIC_FIELDS
+    expected_terminal_keys = {"phase", "operation", "checkpoint", "code", "diagnostic"} | set(diagnostic)
     if not isinstance(terminal, Mapping) or set(terminal) != expected_terminal_keys:
         raise ValueError("bounded_diagnostic_contract_invalid")
     terminal_diagnostic = validate_diagnostic(terminal["diagnostic"])
@@ -323,11 +383,11 @@ def select_diagnostic_contract(*, attempt_raw: str, terminal_raw: str) -> dict[s
         or terminal["operation"] != diagnostic["failure_operation"]
         or terminal["checkpoint"] != diagnostic["failure_checkpoint"]
         or terminal["code"] != diagnostic["failure_code"]
-        or any(terminal[name] != diagnostic[name] for name in DIAGNOSTIC_FIELDS)
+        or any(terminal[name] != diagnostic[name] for name in diagnostic)
     ):
         raise ValueError("bounded_diagnostic_contract_invalid")
     return {
-        "contract_id": CURRENT_DIAGNOSTIC_CONTRACT,
+        "contract_id": STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT if "failure_record" in diagnostic else CURRENT_DIAGNOSTIC_CONTRACT,
         "attempt_sha256": hashlib.sha256(attempt_raw.encode("utf-8")).hexdigest(),
         "terminal_sha256": hashlib.sha256(terminal_raw.encode("utf-8")).hexdigest(),
     }
