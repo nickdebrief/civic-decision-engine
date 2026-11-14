@@ -99,7 +99,12 @@ class Stage77JobTests(unittest.TestCase):
         event = self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE job_id=? AND event_type='terminal'", (item["id"],)).fetchone()
         self.assertIsNotNone(event)
         payload = __import__("json").loads(event[0])
-        self.assertEqual(payload["diagnostic"], value)
+        persisted_at = payload["diagnostic"]["failure_record"]["persisted_at"]
+        self.assertIsInstance(persisted_at, str)
+        self.assertTrue(persisted_at)
+        self.assertIsNone(value["failure_record"]["persisted_at"])
+        expected = {**value, "failure_record": {**value["failure_record"], "persisted_at": persisted_at}}
+        self.assertEqual(payload["diagnostic"], expected)
         self.assertEqual(jobs.get_job(self.conn, item["id"])["state"], "failed_terminal")
 
     def test_worker_rejects_malformed_inner_diagnostic_closed(self):

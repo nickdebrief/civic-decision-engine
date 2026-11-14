@@ -988,14 +988,19 @@ class Stage77RecoveryTests(unittest.TestCase):
         result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
         bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
         manifest = json.loads((bundle / "manifest.json").read_text())
-        self.assertEqual(recovery._manifest_contract(manifest), "diagnostic_aware")
-        self.assertEqual(manifest["diagnostic_contract_version"], "stage77.diagnostic_aware.v1")
+        self.assertEqual(recovery._manifest_contract(manifest), "diagnostic_aware_v2")
+        self.assertEqual(manifest["manifest_schema_version"], "stage77.recovery_manifest.v2")
+        self.assertEqual(manifest["diagnostic_contract_version"], "stage77.diagnostic_aware.v2")
         self.assertEqual(manifest["diagnostic_evidence_count"], 1)
         self.assertEqual(manifest["retry_link_count"], 1)
+        self.assertEqual(manifest["diagnostic_evidence"][0]["diagnostic_attribution_projection"], {"projection_version": "structured_failure_attribution.v2", "source_failure_record_schema_version": "structured_failure_attribution.v1", "affected_target_state": "legacy_unspecified", "affected_target_class": None, "cleanup_relationship": "legacy_unspecified"})
         self.assertEqual(recovery.validate_recovery_bundle(bundle)["manifest_digest"], result["manifest_digest"])
         exports = self.root / "exports"
         exports.mkdir()
         recovery.export_recovery_bundle(bundle_path=bundle, output_archive=exports / "point4.tar", receipt_path=exports / "point4.json", reason="diagnostic-aware pre-retry state")
+        receipt = json.loads((exports / "point4.json").read_text())
+        self.assertEqual(receipt["receipt_schema_version"], "stage77.recovery_receipt.v2")
+        self.assertEqual(receipt["diagnostic_contract_version"], "stage77.diagnostic_aware.v2")
         self.assertEqual(recovery.validate_export_archive(exports / "point4.tar", exports / "point4.json")["state"], "valid")
 
     def test_diagnostic_aware_manifest_binds_legacy_and_transitional_evidence(self):
@@ -1318,6 +1323,25 @@ class Stage77RecoveryTests(unittest.TestCase):
         self.assertEqual(reconciled["state"], "completed")
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], 1)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0], 1)
+
+    def test_repeated_interrupted_recovery_reconciliation_is_idempotent(self):
+        result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
+        self.conn.execute("UPDATE stage77_recovery_control SET state='capturing',worker_drained=1 WHERE singleton=1"); self.conn.commit()
+        first = recovery.reconcile_interrupted_recovery(database_path=self.db, recovery_root=self.recovery_root, approved_root=self.root, actor="admin")
+        before = (self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0])
+        second = recovery.reconcile_interrupted_recovery(database_path=self.db, recovery_root=self.recovery_root, approved_root=self.root, actor="admin")
+        after = (self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0])
+        self.assertEqual(first["recovery_point_id"], result["recovery_point_id"]); self.assertEqual(second["recovery_point_id"], result["recovery_point_id"])
+        self.assertEqual(first["state"], "completed"); self.assertEqual(second["state"], "completed"); self.assertEqual(before, after)
+
+    def test_reconciliation_after_completed_recovery_is_idempotent(self):
+        result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
+        first = recovery.reconcile_interrupted_recovery(database_path=self.db, recovery_root=self.recovery_root, approved_root=self.root, actor="admin")
+        counts = (self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0])
+        second = recovery.reconcile_interrupted_recovery(database_path=self.db, recovery_root=self.recovery_root, approved_root=self.root, actor="admin")
+        self.assertEqual(first["recovery_point_id"], result["recovery_point_id"]); self.assertEqual(second["recovery_point_id"], result["recovery_point_id"])
+        self.assertEqual(second["state"], "completed")
+        self.assertEqual(counts, (self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence").fetchone()[0], self.conn.execute("SELECT COUNT(*) FROM stage77_recovery_point_evidence_events").fetchone()[0]))
 
     def test_recovery_evidence_and_events_are_immutable(self):
         result = recovery.capture_recovery_point(database_path=self.db, artifact_root=self.artifacts, recovery_root=self.recovery_root, approved_root=self.root, actor="admin", governed_action="capture")
