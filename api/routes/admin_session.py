@@ -701,6 +701,108 @@ def require_admin_session(request) -> dict[str, Any]:
     return verified
 
 
+_PUBLICATION_METADATA_STATES = frozenset(
+    {"recorded", "not_recorded", "unavailable", "not_applicable", "disputed"}
+)
+_PUBLICATION_METADATA_VALUE_UNSET = object()
+_PUBLICATION_METADATA_BASIS_RE = re.compile(r"[a-z0-9][a-z0-9_.:-]{0,119}")
+
+
+def _publication_metadata_evidence(
+    state: str,
+    *,
+    value: Any = _PUBLICATION_METADATA_VALUE_UNSET,
+    basis: str | None = None,
+) -> dict[str, Any]:
+    """Return a scalar-only evidence envelope for publication metadata.
+
+    This deliberately does not derive governance values from lifecycle rationale
+    or other free text.  A basis is accepted only for the two states that need
+    one and is restricted to a compact, non-content token.
+    """
+
+    normalized_state = str(state or "").strip()
+    if normalized_state not in _PUBLICATION_METADATA_STATES:
+        raise ValueError("publication_metadata_state_invalid")
+    envelope: dict[str, Any] = {"state": normalized_state}
+    if normalized_state == "recorded":
+        if value is _PUBLICATION_METADATA_VALUE_UNSET or not isinstance(
+            value, (str, int, float, bool)
+        ):
+            raise ValueError("publication_metadata_recorded_value_invalid")
+        envelope["value"] = value
+    elif value is not _PUBLICATION_METADATA_VALUE_UNSET:
+        raise ValueError("publication_metadata_nonrecorded_value_invalid")
+
+    if normalized_state in {"not_applicable", "disputed"}:
+        if not isinstance(basis, str) or not _PUBLICATION_METADATA_BASIS_RE.fullmatch(
+            basis
+        ):
+            raise ValueError("publication_metadata_basis_invalid")
+        envelope["basis"] = basis
+    elif basis is not None:
+        raise ValueError("publication_metadata_basis_unexpected")
+    return envelope
+
+
+def _publication_metadata_recorded_or_unavailable(value: Any) -> dict[str, Any]:
+    if isinstance(value, (str, int, float, bool)) and not (
+        isinstance(value, str) and not value.strip()
+    ):
+        return _publication_metadata_evidence("recorded", value=value)
+    return _publication_metadata_evidence("unavailable")
+
+
+def _publication_metadata_projection(
+    item: Mapping[str, Any], lifecycle_events: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Construct the PI60 scalar allowlist without serializing document data."""
+
+    publication_event = next(
+        (
+            event
+            for event in reversed(lifecycle_events)
+            if isinstance(event, Mapping)
+            and str(event.get("new_status") or "").strip().lower() == "published"
+        ),
+        None,
+    )
+    current_status = str(item.get("status") or "").strip().lower()
+    decision = publication_event if current_status == "published" and publication_event else {}
+    return {
+        "document_identifier": _publication_metadata_recorded_or_unavailable(
+            item.get("document_identifier")
+        ),
+        "document_type": _publication_metadata_recorded_or_unavailable(
+            item.get("document_type")
+        ),
+        "publication_lifecycle_state": _publication_metadata_recorded_or_unavailable(item.get("status")),
+        "publication_decision_key": (_publication_metadata_recorded_or_unavailable(decision.get("decision_key")) if current_status == "published" else _publication_metadata_evidence("not_applicable", basis="current_lifecycle_not_published")),
+        "publication_decision_timestamp": (_publication_metadata_recorded_or_unavailable(decision.get("decided_at")) if current_status == "published" else _publication_metadata_evidence("not_applicable", basis="current_lifecycle_not_published")),
+        "publication_decision_actor": (_publication_metadata_recorded_or_unavailable(decision.get("actor")) if current_status == "published" else _publication_metadata_evidence("not_applicable", basis="current_lifecycle_not_published")),
+        "publication_decision_actor_role": (_publication_metadata_recorded_or_unavailable(decision.get("actor_role")) if current_status == "published" else _publication_metadata_evidence("not_applicable", basis="current_lifecycle_not_published")),
+        "source_sha256": _publication_metadata_recorded_or_unavailable(
+            item.get("sha256_hash")
+        ),
+        "visibility": _publication_metadata_recorded_or_unavailable(
+            item.get("visibility")
+        ),
+        "private_original_source_media": _publication_metadata_evidence(
+            "recorded", value=is_private_original_source_media(item)
+        ),
+        "authority_reference": _publication_metadata_evidence("not_recorded"),
+        "original_mbox_publication_scope": _publication_metadata_evidence(
+            "not_recorded"
+        ),
+        "publication_policy_identifier": _publication_metadata_evidence(
+            "not_recorded"
+        ),
+        "limitations": (
+            "This response does not determine publication authority or disclosure scope.",
+        ),
+    }
+
+
 def get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=rg77.BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
@@ -50584,6 +50686,29 @@ def admin_document_intake_preview_page(
             attachment_page_size=attachment_page_size,
         )
     )
+
+
+@router.get("/admin/documents/{intake_id}/publication-metadata")
+def admin_document_publication_metadata(intake_id: str, request: Request):
+    """Return the PI60 publication-metadata allowlist for one intake record.
+
+    The endpoint is intentionally separate from the broad administrative
+    document-detail and audit views.  It performs no serialization of the
+    document object or lifecycle rationale and reads the lifecycle ledger only
+    through its existing read-only query helper.
+    """
+
+    session = require_admin_session(request)
+    _admin_session_role(session)
+    try:
+        item = load_pending_document_read_only(intake_id)
+    except ValueError as exc:
+        raise _http_error(404, "document_intake_not_found") from exc
+    try:
+        lifecycle_events = list_lifecycle_decisions(intake_id=intake_id, db_path=DB_PATH)
+    except (OSError, sqlite3.Error) as exc:
+        raise _http_error(503, "publication_metadata_unavailable") from exc
+    return _publication_metadata_projection(item, lifecycle_events)
 
 
 @router.get("/admin/archive/jobs", response_class=HTMLResponse)
