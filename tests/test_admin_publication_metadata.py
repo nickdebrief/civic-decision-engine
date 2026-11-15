@@ -157,6 +157,29 @@ class AdminPublicationMetadataTests(unittest.TestCase):
         self.assertEqual(metadata_path.read_bytes(), metadata_before)
         self.assertEqual(self.db_path.read_bytes(), database_before)
 
+    def test_admin_detail_links_to_metadata_by_internal_intake_id(self):
+        intake_id, metadata_path = self._published_synthetic_document()
+        item = json.loads(metadata_path.read_text(encoding="utf-8"))
+        item["intake_id"] = "a" * 64
+        item["sha256_hash"] = "b" * 64
+        item["document_identifier"] = "DOC-2026-000754"
+
+        content = admin_session._render_document_intake_preview(
+            item, lifecycle_events=[]
+        )
+
+        expected_href = f'/admin/documents/{item["intake_id"]}/publication-metadata'
+        self.assertIn("View Publication Metadata", content)
+        self.assertIn(expected_href, content)
+        self.assertNotIn(
+            f'/admin/documents/{item["document_identifier"]}/publication-metadata',
+            content,
+        )
+        self.assertNotIn(
+            f'/admin/documents/{item["sha256_hash"]}/publication-metadata',
+            content,
+        )
+
     def test_endpoint_denies_unauthenticated_and_non_admin_requests(self):
         intake_id, _ = self._published_synthetic_document()
         with self.assertRaises(FakeHTTPException) as unauthenticated:
