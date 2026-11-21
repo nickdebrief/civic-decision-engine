@@ -38,6 +38,33 @@ class FailureEventV1Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             diagnostics.validate_failure_event_v1({**value, "raw_exception": "secret"})
 
+    def test_malformed_container_and_boolean_fields_have_bounded_validation_failures(self):
+        value = event()
+        malformed_values = (
+            {"operation": []},
+            {"operation": {}},
+            {"operation": True},
+            {"phase": []},
+            {"checkpoint": {}},
+            {"category": []},
+            {"terminal_outcome": {}},
+            {"reconciliation_status": []},
+            {"attribution": []},
+        )
+        for malformed in malformed_values:
+            with self.subTest(malformed=malformed):
+                with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+                    diagnostics.validate_failure_event_v1({**value, **malformed})
+
+        with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+            diagnostics.make_failure_event_v1(
+                failure_event_id="evt-malformed-attribution",
+                operation="renderer_invocation",
+                phase="rendering",
+                category="os_error",
+                attribution=[],
+            )
+
     def test_unsupported_version_is_explicit(self):
         value = event()
         with self.assertRaisesRegex(ValueError, "unsupported_failure_event_schema_version"):
@@ -51,6 +78,28 @@ class FailureEventV1Tests(unittest.TestCase):
         for forbidden in ("token=ABC", "/private/path", "traceback", "private@example.test"):
             self.assertNotIn(forbidden, rendered)
 
+    def test_provenance_is_a_bounded_opaque_identifier(self):
+        value = event()
+        for field in ("source_identity", "schema_manifest_id"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+                    diagnostics.make_failure_event_v1(
+                        failure_event_id="evt-private-provenance",
+                        operation="renderer_invocation",
+                        phase="rendering",
+                        category="os_error",
+                        **{field: "PRIVATE-SENTINEL /secret/path token=ABC"},
+                    )
+        self.assertEqual(
+            diagnostics.make_failure_event_v1(
+                failure_event_id="evt-pending-provenance",
+                operation="renderer_invocation",
+                phase="rendering",
+                category="os_error",
+            )["provenance"],
+            {"schema_manifest_id": "pending", "source_identity": "pending"},
+        )
+
     def test_adapter_is_non_destructive_and_rollback_returns_legacy_copy(self):
         legacy = {
             "id": "evt-legacy-1", "failure_operation": "renderer_invocation", "failure_phase": "rendering",
@@ -61,8 +110,12 @@ class FailureEventV1Tests(unittest.TestCase):
         adapted = diagnostics.adapt_legacy_failure_event(legacy, source_identity=source_identity, schema_manifest_id="cf25-schema")
         self.assertEqual(legacy, before)
         self.assertEqual(adapted["provenance"]["source_identity"], source_identity)
-        self.assertEqual(diagnostics.rollback_failure_event(legacy_record=legacy), legacy)
-        self.assertIsNot(diagnostics.rollback_failure_event(legacy_record=legacy), legacy)
+        legacy["nested"] = {"values": ["preserve-me"]}
+        rollback = diagnostics.rollback_failure_event(legacy_record=legacy)
+        self.assertEqual(rollback, legacy)
+        self.assertIsNot(rollback, legacy)
+        rollback["nested"]["values"].append("detached")
+        self.assertEqual(legacy["nested"], {"values": ["preserve-me"]})
 
     def test_milestone_retirement_is_not_time_based(self):
         pending = {name: False for name in diagnostics.LEGACY_SUPPORT_MILESTONES}

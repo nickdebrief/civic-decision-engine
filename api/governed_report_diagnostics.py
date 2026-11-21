@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -408,9 +409,20 @@ def _validate_attribution(value: Any) -> dict[str, str | None]:
 def _validate_provenance(value: Any) -> dict[str, str]:
     if not isinstance(value, Mapping) or set(value) != CANONICAL_PROVENANCE_FIELDS:
         raise _canonical_error()
-    if any(not isinstance(value[key], str) or not value[key] for key in CANONICAL_PROVENANCE_FIELDS):
+    if any(not _public_provenance_identifier(value[key]) for key in CANONICAL_PROVENANCE_FIELDS):
         raise _canonical_error()
     return {key: value[key] for key in sorted(CANONICAL_PROVENANCE_FIELDS)}
+
+
+def _public_provenance_identifier(value: Any) -> bool:
+    """Accept bounded opaque evidence identifiers, never arbitrary diagnostics."""
+    allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and len(value) <= 256
+        and all(character in allowed for character in value)
+    )
 
 
 def validate_failure_event_v1(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -421,14 +433,26 @@ def validate_failure_event_v1(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError("unsupported_failure_event_schema_version")
     if not isinstance(value["failure_event_id"], str) or not value["failure_event_id"]:
         raise _canonical_error()
-    if value["operation"] not in CANONICAL_OPERATIONS or value["phase"] not in FAILURE_PHASES:
+    if (
+        not isinstance(value["operation"], str)
+        or value["operation"] not in CANONICAL_OPERATIONS
+        or not isinstance(value["phase"], str)
+        or value["phase"] not in FAILURE_PHASES
+    ):
         raise _canonical_error()
     checkpoint = value["checkpoint"]
-    if checkpoint is not None and checkpoint not in FAILURE_CHECKPOINTS:
+    if checkpoint is not None and (
+        not isinstance(checkpoint, str) or checkpoint not in FAILURE_CHECKPOINTS
+    ):
         raise _canonical_error()
-    if value["category"] not in CANONICAL_CATEGORIES:
+    if not isinstance(value["category"], str) or value["category"] not in CANONICAL_CATEGORIES:
         raise _canonical_error()
-    if value["terminal_outcome"] not in CANONICAL_TERMINAL_OUTCOMES or value["reconciliation_status"] not in CANONICAL_RECONCILIATION_STATUSES:
+    if (
+        not isinstance(value["terminal_outcome"], str)
+        or value["terminal_outcome"] not in CANONICAL_TERMINAL_OUTCOMES
+        or not isinstance(value["reconciliation_status"], str)
+        or value["reconciliation_status"] not in CANONICAL_RECONCILIATION_STATUSES
+    ):
         raise _canonical_error()
     return {
         "schema_version": CANONICAL_FAILURE_EVENT_SCHEMA_VERSION,
@@ -458,7 +482,7 @@ def make_failure_event_v1(*, failure_event_id: str, operation: str, phase: str, 
         "schema_version": CANONICAL_FAILURE_EVENT_SCHEMA_VERSION,
         "failure_event_id": failure_event_id, "operation": operation, "phase": phase,
         "checkpoint": checkpoint, "category": category,
-        "attribution": attribution or {key: None for key in CANONICAL_ATTRIBUTION_FIELDS},
+        "attribution": attribution if attribution is not None else {key: None for key in CANONICAL_ATTRIBUTION_FIELDS},
         "observed_at": observed_at, "persisted_at": persisted_at,
         "terminal_outcome": terminal_outcome, "reconciliation_status": reconciliation_status,
         "provenance": {"source_identity": source_identity, "schema_manifest_id": schema_manifest_id},
@@ -493,7 +517,10 @@ def rollback_failure_event(*, legacy_record: Mapping[str, Any]) -> dict[str, Any
     """Disable the adapter by returning a detached legacy representation unchanged."""
     if not isinstance(legacy_record, Mapping):
         raise ValueError("legacy_failure_event_invalid")
-    return dict(legacy_record)
+    try:
+        return deepcopy(dict(legacy_record))
+    except (TypeError, ValueError):
+        raise ValueError("legacy_failure_event_invalid") from None
 
 
 def consumer_version_status(schema_version: str) -> str:
