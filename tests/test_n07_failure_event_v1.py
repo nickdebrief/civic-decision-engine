@@ -65,6 +65,61 @@ class FailureEventV1Tests(unittest.TestCase):
                 attribution=[],
             )
 
+    def test_rfc3339_timestamps_are_strict_for_both_optional_fields(self):
+        invalid_timestamps = (
+            "2026-01-01Z",
+            "2026-01-01 00:00:00Z",
+            "2026-01-01",
+            "2026-01-01T00:00:00",
+            "2026-01-01T00:00:00+25:00",
+            "2026-02-30T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:00:00.Z",
+            "2026/01/01T00:00:00Z",
+            [],
+            {},
+            0,
+            True,
+        )
+        for field in ("observed_at", "persisted_at"):
+            for invalid in invalid_timestamps:
+                with self.subTest(field=field, invalid=invalid):
+                    with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+                        event(**{field: invalid})
+
+        valid_timestamps = (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00+00:00",
+            "2026-01-01T12:34:56+05:30",
+            "2026-01-01T12:34:56-07:00",
+            "2026-01-01T00:00:00.123456Z",
+            None,
+        )
+        for field in ("observed_at", "persisted_at"):
+            for valid in valid_timestamps:
+                with self.subTest(field=field, valid=valid):
+                    value = event(**{field: valid})
+                    self.assertEqual(value[field], valid)
+                    self.assertEqual(
+                        diagnostics.serialize_failure_event_v1(value),
+                        diagnostics.serialize_failure_event_v1(dict(reversed(list(value.items())))),
+                    )
+
+    def test_legacy_adapter_cannot_project_invalid_timestamp(self):
+        legacy = {
+            "id": "evt-invalid-time",
+            "failure_operation": "renderer_invocation",
+            "failure_phase": "rendering",
+            "failure_exception_category": "os_error",
+            "observed_at": "2026-01-01Z",
+        }
+        with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+            diagnostics.adapt_legacy_failure_event(
+                legacy,
+                source_identity="sha256:synthetic",
+                schema_manifest_id="cf25-schema",
+            )
+
     def test_unsupported_version_is_explicit(self):
         value = event()
         with self.assertRaisesRegex(ValueError, "unsupported_failure_event_schema_version"):

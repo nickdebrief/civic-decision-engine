@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from copy import deepcopy
 from datetime import datetime
@@ -382,13 +383,19 @@ def _canonical_error() -> ValueError:
     return ValueError("canonical_failure_event_invalid")
 
 
+_RFC3339_DATETIME = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d"
+    r"(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
+)
+
+
 def _optional_rfc3339(value: Any) -> str | None:
     if value is None:
         return None
-    if not isinstance(value, str) or not value.endswith("Z"):
+    if not isinstance(value, str) or not _RFC3339_DATETIME.fullmatch(value):
         raise _canonical_error()
     try:
-        datetime.fromisoformat(value[:-1] + "+00:00")
+        datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
     except ValueError:
         raise _canonical_error() from None
     return value
