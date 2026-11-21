@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from datetime import datetime
 from typing import Any, Mapping
 
 
@@ -351,3 +352,162 @@ def adapter_mapping(phase: str, code: str) -> tuple[str, str, str]:
     if phase == "cleanup":
         return "renderer_invocation", "cleanup", "cleanup"
     return "unknown", "unknown", "unknown"
+
+
+# CF36 canonical external failure-event contract.  It is deliberately separate
+# from the existing Stage 77 internal diagnostic representation: introducing
+# the external v1 schema must not rewrite historic diagnostic payloads.
+CANONICAL_FAILURE_EVENT_SCHEMA_VERSION = "cde.n07.failure-event.v1"
+CANONICAL_FAILURE_EVENT_FIELDS = frozenset({
+    "schema_version", "failure_event_id", "operation", "phase", "checkpoint",
+    "category", "attribution", "observed_at", "persisted_at", "terminal_outcome",
+    "reconciliation_status", "provenance",
+})
+CANONICAL_ATTRIBUTION_FIELDS = frozenset({"run_id", "attempt_id", "process_id", "supervisor_id"})
+CANONICAL_PROVENANCE_FIELDS = frozenset({"source_identity", "schema_manifest_id"})
+CANONICAL_TERMINAL_OUTCOMES = frozenset({"failed", "not_completed"})
+CANONICAL_RECONCILIATION_STATUSES = frozenset({"recorded", "reconciliation_required"})
+CANONICAL_CATEGORIES = frozenset(EXCEPTION_CATEGORIES)
+CANONICAL_OPERATIONS = frozenset(FAILURE_OPERATIONS | {"rendering"})
+LEGACY_MIGRATION_STATES = frozenset({"legacy_unmapped", "adapted", "canonical", "rejected", "reconciliation_required"})
+LEGACY_SUPPORT_MILESTONES = frozenset({
+    "consumer_compatibility_evidenced", "migration_readiness_evidenced",
+    "rollback_readiness_evidenced", "governance_approval",
+})
+
+
+def _canonical_error() -> ValueError:
+    """A bounded public validation failure; never interpolate caller input."""
+    return ValueError("canonical_failure_event_invalid")
+
+
+def _optional_rfc3339(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise _canonical_error()
+    try:
+        datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError:
+        raise _canonical_error() from None
+    return value
+
+
+def _validate_attribution(value: Any) -> dict[str, str | None]:
+    if not isinstance(value, Mapping) or set(value) != CANONICAL_ATTRIBUTION_FIELDS:
+        raise _canonical_error()
+    result: dict[str, str | None] = {}
+    for key in CANONICAL_ATTRIBUTION_FIELDS:
+        item = value[key]
+        if item is not None and (not isinstance(item, str) or not item):
+            raise _canonical_error()
+        result[key] = item
+    return result
+
+
+def _validate_provenance(value: Any) -> dict[str, str]:
+    if not isinstance(value, Mapping) or set(value) != CANONICAL_PROVENANCE_FIELDS:
+        raise _canonical_error()
+    if any(not isinstance(value[key], str) or not value[key] for key in CANONICAL_PROVENANCE_FIELDS):
+        raise _canonical_error()
+    return {key: value[key] for key in sorted(CANONICAL_PROVENANCE_FIELDS)}
+
+
+def validate_failure_event_v1(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate the closed, privacy-bounded `cde.n07.failure-event.v1` shape."""
+    if not isinstance(value, Mapping) or set(value) != CANONICAL_FAILURE_EVENT_FIELDS:
+        raise _canonical_error()
+    if value["schema_version"] != CANONICAL_FAILURE_EVENT_SCHEMA_VERSION:
+        raise ValueError("unsupported_failure_event_schema_version")
+    if not isinstance(value["failure_event_id"], str) or not value["failure_event_id"]:
+        raise _canonical_error()
+    if value["operation"] not in CANONICAL_OPERATIONS or value["phase"] not in FAILURE_PHASES:
+        raise _canonical_error()
+    checkpoint = value["checkpoint"]
+    if checkpoint is not None and checkpoint not in FAILURE_CHECKPOINTS:
+        raise _canonical_error()
+    if value["category"] not in CANONICAL_CATEGORIES:
+        raise _canonical_error()
+    if value["terminal_outcome"] not in CANONICAL_TERMINAL_OUTCOMES or value["reconciliation_status"] not in CANONICAL_RECONCILIATION_STATUSES:
+        raise _canonical_error()
+    return {
+        "schema_version": CANONICAL_FAILURE_EVENT_SCHEMA_VERSION,
+        "failure_event_id": value["failure_event_id"],
+        "operation": value["operation"],
+        "phase": value["phase"],
+        "checkpoint": checkpoint,
+        "category": value["category"],
+        "attribution": _validate_attribution(value["attribution"]),
+        "observed_at": _optional_rfc3339(value["observed_at"]),
+        "persisted_at": _optional_rfc3339(value["persisted_at"]),
+        "terminal_outcome": value["terminal_outcome"],
+        "reconciliation_status": value["reconciliation_status"],
+        "provenance": _validate_provenance(value["provenance"]),
+    }
+
+
+def make_failure_event_v1(*, failure_event_id: str, operation: str, phase: str, category: str,
+                          checkpoint: str | None = None, attribution: Mapping[str, Any] | None = None,
+                          observed_at: str | None = None, persisted_at: str | None = None,
+                          terminal_outcome: str = "failed", reconciliation_status: str = "recorded",
+                          source_identity: str = "pending", schema_manifest_id: str = "pending",
+                          exception_message: str | None = None) -> dict[str, Any]:
+    """Create a canonical event while intentionally discarding raw exception text."""
+    del exception_message
+    return validate_failure_event_v1({
+        "schema_version": CANONICAL_FAILURE_EVENT_SCHEMA_VERSION,
+        "failure_event_id": failure_event_id, "operation": operation, "phase": phase,
+        "checkpoint": checkpoint, "category": category,
+        "attribution": attribution or {key: None for key in CANONICAL_ATTRIBUTION_FIELDS},
+        "observed_at": observed_at, "persisted_at": persisted_at,
+        "terminal_outcome": terminal_outcome, "reconciliation_status": reconciliation_status,
+        "provenance": {"source_identity": source_identity, "schema_manifest_id": schema_manifest_id},
+    })
+
+
+def serialize_failure_event_v1(value: Mapping[str, Any]) -> str:
+    """Deterministic external JSON serialization after closed-schema validation."""
+    return json.dumps(validate_failure_event_v1(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def adapt_legacy_failure_event(legacy_record: Mapping[str, Any], *, source_identity: str,
+                               schema_manifest_id: str, adapter_enabled: bool = True) -> dict[str, Any]:
+    """Read-time-only legacy adapter; it never mutates the supplied source record."""
+    if not isinstance(legacy_record, Mapping) or not adapter_enabled:
+        raise ValueError("legacy_failure_event_adapter_unavailable")
+    return make_failure_event_v1(
+        failure_event_id=legacy_record.get("failure_event_id", legacy_record.get("id", "")),
+        operation=legacy_record.get("operation", legacy_record.get("failure_operation", "unknown")),
+        phase=legacy_record.get("phase", legacy_record.get("failure_phase", "unknown")),
+        checkpoint=legacy_record.get("checkpoint", legacy_record.get("failure_checkpoint")),
+        category=legacy_record.get("category", legacy_record.get("failure_exception_category", "unexpected_error")),
+        attribution=legacy_record.get("attribution") or {key: legacy_record.get(key) for key in CANONICAL_ATTRIBUTION_FIELDS},
+        observed_at=legacy_record.get("observed_at"), persisted_at=legacy_record.get("persisted_at"),
+        terminal_outcome=legacy_record.get("terminal_outcome", "failed"),
+        reconciliation_status=legacy_record.get("reconciliation_status", "recorded"),
+        source_identity=source_identity, schema_manifest_id=schema_manifest_id,
+    )
+
+
+def rollback_failure_event(*, legacy_record: Mapping[str, Any]) -> dict[str, Any]:
+    """Disable the adapter by returning a detached legacy representation unchanged."""
+    if not isinstance(legacy_record, Mapping):
+        raise ValueError("legacy_failure_event_invalid")
+    return dict(legacy_record)
+
+
+def consumer_version_status(schema_version: str) -> str:
+    if schema_version == CANONICAL_FAILURE_EVENT_SCHEMA_VERSION:
+        return "accepted"
+    if schema_version in {CURRENT_DIAGNOSTIC_CONTRACT, LEGACY_DIAGNOSTIC_CONTRACT, TRANSITIONAL_DIAGNOSTIC_CONTRACT}:
+        return "legacy_adapter_required"
+    raise ValueError("unsupported_failure_event_schema_version")
+
+
+def legacy_retirement_eligible(milestones: Mapping[str, bool]) -> bool:
+    """Milestone based only: no timestamp or automatic retirement path exists."""
+    if not isinstance(milestones, Mapping) or set(milestones) != LEGACY_SUPPORT_MILESTONES:
+        raise ValueError("legacy_support_milestones_invalid")
+    if any(type(milestones[key]) is not bool for key in LEGACY_SUPPORT_MILESTONES):
+        raise ValueError("legacy_support_milestones_invalid")
+    return all(milestones.values())
