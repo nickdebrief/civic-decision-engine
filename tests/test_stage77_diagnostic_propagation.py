@@ -302,14 +302,13 @@ class Stage75ToStage77PropagationTests(unittest.TestCase):
         payload = json.loads(self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE event_type='terminal'").fetchone()[0])
         # A structured failure record receives persisted_at only in the
         # committed terminal-event projection; the caller's input stays
-        # unchanged. Legacy diagnostic contracts have no persisted field and
-        # therefore retain their exact representation.
+        # unchanged. Legacy diagnostic contracts retain their exact form.
         if "failure_record" in value:
             self.assertIsNone(value["failure_record"]["persisted_at"])
-            self.assertIsInstance(payload["diagnostic"]["failure_record"]["persisted_at"], str)
-            self.assertTrue(payload["diagnostic"]["failure_record"]["persisted_at"])
-            expected = {**value, "failure_record": {**value["failure_record"], "persisted_at": payload["diagnostic"]["failure_record"]["persisted_at"]}}
-            self.assertEqual(payload["diagnostic"], expected)
+            persisted_at = payload["diagnostic"]["failure_record"]["persisted_at"]
+            self.assertIsInstance(persisted_at, str)
+            self.assertTrue(persisted_at)
+            self.assertEqual(payload["diagnostic"], diagnostics.with_persisted_at(value, persisted_at=persisted_at))
         else:
             self.assertEqual(payload["diagnostic"], value)
         self.assertEqual(payload["operation"], value["failure_operation"])
