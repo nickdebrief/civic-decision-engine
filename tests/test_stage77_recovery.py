@@ -1030,7 +1030,9 @@ class Stage77RecoveryTests(unittest.TestCase):
         bundle = self.recovery_root / f"recovery-{result['recovery_point_id']}"
         manifest = json.loads((bundle / "manifest.json").read_text())
         self.assertEqual(manifest["diagnostic_evidence_count"], 2)
-        self.assertEqual([item["diagnostic_contract_version"] for item in manifest["diagnostic_evidence"]], [diagnostics.CURRENT_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT])
+        self.assertEqual([item["diagnostic_contract_version"] for item in manifest["diagnostic_evidence"]], [diagnostics.STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT, diagnostics.TRANSITIONAL_DIAGNOSTIC_CONTRACT])
+        self.assertIsNotNone(manifest["diagnostic_evidence"][0]["diagnostic_attribution_projection"])
+        self.assertIsNone(manifest["diagnostic_evidence"][1]["diagnostic_attribution_projection"])
         self.assertEqual(recovery.validate_recovery_bundle(bundle)["manifest_digest"], result["manifest_digest"])
 
     def test_diagnostic_database_rejects_older_manifest_shape(self):
@@ -1043,7 +1045,7 @@ class Stage77RecoveryTests(unittest.TestCase):
         raw = recovery.canonical_json(manifest).encode()
         (bundle / "manifest.json").write_bytes(raw)
         (bundle / "manifest.sha256").write_text(recovery.digest_bytes(raw) + "\n")
-        with self.assertRaisesRegex(ValueError, "schema_incompatible"):
+        with self.assertRaisesRegex(ValueError, "manifest_invalid"):
             recovery.validate_recovery_bundle(bundle)
 
     def test_retry_topology_rejects_retry_of_retry_even_without_manifest_trust(self):
@@ -1636,7 +1638,7 @@ class Stage77RecoveryTests(unittest.TestCase):
                     if name in {"legacy_mislabeled", "transitional_mislabeled"}:
                         manifest["diagnostic_evidence_state_digest"] = recovery.digest_bytes(recovery.canonical_json(manifest["diagnostic_evidence"]).encode())
                     self._rewrite_manifest(bundle, manifest)
-                expected = "manifest_invalid" if name in {"swapped_identities", "manifest_contract_mismatch"} else "diagnostic_evidence_mismatch"
+                expected = "manifest_invalid" if name in {"swapped_identities", "manifest_contract_mismatch", "legacy_mislabeled"} else "diagnostic_evidence_mismatch"
                 self._assert_historical_rejection(mutate, expected)
 
     def test_batch3b2_case_18_unknown_partial_malformed_and_unsafe_contracts(self):
@@ -1651,6 +1653,10 @@ class Stage77RecoveryTests(unittest.TestCase):
             return lambda _raw, conn: conn.execute("UPDATE record_governed_report_generation_attempts SET diagnostics_json=? WHERE idempotency_key='stage77-job-2'", (value,))
         from api import governed_report_diagnostics as diagnostics
         current_attempt, current_terminal = self._contract_pair("current")
+        malformed_structured = json.loads(current_attempt)
+        malformed_structured[0]["failure_record"] = {"schema_version": diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2}
+        unsupported_structured = json.loads(current_attempt)
+        unsupported_structured[0]["failure_record"]["schema_version"] = "structured_failure_attribution.v999"
         malformed = [
             ("unknown_identifier", lambda raw, c: c.execute("UPDATE stage77_report_jobs SET governed_action='unknown' WHERE retry_of_job_id IS NOT NULL"), "diagnostic_evidence_invalid"),
             ("blank_identifier", replace("", ""), "diagnostic_evidence_invalid"),
@@ -1680,6 +1686,8 @@ class Stage77RecoveryTests(unittest.TestCase):
             ("partial_legacy", replace("", "[\"governed_report_generation_validation_failed\"]"), "diagnostic_evidence_invalid"),
             ("current_as_transitional", replace("", current_attempt), "diagnostic_evidence_invalid"),
             ("transitional_as_current", replace("", recovery.canonical_json([{**diagnostics.TRANSITIONAL_DIAGNOSTIC, "failure_operation": "adapter_launch"}])), "diagnostic_evidence_invalid"),
+            ("malformed_structured_failure_record", replace("", recovery.canonical_json(malformed_structured)), "diagnostic_evidence_invalid"),
+            ("unsupported_structured_failure_schema", replace("", recovery.canonical_json(unsupported_structured)), "diagnostic_evidence_invalid"),
         ]
         for name, mutator, expected in malformed:
             with self.subTest(case=name):
@@ -1689,7 +1697,7 @@ class Stage77RecoveryTests(unittest.TestCase):
     def test_batch3b2_positive_strict_current_contract(self):
         bundle, live_db, point_id = self._historical_reconstruction_fixture()
         manifest = json.loads((bundle / "manifest.json").read_text())
-        self.assertEqual(manifest["diagnostic_evidence"][0]["diagnostic_contract_version"], "current_diagnostic_contract_v1")
+        self.assertEqual(manifest["diagnostic_evidence"][0]["diagnostic_contract_version"], "structured_failure_diagnostic_contract_v2")
         result = recovery.reconstruct_recovery_point_evidence(database_path=live_db, recovery_root=self.recovery_root, recovery_point_id=point_id, actor="admin", rationale="bounded reconstruction", acknowledged=True, idempotency_key="batch3b2-current", approved_root=self.root)
         replay = recovery.reconstruct_recovery_point_evidence(database_path=live_db, recovery_root=self.recovery_root, recovery_point_id=point_id, actor="admin", rationale="bounded reconstruction", acknowledged=True, idempotency_key="batch3b2-current", approved_root=self.root)
         self.assertEqual(result["id"], replay["id"])
@@ -2705,7 +2713,7 @@ class Stage77RecoveryTests(unittest.TestCase):
             rationale="bounded reconstruction", declaration={"acknowledged": True},
             idempotency_key="b3b4a", created_at="2026-01-01T00:00:00Z",
         )
-        self.assertEqual(recovery._manifest_contract(manifest), "diagnostic_aware")
+        self.assertEqual(recovery._manifest_contract(manifest), "diagnostic_aware_v2")
         self.assertEqual(payload["report_event_bound_status"], "not_bound_by_source_contract")
         self.assertIsNone(payload["report_event_bound"])
         self.assertNotEqual(payload["report_event_bound"], 0)

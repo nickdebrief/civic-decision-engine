@@ -617,7 +617,7 @@ def _recovery_evidence_payload(manifest: Mapping[str, Any], *, source_mode: str,
     integrity = manifest.get("integrity")
     if integrity != {"integrity_check": "ok", "foreign_key_check": "ok"}:
         raise ValueError("recovery_evidence_integrity_invalid")
-    if contract == "post_correction_aware":
+    if contract in {"post_correction_aware", "post_correction_aware_v2"}:
         if isinstance(report_event_bound, bool) or not isinstance(report_event_bound, int) or report_event_bound < 0:
             raise ValueError("recovery_evidence_report_event_bound_invalid")
         report_event_binding = {"report_event_bound_status": "bound", "report_event_bound": report_event_bound}
@@ -818,7 +818,7 @@ def _validate_post_correction_recovery_eligibility(conn: sqlite3.Connection, *, 
 
 def _validate_archived_job_runtime_metadata(conn: sqlite3.Connection, *, contract: str) -> None:
     """Validate only runtime fields actually bound by the archived job schema."""
-    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         raise ValueError("schema_incompatible")
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     attempt_fields = {"attempt_count", "max_attempts"}
@@ -877,7 +877,7 @@ def _validate_archived_job_runtime_metadata(conn: sqlite3.Connection, *, contrac
 
 def _validate_archived_job_cancellation(conn: sqlite3.Connection, *, contract: str) -> None:
     """Validate only cancellation evidence bound by the archived job schema."""
-    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         return
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     if "cancellation_requested_at" not in columns:
@@ -918,7 +918,7 @@ def _validate_archived_job_cancellation(conn: sqlite3.Connection, *, contract: s
 
 def _validate_archived_job_terminal_evidence(conn: sqlite3.Connection, *, contract: str) -> None:
     """Validate failed/succeeded terminal metadata without changing cancellation rules."""
-    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         return
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     terminal_fields = {"terminal_at", "terminal_outcome", "failure_phase", "failure_code"}
@@ -962,7 +962,7 @@ def _validate_archived_job_terminal_evidence(conn: sqlite3.Connection, *, contra
 
 def _validate_archived_job_generation_configuration(conn: sqlite3.Connection, *, contract: str) -> None:
     """Bind archived job configuration to its immutable report-version snapshot."""
-    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"legacy", "current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         raise ValueError("schema_incompatible")
     job_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     bound_fields = {
@@ -1020,7 +1020,7 @@ def _validate_archived_job_generation_configuration(conn: sqlite3.Connection, *,
 
 def _validate_archived_job_qualification_binding(conn: sqlite3.Connection, *, contract: str) -> None:
     """Bind persisted job qualification snapshots to the finalized chain."""
-    if contract not in {"current", "diagnostic_aware", "post_correction_aware"}:
+    if contract not in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"}:
         return
     columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(stage77_report_jobs)").fetchall()}
     qualification_fields = {"qualification_id", "qualification_digest"}
@@ -1496,8 +1496,17 @@ def _diagnostic_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[s
             continue
         try:
             selected = diagnostics.select_diagnostic_contract(attempt_raw=attempt_raw, terminal_raw=terminal_raw)
-            diagnostic = diagnostics.validate_diagnostic(attempt_value[0])
-            record = diagnostics.decode_failure_record(diagnostic["failure_record"])
+            projection = None
+            if selected["contract_id"] == diagnostics.STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT:
+                diagnostic = diagnostics.validate_diagnostic(attempt_value[0])
+                record = diagnostics.decode_failure_record(diagnostic["failure_record"])
+                projection = {
+                    "projection_version": diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2,
+                    "source_failure_record_schema_version": record["schema_version"],
+                    "affected_target_state": record["affected_target_state"],
+                    "affected_target_class": record["affected_target_class"],
+                    "cleanup_relationship": record["cleanup_relationship"],
+                }
         except (TypeError, ValueError, json.JSONDecodeError):
             raise ValueError("diagnostic_evidence_invalid") from None
         inventory.append({
@@ -1507,7 +1516,7 @@ def _diagnostic_evidence_snapshot(conn: sqlite3.Connection) -> tuple[list[dict[s
             "diagnostic_contract_version": str(selected["contract_id"]),
             "attempt_diagnostic_sha256": str(selected["attempt_sha256"]),
             "terminal_diagnostic_sha256": str(selected["terminal_sha256"]),
-            "diagnostic_attribution_projection": {"projection_version": diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2, "source_failure_record_schema_version": record["schema_version"], "affected_target_state": record["affected_target_state"], "affected_target_class": record["affected_target_class"], "cleanup_relationship": record["cleanup_relationship"]},
+            "diagnostic_attribution_projection": projection,
         })
     raw = canonical_json(inventory).encode("utf-8")
     return inventory, digest_bytes(raw)
@@ -1734,11 +1743,14 @@ def _validate_manifest(manifest: Mapping[str, Any]) -> None:
                     raise ValueError("manifest_invalid")
             if is_v2:
                 projection = item["diagnostic_attribution_projection"]
-                if not isinstance(projection, ABCMapping) or set(projection) != {"projection_version", "source_failure_record_schema_version", "affected_target_state", "affected_target_class", "cleanup_relationship"}: raise ValueError("manifest_invalid")
-                if projection["projection_version"] != diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2 or projection["source_failure_record_schema_version"] not in {diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION, diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2}: raise ValueError("manifest_invalid")
-                if projection["source_failure_record_schema_version"] == diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION:
-                    if projection["affected_target_state"] != diagnostics.LEGACY_UNSPECIFIED or projection["affected_target_class"] is not None or projection["cleanup_relationship"] != diagnostics.LEGACY_UNSPECIFIED: raise ValueError("manifest_invalid")
-                elif projection["affected_target_state"] not in diagnostics.AFFECTED_TARGET_STATES_V2 or projection["cleanup_relationship"] not in diagnostics.CLEANUP_RELATIONSHIPS_V2 or (projection["affected_target_state"] == "known" and projection["affected_target_class"] not in diagnostics.AFFECTED_TARGET_CLASSES_V2) or (projection["affected_target_state"] != "known" and projection["affected_target_class"] is not None): raise ValueError("manifest_invalid")
+                if item["diagnostic_contract_version"] != diagnostics.STRUCTURED_FAILURE_DIAGNOSTIC_CONTRACT:
+                    if projection is not None: raise ValueError("manifest_invalid")
+                else:
+                    if not isinstance(projection, ABCMapping) or set(projection) != {"projection_version", "source_failure_record_schema_version", "affected_target_state", "affected_target_class", "cleanup_relationship"}: raise ValueError("manifest_invalid")
+                    if projection["projection_version"] != diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2 or projection["source_failure_record_schema_version"] not in {diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION, diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION_V2}: raise ValueError("manifest_invalid")
+                    if projection["source_failure_record_schema_version"] == diagnostics.STRUCTURED_FAILURE_SCHEMA_VERSION:
+                        if projection["affected_target_state"] != diagnostics.LEGACY_UNSPECIFIED or projection["affected_target_class"] is not None or projection["cleanup_relationship"] != diagnostics.LEGACY_UNSPECIFIED: raise ValueError("manifest_invalid")
+                    elif projection["affected_target_state"] not in diagnostics.AFFECTED_TARGET_STATES_V2 or projection["cleanup_relationship"] not in diagnostics.CLEANUP_RELATIONSHIPS_V2 or (projection["affected_target_state"] == "known" and projection["affected_target_class"] not in diagnostics.AFFECTED_TARGET_CLASSES_V2) or (projection["affected_target_state"] != "known" and projection["affected_target_class"] is not None): raise ValueError("manifest_invalid")
             if previous is not None and int(item["job_id"]) <= previous:
                 raise ValueError("manifest_invalid")
             previous = int(item["job_id"])
@@ -2711,8 +2723,8 @@ def validate_export_archive(archive_path: str | os.PathLike[str], receipt_path: 
         if receipt_contract != manifest_contract:
             raise ValueError("export_receipt_mismatch")
         common_mismatch = result["recovery_point_id"] != receipt["recovery_point_id"] or manifest_digest != receipt["manifest_digest"] or manifest["database"]["sha256"] != receipt["database_digest"] or int(manifest["counts"]["artifacts"]) != receipt["artifact_count"] or int(manifest["recovery_event_bound"]) != receipt["recovery_event_bound"] or int(manifest["job_event_bound"]) != receipt["job_event_bound"]
-        qualification_mismatch = manifest_contract in {"current", "diagnostic_aware", "post_correction_aware"} and (int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"])
-        diagnostic_mismatch = manifest_contract in {"diagnostic_aware", "post_correction_aware"} and (
+        qualification_mismatch = manifest_contract in {"current", "diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"} and (int(manifest["counts"]["qualifications"]) != receipt["qualification_count"] or int(manifest["qualification_event_bound"]) != receipt["qualification_event_bound"] or manifest["qualification_state_digest"] != receipt["qualification_state_digest"])
+        diagnostic_mismatch = manifest_contract in {"diagnostic_aware", "post_correction_aware", "diagnostic_aware_v2", "post_correction_aware_v2"} and (
             receipt.get("diagnostic_contract_version") != manifest["diagnostic_contract_version"]
             or int(receipt.get("diagnostic_evidence_count", -1)) != int(manifest["diagnostic_evidence_count"])
             or receipt.get("diagnostic_evidence_state_digest") != manifest["diagnostic_evidence_state_digest"]

@@ -300,7 +300,17 @@ class Stage75ToStage77PropagationTests(unittest.TestCase):
         value = diagnostics.make_diagnostic(phase="validation", operation="pdf_validation", checkpoint="validation", code="pdf_invalid", cleanup_status="passed", adapter_invocation_entered=True, adapter_process_started=True, adapter_result_received=True, format_category="pdf")
         self.assertTrue(jobs._terminal(self.conn, job["id"], claimed["lease_token"], "failed_terminal", jobs.WORKER_IDENTITY, phase="rendering", code="governed_report_renderer_failed", diagnostic=value))
         payload = json.loads(self.conn.execute("SELECT payload_json FROM stage77_report_job_events WHERE event_type='terminal'").fetchone()[0])
-        self.assertEqual(payload["diagnostic"], value)
+        # A structured failure record receives persisted_at only in the
+        # committed terminal-event projection; the caller's input stays
+        # unchanged. Legacy diagnostic contracts retain their exact form.
+        if "failure_record" in value:
+            self.assertIsNone(value["failure_record"]["persisted_at"])
+            persisted_at = payload["diagnostic"]["failure_record"]["persisted_at"]
+            self.assertIsInstance(persisted_at, str)
+            self.assertTrue(persisted_at)
+            self.assertEqual(payload["diagnostic"], diagnostics.with_persisted_at(value, persisted_at=persisted_at))
+        else:
+            self.assertEqual(payload["diagnostic"], value)
         self.assertEqual(payload["operation"], value["failure_operation"])
         self.assertEqual(payload["checkpoint"], value["failure_checkpoint"])
         self.assertEqual(payload["code"], value["failure_code"])
