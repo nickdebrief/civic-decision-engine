@@ -155,6 +155,64 @@ class FailureEventV1Tests(unittest.TestCase):
             {"schema_manifest_id": "pending", "source_identity": "pending"},
         )
 
+    def test_event_and_attribution_identifiers_are_bounded_opaque_values(self):
+        self.assertEqual(event(failure_event_id="evt-demo_01:attempt.2")["failure_event_id"], "evt-demo_01:attempt.2")
+        self.assertEqual(event(attribution={
+            "run_id": "run-01", "attempt_id": "attempt:2", "process_id": "process_3", "supervisor_id": None,
+        })["attribution"]["process_id"], "process_3")
+
+        unsafe = (
+            "",
+            "x" * 257,
+            "/private/path",
+            "private@example.test",
+            "token=ABC",
+            "traceback line 1",
+            "line-one\nline-two",
+            "{\"raw\":\"diagnostic\"}",
+            [],
+            {},
+            7,
+            True,
+        )
+        for field in ("failure_event_id", "run_id", "attempt_id", "process_id", "supervisor_id"):
+            for unsafe_value in unsafe:
+                with self.subTest(field=field, unsafe_value=unsafe_value):
+                    with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid"):
+                        if field == "failure_event_id":
+                            event(failure_event_id=unsafe_value)
+                        else:
+                            attribution = {key: None for key in diagnostics.CANONICAL_ATTRIBUTION_FIELDS}
+                            attribution[field] = unsafe_value
+                            event(attribution=attribution)
+
+    def test_identifier_rejection_is_bounded_across_producer_serializer_and_adapter(self):
+        sentinel = "token=ABC /private/path private@example.test"
+        with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid") as producer_error:
+            event(failure_event_id=sentinel)
+        self.assertNotIn(sentinel, str(producer_error.exception))
+
+        direct = event()
+        direct["failure_event_id"] = sentinel
+        with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid") as serializer_error:
+            diagnostics.serialize_failure_event_v1(direct)
+        self.assertNotIn(sentinel, str(serializer_error.exception))
+
+        legacy = {
+            "id": sentinel,
+            "failure_operation": "renderer_invocation",
+            "failure_phase": "rendering",
+            "failure_exception_category": "os_error",
+            "run_id": sentinel,
+        }
+        before = dict(legacy)
+        with self.assertRaisesRegex(ValueError, "canonical_failure_event_invalid") as adapter_error:
+            diagnostics.adapt_legacy_failure_event(
+                legacy, source_identity="sha256:synthetic", schema_manifest_id="cf25-schema",
+            )
+        self.assertEqual(legacy, before)
+        self.assertNotIn(sentinel, str(adapter_error.exception))
+
     def test_adapter_is_non_destructive_and_rollback_returns_legacy_copy(self):
         legacy = {
             "id": "evt-legacy-1", "failure_operation": "renderer_invocation", "failure_phase": "rendering",

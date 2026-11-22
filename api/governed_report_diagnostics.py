@@ -407,7 +407,7 @@ def _validate_attribution(value: Any) -> dict[str, str | None]:
     result: dict[str, str | None] = {}
     for key in CANONICAL_ATTRIBUTION_FIELDS:
         item = value[key]
-        if item is not None and (not isinstance(item, str) or not item):
+        if item is not None and not _public_opaque_identifier(item):
             raise _canonical_error()
         result[key] = item
     return result
@@ -416,13 +416,13 @@ def _validate_attribution(value: Any) -> dict[str, str | None]:
 def _validate_provenance(value: Any) -> dict[str, str]:
     if not isinstance(value, Mapping) or set(value) != CANONICAL_PROVENANCE_FIELDS:
         raise _canonical_error()
-    if any(not _public_provenance_identifier(value[key]) for key in CANONICAL_PROVENANCE_FIELDS):
+    if any(not _public_opaque_identifier(value[key]) for key in CANONICAL_PROVENANCE_FIELDS):
         raise _canonical_error()
     return {key: value[key] for key in sorted(CANONICAL_PROVENANCE_FIELDS)}
 
 
-def _public_provenance_identifier(value: Any) -> bool:
-    """Accept bounded opaque evidence identifiers, never arbitrary diagnostics."""
+def _public_opaque_identifier(value: Any) -> bool:
+    """Accept bounded opaque identifiers, never arbitrary diagnostic content."""
     allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
     return (
         isinstance(value, str)
@@ -438,7 +438,7 @@ def validate_failure_event_v1(value: Mapping[str, Any]) -> dict[str, Any]:
         raise _canonical_error()
     if value["schema_version"] != CANONICAL_FAILURE_EVENT_SCHEMA_VERSION:
         raise ValueError("unsupported_failure_event_schema_version")
-    if not isinstance(value["failure_event_id"], str) or not value["failure_event_id"]:
+    if not _public_opaque_identifier(value["failure_event_id"]):
         raise _canonical_error()
     if (
         not isinstance(value["operation"], str)
