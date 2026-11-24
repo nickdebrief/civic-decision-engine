@@ -153,6 +153,7 @@ class MachineDiscoverabilityTests(unittest.TestCase):
         self.assertEqual(response.media_type, "application/xml")
         self.assertIn("<urlset", content)
         for path in (
+            "/documents",
             "/records",
             "/conditions",
             "/conditions/map",
@@ -167,6 +168,17 @@ class MachineDiscoverabilityTests(unittest.TestCase):
         self.assertNotIn("/verify/Strike-LA-20260523-002", content)
         self.assertIn("https://civicdecisionengine.ie/records", content)
         self.assertNotIn("civic-decision-engine-production.up.railway.app", content)
+
+    def test_api_docs_resolves_the_canonical_origin_in_visible_examples(self):
+        response = asyncio.run(self.records.api_docs())
+        content = response.content
+
+        self.assertNotIn("{CANONICAL_PUBLIC_ORIGIN}", content)
+        self.assertIn("https://civicdecisionengine.ie/api/verify/", content)
+        self.assertIn("/api/conditions/map", content)
+        self.assertIn("/api/graph", content)
+        self.assertIn("record_type", content)
+        self.assertIn("total_versions", content)
 
     def test_robots_policy_is_archive_friendly(self):
         response = asyncio.run(self.records.robots())

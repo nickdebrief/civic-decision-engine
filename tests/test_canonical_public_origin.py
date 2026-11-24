@@ -772,6 +772,19 @@ class CanonicalPublicOriginTests(unittest.TestCase):
                 self.assertIn(b'https://civicdecisionengine.ie/"', body)
                 self.assertNotIn(b"data-cde-clarity-consent", body)
 
+    def test_public_documents_and_graph_have_canonical_metadata_and_descriptions(self):
+        for path in ("/documents", "/graph"):
+            with self.subTest(path=path):
+                start, body = self.asgi_get(path, "civicdecisionengine.ie")
+                self.assertEqual(start["status"], 200)
+                self.assertEqual(body.count(b'rel="canonical"'), 1)
+                self.assertIn(f"https://civicdecisionengine.ie{path}".encode(), body)
+                self.assertIn(b'<meta name="description"', body)
+
+        _, graph_body = self.asgi_get("/graph", "civicdecisionengine.ie")
+        self.assertIn(b"Condition Graph requires JavaScript", graph_body)
+        self.assertIn(b'href="/patterns"', graph_body)
+
     def test_asgi_renders_one_default_off_separate_analytics_control_only_when_enabled(self):
         with patch.dict(
             os.environ,
