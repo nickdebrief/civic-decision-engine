@@ -2256,7 +2256,7 @@ async def api_docs():
     <p>All endpoints return JSON. All records exposed through this API are the same records accessible via the public verification pages — this is not a separate dataset.</p>
 
     <h2>Authentication</h2>
-    <p>No authentication is required for read operations. These records are intentionally public — they are generated and published by consent at the point of export. Write operations (record creation, superseding) are not exposed through this API.</p>
+    <p>No authentication is required for the read-only endpoints documented here. These records are intentionally public — they are generated and published by consent at the point of export. Write operations (record creation, superseding) are not exposed through this API.</p>
 
     <h2>Base URL</h2>
     <div class="code-block">{CANONICAL_PUBLIC_ORIGIN}</div>
@@ -2356,11 +2356,12 @@ async def api_docs():
       <span class="method">GET</span>
       <span class="path">/api/stats</span>
     </div>
-    <p>Returns a summary of the public record archive — total records, superseded versions, and distributions by institution type, trajectory, and condition. Statistics reflect only the latest version of each record.</p>
+    <p>Returns a summary of the public record archive — latest-record totals, non-latest and total version counts, and distributions by institution type, trajectory, and condition. The distributions count only the latest version of each record.</p>
 
     <div class="code-block">{
       "total_records": 22,
       "total_superseded": 18,
+      "total_versions": 40,
       "latest_export": "2026-05-09T17:24:27.559+00:00",
       "by_institution": {
         "OT": 3,
@@ -2391,7 +2392,7 @@ async def api_docs():
       <span class="method">GET</span>
       <span class="path">/api/records</span>
     </div>
-    <p>Returns a paginated list of the latest version of all public records, most recent first. Supports filtering by trajectory and institution type.</p>
+    <p>Returns a paginated list of the latest version of all public records, most recent first. Supports filtering by trajectory, institution type, and canonical record type.</p>
 
     <table class="param-table">
       <thead>
@@ -2407,6 +2408,11 @@ async def api_docs():
           <td>institution</td>
           <td>query</td>
           <td>Filter by institution type code, e.g. <code>LA</code>, <code>HS</code>, <code>ED</code></td>
+        </tr>
+        <tr>
+          <td>record_type</td>
+          <td>query</td>
+          <td>Filter by canonical record type.</td>
         </tr>
         <tr>
           <td>limit</td>
@@ -2432,11 +2438,14 @@ async def api_docs():
   "limit": 50,
   "filters": {
     "trajectory": null,
-    "institution": null
+    "institution": null,
+    "record_type": null
   },
   "records": [
     {
       "reference": "Strike-LA-20260508-001",
+      "record_type": "strike",
+      "record_type_label": "Strike",
       "trajectory": "Deteriorating",
       "conditions": ["Transfer of Burden", "Escalation Without Response"],
       "system_state": "Transition to Escalation",
@@ -2453,7 +2462,9 @@ async def api_docs():
 
 curl {CANONICAL_PUBLIC_ORIGIN}/api/records?trajectory=Deteriorating
 
-curl {CANONICAL_PUBLIC_ORIGIN}/api/records?institution=LA&limit=10</div>
+curl {CANONICAL_PUBLIC_ORIGIN}/api/records?institution=LA&limit=10
+
+curl {CANONICAL_PUBLIC_ORIGIN}/api/records?record_type=strike</div>
 
     <h3>Retrieve the condition registry</h3>
     <div class="endpoint">
@@ -2464,6 +2475,26 @@ curl {CANONICAL_PUBLIC_ORIGIN}/api/records?institution=LA&limit=10</div>
 
     <div class="curl-label">Example request</div>
     <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/conditions</div>
+
+    <h3>Retrieve the condition relationship map</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/conditions/map</span>
+    </div>
+    <p>Returns declared condition relationships together with archive-derived co-occurrence and condition-emergence summaries.</p>
+
+    <div class="curl-label">Example request</div>
+    <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/conditions/map</div>
+
+    <h3>Retrieve the condition graph</h3>
+    <div class="endpoint">
+      <span class="method">GET</span>
+      <span class="path">/api/graph</span>
+    </div>
+    <p>Returns condition nodes and co-occurrence edges for latest public records. Optional <code>institution</code> and <code>trajectory</code> query parameters apply the same filters represented in the response.</p>
+
+    <div class="curl-label">Example request</div>
+    <div class="curl-block">curl {CANONICAL_PUBLIC_ORIGIN}/api/graph?institution=LA&amp;trajectory=Deteriorating</div>
 
     <h3>Download verification manifest</h3>
     <div class="endpoint">
@@ -2593,6 +2624,7 @@ curl {CANONICAL_PUBLIC_ORIGIN}/api/records?institution=LA&limit=10</div>
   </div>
 </body>
 </html>"""
+    html = html.replace("{CANONICAL_PUBLIC_ORIGIN}", CANONICAL_PUBLIC_ORIGIN)
     return HTMLResponse(content=html, status_code=200)
 
 
@@ -5266,6 +5298,7 @@ async def sitemap():
         # Static routes
         static_urls = [
             {"loc": f"{base}/archive-manifest.json", "priority": "0.6"},
+            {"loc": f"{base}/documents", "priority": "0.8"},
             {"loc": f"{base}/records", "priority": "0.9"},
             {"loc": f"{base}/conditions", "priority": "0.8"},
             {"loc": f"{base}/patterns", "priority": "0.8"},
@@ -5977,6 +6010,7 @@ async def graph_page():
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Condition Graph — Civic Decision Engine</title>
+  <meta name="description" content="Interactive relationship graph of conditions observed in verified public records. Filter by institution type or trajectory; use the pattern summary for a server-rendered overview.">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {
@@ -6049,6 +6083,22 @@ async def graph_page():
       text-transform: uppercase;
       color: #1a1a1a;
       font-weight: bold;
+    }
+    .graph-heading {
+      margin: 0;
+      font: inherit;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #1a1a1a;
+      font-weight: bold;
+    }
+    .graph-noscript {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #d0cec8;
+      background: #ffffff;
+      line-height: 1.5;
     }
     .graph-controls {
       display: flex;
@@ -6183,7 +6233,7 @@ async def graph_page():
     <div class="graph-header">
       <div class="graph-header-left">
         <span class="graph-engine">Civic Decision Engine</span>
-        <span class="graph-title">Condition Graph</span>
+        <h1 class="graph-heading">Condition Graph</h1>
       </div>
       <div class="graph-controls">
         <select id="filterInstitution">
@@ -6208,6 +6258,7 @@ async def graph_page():
         <a href="/patterns" class="back-link">← Pattern summary</a>
       </div>
    </div>
+    <noscript><section class="graph-noscript"><p><strong>Condition Graph requires JavaScript</strong> to display interactive condition relationships from latest public records.</p><p>For a server-rendered overview of condition co-occurrence, institutional clustering, and trajectory distribution, visit <a href="/patterns">Condition Patterns</a>. The underlying read-only data is available at <a href="/api/graph">/api/graph</a>.</p></section></noscript>
 
     <div id="graph-container">
       <canvas id="canvas"></canvas>
